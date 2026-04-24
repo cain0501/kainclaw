@@ -133,6 +133,7 @@ Note:
   - verify affected flows
 - Build at minimum with `npm run build` unless the user explicitly says not to.
 - Summarize any residual risk honestly.
+- If a change affects frontend-visible behavior, desktop shell behavior, or any user-triggered integration that cannot be fully proven by automated checks alone, explicitly give the user a short manual test checklist in the handoff. Do not assume silent delivery is sufficient.
 
 ## Dangerous Areas
 
