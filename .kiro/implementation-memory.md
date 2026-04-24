@@ -1,5 +1,25 @@
 # 实现记忆
 
+## Current Override - 2026-04-25
+
+- Electron shell command wiring rule:
+  - If a capability already exists in `src/` as a mature host/runtime path, prefer wiring the desktop shell back into that path instead of inventing a desktop-only rewrite.
+- This round confirmed a concrete example:
+  - `/todo` can be restored by giving the Electron shell a real task runtime in `ToolContext`.
+  - `/compact` can be restored by reusing `handleCompactCommandWithHost(...)`.
+  - `/review` and `/verify` can be restored by reusing `handleReviewCommandWithHost(...)` and `handleVerificationCommandWithHost(...)`.
+- Electron shell conversation hygiene rule:
+  - User-facing slash-command replies should still be shown and persisted in the session,
+  - but replies that are not meant to become future model context must be marked and filtered out of later provider history.
+- This round validated:
+  - `npm test`
+  - `npm run check`
+  - `npm run build`
+- Current verified baseline after this round:
+  - `143` test files
+  - `927` tests passed
+- `npm run build:electron` was not rerun in this round by the agent.
+
 更新时间：2026-04-24
 
 ## 使用规则

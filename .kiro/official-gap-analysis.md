@@ -1,5 +1,23 @@
 # KainClaw vs 官方 Claude Code 能力对账
 
+## Current Override - 2026-04-25
+
+- This round validated:
+  - `npm test`
+  - `npm run check`
+  - `npm run build`
+- Current verified baseline after this round:
+  - `143` test files
+  - `927` tests passed
+- `npm run build:electron` was not rerun in this round by the agent. Electron verification remains user-run.
+- Electron shell parity moved forward one step:
+  - `/todo`
+  - `/compact`
+  - `/review`
+  - `/verify`
+  are no longer desktop-shell hard blocks.
+- This is still shell wiring work, not a new capability family. The value is that the Electron validation shell now reuses existing `src/` task / compact / inspection host paths instead of rejecting these commands up front.
+
 更新时间：2026-04-24
 
 ## 使用规则

@@ -233,7 +233,7 @@ describe("ElectronChatPanel session lifecycle", () => {
       envMap: {},
     });
     vi.mocked(buildProviderAdapter).mockReturnValue({} as never);
-    vi.mocked(handleElectronPromptCommand).mockResolvedValue(null);
+    vi.mocked(handleElectronPromptCommand).mockResolvedValue({ kind: "continue" });
 
     const agentReply = createDeferred<string>();
     vi.mocked(runAgent).mockImplementation(async (_history, options) => {
@@ -317,7 +317,7 @@ describe("ElectronChatPanel session lifecycle", () => {
       envMap: {},
     });
     vi.mocked(buildProviderAdapter).mockReturnValue({} as never);
-    vi.mocked(handleElectronPromptCommand).mockResolvedValue(null);
+    vi.mocked(handleElectronPromptCommand).mockResolvedValue({ kind: "continue" });
 
     const replyA = createDeferred<string>();
     const replyB = createDeferred<string>();

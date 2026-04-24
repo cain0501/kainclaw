@@ -17,6 +17,7 @@ export type ChatMessage = {
   content: string;
   kind?: "chat" | "error" | "thinking";
   timestamp?: number;
+  excludeFromConversation?: boolean;
   /** Optional image attachments (base64 data), used for conversation history sent to provider */
   attachments?: Array<{ data: string; mimeType: string }>;
   /** Optional generated image results rendered in the chat UI */

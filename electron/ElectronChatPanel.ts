@@ -18,8 +18,14 @@ import type { NormalizedMessage } from "../src/agent/providers/IProviderAdapter"
 import { McpRuntime } from "../src/mcpRuntime";
 import { runAgent, SYSTEM_PROMPT } from "../src/agent/agentRunner";
 import { toolDefinitions as builtinToolDefinitions } from "../src/toolRuntime";
-import type { ToolContext } from "../src/toolRuntime";
+import type { ToolContext, ToolDefinition } from "../src/toolRuntime";
 import { handleElectronPromptCommand } from "../src/electronPromptCommandHost";
+import { handleCompactCommandWithHost } from "../src/compactHost";
+import {
+  handleReviewCommandWithHost,
+  handleVerificationCommandWithHost,
+} from "../src/inspectionHost";
+import { BackgroundTaskHost } from "../src/backgroundTaskHost";
 import {
   buildImageLabResultBatches,
   removeImageLabResult,
@@ -58,6 +64,11 @@ import { determineChatPromptIntent } from "../src/imageGeneration/chatPromptInte
 import { resolveImageBatchPlan } from "../src/imageGeneration/imagePromptBatching";
 import { resolveRequestedImageSize } from "../src/imageGeneration/imagePromptSizing";
 import type { DesktopRuntimeServices } from "../src/platform/desktopRuntimeServices";
+import { PersistentTaskRuntimeStore } from "../src/tasks/taskRuntime";
+import { PersistentWorktreeRuntimeStore } from "../src/worktree/runtime";
+import type { ConversationTaskRuntime } from "../src/tasks/types";
+import type { ConversationWorktreeRuntime } from "../src/worktree/types";
+import type { EffortLevel, ProviderRuntimeOptions } from "../src/thinkingEffort/types";
 
 const SUPPORTED_ELECTRON_TOOL_NAMES = new Set([
   "list_files",
@@ -76,7 +87,8 @@ const ELECTRON_SHELL_PROMPT_NOTE = `
 - You are running inside a limited Electron validation shell, not the full VS Code host.
 - Identify yourself as KainClaw. Do not claim to be Claude, Anthropic, OpenAI, DeepSeek, or any provider.
 - Only use the tools that are actually exposed in this shell.
-- Plan mode, worktree, background tasks, verification/review launchers, browser automation, LSP, memory management, and skill management are not available here.
+- Plan mode, worktree switching, browser automation, LSP, advanced memory management, and skill management are not available here.
+- Explicit slash commands for /compact, /todo, /review, and /verify are wired into this shell. Treat them as user-invoked shell commands, not autonomous capabilities to invent on your own.
 - When the user asks about the current workspace or local files, rely on the provided workspace root and tool results. Do not guess.
 - If the user asks for one of those unavailable capabilities, say it is not yet wired in the desktop shell instead of pretending to use it.
 `;
@@ -97,6 +109,8 @@ type ElectronPromptRuntime = {
       error?: string;
     }>
   >;
+  getToolDefinitions: () => Promise<ToolDefinition[]>;
+  getToolContext: (mode?: ToolContext["invokerKind"]) => ToolContext;
 };
 
 type ActiveRequestKind = "chat" | "image";
@@ -131,6 +145,9 @@ export class ElectronChatPanel {
   private readonly mcpRuntime: McpRuntime;
   private readonly imageGalleryStore: ImageLabGalleryStore;
   private readonly promptLibraryRepository: PromptLibraryRepository;
+  private readonly taskRuntimeStore: PersistentTaskRuntimeStore;
+  private readonly worktreeRuntimeStore: PersistentWorktreeRuntimeStore;
+  private readonly backgroundTaskHost: BackgroundTaskHost;
 
   constructor(
     private readonly sessions: SessionRepository,
@@ -146,6 +163,12 @@ export class ElectronChatPanel {
     );
     this.imageGalleryStore = new ImageLabGalleryStore(this.host.getStorageUri());
     this.promptLibraryRepository = new PromptLibraryRepository(this.host.getStorageUri());
+    this.taskRuntimeStore = new PersistentTaskRuntimeStore(this.host.getStorageUri());
+    this.worktreeRuntimeStore = new PersistentWorktreeRuntimeStore(this.host.getStorageUri());
+    this.backgroundTaskHost = new BackgroundTaskHost({
+      storageRoot: this.host.getStorageUri(),
+      getTaskRuntime: workspaceRoot => this.getConversationTaskRuntime(workspaceRoot),
+    });
 
     const localBridgeRuntime = this.desktopRuntimeServices?.localBridgeRuntime;
     if (localBridgeRuntime) {
@@ -158,6 +181,7 @@ export class ElectronChatPanel {
   }
 
   dispose(): void {
+    this.backgroundTaskHost.dispose();
     while (this.cleanupHandlers.length > 0) {
       const cleanup = this.cleanupHandlers.pop();
       cleanup?.();
@@ -1452,17 +1476,22 @@ export class ElectronChatPanel {
         // MCP not configured or failed – proceed with built-in tools only
       }
       const allTools = [...getSupportedElectronTools(), ...mcpTools];
-      const promptRuntime: ElectronPromptRuntime = {
-        getMcpStatusSummary: () => this.mcpRuntime.getStatusSummary(),
-      };
+      const runtimeOptions = this.buildProviderRuntimeOptions();
+      const promptRuntime = this.createPromptRuntime(
+        workspaceRoot,
+        envMap,
+        allTools,
+        runtimeOptions,
+      );
 
-      const commandReply = await handleElectronPromptCommand({
+      const commandResult = await handleElectronPromptCommand({
         prompt,
         config,
         workspaceRoot,
         envMap,
         runtime: promptRuntime,
         tools: allTools,
+        runtimeOptions,
         currentEffortLevel: this.settings.getEffortLevel(),
         setEffortLevel: value => this.settings.setEffortLevel(value),
         currentFastMode: this.settings.getFastMode(),
@@ -1471,28 +1500,74 @@ export class ElectronChatPanel {
         refreshWorkspaceStatus: () => {
           void this.postState();
         },
+        handleCompactCommand: (commandText, commandWorkspaceRoot, commandConfig, commandEnvMap) =>
+          this.handleCompactPromptCommand(
+            requestSessionId,
+            commandText,
+            commandWorkspaceRoot,
+            commandConfig,
+            commandEnvMap,
+          ),
+        handleReviewCommand: (
+          commandText,
+          commandWorkspaceRoot,
+          commandConfig,
+          commandEnvMap,
+          commandRuntime,
+          commandTools,
+          commandRuntimeOptions,
+          effortLevel,
+        ) =>
+          this.handleReviewPromptCommand(
+            requestSessionId,
+            commandText,
+            commandWorkspaceRoot,
+            commandConfig,
+            commandEnvMap,
+            commandRuntime as ElectronPromptRuntime,
+            commandTools,
+            commandRuntimeOptions,
+            effortLevel,
+          ),
+        handleVerificationCommand: (
+          commandText,
+          commandWorkspaceRoot,
+          commandConfig,
+          commandEnvMap,
+          commandRuntime,
+          commandTools,
+          commandRuntimeOptions,
+          effortLevel,
+        ) =>
+          this.handleVerificationPromptCommand(
+            requestSessionId,
+            commandText,
+            commandWorkspaceRoot,
+            commandConfig,
+            commandEnvMap,
+            commandRuntime as ElectronPromptRuntime,
+            commandTools,
+            commandRuntimeOptions,
+            effortLevel,
+          ),
       });
 
-      if (commandReply) {
+      if (commandResult.kind === "reply") {
         const assistantMessage: ChatMessage = {
           role: "assistant",
-          content: commandReply,
+          content: commandResult.reply,
+          excludeFromConversation: true,
           timestamp: Date.now(),
         };
         await this.appendAssistantMessageToSession(requestSessionId, assistantMessage);
         return;
       }
 
-      const toolContext: ToolContext = {
-        workspaceRoot,
-        invokerKind: "main",
-        requestFileApproval: (req) => this.host.requestFileApproval(req),
-        requestToolApproval: (req) => this.host.requestToolApproval(req),
-        onToolLifecycle: (event) => {
-          this.sendToRenderer({ type: "tool:lifecycle", event });
-        },
-        mcp: this.mcpRuntime,
-      };
+      if (commandResult.kind === "handled") {
+        return;
+      }
+
+      const toolContext = promptRuntime.getToolContext("main");
 
       const finalText = await runAgent(history, {
         provider: adapter,
@@ -1543,6 +1618,358 @@ export class ElectronChatPanel {
       this.streamingText = "";
       await this.postState();
     }
+  }
+
+  private getConversationKey(): string {
+    return this.currentSessionId ?? "electron";
+  }
+
+  private getConversationTaskRuntime(workspaceRoot: string): ConversationTaskRuntime {
+    return this.taskRuntimeStore.getConversationRuntime(
+      workspaceRoot,
+      this.getConversationKey(),
+    );
+  }
+
+  private getConversationWorktreeRuntime(workspaceRoot: string): ConversationWorktreeRuntime {
+    return this.worktreeRuntimeStore.getConversationRuntime(
+      workspaceRoot,
+      this.getConversationKey(),
+    );
+  }
+
+  private buildProviderRuntimeOptions(): ProviderRuntimeOptions {
+    return {};
+  }
+
+  private createPromptRuntime(
+    workspaceRoot: string,
+    envMap: Record<string, string>,
+    tools: ToolDefinition[],
+  ): ElectronPromptRuntime {
+    const getToolContext = (
+      mode: ToolContext["invokerKind"] = "main",
+    ): ToolContext => ({
+      workspaceRoot,
+      invokerKind: mode,
+      requestFileApproval: request => this.host.requestFileApproval(request),
+      requestToolApproval: request => this.host.requestToolApproval(request),
+      onToolLifecycle: event => {
+        this.sendToRenderer({ type: "tool:lifecycle", event });
+      },
+      mcp: this.mcpRuntime,
+      tasks: this.getConversationTaskRuntime(workspaceRoot),
+      worktree: this.getConversationWorktreeRuntime(workspaceRoot),
+      stopBackgroundTask: (taskId =>
+        this.backgroundTaskHost.stopTask(taskId, workspaceRoot)) as ToolContext["stopBackgroundTask"],
+      runCommandInBackground: request =>
+        this.backgroundTaskHost.runBackgroundCommand({
+          workspaceRoot,
+          command: request.command,
+        }),
+      findReusableBackgroundCommand: request =>
+        this.backgroundTaskHost.findReusableBackgroundCommand(
+          workspaceRoot,
+          request.command,
+        ).then(task => task ?? null),
+      planMode: {
+        active: false,
+        planFilePath: undefined,
+        enter: async () => {
+          throw new Error("Plan Mode is not available in the Electron desktop shell.");
+        },
+        getPlanContent: async () => null,
+        exit: async () => {
+          throw new Error("Plan Mode is not available in the Electron desktop shell.");
+        },
+      },
+    });
+
+    return {
+      getMcpStatusSummary: () => this.mcpRuntime.getStatusSummary(),
+      getToolDefinitions: async () => tools,
+      getToolContext,
+    };
+  }
+
+  private buildConversationHistory(
+    messages: ChatMessage[],
+  ): NormalizedMessage[] {
+    return messages
+      .filter(message => {
+        if (message.role === "user") {
+          return !message.content.trim().startsWith("/");
+        }
+        return message.excludeFromConversation !== true;
+      })
+      .map(message => {
+        if (message.role === "user") {
+          return {
+            role: "user" as const,
+            content: message.content,
+            ...(message.attachments ? { attachments: message.attachments } : {}),
+          };
+        }
+
+        return {
+          role: "assistant" as const,
+          content: message.content,
+        };
+      });
+  }
+
+  private async recordCommandAssistantReply(
+    sessionId: string,
+    reply: string,
+    includeInConversation = false,
+  ): Promise<void> {
+    const message: ChatMessage = {
+      role: "assistant",
+      content: reply,
+      ...(includeInConversation ? {} : { excludeFromConversation: true }),
+      timestamp: Date.now(),
+    };
+    await this.appendAssistantMessageToSession(sessionId, message);
+  }
+
+  private appendStreamingToken(sessionId: string, token: string): void {
+    const requestState = this.inFlightRequests.get(sessionId);
+    if (!requestState) {
+      return;
+    }
+
+    requestState.streamingText += token;
+    if (this.isViewingSession(sessionId)) {
+      this.streamingText = requestState.streamingText;
+      this.sendToRenderer({
+        type: "stateUpdate",
+        isBusy: true,
+        streamingText: this.streamingText,
+      });
+    }
+  }
+
+  private clearStreamingForSession(sessionId: string): void {
+    const requestState = this.inFlightRequests.get(sessionId);
+    if (requestState) {
+      requestState.streamingText = "";
+    }
+    if (this.isViewingSession(sessionId)) {
+      this.streamingText = "";
+      this.sendToRenderer({
+        type: "stateUpdate",
+        isBusy: true,
+        streamingText: "",
+      });
+    }
+  }
+
+  private createProviderForSystemPrompt(
+    config: AdapterProviderConfig,
+    workspaceRoot: string,
+    envMap: Record<string, string>,
+    systemPrompt: string,
+  ) {
+    return buildProviderAdapter(
+      config,
+      workspaceRoot,
+      systemPrompt,
+      envMap,
+    );
+  }
+
+  private findActiveBuiltInAgentTask = async (
+    workspaceRoot: string,
+    agentType: string,
+    diffRef?: string,
+  ): Promise<{ id: string } | undefined> => {
+    const tasks = await this.getConversationTaskRuntime(workspaceRoot).listBackgroundTasks();
+    return tasks.find(task =>
+      task.taskType === "built_in_agent" &&
+      task.agentType === agentType &&
+      (task.status === "running" || task.status === "pending") &&
+      ((typeof diffRef === "string" && diffRef.trim())
+        ? task.metadata?.diffRef === diffRef
+        : !task.metadata?.diffRef),
+    );
+  };
+
+  private createPhaseActivityStub(): string {
+    return randomUUID();
+  }
+
+  private finishPhaseActivityStub(): void {}
+
+  private setCommandCompanionState(): void {}
+
+  private async updateCommandMood(): Promise<void> {}
+
+  private isAbortLikeError(error: unknown): boolean {
+    return (
+      (error instanceof Error &&
+        (error.name === "AbortError" ||
+          /abort/i.test(error.message) ||
+          /cancel/i.test(error.message))) ||
+      false
+    );
+  }
+
+  private async handleCompactPromptCommand(
+    sessionId: string,
+    commandText: string,
+    workspaceRoot: string,
+    config: AdapterProviderConfig,
+    envMap: Record<string, string>,
+  ): Promise<boolean> {
+    return handleCompactCommandWithHost({
+      commandText,
+      workspaceRoot,
+      config,
+      envMap,
+      getConversationHistory: () => this.buildConversationHistory(this.sessionMessages),
+      getTranscriptPath: () => undefined,
+      replaceConversationHistory: compactedHistory => {
+        this.sessionMessages = compactedHistory.map(message => ({
+          role: message.role,
+          content: message.content,
+          timestamp: Date.now(),
+        }));
+      },
+      createProviderAdapter: options =>
+        this.createProviderForSystemPrompt(
+          options.config,
+          options.workspaceRoot,
+          options.envMap,
+          options.systemPrompt,
+        ),
+      addPhaseActivity: () => this.createPhaseActivityStub(),
+      finishPhaseActivity: () => this.finishPhaseActivityStub(),
+      recordAssistantReply: (reply, includeInConversation) =>
+        this.recordCommandAssistantReply(sessionId, reply, includeInConversation),
+      setCompanionState: () => this.setCommandCompanionState(),
+      updateMood: () => this.updateCommandMood(),
+      toErrorMessage: error => error instanceof Error ? error.message : String(error),
+    });
+  }
+
+  private async handleReviewPromptCommand(
+    sessionId: string,
+    commandText: string,
+    workspaceRoot: string,
+    config: AdapterProviderConfig,
+    envMap: Record<string, string>,
+    runtime: ElectronPromptRuntime,
+    tools: ToolDefinition[],
+    runtimeOptions: ProviderRuntimeOptions,
+    effortLevel: EffortLevel | undefined,
+  ): Promise<boolean> {
+    return handleReviewCommandWithHost({
+      commandText,
+      workspaceRoot,
+      config,
+      envMap,
+      runtime,
+      tools,
+      runtimeOptions,
+      effortLevel: effortLevel as import("../src/thinkingEffort/types").EffortLevel | undefined,
+      sessionMessages: this.sessionMessages.map(message => ({
+        role: message.role,
+        content: message.content,
+      })),
+      blockedByPlanMode: false,
+      getConversationHistory: () =>
+        this.buildConversationHistory(this.sessionMessages).map(message => ({
+          role: message.role,
+          content: message.content,
+        })),
+      getPendingPlanVerification: () => undefined,
+      backgroundTaskHost: this.backgroundTaskHost,
+      findActiveBuiltInAgentTask: this.findActiveBuiltInAgentTask,
+      createProviderAdapter: options =>
+        this.createProviderForSystemPrompt(
+          options.config,
+          options.workspaceRoot,
+          options.envMap,
+          options.systemPrompt,
+        ),
+      onStreamingToken: token => this.appendStreamingToken(sessionId, token),
+      startToolExecution: (execId, label, detail) => {
+        this.sendToRenderer({ type: "tool:start", toolName: label, execId, detail });
+      },
+      finishToolExecution: (execId, status, summary) => {
+        this.sendToRenderer({ type: "tool:end", execId, summary, isError: status === "error" });
+      },
+      addPhaseActivity: () => this.createPhaseActivityStub(),
+      finishPhaseActivity: () => this.finishPhaseActivityStub(),
+      recordAssistantReply: (reply, includeInConversation) =>
+        this.recordCommandAssistantReply(sessionId, reply, includeInConversation),
+      setCompanionState: () => this.setCommandCompanionState(),
+      clearStreamingText: () => this.clearStreamingForSession(sessionId),
+      updateMood: () => this.updateCommandMood(),
+      isAbortLikeError: error => this.isAbortLikeError(error),
+    });
+  }
+
+  private async handleVerificationPromptCommand(
+    sessionId: string,
+    commandText: string,
+    workspaceRoot: string,
+    config: AdapterProviderConfig,
+    envMap: Record<string, string>,
+    runtime: ElectronPromptRuntime,
+    tools: ToolDefinition[],
+    runtimeOptions: ProviderRuntimeOptions,
+    effortLevel: EffortLevel | undefined,
+  ): Promise<boolean> {
+    return handleVerificationCommandWithHost({
+      commandText,
+      workspaceRoot,
+      config,
+      envMap,
+      runtime,
+      tools,
+      runtimeOptions,
+      effortLevel: effortLevel as import("../src/thinkingEffort/types").EffortLevel | undefined,
+      sessionMessages: this.sessionMessages.map(message => ({
+        role: message.role,
+        content: message.content,
+      })),
+      blockedByPlanMode: false,
+      getConversationHistory: () =>
+        this.buildConversationHistory(this.sessionMessages).map(message => ({
+          role: message.role,
+          content: message.content,
+        })),
+      getPendingPlanVerification: () => undefined,
+      backgroundTaskHost: this.backgroundTaskHost,
+      findActiveBuiltInAgentTask: this.findActiveBuiltInAgentTask,
+      createProviderAdapter: options =>
+        this.createProviderForSystemPrompt(
+          options.config,
+          options.workspaceRoot,
+          options.envMap,
+          options.systemPrompt,
+        ),
+      onStreamingToken: token => this.appendStreamingToken(sessionId, token),
+      startToolExecution: (execId, label, detail) => {
+        this.sendToRenderer({ type: "tool:start", toolName: label, execId, detail });
+      },
+      finishToolExecution: (execId, status, summary) => {
+        this.sendToRenderer({ type: "tool:end", execId, summary, isError: status === "error" });
+      },
+      addPhaseActivity: () => this.createPhaseActivityStub(),
+      finishPhaseActivity: () => this.finishPhaseActivityStub(),
+      recordAssistantReply: (reply, includeInConversation) =>
+        this.recordCommandAssistantReply(sessionId, reply, includeInConversation),
+      setCompanionState: () => this.setCommandCompanionState(),
+      clearStreamingText: () => this.clearStreamingForSession(sessionId),
+      updateMood: () => this.updateCommandMood(),
+      isAbortLikeError: error => this.isAbortLikeError(error),
+      markPendingPlanVerificationStarted: () => undefined,
+      markPendingPlanVerificationCompleted: () => undefined,
+      resetPendingPlanVerificationToAwaitingStart: () => undefined,
+      onUnexpectedError: () => undefined,
+    });
   }
 
   private getLatestGeneratedImageFromCurrentSession():

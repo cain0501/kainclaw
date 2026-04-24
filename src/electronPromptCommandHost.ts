@@ -8,10 +8,12 @@ import {
   runPromptCommandChain,
 } from "./promptCommandHost";
 import type { ToolDefinition } from "./toolRuntime";
+import type { ProviderRuntimeOptions } from "./thinkingEffort/types";
 import type { EffortLevel } from "./thinkingEffort/types";
 import type { ProfileStore } from "./userModel/profileStore";
 
 type RuntimeLike = {
+  getToolContext?(mode?: string): unknown;
   getMcpStatusSummary?(): Promise<
     Array<{
       name: string;
@@ -24,18 +26,18 @@ type RuntimeLike = {
 };
 
 const SUPPORTED_ELECTRON_RUNTIME_PROMPT_COMMANDS = new Set([
+  "/compact",
   "/mcp",
   "/memory",
+  "/review",
+  "/todo",
   "/tools",
+  "/verify",
 ]);
 
 const UNSUPPORTED_ELECTRON_PROMPT_COMMANDS = new Set([
   "/plan",
   "/exitplan",
-  "/compact",
-  "/todo",
-  "/review",
-  "/verify",
 ]);
 
 const SUPPORTED_ELECTRON_PROMPT_COMMANDS = new Set([
@@ -70,13 +72,18 @@ function buildElectronPromptCommandHelp(): string {
     "Workspace/runtime commands:",
     ...runtimeCommands.map(command => `- ${command.name}: ${command.description}`),
     "",
-    "Unavailable in this shell: /plan, /exitplan, /compact, /todo, /review, /verify",
+    "Unavailable in this shell: /plan, /exitplan",
   ].join("\n");
 }
 
 function buildUnsupportedElectronPromptCommandReply(commandName: string): string {
   return `${commandName} is not yet wired into the Electron desktop shell. Use the VS Code host for this capability for now.`;
 }
+
+export type ElectronPromptCommandResult =
+  | { kind: "continue" }
+  | { kind: "reply"; reply: string }
+  | { kind: "handled" };
 
 export async function handleElectronPromptCommand(options: {
   prompt: string;
@@ -91,15 +98,42 @@ export async function handleElectronPromptCommand(options: {
   setFastMode: (enabled: boolean) => Promise<unknown>;
   setActiveProviderModel: (model: string) => Promise<unknown>;
   refreshWorkspaceStatus: () => void;
+  runtimeOptions: ProviderRuntimeOptions;
+  handleCompactCommand: (
+    prompt: string,
+    workspaceRoot: string,
+    config: AdapterProviderConfig,
+    envMap: Record<string, string>,
+  ) => Promise<boolean>;
+  handleReviewCommand: (
+    prompt: string,
+    workspaceRoot: string,
+    config: AdapterProviderConfig,
+    envMap: Record<string, string>,
+    runtime: RuntimeLike,
+    tools: ToolDefinition[],
+    runtimeOptions: ProviderRuntimeOptions,
+    effortLevel: EffortLevel | undefined,
+  ) => Promise<boolean>;
+  handleVerificationCommand: (
+    prompt: string,
+    workspaceRoot: string,
+    config: AdapterProviderConfig,
+    envMap: Record<string, string>,
+    runtime: RuntimeLike,
+    tools: ToolDefinition[],
+    runtimeOptions: ProviderRuntimeOptions,
+    effortLevel: EffortLevel | undefined,
+  ) => Promise<boolean>;
   profileStore?: ProfileStore;
-}): Promise<string | null> {
+}): Promise<ElectronPromptCommandResult> {
   const parsedCommand = parsePromptSlashCommand(options.prompt);
   if (!parsedCommand) {
-    return null;
+    return { kind: "continue" };
   }
 
   if (parsedCommand.name === "/commands") {
-    return buildElectronPromptCommandHelp();
+    return { kind: "reply", reply: buildElectronPromptCommandHelp() };
   }
 
   const localReply = await handleLocalPromptCommand({
@@ -114,15 +148,18 @@ export async function handleElectronPromptCommand(options: {
     refreshWorkspaceStatus: options.refreshWorkspaceStatus,
   });
   if (localReply) {
-    return localReply;
+    return { kind: "reply", reply: localReply };
   }
 
   if (UNSUPPORTED_ELECTRON_PROMPT_COMMANDS.has(parsedCommand.name)) {
-    return buildUnsupportedElectronPromptCommandReply(parsedCommand.name);
+    return {
+      kind: "reply",
+      reply: buildUnsupportedElectronPromptCommandReply(parsedCommand.name),
+    };
   }
 
   if (!SUPPORTED_ELECTRON_RUNTIME_PROMPT_COMMANDS.has(parsedCommand.name)) {
-    return null;
+    return { kind: "continue" };
   }
 
   const result = await runPromptCommandChain({
@@ -132,19 +169,23 @@ export async function handleElectronPromptCommand(options: {
     envMap: options.envMap,
     runtime: options.runtime,
     tools: options.tools,
-    runtimeOptions: {},
+    runtimeOptions: options.runtimeOptions,
     effortLevel: options.currentEffortLevel,
     profileStore: options.profileStore,
     tryHandleLocalCommand: async () => null,
     tryHandlePlanModeCommand: async () => null,
-    handleCompactCommand: async () => false,
-    handleReviewCommand: async () => false,
-    handleVerificationCommand: async () => false,
+    handleCompactCommand: options.handleCompactCommand,
+    handleReviewCommand: options.handleReviewCommand,
+    handleVerificationCommand: options.handleVerificationCommand,
   });
 
   if (result.kind === "reply") {
-    return result.reply;
+    return result;
   }
 
-  return null;
+  if (result.kind === "handled") {
+    return { kind: "handled" };
+  }
+
+  return { kind: "continue" };
 }
