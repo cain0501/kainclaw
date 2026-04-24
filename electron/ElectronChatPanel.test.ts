@@ -1470,6 +1470,57 @@ describe("ElectronChatPanel session lifecycle", () => {
     }));
   });
 
+  it("routes slash commands through the command chain even when recent image context exists", async () => {
+    const harness = await createHarness();
+    tempDirs.push(harness.storagePath);
+
+    await harness.settings.setOnboardingDone(true);
+
+    const session = await harness.sessions.createSession("session-image-command", "electron", "Image");
+    await harness.sessions.appendMessages(session.id, [
+      {
+        role: "assistant",
+        content: "existing generated image",
+        generatedImages: [
+          {
+            id: "img-existing-1",
+            src: "data:image/png;base64,aGVsbG8=",
+            source: "generate",
+            prompt: "draw a bridal portrait",
+          },
+        ],
+      },
+    ]);
+    await harness.settings.setActiveSessionId(session.id);
+    await harness.panel.handleMessage({ type: "ready" });
+
+    vi.mocked(resolveProviderConfig).mockResolvedValue({
+      config: {
+        type: "anthropic",
+        apiKey: "test-key",
+        model: "claude-sonnet-4-6",
+      },
+      envMap: {},
+    });
+    vi.mocked(buildProviderAdapter).mockReturnValue({} as never);
+    vi.mocked(handleElectronPromptCommand).mockResolvedValue({
+      kind: "reply",
+      reply: "Context compacted.",
+    });
+
+    await harness.panel.handleMessage({
+      type: "sendPrompt",
+      prompt: "/compact",
+    });
+
+    expect(handleElectronPromptCommand).toHaveBeenCalledTimes(1);
+    expect(runImageLabRequest).not.toHaveBeenCalled();
+
+    const messages = await harness.sessions.loadMessages(session.id);
+    expect(messages.map(message => message.content)).toContain("/compact");
+    expect(messages.map(message => message.content)).toContain("Context compacted.");
+  });
+
   it("supports stopping an in-flight image generation request", async () => {
     const harness = await createHarness();
     tempDirs.push(harness.storagePath);

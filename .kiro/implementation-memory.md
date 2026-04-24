@@ -17,8 +17,11 @@
   - `npm run build`
 - Current verified baseline after this round:
   - `143` test files
-  - `927` tests passed
+  - `928` tests passed
 - `npm run build:electron` was not rerun in this round by the agent.
+- Electron routing rule:
+  - Slash commands must be recognized before chat/image intent inference.
+  - Otherwise recent generated-image context will incorrectly hijack commands such as `/compact` into image-edit flows.
 
 更新时间：2026-04-24
 

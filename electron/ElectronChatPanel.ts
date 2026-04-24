@@ -23,6 +23,7 @@ import { runAgent, SYSTEM_PROMPT } from "../src/agent/agentRunner";
 import { toolDefinitions as builtinToolDefinitions } from "../src/toolRuntime";
 import type { ToolContext, ToolDefinition } from "../src/toolRuntime";
 import { handleElectronPromptCommand } from "../src/electronPromptCommandHost";
+import { parsePromptSlashCommand } from "../src/promptCommandHost";
 import { handleCompactCommandWithHost } from "../src/compactHost";
 import {
   handleReviewCommandWithHost,
@@ -1381,6 +1382,11 @@ export class ElectronChatPanel {
     const trimmedPrompt = prompt.trim();
     const hasAttachments = Array.isArray(attachments) && attachments.length > 0;
     if (!trimmedPrompt && !hasAttachments) {
+      return;
+    }
+
+    if (trimmedPrompt && parsePromptSlashCommand(trimmedPrompt)) {
+      await this.sendPrompt(trimmedPrompt, attachments);
       return;
     }
 
