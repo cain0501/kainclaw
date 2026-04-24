@@ -1,5 +1,48 @@
 # AGENTS
 
+## 中文说明（阅读版）
+
+这份 `AGENTS.md` 是当前 `vscode-extension/` 项目的核心执行规则。
+
+如果只看一份最重要的约束文件，就是它。
+
+你可以把它理解成“当前开发总规则”：
+
+- `vscode-extension/` 仍然只是本地验证壳
+- 最终产品目标是 Windows 程序，不是 VS Code 扩展本身
+- Electron 现在只是桌面壳，不是长期业务逻辑归宿
+- 新能力优先落到 `src/` 的 runtime / service / adapter
+- 不要继续把核心业务逻辑堆进：
+  - `electron/ElectronChatPanel.ts`
+  - `electron/renderer/index.html`
+
+它还约束我怎么工作：
+
+- 做功能前先看规格和现状，不要凭记忆乱改
+- 官方 Claude Code 对齐优先，Cain 扩展第二
+- 能复用官方源码，就优先复用，不要平行重写
+- 改动尽量小、可审查、可回退
+- 高风险区域要谨慎：
+  - `src/webviewHtml.ts`
+  - `src/extension.ts`
+  - `src/license/licenseManager.ts`
+
+它还规定了桌面壳边界：
+
+- Electron 只负责桌面 UI、权限、IPC、壳层交互
+- 如果要做这些能力，应该先建 runtime 边界，再接桌面：
+  - `IDesktopAutomationRuntime`
+  - `IBrowserBridgeRuntime`
+  - `ISchedulerRuntime`
+  - `ILocalBridgeRuntime`
+
+你刚刚要求我补进去的流程约束，也已经写进这份文件：
+
+- 多项连续开发时，每完成 5 个用户可感知事项，就把当前稳定状态 push 到 GitHub
+- 目的不是形式化，而是防止像今天这样，做着做着本地文档或记录出问题，恢复成本太高
+
+所以以后如果你想检查“我到底该按什么规则做事”，优先看这份文件的中文说明，再看下面英文原文。
+
 ## Project
 
 - Name: KainClaw
