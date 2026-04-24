@@ -75,14 +75,14 @@ export async function handleVerificationPromptCommand(
         isError: boolean,
       ) => void;
     }) => Promise<{ taskId: string; report: string; verdict: VerificationVerdict }>;
-    buildFollowUpMessage: (label: string, taskId: string) => string;
+    buildFollowUpMessage: (label: string, taskId: string) => string | undefined;
     onUnexpectedError: (message: string, activityId: string) => void;
   },
 ): Promise<boolean> {
   const inspectionPrompt = findOriginalTaskForInspection(options.sessionMessages);
   if (options.commandText.startsWith("/verify") && !inspectionPrompt) {
     await options.recordAssistantReply(
-      "当前对话里还没有可验证的原始任务。先给我一个真实实现任务，或先完成一轮实现后再运行 `/verify`。",
+      "当前对话里还没有可验证的原始任务。先给我一个真实实现任务，或者先完成一轮实现后再运行 `/verify`。",
       false,
     );
     return true;
@@ -125,15 +125,18 @@ export async function handleVerificationPromptCommand(
       }),
     onSuccess: async result => {
       const verificationPassed = result.verdict === "PASS";
+      const followUpMessage = options.buildFollowUpMessage("Verification", result.taskId)?.trim();
       return {
         activityStatus: verificationPassed ? ("done" as const) : ("error" as const),
         activityDetail: `VERDICT: ${result.verdict}`,
         replies: [
           { text: result.report },
-          {
-            text: options.buildFollowUpMessage("Verification", result.taskId),
-            includeInConversation: false,
-          },
+          ...(followUpMessage
+            ? [{
+                text: followUpMessage,
+                includeInConversation: false,
+              }]
+            : []),
         ],
         companionState: verificationPassed ? ("done" as const) : ("idle" as const),
         moodDelta: verificationPassed ? 2 : -1,
@@ -182,7 +185,7 @@ export async function handleReviewPromptCommand(
         isError: boolean,
       ) => void;
     }) => Promise<{ taskId: string; report: string }>;
-    buildFollowUpMessage: (label: string, taskId: string) => string;
+    buildFollowUpMessage: (label: string, taskId: string) => string | undefined;
   },
 ): Promise<boolean> {
   const commandResult = await runInspectionCommandFlow({
@@ -220,19 +223,24 @@ export async function handleReviewPromptCommand(
         onToolStart: hooks.onToolStart,
         onToolEnd: hooks.onToolEnd,
       }),
-    onSuccess: async result => ({
-      activityStatus: "done" as const,
-      replies: [
-        { text: result.report },
-        {
-          text: options.buildFollowUpMessage("Review", result.taskId),
-          includeInConversation: false,
-        },
-      ],
-      companionState: "done" as const,
-      moodDelta: 2,
-      countConversation: true,
-    }),
+    onSuccess: async result => {
+      const followUpMessage = options.buildFollowUpMessage("Review", result.taskId)?.trim();
+      return {
+        activityStatus: "done" as const,
+        replies: [
+          { text: result.report },
+          ...(followUpMessage
+            ? [{
+                text: followUpMessage,
+                includeInConversation: false,
+              }]
+            : []),
+        ],
+        companionState: "done" as const,
+        moodDelta: 2,
+        countConversation: true,
+      };
+    },
     onAbort: async () => ({
       activityStatus: "done" as const,
       activityDetail: "Review cancelled",

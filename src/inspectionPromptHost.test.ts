@@ -45,7 +45,7 @@ describe("inspectionPromptHost", () => {
 
     expect(handled).toBe(true);
     expect(recordAssistantReply).toHaveBeenCalledWith(
-      "当前对话里还没有可验证的原始任务。先给我一个真实实现任务，或先完成一轮实现后再运行 `/verify`。",
+      "当前对话里还没有可验证的原始任务。先给我一个真实实现任务，或者先完成一轮实现后再运行 `/verify`。",
       false,
     );
   });
@@ -109,6 +109,51 @@ describe("inspectionPromptHost", () => {
     expect(setCompanionState).toHaveBeenCalledWith("thinking");
     expect(setCompanionState).toHaveBeenLastCalledWith("done");
     expect(updateMood).toHaveBeenCalledWith(2, true);
+  });
+
+  it("skips verification follow-up replies when the host returns no follow-up message", async () => {
+    const recordAssistantReply = vi.fn(async () => undefined);
+
+    const handled = await handleVerificationPromptCommand({
+      commandText: "/verify focus",
+      workspaceRoot: "E:\\repo",
+      config: {
+        type: "anthropic",
+        apiKey: "secret",
+        model: "claude-sonnet",
+      },
+      envMap: {},
+      runtime: { getToolContext: () => ({}) as any },
+      tools: [],
+      runtimeOptions: {},
+      effortLevel: "high",
+      sessionMessages: [{ role: "user", content: "Implement task" }],
+      blockedByPlanMode: false,
+      onToken: () => undefined,
+      onToolStart: () => undefined,
+      onToolEnd: () => undefined,
+      addPhaseActivity: () => "activity-followup-verify",
+      finishPhaseActivity: () => undefined,
+      recordAssistantReply,
+      setCompanionState: () => undefined,
+      clearStreamingText: () => undefined,
+      updateMood: async () => undefined,
+      isAbortLikeError: () => false,
+      runVerificationSession: async () => ({
+        taskId: "verify-no-followup",
+        report: "verification report",
+        verdict: "PASS",
+      }),
+      buildFollowUpMessage: () => "",
+      onUnexpectedError: () => undefined,
+    });
+
+    expect(handled).toBe(true);
+    expect(recordAssistantReply).toHaveBeenCalledTimes(1);
+    expect(recordAssistantReply).toHaveBeenCalledWith(
+      "verification report",
+      undefined,
+    );
   });
 
   it("treats verification PARTIAL results as non-passing in prompt handling", async () => {
@@ -222,5 +267,48 @@ describe("inspectionPromptHost", () => {
       false,
     );
     expect(updateMood).toHaveBeenCalledWith(2, true);
+  });
+
+  it("skips review follow-up replies when the host returns no follow-up message", async () => {
+    const recordAssistantReply = vi.fn(async () => undefined);
+
+    const handled = await handleReviewPromptCommand({
+      commandText: "/review",
+      workspaceRoot: "E:\\repo",
+      config: {
+        type: "anthropic",
+        apiKey: "secret",
+        model: "claude-sonnet",
+      },
+      envMap: {},
+      runtime: { getToolContext: () => ({}) as any },
+      tools: [],
+      runtimeOptions: {},
+      effortLevel: "medium",
+      sessionMessages: [{ role: "user", content: "Implement task" }],
+      blockedByPlanMode: false,
+      onToken: () => undefined,
+      onToolStart: () => undefined,
+      onToolEnd: () => undefined,
+      addPhaseActivity: () => "activity-review-no-followup",
+      finishPhaseActivity: () => undefined,
+      recordAssistantReply,
+      setCompanionState: () => undefined,
+      clearStreamingText: () => undefined,
+      updateMood: async () => undefined,
+      isAbortLikeError: () => false,
+      runReviewSession: async () => ({
+        taskId: "review-no-followup",
+        report: "review report",
+      }),
+      buildFollowUpMessage: () => "",
+    });
+
+    expect(handled).toBe(true);
+    expect(recordAssistantReply).toHaveBeenCalledTimes(1);
+    expect(recordAssistantReply).toHaveBeenCalledWith(
+      "review report",
+      undefined,
+    );
   });
 });

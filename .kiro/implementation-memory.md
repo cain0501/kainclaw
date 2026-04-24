@@ -11,13 +11,14 @@
 - Electron shell conversation hygiene rule:
   - User-facing slash-command replies should still be shown and persisted in the session,
   - but replies that are not meant to become future model context must be marked and filtered out of later provider history.
+  - Internal follow-up strings for background inspection retrieval, such as `Review task saved as ...` / `TaskOutput`, should stay hidden from desktop-shell end users unless an operator/debug surface explicitly asks for them.
 - This round validated:
   - `npm test`
   - `npm run check`
   - `npm run build`
 - Current verified baseline after this round:
   - `144` test files
-  - `938` tests passed
+  - `940` tests passed
 - `npm run build:electron` was not rerun in this round by the agent.
 - Electron routing rule:
   - Slash commands must be recognized before chat/image intent inference.
@@ -33,6 +34,7 @@
   - Keep normal workspace resolution quiet. Auto-descend to the real repo should usually just update the effective workspace, not open a large diagnostic panel.
   - Reserve expanded workspace UI for exceptional states: non-git degradation, missing paths, or multiple candidate repos.
   - When multiple nested repo candidates exist, expose clickable candidate repo choices in the shell instead of making the user manually retry path guesses.
+  - Workspace badges should show the directory label directly. Do not prepend technical status tags such as `需确认` in the default user-facing shell.
 - Electron runtime consistency rule:
   - Electron chat/runtime, MCP workspace display, and Local Bridge runtime context should all consume the selected workspace path.
   - Only git-sensitive inspection flows should switch to separately resolved repo context.

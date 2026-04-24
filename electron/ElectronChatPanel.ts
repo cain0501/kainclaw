@@ -1964,6 +1964,17 @@ export class ElectronChatPanel {
 
   private finishPhaseActivityStub(): void {}
 
+  private getUserFacingInspectionBackgroundTaskHost(): Pick<
+    BackgroundTaskHost,
+    "runBuiltInAgentSession" | "buildFollowUpMessage"
+  > {
+    return {
+      runBuiltInAgentSession: request =>
+        this.backgroundTaskHost.runBuiltInAgentSession(request),
+      buildFollowUpMessage: () => "",
+    };
+  }
+
   private setCommandCompanionState(): void {}
 
   private async updateCommandMood(): Promise<void> {}
@@ -2045,7 +2056,7 @@ export class ElectronChatPanel {
       getConversationHistory: () =>
         this.buildInspectionConversationHistory(this.sessionMessages),
       getPendingPlanVerification: () => undefined,
-      backgroundTaskHost: this.backgroundTaskHost,
+      backgroundTaskHost: this.getUserFacingInspectionBackgroundTaskHost(),
       findActiveBuiltInAgentTask: this.findActiveBuiltInAgentTask,
       createProviderAdapter: options =>
         this.createProviderForSystemPrompt(
@@ -2101,7 +2112,7 @@ export class ElectronChatPanel {
       getConversationHistory: () =>
         this.buildInspectionConversationHistory(this.sessionMessages),
       getPendingPlanVerification: () => undefined,
-      backgroundTaskHost: this.backgroundTaskHost,
+      backgroundTaskHost: this.getUserFacingInspectionBackgroundTaskHost(),
       findActiveBuiltInAgentTask: this.findActiveBuiltInAgentTask,
       createProviderAdapter: options =>
         this.createProviderForSystemPrompt(

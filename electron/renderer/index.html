@@ -1267,11 +1267,11 @@ function getWorkspaceStatusMeta(workspaceInfo) {
     case 'nested_git_root':
       return { label: 'Git 仓库', shortLabel: '', color: '#166534' };
     case 'missing':
-      return { label: '工作区路径失效', shortLabel: '需确认', color: '#b45309' };
+      return { label: '工作区路径失效', shortLabel: '', color: '#b45309' };
     case 'non_git_workspace':
-      return { label: '当前目录不是 Git 仓库', shortLabel: '需确认', color: '#b45309' };
+      return { label: '当前目录不是 Git 仓库', shortLabel: '', color: '#b45309' };
     case 'ambiguous_nested_git_roots':
-      return { label: '检测到多个候选仓库', shortLabel: '需确认', color: '#b91c1c' };
+      return { label: '检测到多个候选仓库', shortLabel: '', color: '#b91c1c' };
     case 'unset':
     default:
       return { label: '未设置工作区', shortLabel: '', color: '#a1a1aa' };
@@ -1279,7 +1279,7 @@ function getWorkspaceStatusMeta(workspaceInfo) {
 }
 
 function shouldShowWorkspaceAlert(workspaceInfo) {
-  return ['missing', 'non_git_workspace', 'ambiguous_nested_git_roots'].includes(
+  return ['missing', 'ambiguous_nested_git_roots'].includes(
     workspaceInfo?.kind,
   );
 }

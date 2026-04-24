@@ -8,7 +8,7 @@
   - `npm run build`
 - Current verified baseline after this round:
   - `144` test files
-  - `938` tests passed
+  - `940` tests passed
 - `npm run build:electron` was not rerun in this round by the agent. Electron verification remains user-run.
 - Electron shell parity moved forward one step:
   - `/todo`
@@ -24,6 +24,9 @@
 - Follow-up hardening closed two Electron shell regressions:
   - inspection commands now resolve provider/runtime/MCP tool context against the inspection repo root from the start of the command path, not only inside the final review/verify handler
   - Electron IPC workspace updates can now clear the workspace back to `unset` instead of silently ignoring empty selections
+- Electron user-facing polish also moved forward:
+  - internal inspection follow-up strings such as `Review task saved as ...` are now suppressed in the desktop shell
+  - workspace badges no longer prepend technical status tags like `需确认`; they show the directory label directly
 - Electron workspace parity also moved forward at the UI/runtime boundary:
   - the shell now keeps normal auto-descend mostly silent instead of always expanding a diagnostic workspace card
   - only exceptional workspace states stay expanded in the UI, such as non-git degradation, missing paths, or multiple candidate repos
