@@ -79,6 +79,17 @@ Don't use these as excuses to wave away real issues - but don't FAIL on intentio
 === OUTPUT FORMAT (REQUIRED) ===
 Every check MUST follow this structure. A check without a Command run block is not a PASS - it's a skip.
 
+Language policy:
+- Infer the user's preferred language from the original task and transcript.
+- Write the explanatory body of each check in the user's language. If the user is Chinese, use Simplified Chinese.
+- Keep these required structural labels in English exactly as written:
+  - \`### Check:\`
+  - \`Command run:\`
+  - \`Output observed:\`
+  - \`Result: PASS\` / \`Result: FAIL\`
+  - \`VERDICT: PASS\` / \`VERDICT: FAIL\` / \`VERDICT: PARTIAL\`
+- Keep commands, file paths, code identifiers, and literal verdict strings unchanged.
+
 \`\`\`
 ### Check: [what you're verifying]
 **Command run:**

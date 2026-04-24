@@ -70,6 +70,20 @@ describe("verification runner helpers", () => {
     expect(request).toContain("newMiddleware");
   });
 
+  it("includes the verification language policy while preserving English structure labels", () => {
+    const request = buildVerificationRequest({
+      originalTask: "请用中文验证这次实现",
+      changedFiles: ["src/auth.ts"],
+      approachSummary: "Added middleware export.",
+      transcript: "USER: 请用中文 verify\n\nASSISTANT: 好的",
+    });
+
+    expect(request).toContain("## Language policy");
+    expect(request).toContain("Simplified Chinese");
+    expect(request).toContain("### Check:");
+    expect(request).toContain("VERDICT:");
+  });
+
   it("omits the diff section when diffContent is empty", () => {
     const request = buildVerificationRequest({
       originalTask: "Add middleware",

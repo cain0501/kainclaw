@@ -95,6 +95,10 @@ export function buildVerificationRequest(options: {
   }
 
   parts.push(
+    "## Language policy\nInfer the user's preferred language from the original task and transcript. Write the explanatory body in that language. If the user is Chinese, use Simplified Chinese. Keep these structural labels in English exactly: `### Check:`, `Command run:`, `Output observed:`, `Result: PASS/FAIL`, and the final `VERDICT:` line. Keep commands, file paths, code identifiers, and literal verdict strings unchanged.",
+  );
+
+  parts.push(
     "Focus on direct verification of the workspace as it exists now. Do not trust transcript claims without running checks.",
   );
 

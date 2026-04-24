@@ -17,11 +17,15 @@
   - `npm run build`
 - Current verified baseline after this round:
   - `143` test files
-  - `928` tests passed
+  - `930` tests passed
 - `npm run build:electron` was not rerun in this round by the agent.
 - Electron routing rule:
   - Slash commands must be recognized before chat/image intent inference.
   - Otherwise recent generated-image context will incorrectly hijack commands such as `/compact` into image-edit flows.
+- Built-in inspection language rule:
+  - `/review` and `/verify` should follow the user's language by default.
+  - If the user is Chinese, write the explanatory body in Simplified Chinese.
+  - `/verify` still keeps the required English structural labels and the literal `VERDICT:` line.
 
 更新时间：2026-04-24
 
@@ -476,3 +480,4 @@
 - `implementation-memory.md` 只保留长期结论。
 - 后续每组收口后都要同步这三份文档，但不要把每次小修都写成大段演进史。
 - 多项连续开发时，每完成 5 个用户可感知事项，就先把当前稳定状态 push 到 GitHub；不要把恢复能力建立在本地会话记录、临时恢复稿或未同步文档上。
+- 只要改动影响到前端可见行为、桌面壳交互、图片链路、审批流、会话切换、设置页或其它必须人工点按才能确认的路径，就要在收尾时明确提醒用户手测，并给出最短复现步骤。

@@ -66,6 +66,19 @@ describe("review runner helpers", () => {
     expect(request).toContain("newMiddleware");
   });
 
+  it("includes the review language policy for user-language-aware output", () => {
+    const request = buildReviewRequest({
+      originalTask: "用中文审查这次改动",
+      changedFiles: ["src/auth.ts"],
+      approachSummary: "Added middleware export.",
+      transcript: "USER: 请用中文 review\n\nASSISTANT: 好的",
+    });
+
+    expect(request).toContain("## Language policy");
+    expect(request).toContain("Simplified Chinese");
+    expect(request).toContain("未发现问题。");
+  });
+
   it("omits the diff section when diffContent is empty", () => {
     const request = buildReviewRequest({
       originalTask: "Add middleware",

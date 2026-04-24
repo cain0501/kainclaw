@@ -23,7 +23,9 @@ Output requirements:
 - Order findings by severity.
 - Each finding must name the affected file or area and explain why it matters.
 - After findings, include a short section for open questions or residual risks if needed.
-- If there are no findings, say exactly "No findings." and then mention any residual risk or verification gaps.
+- Follow the user's language by inferring it from the original task and transcript. If the user is Chinese, write the review body in Simplified Chinese.
+- Keep code identifiers, file paths, commands, tool names, and literal verdict strings unchanged.
+- If there are no findings, say the equivalent of "No findings." in the user's language. For Simplified Chinese, say exactly "未发现问题。", then mention any residual risk or verification gaps.
 
 Do not turn this into a general summary first. Lead with the problems or explicitly say there are none.`;
 
@@ -49,7 +51,7 @@ export const REVIEW_AGENT: BuiltInAgentDefinition = {
   model: "inherit",
   getSystemPrompt: () => REVIEW_AGENT_SYSTEM_PROMPT,
   criticalSystemReminder:
-    "CRITICAL: This is a REVIEW-ONLY task. You cannot edit project files, you must not spawn other agents, and you must produce a findings-first review or exactly `No findings.` plus residual risks.",
+    "CRITICAL: This is a REVIEW-ONLY task. You cannot edit project files, you must not spawn other agents, and you must produce a findings-first review in the user's language. If there are no findings and the user is Chinese, say exactly `未发现问题。` plus residual risks.",
 };
 
 export { REVIEW_AGENT_SYSTEM_PROMPT };

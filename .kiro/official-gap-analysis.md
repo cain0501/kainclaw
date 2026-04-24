@@ -8,7 +8,7 @@
   - `npm run build`
 - Current verified baseline after this round:
   - `143` test files
-  - `928` tests passed
+  - `930` tests passed
 - `npm run build:electron` was not rerun in this round by the agent. Electron verification remains user-run.
 - Electron shell parity moved forward one step:
   - `/todo`
@@ -18,6 +18,7 @@
   are no longer desktop-shell hard blocks.
 - This is still shell wiring work, not a new capability family. The value is that the Electron validation shell now reuses existing `src/` task / compact / inspection host paths instead of rejecting these commands up front.
 - Electron slash-command routing now runs before image-intent routing, so command inputs are no longer misclassified as image-edit prompts when recent image context exists.
+- Review / verification output policy moved one step closer to expected product behavior: by default the body follows the user's language, and Chinese users should now receive Simplified Chinese explanatory text while `/verify` keeps the required English structural labels.
 
 更新时间：2026-04-24
 

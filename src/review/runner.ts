@@ -83,6 +83,10 @@ export function buildReviewRequest(options: {
   }
 
   parts.push(
+    "## Language policy\nInfer the user's preferred language from the original task and transcript. Write the review body in that language. If the user is Chinese, use Simplified Chinese. Keep file paths, code identifiers, commands, and literal keywords unchanged. If there are no findings and the user is Chinese, say exactly `未发现问题。`.",
+  );
+
+  parts.push(
     "Use the diff and surrounding code to produce a findings-first review. Prefer concrete, high-confidence issues. If you find nothing, say `No findings.` and call out residual risks or test gaps briefly.",
   );
 
