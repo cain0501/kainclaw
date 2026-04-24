@@ -14,8 +14,11 @@ import {
   loadSettingsPanelData,
 } from "../src/settingsHost";
 import { normalizeWebviewAttachments } from "../src/attachmentHandler";
-import type { NormalizedMessage } from "../src/agent/providers/IProviderAdapter";
-import { McpRuntime } from "../src/mcpRuntime";
+import type {
+  NormalizedMessage,
+  ProviderConfig as AdapterProviderConfig,
+} from "../src/agent/providers/IProviderAdapter";
+import { McpRuntime, type McpServerStatusSummary } from "../src/mcpRuntime";
 import { runAgent, SYSTEM_PROMPT } from "../src/agent/agentRunner";
 import { toolDefinitions as builtinToolDefinitions } from "../src/toolRuntime";
 import type { ToolContext, ToolDefinition } from "../src/toolRuntime";
@@ -100,17 +103,14 @@ function getSupportedElectronTools() {
 }
 
 type ElectronPromptRuntime = {
-  getMcpStatusSummary: () => Promise<
-    Array<{
-      name: string;
-      state: string;
-      transport: string;
-      toolCount: number;
-      error?: string;
-    }>
-  >;
+  getMcpStatusSummary: () => Promise<McpServerStatusSummary[]>;
   getToolDefinitions: () => Promise<ToolDefinition[]>;
   getToolContext: (mode?: ToolContext["invokerKind"]) => ToolContext;
+};
+
+type InspectionConversationMessage = {
+  role: "user" | "assistant";
+  content: string;
 };
 
 type ActiveRequestKind = "chat" | "image";
@@ -1481,7 +1481,6 @@ export class ElectronChatPanel {
         workspaceRoot,
         envMap,
         allTools,
-        runtimeOptions,
       );
 
       const commandResult = await handleElectronPromptCommand({
@@ -1718,6 +1717,24 @@ export class ElectronChatPanel {
       });
   }
 
+  private buildInspectionConversationHistory(
+    messages: ChatMessage[],
+  ): InspectionConversationMessage[] {
+    return this.buildConversationHistory(messages)
+      .filter(
+        (
+          message,
+        ): message is Extract<
+          NormalizedMessage,
+          { role: "user" | "assistant" }
+        > => message.role === "user" || message.role === "assistant",
+      )
+      .map(message => ({
+        role: message.role,
+        content: message.content,
+      }));
+  }
+
   private async recordCommandAssistantReply(
     sessionId: string,
     reply: string,
@@ -1878,10 +1895,7 @@ export class ElectronChatPanel {
       })),
       blockedByPlanMode: false,
       getConversationHistory: () =>
-        this.buildConversationHistory(this.sessionMessages).map(message => ({
-          role: message.role,
-          content: message.content,
-        })),
+        this.buildInspectionConversationHistory(this.sessionMessages),
       getPendingPlanVerification: () => undefined,
       backgroundTaskHost: this.backgroundTaskHost,
       findActiveBuiltInAgentTask: this.findActiveBuiltInAgentTask,
@@ -1936,10 +1950,7 @@ export class ElectronChatPanel {
       })),
       blockedByPlanMode: false,
       getConversationHistory: () =>
-        this.buildConversationHistory(this.sessionMessages).map(message => ({
-          role: message.role,
-          content: message.content,
-        })),
+        this.buildInspectionConversationHistory(this.sessionMessages),
       getPendingPlanVerification: () => undefined,
       backgroundTaskHost: this.backgroundTaskHost,
       findActiveBuiltInAgentTask: this.findActiveBuiltInAgentTask,
