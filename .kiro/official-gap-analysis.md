@@ -156,6 +156,47 @@
 - 跨应用上下文共享
 - AI 视觉设计生成等长期探索型扩展
 
+## 相关规格与参考路径
+
+这份对账文档只回答“现在做到哪、还差什么”。如果要继续推进某个能力，直接跳到对应规格：
+
+### 主规格与参考
+
+- 主产品规格：
+  - `E:\claudecodejingiang\vscode-extension\.kiro\specs\v1-product-spec.md`
+- 官方源码能力索引：
+  - `E:\claudecodejingiang\vscode-extension\.kiro\source-reference.md`
+- 文档恢复草稿：
+  - `E:\claudecodejingiang\vscode-extension\.kiro\recovery-draft-2026-04-24.md`
+  - 仅用于恢复旧主体和历史表述，不作为当前状态真源。
+
+### Phase 3 / Phase 4 对应规格
+
+- Computer Use / Browser Bridge：
+  - `E:\claudecodejingiang\vscode-extension\.kiro\specs\computer-use-browser-bridge.md`
+- Office Add-in / Local Bridge：
+  - `E:\claudecodejingiang\vscode-extension\.kiro\specs\office-addin-ecosystem.md`
+- Hooks：
+  - `E:\claudecodejingiang\vscode-extension\.kiro\specs\p3-hooks-execution-chain.md`
+- Custom Agents：
+  - `E:\claudecodejingiang\vscode-extension\.kiro\specs\p3-custom-agents-wizard.md`
+- Cron / Scheduler：
+  - `E:\claudecodejingiang\vscode-extension\.kiro\specs\p3-cron-scheduled-tasks.md`
+- 跨会话搜索：
+  - `E:\claudecodejingiang\vscode-extension\.kiro\specs\x01-cross-session-search.md`
+- User Modeling：
+  - `E:\claudecodejingiang\vscode-extension\.kiro\specs\x02-user-modeling.md`
+- Message Gateway：
+  - `E:\claudecodejingiang\vscode-extension\.kiro\specs\x03-message-gateway.md`
+- Companion：
+  - `E:\claudecodejingiang\vscode-extension\.kiro\specs\f09-companion.md`
+- Auto Skill Generation：
+  - `E:\claudecodejingiang\vscode-extension\.kiro\specs\f11-auto-skill-generation.md`
+- KainClaw Design：
+  - `E:\claudecodejingiang\vscode-extension\.kiro\specs\kainclaw-design.md`
+- Worker 权限边界：
+  - `E:\claudecodejingiang\vscode-extension\.kiro\specs\p05-worker-permissions.md`
+
 ## Latest Sync - 2026-04-24
 
 - 当前文档主体恢复到“官方 parity 主线优先”的写法，不再把图片能力误写成项目主核心。

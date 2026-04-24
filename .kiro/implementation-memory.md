@@ -405,6 +405,47 @@
 - Prompt suggestion
 - Plugin / Skills 市场
 
+## 相关规格与参考路径
+
+这份实现记忆只保留长期有效结论。遇到“未来要做什么、准备怎么实现”时，不要重新脑补，先看对应规格：
+
+### 主规格与参考
+
+- 主产品规格：
+  - `E:\claudecodejingiang\vscode-extension\.kiro\specs\v1-product-spec.md`
+- 官方源码能力索引：
+  - `E:\claudecodejingiang\vscode-extension\.kiro\source-reference.md`
+- 文档恢复草稿：
+  - `E:\claudecodejingiang\vscode-extension\.kiro\recovery-draft-2026-04-24.md`
+  - 仅在需要追旧文档主体、旧能力表述时使用，不作为当前实现真源。
+
+### 各能力实现规格入口
+
+- Computer Use / Browser Bridge：
+  - `E:\claudecodejingiang\vscode-extension\.kiro\specs\computer-use-browser-bridge.md`
+- Office Add-in / Local Bridge：
+  - `E:\claudecodejingiang\vscode-extension\.kiro\specs\office-addin-ecosystem.md`
+- Hooks 执行链：
+  - `E:\claudecodejingiang\vscode-extension\.kiro\specs\p3-hooks-execution-chain.md`
+- Custom Agents：
+  - `E:\claudecodejingiang\vscode-extension\.kiro\specs\p3-custom-agents-wizard.md`
+- Cron / Scheduler：
+  - `E:\claudecodejingiang\vscode-extension\.kiro\specs\p3-cron-scheduled-tasks.md`
+- 跨会话搜索：
+  - `E:\claudecodejingiang\vscode-extension\.kiro\specs\x01-cross-session-search.md`
+- User Modeling：
+  - `E:\claudecodejingiang\vscode-extension\.kiro\specs\x02-user-modeling.md`
+- Message Gateway：
+  - `E:\claudecodejingiang\vscode-extension\.kiro\specs\x03-message-gateway.md`
+- Companion：
+  - `E:\claudecodejingiang\vscode-extension\.kiro\specs\f09-companion.md`
+- Auto Skill Generation：
+  - `E:\claudecodejingiang\vscode-extension\.kiro\specs\f11-auto-skill-generation.md`
+- KainClaw Design：
+  - `E:\claudecodejingiang\vscode-extension\.kiro\specs\kainclaw-design.md`
+- Worker 权限边界：
+  - `E:\claudecodejingiang\vscode-extension\.kiro\specs\p05-worker-permissions.md`
+
 ## 最重要的写法约束
 
 - `CLAUDE_HANDOFF.md` 不再写流水账，只写当前态。
