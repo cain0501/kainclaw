@@ -64,6 +64,7 @@ Note:
 - Treat approvals, license checks, session persistence, and swarm gating as product-sensitive behavior.
 - Use extra caution in large template-string files and extension activation paths.
 - If a task touches a risky area, prefer incremental edits and compile after each logical step.
+- For ongoing multi-item work, after every completed group of 5 user-facing items, push the current stable state to GitHub so recovery does not depend on local-only history.
 
 ### 2.1 Windows Desktop Guardrails
 
