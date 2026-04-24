@@ -1,0 +1,1808 @@
+import { randomUUID } from "node:crypto";
+import { promises as fs } from "node:fs";
+import path from "node:path";
+import { ElectronHostAdapter } from "../src/platform/electronHostAdapter";
+import { SessionRepository, type ChatMessage } from "../src/storage/sessionRepository";
+import { SettingsRepository, type ProviderMeta } from "../src/storage/settingsRepository";
+import { buildProviderAdapter, resolveProviderConfig } from "../src/providerHost";
+import { verifyLicense } from "../src/license/licenseManager";
+import {
+  validateOnboardingProviderKey,
+  completeOnboardingProvider,
+  saveSettingsProvider,
+  deleteSettingsProvider,
+  loadSettingsPanelData,
+} from "../src/settingsHost";
+import { normalizeWebviewAttachments } from "../src/attachmentHandler";
+import type { NormalizedMessage } from "../src/agent/providers/IProviderAdapter";
+import { McpRuntime } from "../src/mcpRuntime";
+import { runAgent, SYSTEM_PROMPT } from "../src/agent/agentRunner";
+import { toolDefinitions as builtinToolDefinitions } from "../src/toolRuntime";
+import type { ToolContext } from "../src/toolRuntime";
+import { handleElectronPromptCommand } from "../src/electronPromptCommandHost";
+import {
+  buildImageLabResultBatches,
+  removeImageLabResult,
+  prependImageLabResults,
+  type ImageLabResultBatch,
+} from "../src/imageGeneration/imageLabGallery";
+import { ImageLabGalleryStore } from "../src/imageGeneration/imageLabGalleryStore";
+import {
+  PromptLibraryRepository,
+  type PromptLibraryPreview,
+} from "../src/imageGeneration/promptLibraryRepository";
+import {
+  createImageVariant,
+  runImageLabRequest,
+  type ImageLabConfig,
+  type ImageLabReferenceImage,
+  type ImageLabResultItem,
+} from "../src/imageGeneration/imageLabRuntime";
+import {
+  IMAGE_PROMPT_INFERENCE_SYSTEM_PROMPT,
+  VISIBLE_IMAGE_PROMPT_PAIR_SYSTEM_PROMPT,
+  inferVisiblePromptPairFromReferenceImages,
+  inferPromptFromReferenceImages,
+  providerSupportsImagePromptInference,
+} from "../src/imageGeneration/imagePromptInference";
+import {
+  IMAGE_WORKFLOW_ORCHESTRATOR_SYSTEM_PROMPT,
+  orchestrateImageWorkflow,
+  providerSupportsImageWorkflowOrchestration,
+  type ImageWorkflowPlan,
+} from "../src/imageGeneration/imageWorkflowOrchestrator";
+import {
+  searchPublicReferenceImages,
+} from "../src/imageGeneration/imageMaterialSearch";
+import { determineChatPromptIntent } from "../src/imageGeneration/chatPromptIntent";
+import { resolveImageBatchPlan } from "../src/imageGeneration/imagePromptBatching";
+import { resolveRequestedImageSize } from "../src/imageGeneration/imagePromptSizing";
+import type { DesktopRuntimeServices } from "../src/platform/desktopRuntimeServices";
+
+const SUPPORTED_ELECTRON_TOOL_NAMES = new Set([
+  "list_files",
+  "read_file",
+  "search_files",
+  "run_command",
+  "write_file",
+  "replace_in_file",
+  "fetch_url",
+  "glob_files",
+]);
+
+const ELECTRON_SHELL_PROMPT_NOTE = `
+
+# Desktop Shell Note
+- You are running inside a limited Electron validation shell, not the full VS Code host.
+- Identify yourself as KainClaw. Do not claim to be Claude, Anthropic, OpenAI, DeepSeek, or any provider.
+- Only use the tools that are actually exposed in this shell.
+- Plan mode, worktree, background tasks, verification/review launchers, browser automation, LSP, memory management, and skill management are not available here.
+- When the user asks about the current workspace or local files, rely on the provided workspace root and tool results. Do not guess.
+- If the user asks for one of those unavailable capabilities, say it is not yet wired in the desktop shell instead of pretending to use it.
+`;
+
+function getSupportedElectronTools() {
+  return builtinToolDefinitions.filter(tool =>
+    SUPPORTED_ELECTRON_TOOL_NAMES.has(tool.name),
+  );
+}
+
+type ElectronPromptRuntime = {
+  getMcpStatusSummary: () => Promise<
+    Array<{
+      name: string;
+      state: string;
+      transport: string;
+      toolCount: number;
+      error?: string;
+    }>
+  >;
+};
+
+type ActiveRequestKind = "chat" | "image";
+
+/**
+ * Electron equivalent of ChatSidebarProvider.
+ *
+ * Wires sessions, settings, MCP, and the full agent+tool pipeline directly to
+ * the Electron IPC layer, with no VS Code module dependencies.
+ */
+export class ElectronChatPanel {
+  private currentSessionId: string | undefined;
+  private sessionMessages: ChatMessage[] = [];
+  private streamingText = "";
+  private imageBusy = false;
+  private imagePromptInferenceBusy = false;
+  private imageWorkflowBusy = false;
+  private imageWorkflowPlan: ImageWorkflowPlan | undefined;
+  private imageMaterialSearchBusy = false;
+  private activeImageAbortController: AbortController | undefined;
+  private imageResults: ImageLabResultItem[] = [];
+  private imageResultsHydrated = false;
+  private readonly cleanupHandlers: Array<() => void> = [];
+  private readonly inFlightRequests = new Map<
+    string,
+    {
+      abortController: AbortController;
+      streamingText: string;
+      kind: ActiveRequestKind;
+    }
+  >();
+  private readonly mcpRuntime: McpRuntime;
+  private readonly imageGalleryStore: ImageLabGalleryStore;
+  private readonly promptLibraryRepository: PromptLibraryRepository;
+
+  constructor(
+    private readonly sessions: SessionRepository,
+    private readonly settings: SettingsRepository,
+    private readonly host: ElectronHostAdapter,
+    /** Sends a message to the renderer via IPC. */
+    private readonly sendToRenderer: (payload: unknown) => void,
+    private readonly desktopRuntimeServices?: DesktopRuntimeServices,
+  ) {
+    this.mcpRuntime = new McpRuntime(
+      () => this.settings.getWorkspaceRoot() ?? "",
+      process.env as Record<string, string>,
+    );
+    this.imageGalleryStore = new ImageLabGalleryStore(this.host.getStorageUri());
+    this.promptLibraryRepository = new PromptLibraryRepository(this.host.getStorageUri());
+
+    const localBridgeRuntime = this.desktopRuntimeServices?.localBridgeRuntime;
+    if (localBridgeRuntime) {
+      this.cleanupHandlers.push(
+        localBridgeRuntime.onStatusChanged(() => {
+          void this.postState();
+        }),
+      );
+    }
+  }
+
+  dispose(): void {
+    while (this.cleanupHandlers.length > 0) {
+      const cleanup = this.cleanupHandlers.pop();
+      cleanup?.();
+    }
+  }
+
+  // ─── IPC entry point ────────────────────────────────────────────────────────
+
+  async handleMessage(message: Record<string, unknown>): Promise<void> {
+    const type = typeof message.type === "string" ? message.type : "";
+
+    // Sessions
+    if (type === "sessions:load") { await this.loadSessions(); return; }
+    if (type === "sessions:close") { this.sendToRenderer({ type: "hideSessions" }); return; }
+    if (type === "sessions:new") { await this.createNewSession(); return; }
+    if (type === "sessions:switch") { await this.switchSession(String(message.id ?? "")); return; }
+    if (type === "sessions:rename") { await this.renameSession(String(message.id ?? ""), String(message.title ?? "")); return; }
+    if (type === "sessions:delete") { await this.deleteSession(String(message.id ?? "")); return; }
+    if (type === "sessions:export") { await this.exportSession(String(message.id ?? "")); return; }
+
+    // Settings
+    if (type === "settings:load") { await this.loadSettings(); return; }
+    if (type === "settings:close") { await this.postState(); return; }
+    if (type === "settings:setActive") { await this.setActiveProvider(String(message.id ?? "")); return; }
+    if (type === "settings:saveProvider") { await this.saveProvider(message.meta, String(message.apiKey ?? "")); return; }
+    if (type === "settings:deleteProvider") { await this.deleteProvider(String(message.id ?? "")); return; }
+    if (type === "license:activate") { await this.activateLicense(String(message.key ?? "")); return; }
+    if (type === "settings:reset") { await this.resetAllConfig(); return; }
+    if (type === "image:loadState") { await this.postImageState(); return; }
+    if (type === "image:saveConfig") {
+      await this.saveImageConfig(message);
+      return;
+    }
+    if (type === "image:setActiveConfig") {
+      await this.setActiveImageConfig(String(message.id ?? ""));
+      return;
+    }
+    if (type === "image:deleteConfig") {
+      await this.deleteImageConfig(String(message.id ?? ""));
+      return;
+    }
+    if (type === "image:deleteHistoryPrompt") {
+      await this.deleteImageHistoryPrompt(String(message.prompt ?? ""));
+      return;
+    }
+    if (type === "image:clearHistory") {
+      await this.clearImageHistory();
+      return;
+    }
+    if (type === "image:clearResults") {
+      await this.clearImageResults();
+      return;
+    }
+    if (type === "image:deleteResult") {
+      await this.deleteImageResult(String(message.id ?? ""));
+      return;
+    }
+    if (type === "promptLibrary:savePrompt") {
+      await this.savePromptLibraryEntry(message);
+      return;
+    }
+    if (type === "promptLibrary:deletePrompt") {
+      await this.deletePromptLibraryEntry(String(message.id ?? ""));
+      return;
+    }
+    if (type === "promptLibrary:toggleFavorite") {
+      await this.togglePromptLibraryFavorite(String(message.id ?? ""));
+      return;
+    }
+    if (type === "promptLibrary:inferFromImage") {
+      await this.inferPromptLibraryPrompt(message);
+      return;
+    }
+    if (type === "image:run") {
+      await this.runImageJob(message);
+      return;
+    }
+    if (type === "image:inferPrompt") {
+      await this.inferImagePrompt(message);
+      return;
+    }
+    if (type === "image:orchestrateWorkflow") {
+      await this.orchestrateImageWorkflow(message);
+      return;
+    }
+    if (type === "image:prepareMaterialSearch") {
+      await this.prepareImageMaterialSearch(message);
+      return;
+    }
+    if (type === "image:searchMaterials") {
+      await this.searchImageMaterials(message);
+      return;
+    }
+    if (type === "image:abort") {
+      this.activeImageAbortController?.abort();
+      return;
+    }
+    if (type === "image:variant") {
+      await this.runImageVariant(String(message.id ?? ""));
+      return;
+    }
+
+    // Workspace
+    if (type === "workspace:set") {
+      const root = String(message.root ?? "");
+      if (root) {
+        await this.settings.setWorkspaceRoot(root);
+        this.mcpRuntime.markConfigDirty();
+        await this.postState();
+      }
+      return;
+    }
+
+    // Onboarding
+    if (type === "onboarding:validateKey") {
+      await this.validateKey(
+        String(message.provider ?? ""),
+        String(message.apiKey ?? ""),
+        message.baseUrl ? String(message.baseUrl) : undefined,
+        message.model ? String(message.model) : undefined,
+      );
+      return;
+    }
+    if (type === "onboarding:complete") {
+      await this.completeOnboarding(message.providerMeta, String(message.apiKey ?? ""));
+      return;
+    }
+
+    // Chat
+    if (type === "ready") { await this.handleReady(); return; }
+    if (type === "clearChat") { await this.clearChat(); return; }
+    if (type === "sendPrompt") {
+      await this.routePrompt(
+        String(message.prompt ?? ""),
+        message.attachments as WebviewAttachment[] | undefined,
+        typeof message.intentOverride === "string" ? message.intentOverride : undefined,
+      );
+      return;
+    }
+    if (type === "chat:imageRun") {
+      await this.runChatImageJob(message);
+      return;
+    }
+    if (type === "abort") {
+      const activeRequest = this.currentSessionId
+        ? this.inFlightRequests.get(this.currentSessionId)
+        : undefined;
+      activeRequest?.abortController.abort();
+      return;
+    }
+    if (type === "approvePendingAction") { this.host.resolveApproval(true); return; }
+    if (type === "rejectPendingAction") { this.host.resolveApproval(false); return; }
+    if (type === "requestEditorSelection") { this.sendToRenderer({ type: "editorSelection", selectedText: "", language: "" }); return; }
+    if (type === "mcp:refresh") { await this.refreshMcpStatus(); return; }
+  }
+
+  // ─── Ready ──────────────────────────────────────────────────────────────────
+
+  private async handleReady(): Promise<void> {
+    if (!this.settings.isOnboardingDone()) {
+      this.sendToRenderer({ type: "showOnboarding" });
+      return;
+    }
+    await this.ensureSession();
+    await this.postState();
+  }
+
+  // ─── Sessions ───────────────────────────────────────────────────────────────
+
+  private async ensureSession(): Promise<void> {
+    let id = this.settings.getActiveSessionId();
+    if (id) {
+      const activeMeta = await this.sessions.getSessionMeta(id);
+      if (!activeMeta) {
+        id = undefined;
+      }
+    }
+
+    if (!id) {
+      const index = await this.sessions.readIndex();
+      const existingSession = index.sessions[0];
+      if (existingSession) {
+        id = existingSession.id;
+      } else {
+        const session = await this.sessions.createSession(randomUUID(), "electron");
+        id = session.id;
+      }
+      await this.settings.setActiveSessionId(id);
+    }
+
+    if (this.currentSessionId !== id) {
+      this.currentSessionId = id;
+      this.sessionMessages = await this.sessions.loadMessages(id);
+    }
+  }
+
+  private async loadSessions(): Promise<void> {
+    const index = await this.sessions.readIndex();
+    this.sendToRenderer({
+      type: "sessions:data",
+      sessions: index.sessions,
+      activeId: this.currentSessionId ?? null,
+    });
+  }
+
+  private async switchSession(id: string): Promise<void> {
+    if (!id) return;
+    this.currentSessionId = id;
+    await this.settings.setActiveSessionId(id);
+    this.sessionMessages = await this.sessions.loadMessages(id);
+    await this.postState();
+    await this.loadSessions();
+  }
+
+  private async createNewSession(): Promise<void> {
+    const session = await this.sessions.createSession(randomUUID(), "electron");
+    await this.switchSession(session.id);
+  }
+
+  private isViewingSession(sessionId: string): boolean {
+    return this.currentSessionId === sessionId;
+  }
+
+  private getVisibleStreamingText(): string {
+    const activeRequest = this.currentSessionId
+      ? this.inFlightRequests.get(this.currentSessionId)
+      : undefined;
+    if (!activeRequest) {
+      return "";
+    }
+
+    return activeRequest.streamingText;
+  }
+
+  private isCurrentSessionBusy(): boolean {
+    return !!(
+      this.currentSessionId && this.inFlightRequests.has(this.currentSessionId)
+    );
+  }
+
+  private async appendAssistantMessageToSession(
+    sessionId: string,
+    message: ChatMessage,
+  ): Promise<void> {
+    await this.sessions.appendMessages(sessionId, [message]);
+    await this.sessions.updateMeta(sessionId, {
+      preview: message.content.slice(0, 100),
+      updatedAt: Date.now(),
+    });
+
+    if (this.isViewingSession(sessionId)) {
+      this.sessionMessages = [...this.sessionMessages, message];
+    }
+
+    await this.loadSessions();
+  }
+
+  private async deleteSession(id: string): Promise<void> {
+    if (!id) return;
+    const wasActiveSession =
+      this.currentSessionId === id || this.settings.getActiveSessionId() === id;
+
+    await this.sessions.deleteSession(id);
+
+    if (wasActiveSession) {
+      this.currentSessionId = undefined;
+      this.sessionMessages = [];
+      await this.ensureSession();
+    }
+
+    await this.postState();
+    await this.loadSessions();
+  }
+
+  private async renameSession(id: string, title: string): Promise<void> {
+    const trimmedTitle = title.trim();
+    if (!id || !trimmedTitle) {
+      return;
+    }
+
+    await this.sessions.updateMeta(id, { title: trimmedTitle });
+    await this.loadSessions();
+  }
+
+  private async exportSession(id: string): Promise<void> {
+    if (!id) return;
+    const meta = await this.sessions.getSessionMeta(id);
+    if (!meta) return;
+    const markdown = await this.sessions.exportMarkdown(id, meta.title);
+    const exportPath = path.join(
+      this.host.getStorageUri(),
+      "exports",
+      `${meta.title.replace(/[^a-zA-Z0-9\u4e00-\u9fff]/g, "-")}-${Date.now()}.md`,
+    );
+    await fs.mkdir(path.dirname(exportPath), { recursive: true });
+    await fs.writeFile(exportPath, markdown, "utf8");
+    this.sendToRenderer({ type: "sessions:exported", path: exportPath });
+  }
+
+  // ─── Settings ───────────────────────────────────────────────────────────────
+
+  private async loadSettings(): Promise<void> {
+    const data = await loadSettingsPanelData(this.settings);
+    this.sendToRenderer({ type: "settings:data", ...data });
+  }
+
+  private async validateKey(provider: string, apiKey: string, baseUrl?: string, model?: string): Promise<void> {
+    const result = await validateOnboardingProviderKey({ providerType: provider, apiKey, baseUrl, model });
+    if (result.ok) {
+      this.sendToRenderer({ type: "onboarding:keyValid" });
+    } else {
+      this.sendToRenderer({ type: "onboarding:keyInvalid", error: result.error });
+    }
+  }
+
+  private async completeOnboarding(meta: unknown, apiKey: string): Promise<void> {
+    await completeOnboardingProvider({ settings: this.settings, meta: meta as ProviderMeta, apiKey });
+    await this.ensureSession();
+    this.sendToRenderer({ type: "onboarding:done" });
+    await this.postState();
+  }
+
+  private async saveProvider(meta: unknown, apiKey: string): Promise<void> {
+    await saveSettingsProvider({ settings: this.settings, meta: meta as ProviderMeta, apiKey: apiKey || undefined });
+    await this.loadSettings();
+    await this.postState();
+  }
+
+  private async deleteProvider(id: string): Promise<void> {
+    await deleteSettingsProvider({ settings: this.settings, id });
+    await this.loadSettings();
+    await this.postState();
+  }
+
+  private async setActiveProvider(id: string): Promise<void> {
+    await this.settings.setActiveProviderId(id);
+    await this.loadSettings();
+    await this.postState();
+  }
+
+  private async activateLicense(rawKey: string): Promise<void> {
+    const result = verifyLicense(rawKey);
+    if (!result.valid) {
+      this.sendToRenderer({
+        type: "license:result",
+        success: false,
+        error: result.reason,
+      });
+      return;
+    }
+
+    await this.settings.setLicenseActivated(true);
+    await this.host.storeSecret("cain.licenseKey", rawKey);
+    this.sendToRenderer({
+      type: "license:result",
+      success: true,
+      flags: result.flags,
+      expiresAt: result.expiresAt?.toISOString() ?? null,
+    });
+    await this.loadSettings();
+    await this.postState();
+  }
+
+  private async saveImageConfig(message: Record<string, unknown>): Promise<void> {
+    const id = typeof message.id === "string" && message.id.trim()
+      ? message.id.trim()
+      : randomUUID();
+    await this.settings.saveImageConfig({
+      id,
+      ...(message.baseUrl ? { baseUrl: String(message.baseUrl) } : {}),
+      ...(message.model ? { model: String(message.model) } : {}),
+      ...(message.authMode ? { authMode: message.authMode as "bearer" | "raw" } : {}),
+      ...(message.responseFormat ? {
+        responseFormat: message.responseFormat as "url" | "b64_json",
+      } : {}),
+    });
+
+    const apiKey = typeof message.apiKey === "string" ? message.apiKey.trim() : "";
+    if (apiKey) {
+      await this.settings.storeImageModelApiKey(id, apiKey);
+    }
+
+    await this.postImageState();
+    await this.loadSettings();
+  }
+
+  private async setActiveImageConfig(id: string): Promise<void> {
+    const trimmed = id.trim();
+    if (!trimmed) {
+      return;
+    }
+
+    await this.settings.setActiveImageModelId(trimmed);
+    await this.postImageState();
+    await this.loadSettings();
+  }
+
+  private async deleteImageConfig(id: string): Promise<void> {
+    const trimmed = id.trim();
+    if (!trimmed) {
+      return;
+    }
+
+    await this.settings.deleteImageModel(trimmed);
+    await this.postImageState();
+    await this.loadSettings();
+  }
+
+  private async deleteImageHistoryPrompt(prompt: string): Promise<void> {
+    const trimmed = prompt.trim();
+    if (!trimmed) {
+      return;
+    }
+
+    const nextHistory = this.settings
+      .getImagePromptHistory()
+      .filter(entry => entry.prompt !== trimmed);
+    await this.settings.saveImagePromptHistory(nextHistory);
+    await this.postImageState();
+  }
+
+  private async clearImageHistory(): Promise<void> {
+    await this.settings.saveImagePromptHistory([]);
+    await this.postImageState();
+  }
+
+  private async clearImageResults(): Promise<void> {
+    this.imageResults = [];
+    this.imageResultsHydrated = true;
+    await this.imageGalleryStore.clear();
+    await this.postImageState();
+  }
+
+  private async deleteImageResult(id: string): Promise<void> {
+    const trimmedId = id.trim();
+    if (!trimmedId) {
+      return;
+    }
+
+    await this.ensureImageResultsHydrated();
+    this.imageResults = removeImageLabResult(this.imageResults, trimmedId);
+    await this.imageGalleryStore.saveResults(this.imageResults);
+    await this.postImageState();
+  }
+
+  private async ensureImageResultsHydrated(): Promise<void> {
+    if (this.imageResultsHydrated) {
+      return;
+    }
+
+    this.imageResults = await this.imageGalleryStore.loadResults();
+    this.imageResultsHydrated = true;
+  }
+
+  private async savePromptLibraryEntry(message: Record<string, unknown>): Promise<void> {
+    const preview = this.resolvePromptLibraryPreview(message.preview);
+    await this.promptLibraryRepository.savePrompt({
+      ...(typeof message.id === "string" && message.id.trim() ? { id: message.id.trim() } : {}),
+      category: String(message.category ?? "").trim(),
+      title: String(message.title ?? "").trim(),
+      text: String(message.text ?? "").trim(),
+      tags: Array.isArray(message.tags)
+        ? message.tags.filter((tag): tag is string => typeof tag === "string")
+        : String(message.tags ?? "")
+          .split(/[,\n]/)
+          .map(tag => tag.trim())
+          .filter(Boolean),
+      ...(preview ? { preview } : {}),
+    });
+    await this.postImageState();
+  }
+
+  private async deletePromptLibraryEntry(id: string): Promise<void> {
+    const trimmed = id.trim();
+    if (!trimmed) {
+      return;
+    }
+
+    await this.promptLibraryRepository.deletePrompt(trimmed);
+    await this.postImageState();
+  }
+
+  private async togglePromptLibraryFavorite(id: string): Promise<void> {
+    const trimmed = id.trim();
+    if (!trimmed) {
+      return;
+    }
+
+    await this.promptLibraryRepository.toggleFavorite(trimmed);
+    await this.postImageState();
+  }
+
+  private resolvePromptLibraryPreview(raw: unknown): PromptLibraryPreview | undefined {
+    if (!raw || typeof raw !== "object") {
+      return undefined;
+    }
+
+    const preview = raw as Record<string, unknown>;
+    if (preview.kind === "image" && typeof preview.src === "string" && preview.src.trim()) {
+      return {
+        kind: "image",
+        src: preview.src.trim(),
+      };
+    }
+
+    if (preview.kind === "gradient" && typeof preview.value === "string" && preview.value.trim()) {
+      return {
+        kind: "gradient",
+        value: preview.value.trim(),
+      };
+    }
+
+    return undefined;
+  }
+
+  private getImageResultBatches(): ImageLabResultBatch[] {
+    return buildImageLabResultBatches(this.imageResults);
+  }
+
+  private getActiveImageModelState(): {
+    config: ReturnType<SettingsRepository["getImageConfig"]>;
+    imageModels: ReturnType<SettingsRepository["getImageModels"]>;
+    activeImageModelId: string | undefined;
+    activeImageModel: ReturnType<SettingsRepository["getActiveImageModelMeta"]>;
+  } {
+    const imageModels = this.settings.getImageModels();
+    const activeImageModelId = this.settings.getActiveImageModelId();
+    const activeImageModel = activeImageModelId
+      ? imageModels.find(imageModel => imageModel.id === activeImageModelId)
+      : undefined;
+
+    return {
+      config: this.settings.getImageConfig(),
+      imageModels,
+      activeImageModelId,
+      activeImageModel,
+    };
+  }
+
+  private resolveImageBatchExecution(message: Record<string, unknown>): {
+    batchCount: number;
+    executionPrompt: string;
+  } {
+    const plan = resolveImageBatchPlan({
+      prompt: String(message.prompt ?? ""),
+      defaultBatchCount: this.settings.getImageConfig()?.batchCount ?? 1,
+      overrideBatchCount: typeof message.batchCount === "number"
+        ? Math.max(1, Math.min(8, message.batchCount))
+        : undefined,
+    });
+
+    return {
+      batchCount: plan.batchCount,
+      executionPrompt: plan.executionPrompt,
+    };
+  }
+
+  private async buildImageConfig(overrides: Record<string, unknown>): Promise<ImageLabConfig> {
+    const {
+      config: saved,
+      activeImageModelId,
+      activeImageModel,
+    } = this.getActiveImageModelState();
+    const apiKey = await this.settings.getImageApiKey();
+
+    if (!activeImageModelId || !activeImageModel) {
+      throw new Error(
+        "No active image model is configured. Open Settings and choose one first.",
+      );
+    }
+    if (!apiKey) {
+      throw new Error(
+        "The active image model does not have an API key yet. Open Settings and save one first.",
+      );
+    }
+    if (!activeImageModel.baseUrl?.trim() || !activeImageModel.model?.trim()) {
+      throw new Error(
+        "The active image model is incomplete. Open Settings and finish the base URL and model fields.",
+      );
+    }
+
+    const size = typeof overrides.size === "string" && overrides.size.trim()
+      ? overrides.size.trim()
+      : resolveRequestedImageSize(String(overrides.prompt ?? ""))?.size
+        ?? saved?.size
+        ?? "1024x1024";
+    const batchCount = typeof overrides.batchCount === "number"
+      ? Math.max(1, Math.min(8, overrides.batchCount))
+      : saved?.batchCount ?? 1;
+    const responseFormat =
+      overrides.responseFormat === "url" || overrides.responseFormat === "b64_json"
+        ? overrides.responseFormat
+        : saved?.responseFormat;
+
+    return {
+      apiKey,
+      baseUrl: activeImageModel.baseUrl.trim(),
+      model: activeImageModel.model.trim(),
+      authMode: activeImageModel.authMode ?? "bearer",
+      size,
+      batchCount,
+      ...(responseFormat ? { responseFormat } : {}),
+    };
+  }
+
+  private async runImageJob(message: Record<string, unknown>): Promise<void> {
+    const prompt = String(message.prompt ?? "").trim();
+    if (!prompt) {
+      this.sendToRenderer({ type: "image:error", error: "Prompt is required." });
+      return;
+    }
+
+    if (this.imageBusy) {
+      return;
+    }
+
+    const abortController = new AbortController();
+    this.activeImageAbortController = abortController;
+    this.imageBusy = true;
+    await this.postImageState();
+
+    try {
+      await this.ensureImageResultsHydrated();
+      const shouldRecordPromptHistory = message.recordPromptHistory !== false;
+      const batchExecution = this.resolveImageBatchExecution(message);
+      const config = await this.buildImageConfig({
+        ...message,
+        batchCount: batchExecution.batchCount,
+      });
+      const referenceImages = Array.isArray(message.referenceImages)
+        ? message.referenceImages.filter(
+          (referenceImage): referenceImage is ImageLabReferenceImage =>
+            !!referenceImage &&
+            typeof referenceImage === "object" &&
+            typeof referenceImage.dataUrl === "string" &&
+            typeof referenceImage.mimeType === "string" &&
+            typeof referenceImage.name === "string",
+        )
+        : [];
+      if (shouldRecordPromptHistory) {
+        await this.settings.pushImagePromptHistory(prompt);
+      }
+      const rawResults = await runImageLabRequest({
+        prompt,
+        executionPrompt: batchExecution.executionPrompt,
+        config,
+        ...(referenceImages.length > 0 ? { referenceImages } : {}),
+        signal: abortController.signal,
+      });
+      const results = await this.hydrateImageResultSources(
+        rawResults,
+        abortController.signal,
+      );
+      this.imageResults = prependImageLabResults(this.imageResults, results);
+      await this.imageGalleryStore.saveResults(this.imageResults);
+      const activeImageModelId = this.settings.getActiveImageModelId();
+      await this.settings.saveImageConfig({
+        ...(activeImageModelId ? { id: activeImageModelId } : {}),
+        size: config.size,
+        batchCount: config.batchCount,
+        responseFormat: config.responseFormat,
+      });
+
+      this.sendToRenderer({
+        type: "image:result",
+        resultBatches: this.getImageResultBatches(),
+        latestBatchId: results[0]?.batchId ?? null,
+        latestBatchCount: results.length,
+        latestBatchSource: results[0]?.source ?? "generate",
+      });
+    } catch (error) {
+      if (abortController.signal.aborted) {
+        this.sendToRenderer({
+          type: "image:aborted",
+          message: "已停止当前图片生成。",
+        });
+        return;
+      }
+
+      this.sendToRenderer({
+        type: "image:error",
+        error: error instanceof Error ? error.message : String(error),
+      });
+    } finally {
+      if (this.activeImageAbortController === abortController) {
+        this.activeImageAbortController = undefined;
+      }
+      this.imageBusy = false;
+      await this.postImageState();
+      await this.loadSettings();
+    }
+  }
+
+  private async runImageVariant(id: string): Promise<void> {
+    await this.ensureImageResultsHydrated();
+    const source = this.imageResults.find(result => result.id === id);
+    if (!source || this.imageBusy) {
+      return;
+    }
+
+    const abortController = new AbortController();
+    this.activeImageAbortController = abortController;
+    this.imageBusy = true;
+    await this.postImageState();
+
+    try {
+      const config = await this.buildImageConfig({});
+      const rawResults = await createImageVariant({
+        prompt: `${source.prompt}\n\nGenerate a close visual variant that keeps the core subject but changes details, lighting, and composition enough to feel new.`,
+        config,
+        seedImageUrl: source.src,
+        signal: abortController.signal,
+      });
+      const results = await this.hydrateImageResultSources(
+        rawResults,
+        abortController.signal,
+      );
+      this.imageResults = prependImageLabResults(this.imageResults, results);
+      await this.imageGalleryStore.saveResults(this.imageResults);
+      this.sendToRenderer({
+        type: "image:result",
+        resultBatches: this.getImageResultBatches(),
+        latestBatchId: results[0]?.batchId ?? null,
+        latestBatchCount: results.length,
+        latestBatchSource: "variant",
+      });
+    } catch (error) {
+      if (abortController.signal.aborted) {
+        this.sendToRenderer({
+          type: "image:aborted",
+          message: "已停止当前图片生成。",
+        });
+        return;
+      }
+
+      this.sendToRenderer({
+        type: "image:error",
+        error: error instanceof Error ? error.message : String(error),
+      });
+    } finally {
+      if (this.activeImageAbortController === abortController) {
+        this.activeImageAbortController = undefined;
+      }
+      this.imageBusy = false;
+      await this.postImageState();
+    }
+  }
+
+  private async inferImagePrompt(message: Record<string, unknown>): Promise<void> {
+    const referenceImages = Array.isArray(message.referenceImages)
+      ? message.referenceImages.filter(
+        (referenceImage): referenceImage is ImageLabReferenceImage =>
+          !!referenceImage &&
+          typeof referenceImage === "object" &&
+          typeof referenceImage.dataUrl === "string" &&
+          typeof referenceImage.mimeType === "string" &&
+          typeof referenceImage.name === "string",
+      )
+      : [];
+    if (!referenceImages.length) {
+      this.sendToRenderer({
+        type: "image:error",
+        error: "请先提供至少一张参考图，再执行提示词反推。",
+      });
+      return;
+    }
+    if (this.imagePromptInferenceBusy) {
+      return;
+    }
+
+    this.imagePromptInferenceBusy = true;
+    await this.postImageState();
+
+    try {
+      const workspaceRoot = this.settings.getWorkspaceRoot() ?? "";
+      const { config, envMap } = await resolveProviderConfig(
+        this.settings,
+        workspaceRoot,
+      );
+      if (!providerSupportsImagePromptInference(config)) {
+        throw new Error(
+          "当前聊天模型不支持图片理解。请先切换到支持视觉输入的聊天模型。",
+        );
+      }
+
+      const adapter = buildProviderAdapter(
+        config,
+        workspaceRoot,
+        IMAGE_PROMPT_INFERENCE_SYSTEM_PROMPT + ELECTRON_SHELL_PROMPT_NOTE,
+        envMap,
+      );
+      const prompt = await inferPromptFromReferenceImages({
+        provider: adapter,
+        referenceImages,
+      });
+
+      this.sendToRenderer({
+        type: "image:promptInferred",
+        prompt,
+      });
+    } catch (error) {
+      this.sendToRenderer({
+        type: "image:error",
+        error: error instanceof Error ? error.message : String(error),
+      });
+    } finally {
+      this.imagePromptInferenceBusy = false;
+      await this.postImageState();
+    }
+  }
+
+  private async inferPromptLibraryPrompt(message: Record<string, unknown>): Promise<void> {
+    const referenceImages = Array.isArray(message.referenceImages)
+      ? message.referenceImages.filter(
+        (referenceImage): referenceImage is ImageLabReferenceImage =>
+          !!referenceImage &&
+          typeof referenceImage === "object" &&
+          typeof referenceImage.dataUrl === "string" &&
+          typeof referenceImage.mimeType === "string" &&
+          typeof referenceImage.name === "string",
+      )
+      : [];
+    if (!referenceImages.length) {
+      this.sendToRenderer({
+        type: "image:error",
+        error: "请先上传一张图片，再执行提示词反推。",
+      });
+      return;
+    }
+    if (this.imagePromptInferenceBusy) {
+      return;
+    }
+
+    this.imagePromptInferenceBusy = true;
+    await this.postImageState();
+
+    try {
+      const workspaceRoot = this.settings.getWorkspaceRoot() ?? "";
+      const { config, envMap } = await resolveProviderConfig(
+        this.settings,
+        workspaceRoot,
+      );
+      if (!providerSupportsImagePromptInference(config)) {
+        throw new Error(
+          "当前聊天模型不支持图片理解。请先切换到支持视觉输入的聊天模型。",
+        );
+      }
+
+      const adapter = buildProviderAdapter(
+        config,
+        workspaceRoot,
+        VISIBLE_IMAGE_PROMPT_PAIR_SYSTEM_PROMPT + ELECTRON_SHELL_PROMPT_NOTE,
+        envMap,
+      );
+      const promptPair = await inferVisiblePromptPairFromReferenceImages({
+        provider: adapter,
+        referenceImages,
+      });
+
+      this.sendToRenderer({
+        type: "promptLibrary:inferredPrompt",
+        promptPair,
+      });
+    } catch (error) {
+      this.sendToRenderer({
+        type: "image:error",
+        error: error instanceof Error ? error.message : String(error),
+      });
+    } finally {
+      this.imagePromptInferenceBusy = false;
+      await this.postImageState();
+    }
+  }
+
+  private async orchestrateImageWorkflow(message: Record<string, unknown>): Promise<void> {
+    const prompt = String(message.prompt ?? "").trim();
+    const referenceImages = Array.isArray(message.referenceImages)
+      ? message.referenceImages.filter(
+        (referenceImage): referenceImage is ImageLabReferenceImage =>
+          !!referenceImage &&
+          typeof referenceImage === "object" &&
+          typeof referenceImage.dataUrl === "string" &&
+          typeof referenceImage.mimeType === "string" &&
+          typeof referenceImage.name === "string",
+      )
+      : [];
+    if (!prompt && referenceImages.length === 0) {
+      this.sendToRenderer({
+        type: "image:error",
+        error: "请输入图像需求，或至少提供一张参考图，再执行工作流编排。",
+      });
+      return;
+    }
+    if (this.imageWorkflowBusy) {
+      return;
+    }
+
+    this.imageWorkflowBusy = true;
+    await this.postImageState();
+
+    try {
+      const workspaceRoot = this.settings.getWorkspaceRoot() ?? "";
+      const { config, envMap } = await resolveProviderConfig(
+        this.settings,
+        workspaceRoot,
+      );
+      if (!providerSupportsImageWorkflowOrchestration(config, referenceImages.length > 0)) {
+        throw new Error(
+          "当前聊天模型不支持带参考图的工作流编排。请先切换到支持视觉输入的聊天模型。",
+        );
+      }
+
+      const adapter = buildProviderAdapter(
+        config,
+        workspaceRoot,
+        IMAGE_WORKFLOW_ORCHESTRATOR_SYSTEM_PROMPT + ELECTRON_SHELL_PROMPT_NOTE,
+        envMap,
+      );
+      const workflowPlan = await orchestrateImageWorkflow({
+        provider: adapter,
+        prompt,
+        referenceImages,
+      });
+
+      this.imageWorkflowPlan = workflowPlan;
+      this.sendToRenderer({
+        type: "image:workflowOrchestrated",
+        workflowPlan,
+      });
+    } catch (error) {
+      this.sendToRenderer({
+        type: "image:error",
+        error: error instanceof Error ? error.message : String(error),
+      });
+    } finally {
+      this.imageWorkflowBusy = false;
+      await this.postImageState();
+    }
+  }
+
+  private extractMaterialSearchContext(message: Record<string, unknown>): {
+    prompt: string;
+    referenceImages: ImageLabReferenceImage[];
+    queries: string[];
+    requestId: string | undefined;
+  } {
+    return {
+      prompt: String(message.prompt ?? "").trim(),
+      referenceImages: Array.isArray(message.referenceImages)
+        ? message.referenceImages.filter(
+          (referenceImage): referenceImage is ImageLabReferenceImage =>
+            !!referenceImage &&
+            typeof referenceImage === "object" &&
+            typeof referenceImage.dataUrl === "string" &&
+            typeof referenceImage.mimeType === "string" &&
+            typeof referenceImage.name === "string",
+        )
+        : [],
+      queries: Array.isArray(message.queries)
+        ? message.queries
+          .filter((query): query is string => typeof query === "string")
+          .map(query => query.trim())
+          .filter(Boolean)
+        : [],
+      requestId: typeof message.requestId === "string" && message.requestId.trim()
+        ? message.requestId.trim()
+        : undefined,
+    };
+  }
+
+  private async buildMaterialSearchWorkflowPlan(options: {
+    prompt: string;
+    referenceImages: ImageLabReferenceImage[];
+  }): Promise<ImageWorkflowPlan> {
+    const workspaceRoot = this.settings.getWorkspaceRoot() ?? "";
+    const { config, envMap } = await resolveProviderConfig(
+      this.settings,
+      workspaceRoot,
+    );
+    if (!providerSupportsImageWorkflowOrchestration(config, options.referenceImages.length > 0)) {
+      throw new Error(
+        "当前聊天模型不支持带参考图的资料查找编排。请先切换到支持视觉输入的聊天模型。",
+      );
+    }
+
+    const adapter = buildProviderAdapter(
+      config,
+      workspaceRoot,
+      IMAGE_WORKFLOW_ORCHESTRATOR_SYSTEM_PROMPT + ELECTRON_SHELL_PROMPT_NOTE,
+      envMap,
+    );
+    return orchestrateImageWorkflow({
+      provider: adapter,
+      prompt: options.prompt,
+      referenceImages: options.referenceImages,
+    });
+  }
+
+  private async prepareImageMaterialSearch(message: Record<string, unknown>): Promise<void> {
+    const {
+      prompt,
+      referenceImages,
+      requestId,
+    } = this.extractMaterialSearchContext(message);
+    if (!prompt && referenceImages.length === 0) {
+      this.sendToRenderer({
+        type: "image:error",
+        error: "请输入想补充的素材方向，或至少提供一张目标图，再查找资料。",
+        ...(requestId ? { requestId } : {}),
+      });
+      return;
+    }
+
+    try {
+      const workflowPlan = await this.buildMaterialSearchWorkflowPlan({
+        prompt,
+        referenceImages,
+      });
+      const searchQueries = workflowPlan.materialKeywords.length > 0
+        ? workflowPlan.materialKeywords
+        : [prompt];
+      this.sendToRenderer({
+        type: "image:materialSearchPrepared",
+        workflowPlan,
+        searchQueries,
+        ...(requestId ? { requestId } : {}),
+      });
+    } catch (error) {
+      this.sendToRenderer({
+        type: "image:error",
+        error: error instanceof Error ? error.message : String(error),
+        ...(requestId ? { requestId } : {}),
+      });
+    }
+  }
+
+  private async searchImageMaterials(message: Record<string, unknown>): Promise<void> {
+    const {
+      prompt,
+      referenceImages,
+      queries,
+      requestId,
+    } = this.extractMaterialSearchContext(message);
+    if (!prompt && referenceImages.length === 0) {
+      this.sendToRenderer({
+        type: "image:error",
+        error: "请输入想补充的素材方向，或至少提供一张目标图，再查找资料。",
+        ...(requestId ? { requestId } : {}),
+      });
+      return;
+    }
+    if (this.imageMaterialSearchBusy) {
+      return;
+    }
+
+    this.imageMaterialSearchBusy = true;
+    await this.postImageState();
+
+    try {
+      const workflowPlan = queries.length > 0
+        ? undefined
+        : await this.buildMaterialSearchWorkflowPlan({
+          prompt,
+          referenceImages,
+        });
+      const searchQueries = queries.length > 0
+        ? queries
+        : workflowPlan?.materialKeywords.length
+          ? workflowPlan.materialKeywords
+          : [prompt];
+      const results = await searchPublicReferenceImages({
+        queries: searchQueries,
+        maxResultsPerQuery: 3,
+      });
+
+      this.sendToRenderer({
+        type: "image:materialSearchResults",
+        ...(workflowPlan ? { workflowPlan } : {}),
+        searchQueries,
+        results,
+        ...(requestId ? { requestId } : {}),
+      });
+    } catch (error) {
+      this.sendToRenderer({
+        type: "image:error",
+        error: error instanceof Error ? error.message : String(error),
+        ...(requestId ? { requestId } : {}),
+      });
+    } finally {
+      this.imageMaterialSearchBusy = false;
+      await this.postImageState();
+    }
+  }
+
+  private async postImageState(): Promise<void> {
+    await this.ensureImageResultsHydrated();
+    const {
+      config,
+      imageModels,
+      activeImageModelId,
+      activeImageModel,
+    } = this.getActiveImageModelState();
+    const imageModelsWithKeyStatus = await Promise.all(
+      imageModels.map(async imageModel => ({
+        ...imageModel,
+        hasKey: !!(await this.settings.getImageModelApiKey(imageModel.id)),
+      })),
+    );
+    const hasApiKey = !!(await this.settings.getImageApiKey());
+    const isConfigured = Boolean(
+      activeImageModel?.baseUrl?.trim() &&
+      activeImageModel.model?.trim() &&
+      hasApiKey,
+    );
+    this.sendToRenderer({
+      type: "image:state",
+      busy: this.imageBusy,
+      promptInferenceBusy: this.imagePromptInferenceBusy,
+      workflowBusy: this.imageWorkflowBusy,
+      materialSearchBusy: this.imageMaterialSearchBusy,
+      imageModels: imageModelsWithKeyStatus,
+      activeImageModelId,
+      config: {
+        id: config?.id ?? activeImageModelId ?? "",
+        model: activeImageModel?.model ?? config?.model ?? "gpt-image-2",
+        size: config?.size ?? "1024x1024",
+        batchCount: config?.batchCount ?? 1,
+        responseFormat: config?.responseFormat ?? "url",
+        hasApiKey,
+        isConfigured,
+      },
+      promptHistory: this.settings.getImagePromptHistory(),
+      resultBatches: this.getImageResultBatches(),
+      workflowPlan: this.imageWorkflowPlan,
+      promptLibrary: await this.promptLibraryRepository.loadState(),
+    });
+  }
+
+  private async resetAllConfig(): Promise<void> {
+    const providers = this.settings.getProviders();
+    for (const provider of providers) {
+      await this.settings.deleteApiKey(provider.id);
+    }
+    await this.settings.saveProviders([]);
+    await this.settings.setActiveProviderId("");
+    await this.settings.setOnboardingDone(false);
+    await this.settings.setLicenseActivated(false);
+    await this.settings.setActiveSessionId("");
+    await this.settings.setWorkspaceRoot("");
+    await this.settings.clearImageSettings();
+    await this.settings.saveImagePromptHistory([]);
+    await this.imageGalleryStore.clear();
+    await this.host.deleteSecret("cain.licenseKey");
+    this.sessionMessages = [];
+    this.currentSessionId = undefined;
+    this.imageResults = [];
+    this.imageResultsHydrated = true;
+    this.sendToRenderer({ type: "settings:resetDone" });
+    await this.postState();
+  }
+
+  // ─── MCP ────────────────────────────────────────────────────────────────────
+
+  private async refreshMcpStatus(): Promise<void> {
+    try {
+      const servers = await this.mcpRuntime.getStatusSummary();
+      this.sendToRenderer({ type: "mcp:status", servers });
+    } catch {
+      this.sendToRenderer({ type: "mcp:status", servers: [] });
+    }
+  }
+
+  // ─── Chat ───────────────────────────────────────────────────────────────────
+
+  async clearChat(): Promise<void> {
+    const activeRequest = this.currentSessionId
+      ? this.inFlightRequests.get(this.currentSessionId)
+      : undefined;
+    if (activeRequest) {
+      activeRequest.abortController.abort();
+      return;
+    }
+    this.sessionMessages = [];
+    this.streamingText = "";
+    const session = await this.sessions.createSession(randomUUID(), "electron");
+    this.currentSessionId = session.id;
+    await this.settings.setActiveSessionId(session.id);
+    await this.postState();
+    await this.loadSessions();
+  }
+
+  private async routePrompt(
+    prompt: string,
+    attachments?: WebviewAttachment[],
+    intentOverride?: string,
+  ): Promise<void> {
+    const trimmedPrompt = prompt.trim();
+    const hasAttachments = Array.isArray(attachments) && attachments.length > 0;
+    if (!trimmedPrompt && !hasAttachments) {
+      return;
+    }
+
+    const latestGeneratedImage = this.getLatestGeneratedImageFromCurrentSession();
+    const intent = determineChatPromptIntent({
+      prompt: trimmedPrompt,
+      explicitIntent: intentOverride === "image_generate" ? "image_generate" : undefined,
+      hasAttachments,
+      hasRecentGeneratedImageContext: !!latestGeneratedImage,
+    });
+
+    if (intent === "image_generate") {
+      await this.runChatImageJob({
+        prompt: trimmedPrompt,
+        referenceImages: attachments,
+      });
+      return;
+    }
+
+    if (intent === "image_edit") {
+      const implicitReferenceImages = await this.buildImplicitEditReferenceImages(attachments);
+      await this.runChatImageJob({
+        prompt: trimmedPrompt,
+        referenceImages: implicitReferenceImages,
+      });
+      return;
+    }
+
+    await this.sendPrompt(trimmedPrompt, attachments);
+  }
+
+  private async sendPrompt(prompt: string, attachments?: WebviewAttachment[]): Promise<void> {
+    if (!prompt.trim()) return;
+    await this.ensureSession();
+
+    const requestSessionId = this.currentSessionId;
+    if (!requestSessionId || this.inFlightRequests.has(requestSessionId)) {
+      return;
+    }
+
+    const abortController = new AbortController();
+    this.inFlightRequests.set(requestSessionId, {
+      abortController,
+      streamingText: "",
+      kind: "chat",
+    });
+
+    const normalizedAttachments = normalizeWebviewAttachments(attachments);
+    const userMessage: ChatMessage = {
+      role: "user",
+      content: prompt,
+      timestamp: Date.now(),
+      ...(normalizedAttachments ? { attachments: normalizedAttachments } : {}),
+    };
+    const requestSessionMessages = [...this.sessionMessages, userMessage];
+    this.sessionMessages = requestSessionMessages;
+    await this.sessions.appendMessages(requestSessionId, [userMessage]);
+
+    await this.postState();
+
+    try {
+      const workspaceRoot = this.settings.getWorkspaceRoot() ?? "";
+      const { config, envMap } = await resolveProviderConfig(
+        this.settings,
+        workspaceRoot,
+      );
+      const workspaceNote = workspaceRoot
+        ? `\n\n# Workspace\nCurrent workspace root: ${workspaceRoot}\n`
+        : `\n\n# Workspace\nNo workspace is currently set. Tell the user they can select a folder via the workspace button in the chat footer.\n`;
+      const adapter = buildProviderAdapter(
+        config,
+        workspaceRoot,
+        SYSTEM_PROMPT + workspaceNote + ELECTRON_SHELL_PROMPT_NOTE,
+        envMap,
+      );
+
+      this.streamingText = this.getVisibleStreamingText();
+
+      // Build conversation history for the agent
+      const history: NormalizedMessage[] = requestSessionMessages.slice(0, -1).map(m => {
+        if (m.role === "user") {
+          return { role: "user", content: m.content, attachments: m.attachments };
+        }
+        return { role: "assistant", content: m.content };
+      });
+      history.push({ role: "user", content: prompt, attachments: normalizedAttachments });
+
+      // Collect all tools: built-in + MCP
+      let mcpTools: typeof builtinToolDefinitions = [];
+      try {
+        mcpTools = await this.mcpRuntime.getToolDefinitions();
+      } catch {
+        // MCP not configured or failed – proceed with built-in tools only
+      }
+      const allTools = [...getSupportedElectronTools(), ...mcpTools];
+      const promptRuntime: ElectronPromptRuntime = {
+        getMcpStatusSummary: () => this.mcpRuntime.getStatusSummary(),
+      };
+
+      const commandReply = await handleElectronPromptCommand({
+        prompt,
+        config,
+        workspaceRoot,
+        envMap,
+        runtime: promptRuntime,
+        tools: allTools,
+        currentEffortLevel: this.settings.getEffortLevel(),
+        setEffortLevel: value => this.settings.setEffortLevel(value),
+        currentFastMode: this.settings.getFastMode(),
+        setFastMode: enabled => this.settings.setFastMode(enabled),
+        setActiveProviderModel: model => this.settings.setActiveProviderModel(model),
+        refreshWorkspaceStatus: () => {
+          void this.postState();
+        },
+      });
+
+      if (commandReply) {
+        const assistantMessage: ChatMessage = {
+          role: "assistant",
+          content: commandReply,
+          timestamp: Date.now(),
+        };
+        await this.appendAssistantMessageToSession(requestSessionId, assistantMessage);
+        return;
+      }
+
+      const toolContext: ToolContext = {
+        workspaceRoot,
+        invokerKind: "main",
+        requestFileApproval: (req) => this.host.requestFileApproval(req),
+        requestToolApproval: (req) => this.host.requestToolApproval(req),
+        onToolLifecycle: (event) => {
+          this.sendToRenderer({ type: "tool:lifecycle", event });
+        },
+        mcp: this.mcpRuntime,
+      };
+
+      const finalText = await runAgent(history, {
+        provider: adapter,
+        tools: allTools,
+        toolContext,
+        onToken: (token) => {
+          const requestState = this.inFlightRequests.get(requestSessionId);
+          if (!requestState) {
+            return;
+          }
+
+          requestState.streamingText += token;
+          if (this.isViewingSession(requestSessionId)) {
+            this.streamingText = requestState.streamingText;
+            this.sendToRenderer({
+              type: "stateUpdate",
+              isBusy: true,
+              streamingText: this.streamingText,
+            });
+          }
+        },
+        onToolStart: (toolName, _input, _execId) => {
+          this.sendToRenderer({ type: "tool:start", toolName });
+        },
+        onToolEnd: (_execId, summary, isError) => {
+          this.sendToRenderer({ type: "tool:end", summary, isError });
+        },
+        abortSignal: abortController.signal,
+      });
+
+      const assistantMessage: ChatMessage = {
+        role: "assistant",
+        content: finalText,
+        timestamp: Date.now(),
+      };
+      await this.appendAssistantMessageToSession(requestSessionId, assistantMessage);
+    } catch (err) {
+      if (abortController.signal.aborted) return;
+      const errorMessage: ChatMessage = {
+        role: "assistant",
+        content: `错误：${err instanceof Error ? err.message : String(err)}`,
+        kind: "error",
+        timestamp: Date.now(),
+      };
+      await this.appendAssistantMessageToSession(requestSessionId, errorMessage);
+    } finally {
+      this.inFlightRequests.delete(requestSessionId);
+      this.streamingText = "";
+      await this.postState();
+    }
+  }
+
+  private getLatestGeneratedImageFromCurrentSession():
+    | NonNullable<ChatMessage["generatedImages"]>[number]
+    | undefined {
+    for (let index = this.sessionMessages.length - 1; index >= 0; index -= 1) {
+      const message = this.sessionMessages[index];
+      if (message?.role !== "assistant" || !message.generatedImages?.length) {
+        continue;
+      }
+
+      return message.generatedImages[0];
+    }
+
+    return undefined;
+  }
+
+  private async buildImplicitEditReferenceImages(
+    attachments?: WebviewAttachment[],
+  ): Promise<ImageLabReferenceImage[]> {
+    const referenceImages: ImageLabReferenceImage[] = [];
+    const latestGeneratedImage = this.getLatestGeneratedImageFromCurrentSession();
+    if (latestGeneratedImage) {
+      referenceImages.push(await this.buildReferenceImagePayloadFromSource(
+        latestGeneratedImage.src,
+        `edit-${latestGeneratedImage.id}.png`,
+      ));
+    }
+
+    if (attachments?.length) {
+      referenceImages.push(
+        ...attachments.map(attachment => ({
+          dataUrl: attachment.dataUrl,
+          mimeType: attachment.mimeType,
+          name: attachment.name,
+        })),
+      );
+    }
+
+    return referenceImages;
+  }
+
+  private async buildReferenceImagePayloadFromSource(
+    source: string,
+    name: string,
+    signal?: AbortSignal,
+  ): Promise<ImageLabReferenceImage> {
+    if (source.startsWith("data:")) {
+      return {
+        dataUrl: source,
+        mimeType: source.slice(5, source.indexOf(";")) || "image/png",
+        name,
+      };
+    }
+
+    let response: Response;
+    try {
+      response = await fetch(source, { signal });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      throw new Error(`加载图片资源失败：${message}`);
+    }
+    if (!response.ok) {
+      throw new Error(`Failed to load reference image (${response.status}).`);
+    }
+    const arrayBuffer = await response.arrayBuffer();
+    const mimeType = response.headers.get("content-type") || "image/png";
+    return {
+      dataUrl: `data:${mimeType};base64,${Buffer.from(arrayBuffer).toString("base64")}`,
+      mimeType,
+      name,
+    };
+  }
+
+  private async hydrateImageResultSources(
+    results: ImageLabResultItem[],
+    signal?: AbortSignal,
+  ): Promise<ImageLabResultItem[]> {
+    return Promise.all(
+      results.map(async result => {
+        if (!result.src || result.src.startsWith("data:")) {
+          return result;
+        }
+
+        const hydrated = await this.buildReferenceImagePayloadFromSource(
+          result.src,
+          `generated-${result.id}.png`,
+          signal,
+        );
+        return {
+          ...result,
+          src: hydrated.dataUrl,
+        };
+      }),
+    );
+  }
+
+  private async runChatImageJob(message: Record<string, unknown>): Promise<void> {
+    const prompt = String(message.prompt ?? "").trim();
+    if (!prompt) {
+      return;
+    }
+
+    await this.ensureSession();
+    const requestSessionId = this.currentSessionId;
+    if (!requestSessionId || this.inFlightRequests.has(requestSessionId)) {
+      return;
+    }
+
+    const abortController = new AbortController();
+    this.inFlightRequests.set(requestSessionId, {
+      abortController,
+      streamingText: "",
+      kind: "image",
+    });
+    const batchExecution = this.resolveImageBatchExecution(message);
+    const activeImageModelState = this.getActiveImageModelState();
+    this.sendToRenderer({
+      type: "chat:imagePending",
+      prompt,
+      referenceCount: Array.isArray(message.referenceImages) ? message.referenceImages.length : 0,
+      batchCount: batchExecution.batchCount,
+      modelLabel: activeImageModelState.activeImageModel?.model?.trim() || "",
+    });
+
+    const userMessage: ChatMessage = {
+      role: "user",
+      content: prompt,
+      timestamp: Date.now(),
+    };
+    this.sessionMessages = [...this.sessionMessages, userMessage];
+    await this.sessions.appendMessages(requestSessionId, [userMessage]);
+    await this.postState();
+
+    try {
+      await this.ensureImageResultsHydrated();
+      const config = await this.buildImageConfig({
+        ...message,
+        batchCount: batchExecution.batchCount,
+      });
+      const referenceImages = Array.isArray(message.referenceImages)
+        ? message.referenceImages.filter(
+          (referenceImage): referenceImage is ImageLabReferenceImage =>
+            !!referenceImage &&
+            typeof referenceImage === "object" &&
+            typeof referenceImage.dataUrl === "string" &&
+            typeof referenceImage.mimeType === "string" &&
+            typeof referenceImage.name === "string",
+        )
+        : [];
+
+      await this.settings.pushImagePromptHistory(prompt);
+      const rawResults = await runImageLabRequest({
+        prompt,
+        executionPrompt: batchExecution.executionPrompt,
+        config,
+        ...(referenceImages.length > 0 ? { referenceImages } : {}),
+        signal: abortController.signal,
+      });
+      const results = await this.hydrateImageResultSources(
+        rawResults,
+        abortController.signal,
+      );
+      this.imageResults = prependImageLabResults(this.imageResults, results);
+      await this.imageGalleryStore.saveResults(this.imageResults);
+
+      const assistantMessage: ChatMessage = {
+        role: "assistant",
+        content: referenceImages.length > 0
+          ? `已根据你的编辑要求生成 ${results.length} 张图片。`
+          : `已生成 ${results.length} 张图片。`,
+        timestamp: Date.now(),
+        generatedImages: results.map(result => ({
+          id: result.id,
+          src: result.src,
+          ...(result.source ? { source: result.source } : {}),
+          ...(result.prompt ? { prompt: result.prompt } : {}),
+          ...(result.revisedPrompt ? { revisedPrompt: result.revisedPrompt } : {}),
+        })),
+      };
+      await this.appendAssistantMessageToSession(requestSessionId, assistantMessage);
+    } catch (error) {
+      if (abortController.signal.aborted) {
+        return;
+      }
+
+      const errorMessage: ChatMessage = {
+        role: "assistant",
+        content: `图片任务失败：${error instanceof Error ? error.message : String(error)}`,
+        kind: "error",
+        timestamp: Date.now(),
+      };
+      await this.appendAssistantMessageToSession(requestSessionId, errorMessage);
+    } finally {
+      this.inFlightRequests.delete(requestSessionId);
+      this.streamingText = "";
+      this.sendToRenderer({ type: "chat:imagePendingCleared" });
+      await this.postState();
+    }
+  }
+
+  // ─── State ──────────────────────────────────────────────────────────────────
+
+  private async postState(): Promise<void> {
+    this.streamingText = this.getVisibleStreamingText();
+    const sessionBusy = this.isCurrentSessionBusy();
+    const activeRequest = this.currentSessionId
+      ? this.inFlightRequests.get(this.currentSessionId)
+      : undefined;
+
+    const onboardingDone = this.settings.isOnboardingDone();
+    const providerMeta = this.settings.getActiveProviderMeta();
+    const providerLabel = providerMeta
+      ? `${providerMeta.type} / ${providerMeta.model ?? "default"}`
+      : "未配置";
+
+    const workspaceRoot = this.settings.getWorkspaceRoot() ?? "";
+
+    let mcpServers: unknown[] = [];
+    try {
+      mcpServers = await this.mcpRuntime.getStatusSummary();
+    } catch {
+      // ignore – MCP not configured
+    }
+
+    this.sendToRenderer({
+      type: "state",
+      isBusy: sessionBusy,
+      activeRequestKind: activeRequest?.kind ?? null,
+      providerLabel,
+      mcpServers,
+      desktopRuntime: this.buildDesktopRuntimeState(),
+      liveActivities: [],
+      lastRunActivities: [],
+      messages: this.sessionMessages,
+      effortLevel: null,
+      fastMode: this.settings.getFastMode(),
+      fastModeLabel: "",
+      fastModeConnected: false,
+      showThinkingSummaries: this.settings.getShowThinkingSummaries(),
+      planMode: { active: false, planFilePath: null },
+      pendingApproval: this.host.getPendingApproval(),
+      onboardingDone,
+      workspaceRoot,
+    });
+  }
+
+  private buildDesktopRuntimeState(): {
+    localBridge?: ReturnType<
+      NonNullable<DesktopRuntimeServices["localBridgeRuntime"]>["getStatus"]
+    >;
+  } {
+    return {
+      localBridge: this.desktopRuntimeServices?.localBridgeRuntime?.getStatus(),
+    };
+  }
+}
+
+type WebviewAttachment = {
+  dataUrl: string;
+  mimeType: string;
+  name: string;
+};

@@ -1,0 +1,80 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>KainClaw for Word</title>
+    <link rel="stylesheet" href="./taskpane.css" />
+  </head>
+  <body>
+    <main class="app-shell">
+      <header class="hero">
+        <p class="eyebrow">KainClaw Local Bridge</p>
+        <h1>Word Add-in Skeleton</h1>
+        <p class="subtitle">
+          This skeleton only validates the Local Bridge session, auth, context, and proxy flow.
+        </p>
+      </header>
+
+      <section class="status-card">
+        <div class="status-row">
+          <span class="label">Bridge</span>
+          <span id="bridge-status" class="value">Connecting…</span>
+        </div>
+        <div class="status-row">
+          <span class="label">Provider</span>
+          <span id="provider-status" class="value">—</span>
+        </div>
+        <div class="status-row">
+          <span class="label">Session</span>
+          <span id="session-status" class="value mono">—</span>
+        </div>
+        <div class="status-row">
+          <span class="label">Document</span>
+          <span id="document-status" class="value">Not loaded</span>
+        </div>
+      </section>
+
+      <section class="chat-card">
+        <div class="context-toolbar">
+          <button id="refresh-context-button" type="button">Refresh Document Context</button>
+        </div>
+        <section class="selection-card">
+          <div class="selection-header">
+            <h2>Selection</h2>
+            <span id="selection-summary" class="selection-summary">No active selection</span>
+          </div>
+          <div id="selection-preview" class="selection-preview"></div>
+          <label class="selection-toggle">
+            <input id="selection-mode-toggle" type="checkbox" checked />
+            Prefer selection when available
+          </label>
+          <div class="selection-actions">
+            <button id="refresh-selection-button" type="button">Refresh Selection</button>
+          </div>
+        </section>
+        <section class="selected-context-card">
+          <div class="selected-context-header">
+            <h2>Selected Context</h2>
+            <span id="selected-context-summary" class="selected-context-summary">
+              No scoped context selected yet
+            </span>
+          </div>
+          <div id="selected-context-list" class="selected-context-list"></div>
+        </section>
+        <div id="message-list" class="message-list"></div>
+
+        <form id="prompt-form" class="prompt-form">
+          <textarea
+            id="prompt-input"
+            rows="4"
+            placeholder="Send a test prompt through the Local Bridge…"
+          ></textarea>
+          <button id="send-button" type="submit">Send</button>
+        </form>
+      </section>
+    </main>
+
+    <script type="module" src="./taskpane.ts"></script>
+  </body>
+</html>

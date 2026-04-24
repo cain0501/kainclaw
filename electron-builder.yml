@@ -1,0 +1,39 @@
+appId: com.kainclaw.desktop
+productName: KainClaw
+copyright: Copyright © 2026 KainClaw
+
+directories:
+  output: dist-win
+  buildResources: build-resources
+
+files:
+  - dist-electron/**/*
+  - node_modules/**/*
+  - "!node_modules/@types/**"
+  - "!node_modules/typescript/**"
+  - "!node_modules/vitest/**"
+  - "!node_modules/electron-builder/**"
+  - "!node_modules/@electron/**"
+
+extraResources:
+  - from: media
+    to: media
+    filter:
+      - "**/*"
+
+win:
+  target:
+    - target: nsis
+      arch: [x64]
+
+nsis:
+  oneClick: false
+  allowToChangeInstallationDirectory: true
+  createDesktopShortcut: true
+  createStartMenuShortcut: true
+  shortcutName: KainClaw
+
+extraMetadata:
+  main: dist-electron/electron/main.js
+
+publish: null

@@ -1,0 +1,87 @@
+{
+  "name": "terminal-ai-assistant-vscode",
+  "displayName": "KainClaw",
+  "description": "一个带 VS Code 侧边栏的本地终端 AI 助手。",
+  "version": "0.0.1",
+  "private": true,
+  "engines": {
+    "vscode": "^1.100.0"
+  },
+  "categories": [
+    "Other"
+  ],
+  "activationEvents": [
+    "onView:terminalAiAssistant.chatView",
+    "onCommand:terminalAiAssistant.focus",
+    "onCommand:terminalAiAssistant.clearChat"
+  ],
+  "main": "./dist/extension.js",
+  "contributes": {
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "terminalAiAssistant",
+          "title": "KainClaw",
+          "icon": "media/icon.svg"
+        }
+      ]
+    },
+    "views": {
+      "terminalAiAssistant": [
+        {
+          "type": "webview",
+          "id": "terminalAiAssistant.chatView",
+          "name": "对话"
+        }
+      ]
+    },
+    "commands": [
+      {
+        "command": "terminalAiAssistant.focus",
+        "title": "KainClaw:聚焦对话"
+      },
+      {
+        "command": "terminalAiAssistant.clearChat",
+        "title": "KainClaw:清空对话"
+      },
+      {
+        "command": "terminalAiAssistant.openSettings",
+        "title": "KainClaw:打开设置"
+      }
+    ],
+    "menus": {
+      "view/title": [
+        {
+          "command": "terminalAiAssistant.clearChat",
+          "when": "view == terminalAiAssistant.chatView",
+          "group": "navigation"
+        }
+      ]
+    }
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "check": "tsc --noEmit -p tsconfig.json",
+    "build:electron": "tsc -p tsconfig.electron.json && node -e \"require('fs').cpSync('electron/renderer','dist-electron/electron/renderer',{recursive:true})\"",
+    "check:electron": "tsc --noEmit -p tsconfig.electron.json",
+    "start:image-api": "npm run build && node dist/imageGeneration/imageApiServer.js",
+    "start:electron": "npm run build:electron && node scripts/start-electron.cjs",
+    "dist:win": "npm run build:electron && electron-builder --win --config electron-builder.yml",
+    "playwright:install": "playwright install chromium",
+    "test": "vitest run"
+  },
+  "devDependencies": {
+    "@types/node": "^25.5.0",
+    "@types/vscode": "^1.100.0",
+    "electron": "^35.2.0",
+    "electron-builder": "^25.1.8",
+    "typescript": "^6.0.2",
+    "vitest": "^3.2.4"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.29.0",
+    "diff": "^8.0.4",
+    "playwright": "^1.58.2",
+    "zod": "^4.3.6"
+  }
+}

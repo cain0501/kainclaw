@@ -1,0 +1,1981 @@
+import { mkdtemp, rm } from "node:fs/promises";
+import os from "node:os";
+import path from "node:path";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { runAgent } from "../src/agent/agentRunner";
+import {
+  buildProviderAdapter,
+  resolveProviderConfig,
+} from "../src/providerHost";
+import { handleElectronPromptCommand } from "../src/electronPromptCommandHost";
+import {
+  createImageVariant,
+  runImageLabRequest,
+} from "../src/imageGeneration/imageLabRuntime";
+import { searchPublicReferenceImages } from "../src/imageGeneration/imageMaterialSearch";
+import type { IHostAdapter } from "../src/platform/IHostAdapter";
+import type { DesktopRuntimeServices } from "../src/platform/desktopRuntimeServices";
+import type { LocalBridgeRuntimeStatus } from "../src/platform/localBridgeRuntime";
+import { SettingsRepository } from "../src/storage/settingsRepository";
+import { SessionRepository } from "../src/storage/sessionRepository";
+import { ElectronChatPanel } from "./ElectronChatPanel";
+
+vi.mock("../src/platform/electronHostAdapter", () => ({
+  ElectronHostAdapter: class {},
+}));
+
+vi.mock("../src/mcpRuntime", () => ({
+  McpRuntime: class {
+    markConfigDirty(): void {}
+
+    async getStatusSummary(): Promise<unknown[]> {
+      return [];
+    }
+  },
+}));
+
+vi.mock("../src/providerHost", () => ({
+  buildProviderAdapter: vi.fn(),
+  resolveProviderConfig: vi.fn(),
+}));
+
+vi.mock("../src/license/licenseManager", () => ({
+  verifyLicense: vi.fn(),
+}));
+
+vi.mock("../src/settingsHost", () => ({
+  validateOnboardingProviderKey: vi.fn(),
+  completeOnboardingProvider: vi.fn(),
+  saveSettingsProvider: vi.fn(),
+  deleteSettingsProvider: vi.fn(),
+  loadSettingsPanelData: vi.fn(async () => ({
+    providers: [],
+    activeId: undefined,
+    licenseActivated: false,
+  })),
+}));
+
+vi.mock("../src/attachmentHandler", () => ({
+  normalizeWebviewAttachments: vi.fn(() => []),
+}));
+
+vi.mock("../src/agent/agentRunner", () => ({
+  runAgent: vi.fn(),
+  SYSTEM_PROMPT: "",
+}));
+
+vi.mock("../src/toolRuntime", () => ({
+  toolDefinitions: [],
+}));
+
+vi.mock("../src/electronPromptCommandHost", () => ({
+  handleElectronPromptCommand: vi.fn(),
+}));
+
+vi.mock("../src/imageGeneration/imageLabRuntime", () => ({
+  runImageLabRequest: vi.fn(),
+  createImageVariant: vi.fn(),
+}));
+
+vi.mock("../src/imageGeneration/imageMaterialSearch", () => ({
+  searchPublicReferenceImages: vi.fn(),
+}));
+
+class FakeHostAdapter implements IHostAdapter {
+  private readonly state = new Map<string, unknown>();
+  private readonly secrets = new Map<string, string>();
+  private pendingApproval: Record<string, unknown> | null = null;
+
+  constructor(private readonly storagePath: string) {}
+
+  getWorkspaceRoot(): string | undefined {
+    return undefined;
+  }
+
+  getEditorSelection(): { selectedText: string; language: string } | null {
+    return null;
+  }
+
+  async showDiff(): Promise<void> {}
+
+  async requestFileApproval(): Promise<boolean> {
+    return true;
+  }
+
+  async requestToolApproval(): Promise<boolean> {
+    return true;
+  }
+
+  showError(): void {}
+
+  async getSecret(key: string): Promise<string | undefined> {
+    return this.secrets.get(key);
+  }
+
+  async storeSecret(key: string, value: string): Promise<void> {
+    this.secrets.set(key, value);
+  }
+
+  async deleteSecret(key: string): Promise<void> {
+    this.secrets.delete(key);
+  }
+
+  getState<T>(key: string): T | undefined {
+    return this.state.get(key) as T | undefined;
+  }
+
+  async setState<T>(key: string, value: T): Promise<void> {
+    this.state.set(key, value);
+  }
+
+  getStorageUri(): string {
+    return this.storagePath;
+  }
+
+  getPendingApproval(): Record<string, unknown> | null {
+    return this.pendingApproval;
+  }
+
+  setPendingApproval(payload: Record<string, unknown> | null): void {
+    this.pendingApproval = payload;
+  }
+}
+
+async function createHarness(options?: {
+  desktopRuntimeServices?: DesktopRuntimeServices;
+}) {
+  const storagePath = await mkdtemp(path.join(os.tmpdir(), "electron-chat-panel-"));
+  const host = new FakeHostAdapter(storagePath);
+  const settings = new SettingsRepository(host);
+  const sessions = new SessionRepository(storagePath);
+  const rendererPayloads: unknown[] = [];
+  const panel = new ElectronChatPanel(
+    sessions,
+    settings,
+    host as unknown as ConstructorParameters<typeof ElectronChatPanel>[2],
+    payload => {
+      rendererPayloads.push(payload);
+    },
+    options?.desktopRuntimeServices,
+  );
+
+  return {
+    storagePath,
+    host,
+    settings,
+    sessions,
+    panel,
+    rendererPayloads,
+  };
+}
+
+function createDeferred<T>() {
+  let resolve!: (value: T | PromiseLike<T>) => void;
+  let reject!: (reason?: unknown) => void;
+  const promise = new Promise<T>((res, rej) => {
+    resolve = res;
+    reject = rej;
+  });
+
+  return { promise, resolve, reject };
+}
+
+describe("ElectronChatPanel session lifecycle", () => {
+  const tempDirs: string[] = [];
+
+  beforeEach(() => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({
+      ok: true,
+      arrayBuffer: async () => Uint8Array.from([1, 2, 3, 4]).buffer,
+      headers: {
+        get: (name: string) => name.toLowerCase() === "content-type" ? "image/png" : null,
+      },
+    }));
+  });
+
+  afterEach(async () => {
+    await Promise.all(
+      tempDirs.splice(0).map(dir => rm(dir, { recursive: true, force: true })),
+    );
+    vi.unstubAllGlobals();
+    vi.clearAllMocks();
+  });
+
+  it("keeps an in-flight reply attached to the session that started it", async () => {
+    const harness = await createHarness();
+    tempDirs.push(harness.storagePath);
+
+    await harness.settings.setOnboardingDone(true);
+
+    const chineseSession = await harness.sessions.createSession(
+      "session-cn",
+      "electron",
+      "中文会话",
+    );
+    await harness.sessions.appendMessages(chineseSession.id, [
+      { role: "assistant", content: "你好！有什么我可以帮你的吗？" },
+    ]);
+
+    const abbSession = await harness.sessions.createSession("session-abb", "electron", "ABB");
+    await harness.sessions.appendMessages(abbSession.id, [
+      { role: "assistant", content: "EDFG" },
+    ]);
+
+    await harness.settings.setActiveSessionId(chineseSession.id);
+    await harness.panel.handleMessage({ type: "ready" });
+
+    vi.mocked(resolveProviderConfig).mockResolvedValue({
+      config: {
+        type: "anthropic",
+        apiKey: "test-key",
+        model: "claude-sonnet-4-6",
+      },
+      envMap: {},
+    });
+    vi.mocked(buildProviderAdapter).mockReturnValue({} as never);
+    vi.mocked(handleElectronPromptCommand).mockResolvedValue(null);
+
+    const agentReply = createDeferred<string>();
+    vi.mocked(runAgent).mockImplementation(async (_history, options) => {
+      options.onToken?.("处理中");
+      return agentReply.promise;
+    });
+
+    const sendPromise = harness.panel.handleMessage({
+      type: "sendPrompt",
+      prompt: "你好",
+    });
+
+    await vi.waitFor(() => {
+      expect(runAgent).toHaveBeenCalledTimes(1);
+    });
+
+    await harness.panel.handleMessage({
+      type: "sessions:switch",
+      id: abbSession.id,
+    });
+
+    const switchedStatePayload = [...harness.rendererPayloads]
+      .reverse()
+      .find(payload => (payload as { type?: string }).type === "state") as {
+        isBusy: boolean;
+        messages: Array<{ content: string }>;
+      };
+    expect(switchedStatePayload.isBusy).toBe(false);
+    expect(switchedStatePayload.messages.map(message => message.content)).toEqual([
+      "EDFG",
+    ]);
+
+    agentReply.resolve("这条回复应该留在中文会话");
+    await sendPromise;
+
+    expect(harness.settings.getActiveSessionId()).toBe(abbSession.id);
+
+    const chineseMessages = await harness.sessions.loadMessages(chineseSession.id);
+    expect(chineseMessages.map(message => message.content)).toEqual([
+      "你好！有什么我可以帮你的吗？",
+      "你好",
+      "这条回复应该留在中文会话",
+    ]);
+
+    const abbMessages = await harness.sessions.loadMessages(abbSession.id);
+    expect(abbMessages.map(message => message.content)).toEqual(["EDFG"]);
+
+    const lastStatePayload = [...harness.rendererPayloads]
+      .reverse()
+      .find(payload => (payload as { type?: string }).type === "state") as {
+        messages: Array<{ content: string }>;
+      };
+    expect(lastStatePayload.messages.map(message => message.content)).toEqual(["EDFG"]);
+  });
+
+  it("allows different sessions to run requests concurrently", async () => {
+    const harness = await createHarness();
+    tempDirs.push(harness.storagePath);
+
+    await harness.settings.setOnboardingDone(true);
+
+    const sessionA = await harness.sessions.createSession("session-a", "electron", "A");
+    await harness.sessions.appendMessages(sessionA.id, [
+      { role: "assistant", content: "hello from A" },
+    ]);
+
+    const sessionB = await harness.sessions.createSession("session-b", "electron", "B");
+    await harness.sessions.appendMessages(sessionB.id, [
+      { role: "assistant", content: "hello from B" },
+    ]);
+
+    await harness.settings.setActiveSessionId(sessionA.id);
+    await harness.panel.handleMessage({ type: "ready" });
+
+    vi.mocked(resolveProviderConfig).mockResolvedValue({
+      config: {
+        type: "anthropic",
+        apiKey: "test-key",
+        model: "claude-sonnet-4-6",
+      },
+      envMap: {},
+    });
+    vi.mocked(buildProviderAdapter).mockReturnValue({} as never);
+    vi.mocked(handleElectronPromptCommand).mockResolvedValue(null);
+
+    const replyA = createDeferred<string>();
+    const replyB = createDeferred<string>();
+    let invocationCount = 0;
+    vi.mocked(runAgent).mockImplementation(async (_history, options) => {
+      invocationCount += 1;
+      options.onToken?.(`chunk-${invocationCount}`);
+      return invocationCount === 1 ? replyA.promise : replyB.promise;
+    });
+
+    const sendPromiseA = harness.panel.handleMessage({
+      type: "sendPrompt",
+      prompt: "message for A",
+    });
+
+    await vi.waitFor(() => {
+      expect(runAgent).toHaveBeenCalledTimes(1);
+    });
+
+    await harness.panel.handleMessage({
+      type: "sessions:switch",
+      id: sessionB.id,
+    });
+
+    const stateAfterSwitch = [...harness.rendererPayloads]
+      .reverse()
+      .find(payload => (payload as { type?: string }).type === "state") as {
+        isBusy: boolean;
+        messages: Array<{ content: string }>;
+      };
+    expect(stateAfterSwitch.isBusy).toBe(false);
+    expect(stateAfterSwitch.messages.map(message => message.content)).toEqual([
+      "hello from B",
+    ]);
+
+    const sendPromiseB = harness.panel.handleMessage({
+      type: "sendPrompt",
+      prompt: "message for B",
+    });
+
+    await vi.waitFor(() => {
+      expect(runAgent).toHaveBeenCalledTimes(2);
+    });
+
+    replyB.resolve("reply for B");
+    await sendPromiseB;
+
+    replyA.resolve("reply for A");
+    await sendPromiseA;
+
+    const sessionAMessages = await harness.sessions.loadMessages(sessionA.id);
+    expect(sessionAMessages.map(message => message.content)).toEqual([
+      "hello from A",
+      "message for A",
+      "reply for A",
+    ]);
+
+    const sessionBMessages = await harness.sessions.loadMessages(sessionB.id);
+    expect(sessionBMessages.map(message => message.content)).toEqual([
+      "hello from B",
+      "message for B",
+      "reply for B",
+    ]);
+  });
+
+  it("falls back to another existing session after deleting the active session", async () => {
+    const harness = await createHarness();
+    tempDirs.push(harness.storagePath);
+
+    await harness.settings.setOnboardingDone(true);
+
+    const first = await harness.sessions.createSession("session-a", "electron", "A");
+    await harness.sessions.appendMessages(first.id, [
+      { role: "assistant", content: "first session" },
+    ]);
+
+    const second = await harness.sessions.createSession("session-b", "electron", "B");
+    await harness.sessions.appendMessages(second.id, [
+      { role: "assistant", content: "second session" },
+    ]);
+
+    await harness.settings.setActiveSessionId(second.id);
+    await harness.panel.handleMessage({ type: "ready" });
+
+    harness.rendererPayloads.length = 0;
+    await harness.panel.handleMessage({ type: "sessions:delete", id: second.id });
+
+    expect(harness.settings.getActiveSessionId()).toBe(first.id);
+
+    const statePayload = harness.rendererPayloads.find(
+      payload => (payload as { type?: string }).type === "state",
+    ) as { messages: Array<{ content: string }> };
+    expect(statePayload.messages.map(message => message.content)).toEqual([
+      "first session",
+    ]);
+
+    const sessionListPayloads = harness.rendererPayloads.filter(
+      payload => (payload as { type?: string }).type === "sessions:data",
+    ) as Array<{ activeId: string; sessions: Array<{ id: string }> }>;
+    const lastSessionList = sessionListPayloads.at(-1);
+    expect(lastSessionList).toBeDefined();
+    expect(lastSessionList?.activeId).toBe(first.id);
+    expect(lastSessionList?.sessions.map(session => session.id)).toEqual([first.id]);
+  });
+
+  it("keeps pending approval in state while switching sessions", async () => {
+    const harness = await createHarness();
+    tempDirs.push(harness.storagePath);
+
+    await harness.settings.setOnboardingDone(true);
+
+    const sessionA = await harness.sessions.createSession("session-a", "electron", "A");
+    const sessionB = await harness.sessions.createSession("session-b", "electron", "B");
+
+    await harness.settings.setActiveSessionId(sessionA.id);
+    await harness.panel.handleMessage({ type: "ready" });
+
+    harness.host.setPendingApproval({
+      id: "approval-1",
+      title: "Confirm file write",
+      summary: "Create test-approval.txt",
+      diff: "+hello approval",
+    });
+
+    await harness.panel.handleMessage({
+      type: "sessions:switch",
+      id: sessionB.id,
+    });
+
+    const switchedStatePayload = [...harness.rendererPayloads]
+      .reverse()
+      .find(payload => (payload as { type?: string }).type === "state") as {
+        pendingApproval: { id: string; title: string };
+      };
+    expect(switchedStatePayload.pendingApproval).toMatchObject({
+      id: "approval-1",
+      title: "Confirm file write",
+    });
+  });
+
+  it("heals a stale activeSessionId to an existing session on ready", async () => {
+    const harness = await createHarness();
+    tempDirs.push(harness.storagePath);
+
+    await harness.settings.setOnboardingDone(true);
+
+    const existing = await harness.sessions.createSession(
+      "session-existing",
+      "electron",
+      "Recovered",
+    );
+    await harness.sessions.appendMessages(existing.id, [
+      { role: "assistant", content: "recovered session" },
+    ]);
+
+    await harness.settings.setActiveSessionId("deleted-session");
+
+    await harness.panel.handleMessage({ type: "ready" });
+
+    expect(harness.settings.getActiveSessionId()).toBe(existing.id);
+
+    const statePayload = harness.rendererPayloads.find(
+      payload => (payload as { type?: string }).type === "state",
+    ) as { messages: Array<{ content: string }> };
+    expect(statePayload.messages.map(message => message.content)).toEqual([
+      "recovered session",
+    ]);
+  });
+
+  it("publishes local bridge runtime state and reacts to status updates", async () => {
+    let currentLocalBridgeStatus: LocalBridgeRuntimeStatus = {
+      running: false,
+      port: 52358,
+      version: "1.0",
+      addins: [],
+      error: undefined,
+    };
+    let emitStatusChange:
+      | ((status: LocalBridgeRuntimeStatus) => void)
+      | undefined;
+
+    const localBridgeRuntime: NonNullable<
+      DesktopRuntimeServices["localBridgeRuntime"]
+    > = {
+      start: vi.fn(),
+      stop: vi.fn(),
+      isRunning: vi.fn(() => currentLocalBridgeStatus.running),
+      getPort: vi.fn(() => currentLocalBridgeStatus.port),
+      getStatus: vi.fn(() => currentLocalBridgeStatus),
+      getAddinStatus: vi.fn(),
+      onAddinRegistered: vi.fn(() => () => {}),
+      onStatusChanged: vi.fn(handler => {
+        emitStatusChange = handler;
+        return () => {
+          emitStatusChange = undefined;
+        };
+      }),
+    };
+
+    const harness = await createHarness({
+      desktopRuntimeServices: {
+        localBridgeRuntime,
+      },
+    });
+    tempDirs.push(harness.storagePath);
+
+    await harness.settings.setOnboardingDone(true);
+    await harness.panel.handleMessage({ type: "ready" });
+
+    const initialState = [...harness.rendererPayloads]
+      .reverse()
+      .find(payload => (payload as { type?: string }).type === "state") as {
+        desktopRuntime?: {
+          localBridge?: typeof currentLocalBridgeStatus;
+        };
+      };
+    expect(initialState.desktopRuntime?.localBridge).toEqual(
+      currentLocalBridgeStatus,
+    );
+    expect(localBridgeRuntime.onStatusChanged).toHaveBeenCalledTimes(1);
+
+    currentLocalBridgeStatus = {
+      running: true,
+      port: 52358,
+      version: "1.0",
+      addins: [
+        {
+          addin: {
+            id: "word-addin",
+            name: "Word Add-in",
+            version: "0.1.0",
+            capabilities: ["document.read"],
+            connectedAt: 1,
+          },
+          connectionStatus: "connected",
+          lastPingAt: 2,
+        },
+      ],
+      error: undefined,
+    };
+
+    emitStatusChange?.(currentLocalBridgeStatus);
+
+    await vi.waitFor(() => {
+      const latestState = [...harness.rendererPayloads]
+        .reverse()
+        .find(payload => (payload as { type?: string }).type === "state") as {
+          desktopRuntime?: {
+            localBridge?: typeof currentLocalBridgeStatus;
+          };
+        };
+
+      expect(latestState.desktopRuntime?.localBridge).toEqual(
+        currentLocalBridgeStatus,
+      );
+    });
+  });
+
+  it("publishes image lab state from saved config", async () => {
+    const harness = await createHarness();
+    tempDirs.push(harness.storagePath);
+
+    await harness.settings.setOnboardingDone(true);
+    await harness.settings.saveImageConfig({
+      id: "image-model-1",
+      baseUrl: "https://example.com/v1",
+      model: "gpt-image-2",
+      authMode: "raw",
+      size: "1024x1024",
+      batchCount: 3,
+      responseFormat: "url",
+    });
+    await harness.settings.storeImageModelApiKey("image-model-1", "image-secret");
+    await harness.settings.pushImagePromptHistory("draw a cat");
+
+    await harness.panel.handleMessage({ type: "image:loadState" });
+
+    expect(harness.rendererPayloads).toContainEqual({
+      type: "image:state",
+      busy: false,
+      promptInferenceBusy: false,
+      materialSearchBusy: false,
+      workflowBusy: false,
+      workflowPlan: undefined,
+      activeImageModelId: "image-model-1",
+      imageModels: [
+        {
+          id: "image-model-1",
+          baseUrl: "https://example.com/v1",
+          model: "gpt-image-2",
+          authMode: "raw",
+          responseFormat: "url",
+          hasKey: true,
+        },
+      ],
+      config: {
+        id: "image-model-1",
+        model: "gpt-image-2",
+        size: "1024x1024",
+        batchCount: 3,
+        responseFormat: "url",
+        hasApiKey: true,
+        isConfigured: true,
+      },
+      promptHistory: [
+        {
+          prompt: "draw a cat",
+          createdAt: expect.any(Number),
+        },
+      ],
+      promptLibrary: expect.objectContaining({
+        favoriteIds: [],
+        entries: expect.any(Array),
+      }),
+      resultBatches: [],
+    });
+  });
+
+  it("keeps image lab batches grouped and preserves originals when generating variants", async () => {
+    const harness = await createHarness();
+    tempDirs.push(harness.storagePath);
+
+    await harness.settings.setOnboardingDone(true);
+    await harness.settings.saveImageConfig({
+      id: "image-model-1",
+      baseUrl: "https://example.com/v1",
+      model: "gpt-image-2",
+      authMode: "raw",
+      size: "1024x1024",
+      batchCount: 1,
+      responseFormat: "url",
+    });
+    await harness.settings.storeImageModelApiKey("image-model-1", "image-secret");
+    vi.mocked(runImageLabRequest).mockResolvedValue([
+      {
+        id: "img-1",
+        batchId: "batch-generate-1",
+        src: "https://example.com/generated-1.png",
+        prompt: "draw a cat",
+        createdAt: Date.now(),
+        source: "generate",
+      },
+      {
+        id: "img-2",
+        batchId: "batch-generate-1",
+        src: "https://example.com/generated-2.png",
+        prompt: "draw a cat",
+        createdAt: Date.now(),
+        source: "generate",
+      },
+    ] as never);
+    vi.mocked(createImageVariant).mockResolvedValue([
+      {
+        id: "img-variant-1",
+        batchId: "batch-variant-1",
+        src: "https://example.com/variant-1.png",
+        prompt: "draw a cat",
+        createdAt: Date.now(),
+        source: "variant",
+      },
+    ] as never);
+
+    await harness.panel.handleMessage({
+      type: "image:run",
+      prompt: "draw a cat",
+      size: "1024x1024",
+      batchCount: 2,
+      responseFormat: "url",
+      recordPromptHistory: true,
+    });
+
+    expect(vi.mocked(runImageLabRequest)).toHaveBeenCalledTimes(1);
+    expect(vi.mocked(runImageLabRequest)).toHaveBeenCalledWith(expect.objectContaining({
+      prompt: "draw a cat",
+      config: {
+        apiKey: "image-secret",
+        baseUrl: "https://example.com/v1",
+        model: "gpt-image-2",
+        authMode: "raw",
+        size: "1024x1024",
+        batchCount: 2,
+        responseFormat: "url",
+      },
+      signal: expect.any(Object),
+    }));
+    const runPayload = [...harness.rendererPayloads]
+      .reverse()
+      .find(payload => (payload as { type?: string }).type === "image:result") as {
+        latestBatchCount: number;
+        latestBatchSource: string;
+        resultBatches: Array<{ id: string; itemCount: number; items: Array<{ id: string }> }>;
+      };
+    expect(runPayload.latestBatchCount).toBe(2);
+    expect(runPayload.latestBatchSource).toBe("generate");
+    expect(runPayload.resultBatches).toEqual([
+      {
+        id: "batch-generate-1",
+        prompt: "draw a cat",
+        createdAt: expect.any(Number),
+        source: "generate",
+        itemCount: 2,
+        items: [
+          expect.objectContaining({ id: "img-1" }),
+          expect.objectContaining({ id: "img-2" }),
+        ],
+      },
+    ]);
+
+    await harness.panel.handleMessage({ type: "image:variant", id: "img-1" });
+    expect(vi.mocked(createImageVariant)).toHaveBeenCalledTimes(1);
+    const variantPayload = [...harness.rendererPayloads]
+      .reverse()
+      .find(payload => (payload as { type?: string }).type === "image:result") as {
+        latestBatchCount: number;
+        latestBatchSource: string;
+        resultBatches: Array<{ id: string; itemCount: number; items: Array<{ id: string }> }>;
+      };
+    expect(variantPayload.latestBatchCount).toBe(1);
+    expect(variantPayload.latestBatchSource).toBe("variant");
+    expect(variantPayload.resultBatches).toEqual([
+      {
+        id: "batch-variant-1",
+        prompt: "draw a cat",
+        createdAt: expect.any(Number),
+        source: "variant",
+        itemCount: 1,
+        items: [
+          expect.objectContaining({ id: "img-variant-1" }),
+        ],
+      },
+      {
+        id: "batch-generate-1",
+        prompt: "draw a cat",
+        createdAt: expect.any(Number),
+        source: "generate",
+        itemCount: 2,
+        items: [
+          expect.objectContaining({ id: "img-1" }),
+          expect.objectContaining({ id: "img-2" }),
+        ],
+      },
+    ]);
+  });
+
+  it("records prompt history only for explicit generate or edit submissions", async () => {
+    const harness = await createHarness();
+    tempDirs.push(harness.storagePath);
+
+    await harness.settings.setOnboardingDone(true);
+    await harness.settings.saveImageConfig({
+      id: "image-model-1",
+      baseUrl: "https://example.com/v1",
+      model: "gpt-image-2",
+      authMode: "raw",
+      size: "1024x1024",
+      batchCount: 1,
+      responseFormat: "url",
+    });
+    await harness.settings.storeImageModelApiKey("image-model-1", "image-secret");
+
+    vi.mocked(runImageLabRequest)
+      .mockResolvedValueOnce([
+        {
+          id: "img-1",
+          batchId: "batch-generate-1",
+          src: "https://example.com/generated-1.png",
+          prompt: "draw a cat",
+          createdAt: Date.now(),
+          source: "generate",
+        },
+      ] as never)
+      .mockResolvedValueOnce([
+        {
+          id: "img-2",
+          batchId: "batch-generate-2",
+          src: "https://example.com/generated-2.png",
+          prompt: "draw a cat",
+          createdAt: Date.now(),
+          source: "generate",
+        },
+      ] as never);
+    vi.mocked(createImageVariant).mockResolvedValue([
+      {
+        id: "img-variant-1",
+        batchId: "batch-variant-1",
+        src: "https://example.com/variant-1.png",
+        prompt: "draw a cat",
+        createdAt: Date.now(),
+        source: "variant",
+      },
+    ] as never);
+
+    await harness.panel.handleMessage({
+      type: "image:run",
+      prompt: "draw a cat",
+      size: "1024x1024",
+      batchCount: 1,
+      responseFormat: "url",
+      recordPromptHistory: true,
+    });
+    expect(harness.settings.getImagePromptHistory().map(entry => entry.prompt)).toEqual([
+      "draw a cat",
+    ]);
+
+    await harness.panel.handleMessage({
+      type: "image:run",
+      prompt: "draw a cat",
+      size: "1024x1024",
+      batchCount: 1,
+      responseFormat: "url",
+      recordPromptHistory: false,
+    });
+    expect(harness.settings.getImagePromptHistory().map(entry => entry.prompt)).toEqual([
+      "draw a cat",
+    ]);
+
+    await harness.panel.handleMessage({ type: "image:variant", id: "img-1" });
+    expect(harness.settings.getImagePromptHistory().map(entry => entry.prompt)).toEqual([
+      "draw a cat",
+    ]);
+  });
+
+  it("passes multiple reference images through image edit runs", async () => {
+    const harness = await createHarness();
+    tempDirs.push(harness.storagePath);
+
+    await harness.settings.setOnboardingDone(true);
+    await harness.settings.saveImageConfig({
+      id: "image-model-1",
+      baseUrl: "https://example.com/v1",
+      model: "gpt-image-2",
+      authMode: "raw",
+      size: "1024x1024",
+      batchCount: 1,
+      responseFormat: "url",
+    });
+    await harness.settings.storeImageModelApiKey("image-model-1", "image-secret");
+    vi.mocked(runImageLabRequest).mockResolvedValue([
+      {
+        id: "img-1",
+        batchId: "batch-edit-1",
+        src: "https://example.com/edited-1.png",
+        prompt: "add floral accents",
+        createdAt: Date.now(),
+        source: "edit",
+      },
+    ] as never);
+
+    await harness.panel.handleMessage({
+      type: "image:run",
+      prompt: "add floral accents",
+      size: "1024x1024",
+      batchCount: 1,
+      responseFormat: "url",
+      recordPromptHistory: true,
+      referenceImages: [
+        {
+          dataUrl: "data:image/png;base64,aGVsbG8=",
+          mimeType: "image/png",
+          name: "base.png",
+        },
+        {
+          dataUrl: "data:image/png;base64,d29ybGQ=",
+          mimeType: "image/png",
+          name: "flowers.png",
+        },
+      ],
+    });
+
+    expect(vi.mocked(runImageLabRequest)).toHaveBeenCalledWith(expect.objectContaining({
+      prompt: "add floral accents",
+      referenceImages: [
+        {
+          dataUrl: "data:image/png;base64,aGVsbG8=",
+          mimeType: "image/png",
+          name: "base.png",
+        },
+        {
+          dataUrl: "data:image/png;base64,d29ybGQ=",
+          mimeType: "image/png",
+          name: "flowers.png",
+        },
+      ],
+    }));
+  });
+
+  it("uses the active chat provider to infer a prompt from reference images", async () => {
+    const harness = await createHarness();
+    tempDirs.push(harness.storagePath);
+
+    await harness.settings.setOnboardingDone(true);
+    vi.mocked(resolveProviderConfig).mockResolvedValue({
+      config: {
+        type: "openai",
+        apiKey: "chat-secret",
+        model: "gpt-4o",
+      },
+      envMap: {},
+    });
+    const providerRunStep = vi.fn().mockResolvedValue({
+      text: "cinematic portrait with layered floral accents, soft rim light, editorial photography",
+      toolCalls: [],
+      done: true,
+    });
+    vi.mocked(buildProviderAdapter).mockReturnValue({
+      runStep: providerRunStep,
+    } as never);
+
+    await harness.panel.handleMessage({
+      type: "image:inferPrompt",
+      referenceImages: [
+        {
+          dataUrl: "data:image/png;base64,aGVsbG8=",
+          mimeType: "image/png",
+          name: "base.png",
+        },
+        {
+          dataUrl: "data:image/png;base64,d29ybGQ=",
+          mimeType: "image/png",
+          name: "flowers.png",
+        },
+      ],
+    });
+
+    expect(providerRunStep).toHaveBeenCalledTimes(1);
+    const inferencePayload = [...harness.rendererPayloads]
+      .reverse()
+      .find(payload => (payload as { type?: string }).type === "image:promptInferred") as {
+        prompt: string;
+      };
+    expect(inferencePayload.prompt).toContain("floral accents");
+
+    const imageStatePayload = [...harness.rendererPayloads]
+      .reverse()
+      .find(payload => (payload as { type?: string }).type === "image:state") as {
+        promptInferenceBusy: boolean;
+      };
+    expect(imageStatePayload.promptInferenceBusy).toBe(false);
+  });
+
+  it("returns bilingual prompt inference for prompt library image uploads", async () => {
+    const harness = await createHarness();
+    tempDirs.push(harness.storagePath);
+
+    await harness.settings.setOnboardingDone(true);
+    vi.mocked(resolveProviderConfig).mockResolvedValue({
+      config: {
+        type: "openai",
+        apiKey: "chat-secret",
+        model: "gpt-4o",
+      },
+      envMap: {},
+    });
+    const providerRunStep = vi.fn().mockResolvedValue({
+      text: JSON.stringify({
+        zhPrompt: "浪漫湖畔婚礼肖像，白色花艺更密，背景更真实自然。",
+        enPrompt: "Romantic lakeside bridal portrait, denser white floral styling, more realistic natural background.",
+      }),
+      toolCalls: [],
+      done: true,
+    });
+    vi.mocked(buildProviderAdapter).mockReturnValue({
+      runStep: providerRunStep,
+    } as never);
+
+    await harness.panel.handleMessage({
+      type: "promptLibrary:inferFromImage",
+      referenceImages: [{
+        dataUrl: "data:image/png;base64,aGVsbG8=",
+        mimeType: "image/png",
+        name: "sample.png",
+      }],
+    });
+
+    const inferencePayload = [...harness.rendererPayloads]
+      .reverse()
+      .find(payload => (payload as { type?: string }).type === "promptLibrary:inferredPrompt") as {
+        promptPair: { zhPrompt: string; enPrompt: string };
+      };
+    expect(inferencePayload.promptPair).toEqual({
+      zhPrompt: "浪漫湖畔婚礼肖像，白色花艺更密，背景更真实自然。",
+      enPrompt: "Romantic lakeside bridal portrait, denser white floral styling, more realistic natural background.",
+    });
+  });
+
+  it("uses the active chat provider to orchestrate an image workflow plan", async () => {
+    const harness = await createHarness();
+    tempDirs.push(harness.storagePath);
+
+    await harness.settings.setOnboardingDone(true);
+    vi.mocked(resolveProviderConfig).mockResolvedValue({
+      config: {
+        type: "anthropic",
+        apiKey: "chat-secret",
+        model: "claude-sonnet-4-6",
+      },
+      envMap: {},
+    });
+    const providerRunStep = vi.fn().mockResolvedValue({
+      text: JSON.stringify({
+        mode: "edit",
+        intentSummary: "Keep the bridal pose and strengthen the floral styling.",
+        finalPrompt: "Elegant bridal portrait by the lake, preserve pose, enrich white floral ground detail, cleaner realistic lighting, editorial wedding photography",
+        materialKeywords: ["white wedding flowers", "lakefront ceremony decor"],
+        nextStepNote: "Add one more close floral detail reference if you want denser petals.",
+      }),
+      toolCalls: [],
+      done: true,
+    });
+    vi.mocked(buildProviderAdapter).mockReturnValue({
+      runStep: providerRunStep,
+    } as never);
+
+    await harness.panel.handleMessage({
+      type: "image:orchestrateWorkflow",
+      prompt: "把花艺增强一些，背景更真实",
+      referenceImages: [{
+        dataUrl: "data:image/png;base64,aGVsbG8=",
+        mimeType: "image/png",
+        name: "base.png",
+      }],
+    });
+
+    expect(providerRunStep).toHaveBeenCalledTimes(1);
+    const planPayload = [...harness.rendererPayloads]
+      .reverse()
+      .find(payload => (payload as { type?: string }).type === "image:workflowOrchestrated") as {
+        workflowPlan: {
+          mode: string;
+          intentSummary: string;
+          finalPrompt: string;
+          materialKeywords: string[];
+        };
+      };
+    expect(planPayload.workflowPlan).toMatchObject({
+      mode: "edit",
+      intentSummary: "Keep the bridal pose and strengthen the floral styling.",
+      finalPrompt: expect.stringContaining("bridal portrait"),
+      materialKeywords: ["white wedding flowers", "lakefront ceremony decor"],
+    });
+
+    const imageStatePayload = [...harness.rendererPayloads]
+      .reverse()
+      .find(payload => (payload as { type?: string }).type === "image:state") as {
+        workflowBusy: boolean;
+        workflowPlan: { mode: string; finalPrompt: string };
+      };
+    expect(imageStatePayload.workflowBusy).toBe(false);
+    expect(imageStatePayload.workflowPlan).toMatchObject({
+      mode: "edit",
+      finalPrompt: expect.stringContaining("bridal portrait"),
+    });
+  });
+
+  it("prepares material-search keywords before querying public references", async () => {
+    const harness = await createHarness();
+    tempDirs.push(harness.storagePath);
+
+    await harness.settings.setOnboardingDone(true);
+    vi.mocked(resolveProviderConfig).mockResolvedValue({
+      config: {
+        type: "anthropic",
+        apiKey: "chat-secret",
+        model: "claude-sonnet-4-6",
+      },
+      envMap: {},
+    });
+    const providerRunStep = vi.fn().mockResolvedValue({
+      text: JSON.stringify({
+        mode: "edit",
+        intentSummary: "Strengthen the floral styling around the bottle.",
+        finalPrompt: "Luxury skincare bottle on marble, keep bottle fixed, add one more soft white flower beside it, soft daylight, realistic product photography",
+        materialKeywords: ["white gardenia flower", "marble surface product photography"],
+        nextStepNote: "Look for close-up floral references before the next edit.",
+      }),
+      toolCalls: [],
+      done: true,
+    });
+    vi.mocked(buildProviderAdapter).mockReturnValue({
+      runStep: providerRunStep,
+    } as never);
+
+    await harness.panel.handleMessage({
+      type: "image:prepareMaterialSearch",
+      prompt: "在瓶子边加朵花",
+      referenceImages: [],
+      requestId: "material-prepare-1",
+    });
+
+    expect(providerRunStep).toHaveBeenCalledTimes(1);
+
+    const preparedPayload = [...harness.rendererPayloads]
+      .reverse()
+      .find(payload => (payload as { type?: string }).type === "image:materialSearchPrepared") as {
+        requestId?: string;
+        searchQueries: string[];
+        workflowPlan: { mode: string; finalPrompt: string };
+      };
+    expect(preparedPayload.requestId).toBe("material-prepare-1");
+    expect(preparedPayload.searchQueries).toEqual([
+      "white gardenia flower",
+      "marble surface product photography",
+    ]);
+    expect(preparedPayload.workflowPlan).toMatchObject({
+      mode: "edit",
+      finalPrompt: expect.stringContaining("Luxury skincare bottle"),
+    });
+  });
+
+  it("searches public material references from prepared keywords without reopening orchestration", async () => {
+    const harness = await createHarness();
+    tempDirs.push(harness.storagePath);
+
+    await harness.settings.setOnboardingDone(true);
+    vi.mocked(searchPublicReferenceImages).mockResolvedValue([
+      {
+        id: "material-1",
+        query: "white gardenia flower",
+        title: "White gardenia flower",
+        thumbnailUrl: "https://thumb.example.com/gardenia.jpg",
+        fullUrl: "https://full.example.com/gardenia.jpg",
+        pageUrl: "https://example.com/gardenia",
+        sourceLabel: "flickr",
+      },
+    ] as never);
+
+    await harness.panel.handleMessage({
+      type: "image:searchMaterials",
+      prompt: "在瓶子边加朵花",
+      referenceImages: [],
+      queries: ["white gardenia flower", "marble surface product photography"],
+      requestId: "material-search-1",
+    });
+
+    expect(vi.mocked(searchPublicReferenceImages)).toHaveBeenCalledWith({
+      queries: ["white gardenia flower", "marble surface product photography"],
+      maxResultsPerQuery: 3,
+    });
+    expect(vi.mocked(buildProviderAdapter)).not.toHaveBeenCalled();
+
+    const searchPayload = [...harness.rendererPayloads]
+      .reverse()
+      .find(payload => (payload as { type?: string }).type === "image:materialSearchResults") as {
+        requestId?: string;
+        searchQueries: string[];
+        results: Array<{ id: string; query: string }>;
+      };
+    expect(searchPayload.requestId).toBe("material-search-1");
+    expect(searchPayload.searchQueries).toEqual([
+      "white gardenia flower",
+      "marble surface product photography",
+    ]);
+    expect(searchPayload.results).toEqual([
+      {
+        id: "material-1",
+        query: "white gardenia flower",
+        title: "White gardenia flower",
+        thumbnailUrl: "https://thumb.example.com/gardenia.jpg",
+        fullUrl: "https://full.example.com/gardenia.jpg",
+        pageUrl: "https://example.com/gardenia",
+        sourceLabel: "flickr",
+      },
+    ]);
+  });
+
+  it("appends generated images back into the chat session when image mode runs from chat", async () => {
+    const harness = await createHarness();
+    tempDirs.push(harness.storagePath);
+
+    await harness.settings.setOnboardingDone(true);
+    await harness.settings.saveImageConfig({
+      id: "image-model-1",
+      baseUrl: "https://example.com/v1",
+      model: "gpt-image-2",
+      authMode: "raw",
+      size: "1024x1024",
+      batchCount: 1,
+      responseFormat: "url",
+    });
+    await harness.settings.storeImageModelApiKey("image-model-1", "image-secret");
+    vi.mocked(runImageLabRequest).mockResolvedValue([
+      {
+        id: "img-chat-1",
+        batchId: "batch-chat-1",
+        src: "https://example.com/generated-chat-1.png",
+        prompt: "draw a bridal portrait",
+        createdAt: Date.now(),
+        source: "generate",
+      },
+    ] as never);
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({
+      ok: true,
+      arrayBuffer: async () => Uint8Array.from([1, 2, 3, 4]).buffer,
+      headers: {
+        get: (name: string) => name.toLowerCase() === "content-type" ? "image/png" : null,
+      },
+    }));
+
+    await harness.panel.handleMessage({
+      type: "chat:imageRun",
+      prompt: "draw a bridal portrait",
+      referenceImages: [],
+    });
+
+    const chatStatePayload = [...harness.rendererPayloads]
+      .reverse()
+      .find(payload => (payload as { type?: string }).type === "state") as {
+        messages: Array<{
+          role: string;
+          content: string;
+          generatedImages?: Array<{ id: string; src: string }>;
+        }>;
+      };
+    expect(chatStatePayload.messages).toHaveLength(2);
+    expect(chatStatePayload.messages[0]).toMatchObject({
+      role: "user",
+      content: "draw a bridal portrait",
+    });
+    expect(chatStatePayload.messages[1]).toMatchObject({
+      role: "assistant",
+      content: "已生成 1 张图片。",
+      generatedImages: [
+        {
+          id: "img-chat-1",
+          src: "data:image/png;base64,AQIDBA==",
+        },
+      ],
+    });
+  });
+
+  it("auto-routes strong generate prompts to image generation without requiring the image button", async () => {
+    const harness = await createHarness();
+    tempDirs.push(harness.storagePath);
+
+    await harness.settings.setOnboardingDone(true);
+    await harness.settings.saveImageConfig({
+      id: "image-model-1",
+      baseUrl: "https://example.com/v1",
+      model: "gpt-image-2",
+      authMode: "raw",
+      size: "1024x1024",
+      batchCount: 1,
+      responseFormat: "url",
+    });
+    await harness.settings.storeImageModelApiKey("image-model-1", "image-secret");
+    vi.mocked(runImageLabRequest).mockResolvedValue([
+      {
+        id: "img-auto-1",
+        batchId: "batch-auto-1",
+        src: "https://example.com/generated-auto-1.png",
+        prompt: "生成一张湖畔婚礼肖像",
+        createdAt: Date.now(),
+        source: "generate",
+      },
+    ] as never);
+
+    await harness.panel.handleMessage({
+      type: "sendPrompt",
+      prompt: "生成一张湖畔婚礼肖像",
+    });
+
+    expect(vi.mocked(runImageLabRequest)).toHaveBeenCalledWith(expect.objectContaining({
+      prompt: "生成一张湖畔婚礼肖像",
+      config: expect.objectContaining({
+        model: "gpt-image-2",
+      }),
+    }));
+  });
+
+  it("derives image size from the user's requested ratio or dimensions", async () => {
+    const harness = await createHarness();
+    tempDirs.push(harness.storagePath);
+
+    await harness.settings.setOnboardingDone(true);
+    await harness.settings.saveImageConfig({
+      id: "image-model-1",
+      baseUrl: "https://example.com/v1",
+      model: "gpt-image-2",
+      authMode: "raw",
+      size: "1024x1024",
+      batchCount: 1,
+      responseFormat: "url",
+    });
+    await harness.settings.storeImageModelApiKey("image-model-1", "image-secret");
+    vi.mocked(runImageLabRequest)
+      .mockResolvedValueOnce([
+        {
+          id: "img-ratio-1",
+          batchId: "batch-ratio-1",
+          src: "https://example.com/generated-ratio-1.png",
+          prompt: "生成一个 16:9 的法斗头像",
+          createdAt: Date.now(),
+          source: "generate",
+        },
+      ] as never)
+      .mockResolvedValueOnce([
+        {
+          id: "img-dim-1",
+          batchId: "batch-dim-1",
+          src: "https://example.com/generated-dim-1.png",
+          prompt: "做一张 1920x1080 的产品主图",
+          createdAt: Date.now(),
+          source: "generate",
+        },
+      ] as never);
+
+    await harness.panel.handleMessage({
+      type: "sendPrompt",
+      prompt: "生成一个 16:9 的法斗头像",
+    });
+    await harness.panel.handleMessage({
+      type: "sendPrompt",
+      prompt: "做一张 1920x1080 的产品主图",
+    });
+
+    expect(vi.mocked(runImageLabRequest)).toHaveBeenNthCalledWith(1, expect.objectContaining({
+      prompt: "生成一个 16:9 的法斗头像",
+      config: expect.objectContaining({
+        size: "1536x896",
+      }),
+    }));
+    expect(vi.mocked(runImageLabRequest)).toHaveBeenNthCalledWith(2, expect.objectContaining({
+      prompt: "做一张 1920x1080 的产品主图",
+      config: expect.objectContaining({
+        size: "1920x1080",
+      }),
+    }));
+  });
+
+  it("treats prompt-declared batch requests as separate image outputs instead of a collage hint", async () => {
+    const harness = await createHarness();
+    tempDirs.push(harness.storagePath);
+
+    await harness.settings.setOnboardingDone(true);
+    await harness.settings.saveImageConfig({
+      id: "image-model-1",
+      baseUrl: "https://example.com/v1",
+      model: "gpt-image-2",
+      authMode: "raw",
+      size: "1024x1024",
+      batchCount: 1,
+      responseFormat: "url",
+    });
+    await harness.settings.storeImageModelApiKey("image-model-1", "image-secret");
+    vi.mocked(runImageLabRequest).mockResolvedValue([
+      {
+        id: "img-batch-1",
+        batchId: "batch-batch-1",
+        src: "https://example.com/generated-batch-1.png",
+        prompt: "批量生成三张图片，美少女遛狗",
+        createdAt: Date.now(),
+        source: "generate",
+      },
+      {
+        id: "img-batch-2",
+        batchId: "batch-batch-1",
+        src: "https://example.com/generated-batch-2.png",
+        prompt: "批量生成三张图片，美少女遛狗",
+        createdAt: Date.now(),
+        source: "generate",
+      },
+      {
+        id: "img-batch-3",
+        batchId: "batch-batch-1",
+        src: "https://example.com/generated-batch-3.png",
+        prompt: "批量生成三张图片，美少女遛狗",
+        createdAt: Date.now(),
+        source: "generate",
+      },
+    ] as never);
+
+    await harness.panel.handleMessage({
+      type: "sendPrompt",
+      prompt: "批量生成三张图片，美少女遛狗",
+    });
+
+    expect(vi.mocked(runImageLabRequest)).toHaveBeenCalledWith(expect.objectContaining({
+      prompt: "批量生成三张图片，美少女遛狗",
+      executionPrompt: expect.stringContaining("每个输出结果都必须是一张独立完整的单图"),
+      config: expect.objectContaining({
+        model: "gpt-image-2",
+        batchCount: 3,
+      }),
+    }));
+
+    expect(harness.rendererPayloads).toContainEqual(expect.objectContaining({
+      type: "chat:imagePending",
+      prompt: "批量生成三张图片，美少女遛狗",
+      batchCount: 3,
+      modelLabel: "gpt-image-2",
+    }));
+  });
+
+  it("auto-routes short follow-up modifiers to image edit when recent image context exists", async () => {
+    const harness = await createHarness();
+    tempDirs.push(harness.storagePath);
+
+    await harness.settings.setOnboardingDone(true);
+    await harness.settings.saveImageConfig({
+      id: "image-model-1",
+      baseUrl: "https://example.com/v1",
+      model: "gpt-image-2",
+      authMode: "raw",
+      size: "1024x1024",
+      batchCount: 1,
+      responseFormat: "url",
+    });
+    await harness.settings.storeImageModelApiKey("image-model-1", "image-secret");
+
+    const session = await harness.sessions.createSession("session-image", "electron", "Image");
+    await harness.sessions.appendMessages(session.id, [
+      {
+        role: "assistant",
+        content: "已生成 1 张图片。",
+        generatedImages: [{
+          id: "img-existing-1",
+          src: "data:image/png;base64,aGVsbG8=",
+          source: "generate",
+          prompt: "draw a bridal portrait",
+        }],
+      },
+    ]);
+    await harness.settings.setActiveSessionId(session.id);
+    await harness.panel.handleMessage({ type: "ready" });
+
+    vi.mocked(runImageLabRequest).mockResolvedValue([
+      {
+        id: "img-edit-1",
+        batchId: "batch-edit-1",
+        src: "https://example.com/edited-1.png",
+        prompt: "胸部大一点",
+        createdAt: Date.now(),
+        source: "edit",
+      },
+    ] as never);
+
+    await harness.panel.handleMessage({
+      type: "sendPrompt",
+      prompt: "胸部大一点",
+    });
+
+    expect(vi.mocked(runImageLabRequest)).toHaveBeenCalledWith(expect.objectContaining({
+      prompt: "胸部大一点",
+      referenceImages: [
+        expect.objectContaining({
+          dataUrl: "data:image/png;base64,aGVsbG8=",
+          mimeType: "image/png",
+        }),
+      ],
+    }));
+  });
+
+  it("supports stopping an in-flight image generation request", async () => {
+    const harness = await createHarness();
+    tempDirs.push(harness.storagePath);
+
+    await harness.settings.setOnboardingDone(true);
+    await harness.settings.saveImageConfig({
+      id: "image-model-1",
+      baseUrl: "https://example.com/v1",
+      model: "gpt-image-2",
+      authMode: "raw",
+      size: "1024x1024",
+      batchCount: 1,
+      responseFormat: "url",
+    });
+    await harness.settings.storeImageModelApiKey("image-model-1", "image-secret");
+
+    let capturedSignal: AbortSignal | undefined;
+    vi.mocked(runImageLabRequest).mockImplementation(async request => {
+      capturedSignal = request.signal;
+      return await new Promise<never>((_resolve, reject) => {
+        request.signal?.addEventListener(
+          "abort",
+          () => reject(new DOMException("The operation was aborted", "AbortError")),
+          { once: true },
+        );
+      });
+    });
+
+    const runPromise = harness.panel.handleMessage({
+      type: "image:run",
+      prompt: "draw a cat",
+      size: "1024x1024",
+      batchCount: 1,
+      responseFormat: "url",
+      recordPromptHistory: true,
+    });
+
+    await vi.waitFor(() => {
+      expect(vi.mocked(runImageLabRequest)).toHaveBeenCalledTimes(1);
+      expect(capturedSignal).toBeDefined();
+    });
+
+    await harness.panel.handleMessage({ type: "image:abort" });
+    await runPromise;
+
+    expect(capturedSignal?.aborted).toBe(true);
+
+    const abortedPayload = [...harness.rendererPayloads]
+      .reverse()
+      .find(payload => (payload as { type?: string }).type === "image:aborted") as {
+        message: string;
+      };
+    expect(abortedPayload.message).toContain("已停止");
+
+    const latestImageState = [...harness.rendererPayloads]
+      .reverse()
+      .find(payload => (payload as { type?: string }).type === "image:state") as {
+        busy: boolean;
+        resultBatches: unknown[];
+      };
+    expect(latestImageState.busy).toBe(false);
+    expect(latestImageState.resultBatches).toEqual([]);
+  });
+
+  it("rehydrates persisted image lab result batches after recreating the panel", async () => {
+    const harness = await createHarness();
+    tempDirs.push(harness.storagePath);
+
+    await harness.settings.setOnboardingDone(true);
+    await harness.settings.saveImageConfig({
+      id: "image-model-1",
+      baseUrl: "https://example.com/v1",
+      model: "gpt-image-2",
+      authMode: "raw",
+      size: "1024x1024",
+      batchCount: 2,
+      responseFormat: "url",
+    });
+    await harness.settings.storeImageModelApiKey("image-model-1", "image-secret");
+
+    vi.mocked(runImageLabRequest).mockResolvedValue([
+      {
+        id: "img-1",
+        batchId: "batch-generate-1",
+        src: "https://example.com/generated-1.png",
+        prompt: "draw a cat",
+        createdAt: Date.now(),
+        source: "generate",
+      },
+      {
+        id: "img-2",
+        batchId: "batch-generate-1",
+        src: "https://example.com/generated-2.png",
+        prompt: "draw a cat",
+        createdAt: Date.now(),
+        source: "generate",
+      },
+    ] as never);
+
+    await harness.panel.handleMessage({
+      type: "image:run",
+      prompt: "draw a cat",
+      size: "1024x1024",
+      batchCount: 2,
+      responseFormat: "url",
+      recordPromptHistory: true,
+    });
+
+    const rehydratedPayloads: unknown[] = [];
+    const rehydratedPanel = new ElectronChatPanel(
+      harness.sessions,
+      harness.settings,
+      harness.host as unknown as ConstructorParameters<typeof ElectronChatPanel>[2],
+      payload => {
+        rehydratedPayloads.push(payload);
+      },
+    );
+
+    await rehydratedPanel.handleMessage({ type: "image:loadState" });
+
+    expect(rehydratedPayloads).toContainEqual({
+      type: "image:state",
+      busy: false,
+      promptInferenceBusy: false,
+      materialSearchBusy: false,
+      workflowBusy: false,
+      workflowPlan: undefined,
+      activeImageModelId: "image-model-1",
+      imageModels: [
+        {
+          id: "image-model-1",
+          baseUrl: "https://example.com/v1",
+          model: "gpt-image-2",
+          authMode: "raw",
+          responseFormat: "url",
+          hasKey: true,
+        },
+      ],
+      config: {
+        id: "image-model-1",
+        model: "gpt-image-2",
+        size: "1024x1024",
+        batchCount: 2,
+        responseFormat: "url",
+        hasApiKey: true,
+        isConfigured: true,
+      },
+      promptHistory: [
+        {
+          prompt: "draw a cat",
+          createdAt: expect.any(Number),
+        },
+      ],
+      promptLibrary: expect.objectContaining({
+        favoriteIds: [],
+        entries: expect.any(Array),
+      }),
+      resultBatches: [
+        {
+          id: "batch-generate-1",
+          prompt: "draw a cat",
+          createdAt: expect.any(Number),
+          source: "generate",
+          itemCount: 2,
+          items: [
+            expect.objectContaining({ id: "img-1" }),
+            expect.objectContaining({ id: "img-2" }),
+          ],
+        },
+      ],
+    });
+
+    await rehydratedPanel.handleMessage({ type: "image:clearResults" });
+
+    const thirdPanelPayloads: unknown[] = [];
+    const thirdPanel = new ElectronChatPanel(
+      harness.sessions,
+      harness.settings,
+      harness.host as unknown as ConstructorParameters<typeof ElectronChatPanel>[2],
+      payload => {
+        thirdPanelPayloads.push(payload);
+      },
+    );
+
+    await thirdPanel.handleMessage({ type: "image:loadState" });
+
+    expect(thirdPanelPayloads).toContainEqual({
+      type: "image:state",
+      busy: false,
+      promptInferenceBusy: false,
+      materialSearchBusy: false,
+      workflowBusy: false,
+      workflowPlan: undefined,
+      activeImageModelId: "image-model-1",
+      imageModels: [
+        {
+          id: "image-model-1",
+          baseUrl: "https://example.com/v1",
+          model: "gpt-image-2",
+          authMode: "raw",
+          responseFormat: "url",
+          hasKey: true,
+        },
+      ],
+      config: {
+        id: "image-model-1",
+        model: "gpt-image-2",
+        size: "1024x1024",
+        batchCount: 2,
+        responseFormat: "url",
+        hasApiKey: true,
+        isConfigured: true,
+      },
+      promptHistory: [
+        {
+          prompt: "draw a cat",
+          createdAt: expect.any(Number),
+        },
+      ],
+      promptLibrary: expect.objectContaining({
+        favoriteIds: [],
+        entries: expect.any(Array),
+      }),
+      resultBatches: [],
+    });
+  });
+
+  it("deletes a single persisted image result without clearing the whole gallery", async () => {
+    const harness = await createHarness();
+    tempDirs.push(harness.storagePath);
+
+    await harness.settings.setOnboardingDone(true);
+    await harness.settings.saveImageConfig({
+      id: "image-model-1",
+      baseUrl: "https://example.com/v1",
+      model: "gpt-image-2",
+      authMode: "raw",
+      size: "1024x1024",
+      batchCount: 2,
+      responseFormat: "url",
+    });
+    await harness.settings.storeImageModelApiKey("image-model-1", "image-secret");
+
+    vi.mocked(runImageLabRequest).mockResolvedValue([
+      {
+        id: "img-1",
+        batchId: "batch-generate-1",
+        src: "https://example.com/generated-1.png",
+        prompt: "draw a cat",
+        createdAt: Date.now(),
+        source: "generate",
+      },
+      {
+        id: "img-2",
+        batchId: "batch-generate-1",
+        src: "https://example.com/generated-2.png",
+        prompt: "draw a cat",
+        createdAt: Date.now(),
+        source: "generate",
+      },
+    ] as never);
+
+    await harness.panel.handleMessage({
+      type: "image:run",
+      prompt: "draw a cat",
+      size: "1024x1024",
+      batchCount: 2,
+      responseFormat: "url",
+      recordPromptHistory: true,
+    });
+
+    await harness.panel.handleMessage({ type: "image:deleteResult", id: "img-1" });
+
+    const payload = [...harness.rendererPayloads]
+      .reverse()
+      .find(entry => (entry as { type?: string }).type === "image:state") as {
+        resultBatches: Array<{
+          id: string;
+          itemCount: number;
+          items: Array<{ id: string }>;
+        }>;
+      };
+    expect(payload.resultBatches).toEqual([
+      {
+        id: "batch-generate-1",
+        prompt: "draw a cat",
+        createdAt: expect.any(Number),
+        source: "generate",
+        itemCount: 1,
+        items: [
+          expect.objectContaining({ id: "img-2" }),
+        ],
+      },
+    ]);
+
+    const rehydratedPayloads: unknown[] = [];
+    const rehydratedPanel = new ElectronChatPanel(
+      harness.sessions,
+      harness.settings,
+      harness.host as unknown as ConstructorParameters<typeof ElectronChatPanel>[2],
+      payload => {
+        rehydratedPayloads.push(payload);
+      },
+    );
+
+    await rehydratedPanel.handleMessage({ type: "image:loadState" });
+
+    expect(rehydratedPayloads).toContainEqual({
+      type: "image:state",
+      busy: false,
+      promptInferenceBusy: false,
+      materialSearchBusy: false,
+      workflowBusy: false,
+      workflowPlan: undefined,
+      activeImageModelId: "image-model-1",
+      imageModels: [
+        {
+          id: "image-model-1",
+          baseUrl: "https://example.com/v1",
+          model: "gpt-image-2",
+          authMode: "raw",
+          responseFormat: "url",
+          hasKey: true,
+        },
+      ],
+      config: {
+        id: "image-model-1",
+        model: "gpt-image-2",
+        size: "1024x1024",
+        batchCount: 2,
+        responseFormat: "url",
+        hasApiKey: true,
+        isConfigured: true,
+      },
+      promptHistory: [
+        {
+          prompt: "draw a cat",
+          createdAt: expect.any(Number),
+        },
+      ],
+      promptLibrary: expect.objectContaining({
+        favoriteIds: [],
+        entries: expect.any(Array),
+      }),
+      resultBatches: [
+        {
+          id: "batch-generate-1",
+          prompt: "draw a cat",
+          createdAt: expect.any(Number),
+          source: "generate",
+          itemCount: 1,
+          items: [
+            expect.objectContaining({ id: "img-2" }),
+          ],
+        },
+      ],
+    });
+  });
+
+  it("persists prompt library state through the Electron image state payload", async () => {
+    const harness = await createHarness();
+    tempDirs.push(harness.storagePath);
+
+    await harness.settings.setOnboardingDone(true);
+    await harness.panel.handleMessage({
+      type: "promptLibrary:savePrompt",
+      title: "直播间写真",
+      category: "自定义",
+      text: "draw a live-stream portrait",
+      tags: "直播, 写真",
+      preview: {
+        kind: "image",
+        src: "https://example.com/sample.png",
+      },
+    });
+
+    const afterSaveState = [...harness.rendererPayloads]
+      .reverse()
+      .find(payload => (payload as { type?: string }).type === "image:state") as {
+        promptLibrary: {
+          entries: Array<{
+            id: string;
+            origin: string;
+            title: string;
+            category: string;
+            text: string;
+            tags: string[];
+            preview: { kind: string; src?: string; value?: string };
+            isFavorite: boolean;
+          }>;
+          favoriteIds: string[];
+        };
+      };
+    const savedEntry = afterSaveState.promptLibrary.entries.find(entry => entry.origin === "user");
+    expect(savedEntry).toMatchObject({
+      title: "直播间写真",
+      category: "自定义",
+      text: "draw a live-stream portrait",
+      tags: ["直播", "写真"],
+      preview: { kind: "image", src: "https://example.com/sample.png" },
+      isFavorite: false,
+    });
+
+    await harness.panel.handleMessage({
+      type: "promptLibrary:toggleFavorite",
+      id: savedEntry!.id,
+    });
+
+    const afterFavoriteState = [...harness.rendererPayloads]
+      .reverse()
+      .find(payload => (payload as { type?: string }).type === "image:state") as {
+        promptLibrary: {
+          entries: Array<{ id: string; isFavorite: boolean }>;
+          favoriteIds: string[];
+        };
+      };
+    expect(afterFavoriteState.promptLibrary.favoriteIds).toContain(savedEntry!.id);
+    expect(afterFavoriteState.promptLibrary.entries.find(entry => entry.id === savedEntry!.id)?.isFavorite).toBe(true);
+
+    await harness.panel.handleMessage({
+      type: "promptLibrary:deletePrompt",
+      id: savedEntry!.id,
+    });
+
+    const afterDeleteState = [...harness.rendererPayloads]
+      .reverse()
+      .find(payload => (payload as { type?: string }).type === "image:state") as {
+        promptLibrary: {
+          entries: Array<{ id: string }>;
+          favoriteIds: string[];
+        };
+      };
+    expect(afterDeleteState.promptLibrary.entries.find(entry => entry.id === savedEntry!.id)).toBeUndefined();
+    expect(afterDeleteState.promptLibrary.favoriteIds).not.toContain(savedEntry!.id);
+  });
+
+  it("always resolves image lab runs against the active image model", async () => {
+    const harness = await createHarness();
+    tempDirs.push(harness.storagePath);
+
+    await harness.settings.setOnboardingDone(true);
+    await harness.settings.saveImageConfig({
+      id: "image-model-1",
+      baseUrl: "https://example.com/v1",
+      model: "gpt-image-2",
+      authMode: "raw",
+      responseFormat: "url",
+    });
+    await harness.settings.storeImageModelApiKey("image-model-1", "image-secret-1");
+    await harness.settings.saveImageConfig({
+      id: "image-model-2",
+      baseUrl: "https://images.example.com/v1",
+      model: "gpt-image-2.1",
+      authMode: "bearer",
+      responseFormat: "b64_json",
+    });
+    await harness.settings.storeImageModelApiKey("image-model-2", "image-secret-2");
+    await harness.settings.setActiveImageModelId("image-model-2");
+
+    vi.mocked(runImageLabRequest).mockResolvedValue([
+      {
+        id: "img-2",
+        batchId: "batch-generate-2",
+        src: "https://example.com/generated-2.png",
+        prompt: "draw a fox",
+        createdAt: Date.now(),
+        source: "generate",
+      },
+    ] as never);
+
+    await harness.panel.handleMessage({
+      type: "image:run",
+      prompt: "draw a fox",
+      baseUrl: "https://stale.example.com/v1",
+      model: "stale-model",
+      authMode: "raw",
+      size: "1536x1024",
+      batchCount: 2,
+      responseFormat: "url",
+      apiKey: "stale-secret",
+    });
+
+    expect(vi.mocked(runImageLabRequest)).toHaveBeenLastCalledWith(expect.objectContaining({
+      prompt: "draw a fox",
+      config: {
+        apiKey: "image-secret-2",
+        baseUrl: "https://images.example.com/v1",
+        model: "gpt-image-2.1",
+        authMode: "bearer",
+        size: "1536x1024",
+        batchCount: 2,
+        responseFormat: "url",
+      },
+      signal: expect.any(Object),
+    }));
+    await expect(harness.settings.getImageModelApiKey("image-model-2")).resolves.toBe(
+      "image-secret-2",
+    );
+    expect(harness.settings.getImageConfig()).toEqual({
+      id: "image-model-2",
+      baseUrl: "https://images.example.com/v1",
+      model: "gpt-image-2.1",
+      authMode: "bearer",
+      size: "1536x1024",
+      batchCount: 2,
+      responseFormat: "url",
+    });
+  });
+});

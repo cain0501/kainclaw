@@ -1,0 +1,33 @@
+# Dependencies
+node_modules/
+
+# Build outputs
+dist/
+dist-electron/
+dist-win/
+*.vsix
+
+# Local environment and secrets
+.env
+.env.*
+.mcp.json
+.cain-mcp.json
+
+# Local agent/runtime state
+.claude/
+.omx/
+.tmp/
+.cain-artifacts/
+.codex-parallel/
+
+# Editor-local files
+.vscode/
+dev-host.code-workspace
+
+# Recovery / scratch docs
+.kiro/recovery-draft-*.md
+
+# OS / logs
+*.log
+Thumbs.db
+.DS_Store
