@@ -7,8 +7,8 @@
   - `npm run check`
   - `npm run build`
 - Current verified baseline after this round:
-  - `143` test files
-  - `930` tests passed
+  - `144` test files
+  - `936` tests passed
 - `npm run build:electron` was not rerun in this round by the agent. Electron verification remains user-run.
 - Electron shell parity moved forward one step:
   - `/todo`
@@ -17,6 +17,13 @@
   - `/verify`
   are no longer desktop-shell hard blocks.
 - This is still shell wiring work, not a new capability family. The value is that the Electron validation shell now reuses existing `src/` task / compact / inspection host paths instead of rejecting these commands up front.
+- Electron workspace selection now has a parity-hardening layer for git-backed inspection:
+  - when the selected folder is a non-git parent workspace with a single nested repo, Electron auto-resolves that repo root for runtime and inspection work
+  - when no unique repo can be identified, `/review` and `/verify` warn that they are running without reliable local git diff context
+- Electron workspace parity also moved forward at the UI/runtime boundary:
+  - the shell now shows the selected folder, effective repo root, and current workspace status explicitly instead of exposing only one opaque path
+  - when multiple nested repos are found, the shell exposes candidate repo buttons instead of leaving the user to re-guess the correct path manually
+  - Local Bridge provider/runtime resolution now uses the same effective workspace-root decision as the Electron chat shell
 - Electron slash-command routing now runs before image-intent routing, so command inputs are no longer misclassified as image-edit prompts when recent image context exists.
 - Review / verification output policy moved one step closer to expected product behavior: by default the body follows the user's language, and Chinese users should now receive Simplified Chinese explanatory text while `/verify` keeps the required English structural labels.
 

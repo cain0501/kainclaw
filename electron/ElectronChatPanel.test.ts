@@ -1,6 +1,8 @@
-import { mkdtemp, rm } from "node:fs/promises";
+import { execFile } from "node:child_process";
+import { mkdir, mkdtemp, rm } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
+import { promisify } from "node:util";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { runAgent } from "../src/agent/agentRunner";
 import {
@@ -8,6 +10,7 @@ import {
   resolveProviderConfig,
 } from "../src/providerHost";
 import { handleElectronPromptCommand } from "../src/electronPromptCommandHost";
+import { handleReviewCommandWithHost } from "../src/inspectionHost";
 import {
   createImageVariant,
   runImageLabRequest,
@@ -19,6 +22,8 @@ import type { LocalBridgeRuntimeStatus } from "../src/platform/localBridgeRuntim
 import { SettingsRepository } from "../src/storage/settingsRepository";
 import { SessionRepository } from "../src/storage/sessionRepository";
 import { ElectronChatPanel } from "./ElectronChatPanel";
+
+const execFileAsync = promisify(execFile);
 
 vi.mock("../src/platform/electronHostAdapter", () => ({
   ElectronHostAdapter: class {},
@@ -70,6 +75,11 @@ vi.mock("../src/toolRuntime", () => ({
 
 vi.mock("../src/electronPromptCommandHost", () => ({
   handleElectronPromptCommand: vi.fn(),
+}));
+
+vi.mock("../src/inspectionHost", () => ({
+  handleReviewCommandWithHost: vi.fn(),
+  handleVerificationCommandWithHost: vi.fn(),
 }));
 
 vi.mock("../src/imageGeneration/imageLabRuntime", () => ({
@@ -1519,6 +1529,142 @@ describe("ElectronChatPanel session lifecycle", () => {
     const messages = await harness.sessions.loadMessages(session.id);
     expect(messages.map(message => message.content)).toContain("/compact");
     expect(messages.map(message => message.content)).toContain("Context compacted.");
+  });
+
+  it("auto-descends to a unique nested git repo when the selected Electron workspace is a parent folder", async () => {
+    const harness = await createHarness();
+    tempDirs.push(harness.storagePath);
+
+    const workspaceRoot = await mkdtemp(path.join(os.tmpdir(), "electron-parent-workspace-"));
+    const repoRoot = path.join(workspaceRoot, "vscode-extension");
+    tempDirs.push(workspaceRoot);
+
+    await mkdir(repoRoot, { recursive: true });
+    await execFileAsync("git", ["init"], {
+      cwd: repoRoot,
+      windowsHide: true,
+    });
+
+    await harness.settings.setOnboardingDone(true);
+    await harness.settings.setWorkspaceRoot(workspaceRoot);
+
+    vi.mocked(resolveProviderConfig).mockResolvedValue({
+      config: {
+        type: "anthropic",
+        apiKey: "test-key",
+        model: "claude-sonnet-4-6",
+      },
+      envMap: {},
+    });
+    vi.mocked(buildProviderAdapter).mockReturnValue({} as never);
+    vi.mocked(handleElectronPromptCommand).mockResolvedValue({
+      kind: "reply",
+      reply: "Workspace resolved.",
+    });
+
+    await harness.panel.handleMessage({
+      type: "sendPrompt",
+      prompt: "/todo",
+    });
+
+    expect(resolveProviderConfig).toHaveBeenCalledWith(harness.settings, repoRoot);
+    expect(handleElectronPromptCommand).toHaveBeenCalledWith(
+      expect.objectContaining({
+        workspaceRoot: repoRoot,
+      }),
+    );
+
+    const statePayload = [...harness.rendererPayloads]
+      .reverse()
+      .find(payload => (payload as { type?: string }).type === "state") as {
+        workspaceRoot: string;
+        workspaceInfo: {
+          selectedRoot: string;
+          effectiveRoot: string;
+          gitRoot: string | null;
+          kind: string;
+        };
+      };
+    expect(statePayload.workspaceRoot).toBe(repoRoot);
+    expect(statePayload.workspaceInfo).toMatchObject({
+      selectedRoot: workspaceRoot,
+      effectiveRoot: repoRoot,
+      gitRoot: repoRoot,
+      kind: "nested_git_root",
+    });
+  });
+
+  it("warns before degraded review when the selected Electron workspace is not a git repo", async () => {
+    const harness = await createHarness();
+    tempDirs.push(harness.storagePath);
+
+    const workspaceRoot = await mkdtemp(path.join(os.tmpdir(), "electron-non-git-workspace-"));
+    tempDirs.push(workspaceRoot);
+
+    await harness.settings.setOnboardingDone(true);
+    await harness.settings.setWorkspaceRoot(workspaceRoot);
+
+    vi.mocked(resolveProviderConfig).mockResolvedValue({
+      config: {
+        type: "anthropic",
+        apiKey: "test-key",
+        model: "claude-sonnet-4-6",
+      },
+      envMap: {},
+    });
+    vi.mocked(buildProviderAdapter).mockReturnValue({} as never);
+    vi.mocked(handleReviewCommandWithHost).mockResolvedValue(true);
+    vi.mocked(handleElectronPromptCommand).mockImplementation(async options => {
+      await options.handleReviewCommand(
+        "/review",
+        options.workspaceRoot,
+        options.config,
+        options.envMap,
+        options.runtime,
+        options.tools,
+        options.runtimeOptions,
+        options.currentEffortLevel,
+      );
+      return { kind: "handled" };
+    });
+
+    await harness.panel.handleMessage({
+      type: "sendPrompt",
+      prompt: "/review",
+    });
+
+    const sessionId = harness.settings.getActiveSessionId();
+    expect(sessionId).toBeTruthy();
+
+    const messages = await harness.sessions.loadMessages(sessionId!);
+    expect(messages.some(message =>
+      message.role === "assistant" &&
+      message.content.includes("当前工作区不是 Git 仓库"),
+    )).toBe(true);
+
+    const statePayload = [...harness.rendererPayloads]
+      .reverse()
+      .find(payload => (payload as { type?: string }).type === "state") as {
+        workspaceRoot: string;
+        workspaceInfo: {
+          selectedRoot: string;
+          effectiveRoot: string;
+          gitRoot: string | null;
+          kind: string;
+        };
+      };
+    expect(statePayload.workspaceRoot).toBe(workspaceRoot);
+    expect(statePayload.workspaceInfo).toMatchObject({
+      selectedRoot: workspaceRoot,
+      effectiveRoot: workspaceRoot,
+      gitRoot: null,
+      kind: "non_git_workspace",
+    });
+    expect(handleReviewCommandWithHost).toHaveBeenCalledWith(
+      expect.objectContaining({
+        workspaceRoot,
+      }),
+    );
   });
 
   it("supports stopping an in-flight image generation request", async () => {

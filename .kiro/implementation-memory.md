@@ -16,12 +16,21 @@
   - `npm run check`
   - `npm run build`
 - Current verified baseline after this round:
-  - `143` test files
-  - `930` tests passed
+  - `144` test files
+  - `936` tests passed
 - `npm run build:electron` was not rerun in this round by the agent.
 - Electron routing rule:
   - Slash commands must be recognized before chat/image intent inference.
   - Otherwise recent generated-image context will incorrectly hijack commands such as `/compact` into image-edit flows.
+- Electron workspace resolution rule:
+  - Keep the user-selected folder as the effective workspace when it is already inside a git repo.
+  - If the selected folder is only a collaboration parent folder and contains exactly one nested git repo, auto-descend to that repo root for Electron runtime/inspection work instead of silently staying too high.
+  - If Electron cannot identify a unique repo, `/review` and `/verify` must warn that local git diff context is degraded instead of pretending inspection still has a trustworthy repo root.
+- Electron workspace UI rule:
+  - The desktop shell must expose the selected folder, effective workspace/repo root, and current resolution status explicitly.
+  - When multiple nested repo candidates exist, expose clickable candidate repo choices in the shell instead of making the user manually retry path guesses.
+- Electron runtime consistency rule:
+  - Electron chat/runtime, MCP workspace display, and Local Bridge runtime context should all consume the same resolved effective workspace root. Do not let one surface use the raw selected folder while another uses the resolved repo root.
 - Built-in inspection language rule:
   - `/review` and `/verify` should follow the user's language by default.
   - If the user is Chinese, write the explanatory body in Simplified Chinese.

@@ -403,6 +403,13 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-seri
         <div style="flex:1"></div>
         <span id="license-badge" style="font-size:12px;color:#16a34a;display:none">已激活</span>
       </div>
+      <div id="workspace-meta" style="display:none;margin-top:8px;padding:10px 12px;border-radius:10px;background:#fafafa;border:1px solid #f1f1f3">
+        <div id="workspace-status-line" style="font-size:12px;font-weight:600;color:#18181b"></div>
+        <div id="workspace-selected-line" style="font-size:11px;color:#52525b;margin-top:4px;word-break:break-all"></div>
+        <div id="workspace-effective-line" style="font-size:11px;color:#52525b;margin-top:4px;word-break:break-all"></div>
+        <div id="workspace-detail-line" style="font-size:11px;color:#71717a;margin-top:6px;line-height:1.5;display:none"></div>
+        <div id="workspace-candidates" style="display:none;flex-wrap:wrap;gap:6px;margin-top:8px"></div>
+      </div>
     </div>
   </div>
 </div>
@@ -683,6 +690,13 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-seri
         <button onclick="pickWorkspace()" style="background:#E84040;color:#fff;border:none;border-radius:5px;padding:4px 10px;font-size:12px;cursor:pointer;white-space:nowrap;font-family:inherit">选择文件夹</button>
       </div>
       <div style="font-size:11px;color:#a1a1aa;margin-top:6px;line-height:1.5">MCP 服务器从工作区根目录的 <code style="background:#e4e4e7;padding:1px 4px;border-radius:3px">.mcp.json</code> 读取配置</div>
+      <div id="mcp-workspace-meta" style="display:none;margin-top:10px;padding-top:10px;border-top:1px solid #e4e4e7">
+        <div id="mcp-workspace-status" style="font-size:12px;font-weight:600;color:#18181b"></div>
+        <div id="mcp-workspace-selected" style="font-size:11px;color:#52525b;margin-top:4px;word-break:break-all"></div>
+        <div id="mcp-workspace-effective" style="font-size:11px;color:#52525b;margin-top:4px;word-break:break-all"></div>
+        <div id="mcp-workspace-detail" style="font-size:11px;color:#71717a;margin-top:6px;line-height:1.5;display:none"></div>
+        <div id="mcp-workspace-candidates" style="display:none;flex-wrap:wrap;gap:6px;margin-top:8px"></div>
+      </div>
     </div>
     <div id="mcp-list" style="display:flex;flex-direction:column;gap:7px"></div>
       <div id="mcp-empty" style="color:#a1a1aa;text-align:center;padding:20px 0;font-size:13px">尚未配置 MCP 服务器<br><span style="font-size:11px">在工作区根目录创建 .mcp.json 并选择文件夹</span></div>
@@ -892,6 +906,7 @@ let appState = {
   pendingApproval: null,
   mcpServers: [],
   licenseActivated: false,
+  workspaceInfo: null,
 };
 
 let pendingAttachments = []; // { dataUrl, mimeType, name }
@@ -1214,6 +1229,14 @@ function applyState(state) {
   appState.onboardingDone = state.onboardingDone;
   appState.pendingApproval = state.pendingApproval || null;
   appState.mcpServers = state.mcpServers || [];
+  appState.workspaceInfo = state.workspaceInfo || {
+    selectedRoot: state.workspaceRoot || '',
+    effectiveRoot: state.workspaceRoot || '',
+    gitRoot: state.workspaceRoot || null,
+    kind: state.workspaceRoot ? 'direct_git_root' : 'unset',
+    detail: '',
+    candidates: [],
+  };
 
   if (!state.onboardingDone) {
     showOnboardingPage();
@@ -1227,27 +1250,173 @@ function applyState(state) {
   }
 
   document.getElementById('provider-label').textContent = state.providerLabel || '未配置';
-
-  // Update workspace display
-  const wsLabel = document.getElementById('workspace-label');
-  const wsPath = state.workspaceRoot || '';
-  if (wsLabel) {
-    if (wsPath) {
-      wsLabel.textContent = wsPath.split(/[\\/]/).pop() || wsPath;
-      wsLabel.style.color = '#18181b';
-      wsLabel.parentElement.title = wsPath;
-    } else {
-      wsLabel.textContent = '选择工作区';
-      wsLabel.style.color = '#a1a1aa';
-    }
-  }
-  const mcpWsPath = document.getElementById('mcp-workspace-path');
-  if (mcpWsPath) mcpWsPath.textContent = wsPath || '未设置';
+  renderWorkspaceState(appState.workspaceInfo);
 
   renderMessages();
   updateBusyUi();
   renderApproval(state.pendingApproval);
   renderMcpServers(state.mcpServers);
+}
+
+function getWorkspaceStatusMeta(workspaceInfo) {
+  switch (workspaceInfo?.kind) {
+    case 'direct_git_root':
+      return { label: '直接命中 Git 仓库', shortLabel: 'Git直连', color: '#166534' };
+    case 'inside_git_repo':
+      return { label: '位于 Git 仓库内', shortLabel: '仓库内', color: '#166534' };
+    case 'nested_git_root':
+      return { label: '自动下沉到嵌套仓库', shortLabel: '自动下沉', color: '#1d4ed8' };
+    case 'missing':
+      return { label: '工作区路径失效', shortLabel: '路径失效', color: '#b45309' };
+    case 'non_git_workspace':
+      return { label: '非 Git 降级', shortLabel: '非Git降级', color: '#b45309' };
+    case 'ambiguous_nested_git_roots':
+      return { label: '多仓库歧义', shortLabel: '多仓库歧义', color: '#b91c1c' };
+    case 'unset':
+    default:
+      return { label: '未设置工作区', shortLabel: '未设置', color: '#a1a1aa' };
+  }
+}
+
+function getPathLeaf(targetPath) {
+  if (!targetPath) return '';
+  const parts = String(targetPath).split(/[\\/]/).filter(Boolean);
+  return parts[parts.length - 1] || targetPath;
+}
+
+function formatWorkspaceLine(label, value) {
+  return `${label}：${value || '未设置'}`;
+}
+
+function describeCandidateLabel(targetPath) {
+  const parts = String(targetPath).split(/[\\/]/).filter(Boolean);
+  if (parts.length <= 1) {
+    return targetPath;
+  }
+  const leaf = parts[parts.length - 1];
+  const parent = parts[parts.length - 2];
+  return `${leaf} (${parent})`;
+}
+
+function renderWorkspaceCandidates(containerId, workspaceInfo) {
+  const container = document.getElementById(containerId);
+  if (!container) return;
+  container.innerHTML = '';
+
+  const candidates = Array.isArray(workspaceInfo?.candidates)
+    ? workspaceInfo.candidates
+    : [];
+  if (!candidates.length) {
+    container.style.display = 'none';
+    return;
+  }
+
+  container.style.display = 'flex';
+  candidates.forEach(candidate => {
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.textContent = describeCandidateLabel(candidate);
+    button.title = candidate;
+    button.style.background = '#fff';
+    button.style.color = '#18181b';
+    button.style.border = '1px solid #d4d4d8';
+    button.style.borderRadius = '999px';
+    button.style.padding = '4px 10px';
+    button.style.fontSize = '11px';
+    button.style.cursor = 'pointer';
+    button.style.fontFamily = 'inherit';
+    button.onclick = () => setWorkspaceRoot(candidate);
+    container.appendChild(button);
+  });
+}
+
+function renderWorkspaceState(workspaceInfo) {
+  const info = workspaceInfo || {
+    selectedRoot: '',
+    effectiveRoot: '',
+    gitRoot: null,
+    kind: 'unset',
+    detail: '',
+    candidates: [],
+  };
+  const statusMeta = getWorkspaceStatusMeta(info);
+  const effectiveRoot = info.effectiveRoot || '';
+  const selectedRoot = info.selectedRoot || '';
+  const badgeLabel = effectiveRoot
+    ? `${statusMeta.shortLabel} · ${getPathLeaf(effectiveRoot)}`
+    : '选择工作区';
+
+  const wsBadge = document.getElementById('workspace-badge');
+  const wsLabel = document.getElementById('workspace-label');
+  if (wsBadge) {
+    wsBadge.style.borderColor = effectiveRoot ? statusMeta.color : '#d4d4d8';
+    wsBadge.title = [
+      `状态：${statusMeta.label}`,
+      formatWorkspaceLine('已选', selectedRoot),
+      formatWorkspaceLine('生效', effectiveRoot),
+      info.detail ? `说明：${info.detail}` : '',
+    ].filter(Boolean).join('\n');
+  }
+  if (wsLabel) {
+    wsLabel.textContent = badgeLabel;
+    wsLabel.style.color = effectiveRoot ? statusMeta.color : '#a1a1aa';
+  }
+
+  const workspaceMeta = document.getElementById('workspace-meta');
+  if (workspaceMeta) workspaceMeta.style.display = 'block';
+  const workspaceStatusLine = document.getElementById('workspace-status-line');
+  if (workspaceStatusLine) {
+    workspaceStatusLine.textContent = `状态：${statusMeta.label}`;
+    workspaceStatusLine.style.color = statusMeta.color;
+  }
+  const workspaceSelectedLine = document.getElementById('workspace-selected-line');
+  if (workspaceSelectedLine) {
+    workspaceSelectedLine.textContent = formatWorkspaceLine('已选', selectedRoot);
+  }
+  const workspaceEffectiveLine = document.getElementById('workspace-effective-line');
+  if (workspaceEffectiveLine) {
+    workspaceEffectiveLine.textContent = formatWorkspaceLine('生效', effectiveRoot);
+  }
+  const workspaceDetailLine = document.getElementById('workspace-detail-line');
+  if (workspaceDetailLine) {
+    if (info.detail) {
+      workspaceDetailLine.style.display = 'block';
+      workspaceDetailLine.textContent = `说明：${info.detail}`;
+    } else {
+      workspaceDetailLine.style.display = 'none';
+      workspaceDetailLine.textContent = '';
+    }
+  }
+  renderWorkspaceCandidates('workspace-candidates', info);
+
+  const mcpWsPath = document.getElementById('mcp-workspace-path');
+  if (mcpWsPath) mcpWsPath.textContent = effectiveRoot || '未设置';
+  const mcpWorkspaceMeta = document.getElementById('mcp-workspace-meta');
+  if (mcpWorkspaceMeta) mcpWorkspaceMeta.style.display = 'block';
+  const mcpWorkspaceStatus = document.getElementById('mcp-workspace-status');
+  if (mcpWorkspaceStatus) {
+    mcpWorkspaceStatus.textContent = `状态：${statusMeta.label}`;
+    mcpWorkspaceStatus.style.color = statusMeta.color;
+  }
+  const mcpWorkspaceSelected = document.getElementById('mcp-workspace-selected');
+  if (mcpWorkspaceSelected) {
+    mcpWorkspaceSelected.textContent = formatWorkspaceLine('已选', selectedRoot);
+  }
+  const mcpWorkspaceEffective = document.getElementById('mcp-workspace-effective');
+  if (mcpWorkspaceEffective) {
+    mcpWorkspaceEffective.textContent = formatWorkspaceLine('生效', effectiveRoot);
+  }
+  const mcpWorkspaceDetail = document.getElementById('mcp-workspace-detail');
+  if (mcpWorkspaceDetail) {
+    if (info.detail) {
+      mcpWorkspaceDetail.style.display = 'block';
+      mcpWorkspaceDetail.textContent = `说明：${info.detail}`;
+    } else {
+      mcpWorkspaceDetail.style.display = 'none';
+      mcpWorkspaceDetail.textContent = '';
+    }
+  }
+  renderWorkspaceCandidates('mcp-workspace-candidates', info);
 }
 
 // Page Navigation
@@ -1428,8 +1597,13 @@ function stopGeneration() {
 async function pickWorkspace() {
   const root = await window.electronAPI?.pickWorkspace?.();
   if (root) {
-    send({ type: 'workspace:set', root });
+    setWorkspaceRoot(root);
   }
+}
+
+function setWorkspaceRoot(root) {
+  if (!root) return;
+  send({ type: 'workspace:set', root });
 }
 
 function refreshMcp() {

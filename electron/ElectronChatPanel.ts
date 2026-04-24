@@ -29,6 +29,10 @@ import {
   handleReviewCommandWithHost,
   handleVerificationCommandWithHost,
 } from "../src/inspectionHost";
+import {
+  parseReviewDiffRef,
+  parseVerificationDiffRef,
+} from "../src/agent/built-in/agentUtils";
 import { BackgroundTaskHost } from "../src/backgroundTaskHost";
 import {
   buildImageLabResultBatches,
@@ -68,6 +72,10 @@ import { determineChatPromptIntent } from "../src/imageGeneration/chatPromptInte
 import { resolveImageBatchPlan } from "../src/imageGeneration/imagePromptBatching";
 import { resolveRequestedImageSize } from "../src/imageGeneration/imagePromptSizing";
 import type { DesktopRuntimeServices } from "../src/platform/desktopRuntimeServices";
+import {
+  resolveWorkspaceRoot,
+  type ResolvedWorkspaceRoot,
+} from "../src/platform/workspaceRootResolver";
 import { PersistentTaskRuntimeStore } from "../src/tasks/taskRuntime";
 import { PersistentWorktreeRuntimeStore } from "../src/worktree/runtime";
 import type { ConversationTaskRuntime } from "../src/tasks/types";
@@ -149,6 +157,12 @@ export class ElectronChatPanel {
   private readonly taskRuntimeStore: PersistentTaskRuntimeStore;
   private readonly worktreeRuntimeStore: PersistentWorktreeRuntimeStore;
   private readonly backgroundTaskHost: BackgroundTaskHost;
+  private cachedWorkspaceResolution:
+    | {
+        selectedRoot: string;
+        resolution: ResolvedWorkspaceRoot;
+      }
+    | undefined;
 
   constructor(
     private readonly sessions: SessionRepository,
@@ -159,7 +173,7 @@ export class ElectronChatPanel {
     private readonly desktopRuntimeServices?: DesktopRuntimeServices,
   ) {
     this.mcpRuntime = new McpRuntime(
-      () => this.settings.getWorkspaceRoot() ?? "",
+      () => this.getCachedEffectiveWorkspaceRoot(),
       process.env as Record<string, string>,
     );
     this.imageGalleryStore = new ImageLabGalleryStore(this.host.getStorageUri());
@@ -187,6 +201,107 @@ export class ElectronChatPanel {
       const cleanup = this.cleanupHandlers.pop();
       cleanup?.();
     }
+  }
+
+  private clearWorkspaceResolutionCache(): void {
+    this.cachedWorkspaceResolution = undefined;
+  }
+
+  private getCachedEffectiveWorkspaceRoot(): string {
+    const selectedRoot = this.settings.getWorkspaceRoot() ?? "";
+    if (
+      this.cachedWorkspaceResolution &&
+      this.cachedWorkspaceResolution.selectedRoot === selectedRoot
+    ) {
+      return this.cachedWorkspaceResolution.resolution.effectiveRoot;
+    }
+    return selectedRoot;
+  }
+
+  private async getResolvedWorkspaceContext(
+    forceRefresh = false,
+  ): Promise<ResolvedWorkspaceRoot> {
+    const selectedRoot = this.settings.getWorkspaceRoot() ?? "";
+    if (
+      !forceRefresh &&
+      this.cachedWorkspaceResolution &&
+      this.cachedWorkspaceResolution.selectedRoot === selectedRoot
+    ) {
+      return this.cachedWorkspaceResolution.resolution;
+    }
+
+    const resolution = await resolveWorkspaceRoot(selectedRoot);
+    this.cachedWorkspaceResolution = {
+      selectedRoot,
+      resolution,
+    };
+    return resolution;
+  }
+
+  private buildWorkspaceSystemNote(workspace: ResolvedWorkspaceRoot): string {
+    if (!workspace.selectedRoot) {
+      return "\n\n# Workspace\nNo workspace is currently set. Tell the user they can select a folder via the workspace button in the chat footer.\n";
+    }
+
+    const details: string[] = [`Current workspace root: ${workspace.effectiveRoot}`];
+
+    if (
+      workspace.selectedRoot &&
+      workspace.effectiveRoot &&
+      workspace.selectedRoot !== workspace.effectiveRoot
+    ) {
+      details.push(`Selected folder: ${workspace.selectedRoot}`);
+    }
+
+    if (workspace.detail) {
+      details.push(`Git status: ${workspace.detail}`);
+    }
+
+    return `\n\n# Workspace\n${details.join("\n")}\n`;
+  }
+
+  private buildInspectionWorkspaceWarning(
+    commandName: "/review" | "/verify",
+    workspace: ResolvedWorkspaceRoot,
+  ): string | undefined {
+    switch (workspace.kind) {
+      case "unset":
+        return `当前还没有选择工作区。${commandName} 将以降级模式运行，可能拿不到真实 git diff。请先选择目标仓库文件夹。`;
+      case "missing":
+        return `当前工作区路径不可访问。${commandName} 将以降级模式运行，可能拿不到真实 git diff。请重新选择目标仓库文件夹。`;
+      case "non_git_workspace":
+        return `当前工作区不是 Git 仓库。${commandName} 将以降级模式运行，可能拿不到真实 git diff。请直接选择目标仓库文件夹。`;
+      case "ambiguous_nested_git_roots": {
+        const candidates = workspace.candidates?.length
+          ? `\n候选目录：\n${workspace.candidates.map(candidate => `- ${candidate}`).join("\n")}`
+          : "";
+        return `当前工作区不是 Git 仓库，而且找到了多个同层候选仓库。${commandName} 将以降级模式运行，可能拿不到真实 git diff。请直接选择目标仓库文件夹。${candidates}`;
+      }
+      default:
+        return undefined;
+    }
+  }
+
+  private async warnOnDegradedInspectionWorkspace(
+    sessionId: string,
+    commandName: "/review" | "/verify",
+    commandText: string,
+  ): Promise<void> {
+    const diffRef =
+      commandName === "/review"
+        ? parseReviewDiffRef(commandText)
+        : parseVerificationDiffRef(commandText);
+    if (diffRef && /^https?:\/\//i.test(diffRef.trim())) {
+      return;
+    }
+    const warning = this.buildInspectionWorkspaceWarning(
+      commandName,
+      await this.getResolvedWorkspaceContext(),
+    );
+    if (!warning) {
+      return;
+    }
+    await this.recordCommandAssistantReply(sessionId, warning, false);
   }
 
   // ─── IPC entry point ────────────────────────────────────────────────────────
@@ -290,6 +405,7 @@ export class ElectronChatPanel {
       const root = String(message.root ?? "");
       if (root) {
         await this.settings.setWorkspaceRoot(root);
+        await this.getResolvedWorkspaceContext(true);
         this.mcpRuntime.markConfigDirty();
         await this.postState();
       }
@@ -347,6 +463,7 @@ export class ElectronChatPanel {
       return;
     }
     await this.ensureSession();
+    await this.getResolvedWorkspaceContext(true);
     await this.postState();
   }
 
@@ -957,7 +1074,7 @@ export class ElectronChatPanel {
     await this.postImageState();
 
     try {
-      const workspaceRoot = this.settings.getWorkspaceRoot() ?? "";
+      const workspaceRoot = (await this.getResolvedWorkspaceContext()).effectiveRoot;
       const { config, envMap } = await resolveProviderConfig(
         this.settings,
         workspaceRoot,
@@ -1020,7 +1137,7 @@ export class ElectronChatPanel {
     await this.postImageState();
 
     try {
-      const workspaceRoot = this.settings.getWorkspaceRoot() ?? "";
+      const workspaceRoot = (await this.getResolvedWorkspaceContext()).effectiveRoot;
       const { config, envMap } = await resolveProviderConfig(
         this.settings,
         workspaceRoot,
@@ -1084,7 +1201,7 @@ export class ElectronChatPanel {
     await this.postImageState();
 
     try {
-      const workspaceRoot = this.settings.getWorkspaceRoot() ?? "";
+      const workspaceRoot = (await this.getResolvedWorkspaceContext()).effectiveRoot;
       const { config, envMap } = await resolveProviderConfig(
         this.settings,
         workspaceRoot,
@@ -1157,7 +1274,8 @@ export class ElectronChatPanel {
     prompt: string;
     referenceImages: ImageLabReferenceImage[];
   }): Promise<ImageWorkflowPlan> {
-    const workspaceRoot = this.settings.getWorkspaceRoot() ?? "";
+    const workspaceInfo = await this.getResolvedWorkspaceContext();
+    const workspaceRoot = workspaceInfo.effectiveRoot;
     const { config, envMap } = await resolveProviderConfig(
       this.settings,
       workspaceRoot,
@@ -1332,6 +1450,8 @@ export class ElectronChatPanel {
     await this.settings.setLicenseActivated(false);
     await this.settings.setActiveSessionId("");
     await this.settings.setWorkspaceRoot("");
+    this.clearWorkspaceResolutionCache();
+    this.mcpRuntime.markConfigDirty();
     await this.settings.clearImageSettings();
     await this.settings.saveImagePromptHistory([]);
     await this.imageGalleryStore.clear();
@@ -1448,14 +1568,13 @@ export class ElectronChatPanel {
     await this.postState();
 
     try {
-      const workspaceRoot = this.settings.getWorkspaceRoot() ?? "";
+      const workspaceContext = await this.getResolvedWorkspaceContext();
+      const workspaceRoot = workspaceContext.effectiveRoot;
       const { config, envMap } = await resolveProviderConfig(
         this.settings,
         workspaceRoot,
       );
-      const workspaceNote = workspaceRoot
-        ? `\n\n# Workspace\nCurrent workspace root: ${workspaceRoot}\n`
-        : `\n\n# Workspace\nNo workspace is currently set. Tell the user they can select a folder via the workspace button in the chat footer.\n`;
+      const workspaceNote = this.buildWorkspaceSystemNote(workspaceContext);
       const adapter = buildProviderAdapter(
         config,
         workspaceRoot,
@@ -1886,6 +2005,7 @@ export class ElectronChatPanel {
     runtimeOptions: ProviderRuntimeOptions,
     effortLevel: EffortLevel | undefined,
   ): Promise<boolean> {
+    await this.warnOnDegradedInspectionWorkspace(sessionId, "/review", commandText);
     return handleReviewCommandWithHost({
       commandText,
       workspaceRoot,
@@ -1941,6 +2061,7 @@ export class ElectronChatPanel {
     runtimeOptions: ProviderRuntimeOptions,
     effortLevel: EffortLevel | undefined,
   ): Promise<boolean> {
+    await this.warnOnDegradedInspectionWorkspace(sessionId, "/verify", commandText);
     return handleVerificationCommandWithHost({
       commandText,
       workspaceRoot,
@@ -2203,7 +2324,8 @@ export class ElectronChatPanel {
       ? `${providerMeta.type} / ${providerMeta.model ?? "default"}`
       : "未配置";
 
-    const workspaceRoot = this.settings.getWorkspaceRoot() ?? "";
+    const workspaceInfo = await this.getResolvedWorkspaceContext();
+    const workspaceRoot = workspaceInfo.effectiveRoot;
 
     let mcpServers: unknown[] = [];
     try {
@@ -2231,6 +2353,7 @@ export class ElectronChatPanel {
       pendingApproval: this.host.getPendingApproval(),
       onboardingDone,
       workspaceRoot,
+      workspaceInfo,
     });
   }
 
