@@ -17,20 +17,25 @@
   - `npm run build`
 - Current verified baseline after this round:
   - `144` test files
-  - `936` tests passed
+  - `938` tests passed
 - `npm run build:electron` was not rerun in this round by the agent.
 - Electron routing rule:
   - Slash commands must be recognized before chat/image intent inference.
   - Otherwise recent generated-image context will incorrectly hijack commands such as `/compact` into image-edit flows.
 - Electron workspace resolution rule:
-  - Keep the user-selected folder as the effective workspace when it is already inside a git repo.
-  - If the selected folder is only a collaboration parent folder and contains exactly one nested git repo, auto-descend to that repo root for Electron runtime/inspection work instead of silently staying too high.
+  - The selected workspace is the user-selected folder, not the git repo root.
+  - Git repo detection is a separate inspection-only concern. Do not globally rewrite the workspace just because a nested repo was found.
+  - If the selected folder is a collaboration parent folder with one nested repo, `/review` and `/verify` may resolve that repo for git diff purposes, but ordinary chat/runtime flows should stay on the selected workspace.
   - If Electron cannot identify a unique repo, `/review` and `/verify` must warn that local git diff context is degraded instead of pretending inspection still has a trustworthy repo root.
+  - For `/review` and `/verify`, inspection repo resolution must be applied before provider resolution, MCP tool loading, runtime construction, and command dispatch. Do not wait until only the final handler boundary to switch roots.
+  - Electron IPC workspace updates must support clearing the workspace back to `unset`; empty-string updates are valid state transitions, not no-ops.
 - Electron workspace UI rule:
-  - The desktop shell must expose the selected folder, effective workspace/repo root, and current resolution status explicitly.
+  - Keep normal workspace resolution quiet. Auto-descend to the real repo should usually just update the effective workspace, not open a large diagnostic panel.
+  - Reserve expanded workspace UI for exceptional states: non-git degradation, missing paths, or multiple candidate repos.
   - When multiple nested repo candidates exist, expose clickable candidate repo choices in the shell instead of making the user manually retry path guesses.
 - Electron runtime consistency rule:
-  - Electron chat/runtime, MCP workspace display, and Local Bridge runtime context should all consume the same resolved effective workspace root. Do not let one surface use the raw selected folder while another uses the resolved repo root.
+  - Electron chat/runtime, MCP workspace display, and Local Bridge runtime context should all consume the selected workspace path.
+  - Only git-sensitive inspection flows should switch to separately resolved repo context.
 - Built-in inspection language rule:
   - `/review` and `/verify` should follow the user's language by default.
   - If the user is Chinese, write the explanatory body in Simplified Chinese.

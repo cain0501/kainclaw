@@ -10,7 +10,6 @@ import {
 import { SettingsRepository } from "../src/storage/settingsRepository";
 import { SessionRepository } from "../src/storage/sessionRepository";
 import { resolveProviderConfig } from "../src/providerHost";
-import { resolveWorkspaceRoot } from "../src/platform/workspaceRootResolver";
 import { ElectronChatPanel } from "./ElectronChatPanel";
 import { createPersistentLocalBridgeAuthTokenResolver } from "../src/localBridge/localBridgeAuth";
 import { LocalBridgeContextStore } from "../src/localBridge/localBridgeContextStore";
@@ -118,9 +117,7 @@ function createWindow(): void {
     localBridgeRuntime = new LocalBridgeRuntime();
     const localBridgeProxyHandler = createLocalBridgeProxyHandler({
       resolveRuntimeContext: async () => {
-        const workspaceRoot = (
-          await resolveWorkspaceRoot(settings.getWorkspaceRoot())
-        ).effectiveRoot;
+        const workspaceRoot = settings.getWorkspaceRoot() ?? "";
         const { config, envMap } = await resolveProviderConfig(settings, workspaceRoot);
         return {
           config,

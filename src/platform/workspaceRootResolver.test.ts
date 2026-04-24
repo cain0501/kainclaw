@@ -75,7 +75,7 @@ describe("resolveWorkspaceRoot", () => {
       gitRoot: null,
       kind: "non_git_workspace",
     });
-    expect(resolution.detail).toContain("degraded mode");
+    expect(resolution.detail).toContain("不是 Git 仓库");
   });
 
   it("does not guess when multiple nested repos exist at the same depth", async () => {

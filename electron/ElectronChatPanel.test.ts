@@ -1547,6 +1547,7 @@ describe("ElectronChatPanel session lifecycle", () => {
 
     await harness.settings.setOnboardingDone(true);
     await harness.settings.setWorkspaceRoot(workspaceRoot);
+    await harness.panel.handleMessage({ type: "ready" });
 
     vi.mocked(resolveProviderConfig).mockResolvedValue({
       config: {
@@ -1567,10 +1568,11 @@ describe("ElectronChatPanel session lifecycle", () => {
       prompt: "/todo",
     });
 
-    expect(resolveProviderConfig).toHaveBeenCalledWith(harness.settings, repoRoot);
+    expect(harness.settings.getWorkspaceRoot()).toBe(workspaceRoot);
+    expect(resolveProviderConfig).toHaveBeenCalledWith(harness.settings, workspaceRoot);
     expect(handleElectronPromptCommand).toHaveBeenCalledWith(
       expect.objectContaining({
-        workspaceRoot: repoRoot,
+        workspaceRoot: workspaceRoot,
       }),
     );
 
@@ -1585,12 +1587,101 @@ describe("ElectronChatPanel session lifecycle", () => {
           kind: string;
         };
       };
-    expect(statePayload.workspaceRoot).toBe(repoRoot);
+    expect(statePayload.workspaceRoot).toBe(workspaceRoot);
     expect(statePayload.workspaceInfo).toMatchObject({
       selectedRoot: workspaceRoot,
       effectiveRoot: repoRoot,
       gitRoot: repoRoot,
       kind: "nested_git_root",
+    });
+  });
+
+  it("uses the resolved repo root for /review without rewriting the selected workspace", async () => {
+    const harness = await createHarness();
+    tempDirs.push(harness.storagePath);
+
+    const workspaceRoot = await mkdtemp(path.join(os.tmpdir(), "electron-parent-workspace-review-"));
+    const repoRoot = path.join(workspaceRoot, "vscode-extension");
+    tempDirs.push(workspaceRoot);
+
+    await mkdir(repoRoot, { recursive: true });
+    await execFileAsync("git", ["init"], {
+      cwd: repoRoot,
+      windowsHide: true,
+    });
+
+    await harness.settings.setOnboardingDone(true);
+    await harness.settings.setWorkspaceRoot(workspaceRoot);
+
+    vi.mocked(resolveProviderConfig).mockResolvedValue({
+      config: {
+        type: "anthropic",
+        apiKey: "test-key",
+        model: "claude-sonnet-4-6",
+      },
+      envMap: {},
+    });
+    vi.mocked(buildProviderAdapter).mockReturnValue({} as never);
+    vi.mocked(handleReviewCommandWithHost).mockResolvedValue(true);
+    vi.mocked(handleElectronPromptCommand).mockImplementation(async options => {
+      await options.handleReviewCommand(
+        "/review",
+        options.workspaceRoot,
+        options.config,
+        options.envMap,
+        options.runtime,
+        options.tools,
+        options.runtimeOptions,
+        options.currentEffortLevel,
+      );
+      return { kind: "handled" };
+    });
+
+    await harness.panel.handleMessage({
+      type: "sendPrompt",
+      prompt: "/review",
+    });
+
+    expect(harness.settings.getWorkspaceRoot()).toBe(workspaceRoot);
+    expect(resolveProviderConfig).toHaveBeenCalledWith(harness.settings, repoRoot);
+    expect(handleReviewCommandWithHost).toHaveBeenCalledWith(
+      expect.objectContaining({
+        workspaceRoot: repoRoot,
+      }),
+    );
+  });
+
+  it("allows clearing the Electron workspace back to unset", async () => {
+    const harness = await createHarness();
+    tempDirs.push(harness.storagePath);
+
+    await harness.settings.setOnboardingDone(true);
+    await harness.settings.setWorkspaceRoot("E:\\claudecodejingiang");
+
+    await harness.panel.handleMessage({
+      type: "workspace:set",
+      root: "",
+    });
+
+    expect(harness.settings.getWorkspaceRoot()).toBe("");
+
+    const statePayload = [...harness.rendererPayloads]
+      .reverse()
+      .find(payload => (payload as { type?: string }).type === "state") as {
+        workspaceRoot: string;
+        workspaceInfo: {
+          selectedRoot: string;
+          effectiveRoot: string;
+          gitRoot: string | null;
+          kind: string;
+        };
+      };
+    expect(statePayload.workspaceRoot).toBe("");
+    expect(statePayload.workspaceInfo).toMatchObject({
+      selectedRoot: "",
+      effectiveRoot: "",
+      gitRoot: null,
+      kind: "unset",
     });
   });
 

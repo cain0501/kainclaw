@@ -173,7 +173,7 @@ export class ElectronChatPanel {
     private readonly desktopRuntimeServices?: DesktopRuntimeServices,
   ) {
     this.mcpRuntime = new McpRuntime(
-      () => this.getCachedEffectiveWorkspaceRoot(),
+      () => this.getSelectedWorkspaceRoot(),
       process.env as Record<string, string>,
     );
     this.imageGalleryStore = new ImageLabGalleryStore(this.host.getStorageUri());
@@ -207,15 +207,8 @@ export class ElectronChatPanel {
     this.cachedWorkspaceResolution = undefined;
   }
 
-  private getCachedEffectiveWorkspaceRoot(): string {
-    const selectedRoot = this.settings.getWorkspaceRoot() ?? "";
-    if (
-      this.cachedWorkspaceResolution &&
-      this.cachedWorkspaceResolution.selectedRoot === selectedRoot
-    ) {
-      return this.cachedWorkspaceResolution.resolution.effectiveRoot;
-    }
-    return selectedRoot;
+  private getSelectedWorkspaceRoot(): string {
+    return this.settings.getWorkspaceRoot() ?? "";
   }
 
   private async getResolvedWorkspaceContext(
@@ -243,18 +236,13 @@ export class ElectronChatPanel {
       return "\n\n# Workspace\nNo workspace is currently set. Tell the user they can select a folder via the workspace button in the chat footer.\n";
     }
 
-    const details: string[] = [`Current workspace root: ${workspace.effectiveRoot}`];
-
+    const details: string[] = [`Current workspace root: ${workspace.selectedRoot}`];
     if (
-      workspace.selectedRoot &&
-      workspace.effectiveRoot &&
-      workspace.selectedRoot !== workspace.effectiveRoot
+      workspace.kind === "missing" ||
+      workspace.kind === "non_git_workspace" ||
+      workspace.kind === "ambiguous_nested_git_roots"
     ) {
-      details.push(`Selected folder: ${workspace.selectedRoot}`);
-    }
-
-    if (workspace.detail) {
-      details.push(`Git status: ${workspace.detail}`);
+      details.push(`Git inspection status: ${workspace.detail}`);
     }
 
     return `\n\n# Workspace\n${details.join("\n")}\n`;
@@ -402,13 +390,14 @@ export class ElectronChatPanel {
 
     // Workspace
     if (type === "workspace:set") {
-      const root = String(message.root ?? "");
+      const root = typeof message.root === "string" ? message.root.trim() : "";
+      await this.settings.setWorkspaceRoot(root);
+      this.clearWorkspaceResolutionCache();
       if (root) {
-        await this.settings.setWorkspaceRoot(root);
         await this.getResolvedWorkspaceContext(true);
-        this.mcpRuntime.markConfigDirty();
-        await this.postState();
       }
+      this.mcpRuntime.markConfigDirty();
+      await this.postState();
       return;
     }
 
@@ -1074,7 +1063,7 @@ export class ElectronChatPanel {
     await this.postImageState();
 
     try {
-      const workspaceRoot = (await this.getResolvedWorkspaceContext()).effectiveRoot;
+      const workspaceRoot = this.getSelectedWorkspaceRoot();
       const { config, envMap } = await resolveProviderConfig(
         this.settings,
         workspaceRoot,
@@ -1137,7 +1126,7 @@ export class ElectronChatPanel {
     await this.postImageState();
 
     try {
-      const workspaceRoot = (await this.getResolvedWorkspaceContext()).effectiveRoot;
+      const workspaceRoot = this.getSelectedWorkspaceRoot();
       const { config, envMap } = await resolveProviderConfig(
         this.settings,
         workspaceRoot,
@@ -1201,7 +1190,7 @@ export class ElectronChatPanel {
     await this.postImageState();
 
     try {
-      const workspaceRoot = (await this.getResolvedWorkspaceContext()).effectiveRoot;
+      const workspaceRoot = this.getSelectedWorkspaceRoot();
       const { config, envMap } = await resolveProviderConfig(
         this.settings,
         workspaceRoot,
@@ -1274,8 +1263,7 @@ export class ElectronChatPanel {
     prompt: string;
     referenceImages: ImageLabReferenceImage[];
   }): Promise<ImageWorkflowPlan> {
-    const workspaceInfo = await this.getResolvedWorkspaceContext();
-    const workspaceRoot = workspaceInfo.effectiveRoot;
+    const workspaceRoot = this.getSelectedWorkspaceRoot();
     const { config, envMap } = await resolveProviderConfig(
       this.settings,
       workspaceRoot,
@@ -1567,9 +1555,23 @@ export class ElectronChatPanel {
 
     await this.postState();
 
+    let temporaryMcpRuntime: McpRuntime | undefined;
+
     try {
       const workspaceContext = await this.getResolvedWorkspaceContext();
-      const workspaceRoot = workspaceContext.effectiveRoot;
+      const parsedCommand = parsePromptSlashCommand(prompt);
+      const isInspectionCommand =
+        parsedCommand?.name === "/review" || parsedCommand?.name === "/verify";
+      const workspaceRoot = isInspectionCommand
+        ? workspaceContext.effectiveRoot
+        : this.getSelectedWorkspaceRoot();
+      const commandMcpRuntime =
+        isInspectionCommand && workspaceRoot && workspaceRoot !== this.getSelectedWorkspaceRoot()
+          ? (temporaryMcpRuntime = new McpRuntime(
+              () => workspaceRoot,
+              process.env as Record<string, string>,
+            ))
+          : this.mcpRuntime;
       const { config, envMap } = await resolveProviderConfig(
         this.settings,
         workspaceRoot,
@@ -1596,7 +1598,7 @@ export class ElectronChatPanel {
       // Collect all tools: built-in + MCP
       let mcpTools: typeof builtinToolDefinitions = [];
       try {
-        mcpTools = await this.mcpRuntime.getToolDefinitions();
+        mcpTools = await commandMcpRuntime.getToolDefinitions();
       } catch {
         // MCP not configured or failed – proceed with built-in tools only
       }
@@ -1606,6 +1608,7 @@ export class ElectronChatPanel {
         workspaceRoot,
         envMap,
         allTools,
+        commandMcpRuntime,
       );
 
       const commandResult = await handleElectronPromptCommand({
@@ -1634,10 +1637,10 @@ export class ElectronChatPanel {
           ),
         handleReviewCommand: (
           commandText,
-          commandWorkspaceRoot,
+          _commandWorkspaceRoot,
           commandConfig,
           commandEnvMap,
-          commandRuntime,
+          _commandRuntime,
           commandTools,
           commandRuntimeOptions,
           effortLevel,
@@ -1645,20 +1648,25 @@ export class ElectronChatPanel {
           this.handleReviewPromptCommand(
             requestSessionId,
             commandText,
-            commandWorkspaceRoot,
+            workspaceContext.effectiveRoot,
             commandConfig,
             commandEnvMap,
-            commandRuntime as ElectronPromptRuntime,
+            this.createPromptRuntime(
+              workspaceContext.effectiveRoot,
+              commandEnvMap,
+              commandTools,
+              commandMcpRuntime,
+            ),
             commandTools,
             commandRuntimeOptions,
             effortLevel,
           ),
         handleVerificationCommand: (
           commandText,
-          commandWorkspaceRoot,
+          _commandWorkspaceRoot,
           commandConfig,
           commandEnvMap,
-          commandRuntime,
+          _commandRuntime,
           commandTools,
           commandRuntimeOptions,
           effortLevel,
@@ -1666,10 +1674,15 @@ export class ElectronChatPanel {
           this.handleVerificationPromptCommand(
             requestSessionId,
             commandText,
-            commandWorkspaceRoot,
+            workspaceContext.effectiveRoot,
             commandConfig,
             commandEnvMap,
-            commandRuntime as ElectronPromptRuntime,
+            this.createPromptRuntime(
+              workspaceContext.effectiveRoot,
+              commandEnvMap,
+              commandTools,
+              commandMcpRuntime,
+            ),
             commandTools,
             commandRuntimeOptions,
             effortLevel,
@@ -1738,6 +1751,14 @@ export class ElectronChatPanel {
       };
       await this.appendAssistantMessageToSession(requestSessionId, errorMessage);
     } finally {
+      if (temporaryMcpRuntime) {
+        const disposableRuntime = temporaryMcpRuntime as unknown as {
+          dispose?: () => Promise<void>;
+        };
+        if (typeof disposableRuntime.dispose === "function") {
+          await disposableRuntime.dispose.call(temporaryMcpRuntime).catch(() => undefined);
+        }
+      }
       this.inFlightRequests.delete(requestSessionId);
       this.streamingText = "";
       await this.postState();
@@ -1770,6 +1791,7 @@ export class ElectronChatPanel {
     workspaceRoot: string,
     envMap: Record<string, string>,
     tools: ToolDefinition[],
+    mcpRuntime: McpRuntime = this.mcpRuntime,
   ): ElectronPromptRuntime {
     const getToolContext = (
       mode: ToolContext["invokerKind"] = "main",
@@ -1781,7 +1803,7 @@ export class ElectronChatPanel {
       onToolLifecycle: event => {
         this.sendToRenderer({ type: "tool:lifecycle", event });
       },
-      mcp: this.mcpRuntime,
+      mcp: mcpRuntime,
       tasks: this.getConversationTaskRuntime(workspaceRoot),
       worktree: this.getConversationWorktreeRuntime(workspaceRoot),
       stopBackgroundTask: (taskId =>
@@ -1810,7 +1832,7 @@ export class ElectronChatPanel {
     });
 
     return {
-      getMcpStatusSummary: () => this.mcpRuntime.getStatusSummary(),
+      getMcpStatusSummary: () => mcpRuntime.getStatusSummary(),
       getToolDefinitions: async () => tools,
       getToolContext,
     };
@@ -2325,7 +2347,7 @@ export class ElectronChatPanel {
       : "未配置";
 
     const workspaceInfo = await this.getResolvedWorkspaceContext();
-    const workspaceRoot = workspaceInfo.effectiveRoot;
+    const workspaceRoot = workspaceInfo.selectedRoot;
 
     let mcpServers: unknown[] = [];
     try {

@@ -1261,21 +1261,27 @@ function applyState(state) {
 function getWorkspaceStatusMeta(workspaceInfo) {
   switch (workspaceInfo?.kind) {
     case 'direct_git_root':
-      return { label: '直接命中 Git 仓库', shortLabel: 'Git直连', color: '#166534' };
+      return { label: 'Git 仓库', shortLabel: '', color: '#166534' };
     case 'inside_git_repo':
-      return { label: '位于 Git 仓库内', shortLabel: '仓库内', color: '#166534' };
+      return { label: 'Git 仓库', shortLabel: '', color: '#166534' };
     case 'nested_git_root':
-      return { label: '自动下沉到嵌套仓库', shortLabel: '自动下沉', color: '#1d4ed8' };
+      return { label: 'Git 仓库', shortLabel: '', color: '#166534' };
     case 'missing':
-      return { label: '工作区路径失效', shortLabel: '路径失效', color: '#b45309' };
+      return { label: '工作区路径失效', shortLabel: '需确认', color: '#b45309' };
     case 'non_git_workspace':
-      return { label: '非 Git 降级', shortLabel: '非Git降级', color: '#b45309' };
+      return { label: '当前目录不是 Git 仓库', shortLabel: '需确认', color: '#b45309' };
     case 'ambiguous_nested_git_roots':
-      return { label: '多仓库歧义', shortLabel: '多仓库歧义', color: '#b91c1c' };
+      return { label: '检测到多个候选仓库', shortLabel: '需确认', color: '#b91c1c' };
     case 'unset':
     default:
-      return { label: '未设置工作区', shortLabel: '未设置', color: '#a1a1aa' };
+      return { label: '未设置工作区', shortLabel: '', color: '#a1a1aa' };
   }
+}
+
+function shouldShowWorkspaceAlert(workspaceInfo) {
+  return ['missing', 'non_git_workspace', 'ambiguous_nested_git_roots'].includes(
+    workspaceInfo?.kind,
+  );
 }
 
 function getPathLeaf(targetPath) {
@@ -1340,48 +1346,51 @@ function renderWorkspaceState(workspaceInfo) {
     candidates: [],
   };
   const statusMeta = getWorkspaceStatusMeta(info);
+  const showAlert = shouldShowWorkspaceAlert(info);
   const effectiveRoot = info.effectiveRoot || '';
   const selectedRoot = info.selectedRoot || '';
-  const badgeLabel = effectiveRoot
-    ? `${statusMeta.shortLabel} · ${getPathLeaf(effectiveRoot)}`
+  const displayRoot = selectedRoot || effectiveRoot;
+  const badgeLabel = displayRoot
+    ? (statusMeta.shortLabel
+        ? `${statusMeta.shortLabel} · ${getPathLeaf(displayRoot)}`
+        : getPathLeaf(displayRoot))
     : '选择工作区';
 
   const wsBadge = document.getElementById('workspace-badge');
   const wsLabel = document.getElementById('workspace-label');
   if (wsBadge) {
-    wsBadge.style.borderColor = effectiveRoot ? statusMeta.color : '#d4d4d8';
+    wsBadge.style.borderColor = showAlert ? statusMeta.color : '#d4d4d8';
     wsBadge.title = [
-      `状态：${statusMeta.label}`,
-      formatWorkspaceLine('已选', selectedRoot),
-      formatWorkspaceLine('生效', effectiveRoot),
-      info.detail ? `说明：${info.detail}` : '',
+      displayRoot ? `当前工作区：${displayRoot}` : '点击选择工作区文件夹',
+      selectedRoot && selectedRoot !== effectiveRoot ? `已选目录：${selectedRoot}` : '',
+      showAlert && info.detail ? `说明：${info.detail}` : '',
     ].filter(Boolean).join('\n');
   }
   if (wsLabel) {
     wsLabel.textContent = badgeLabel;
-    wsLabel.style.color = effectiveRoot ? statusMeta.color : '#a1a1aa';
+    wsLabel.style.color = effectiveRoot ? (showAlert ? statusMeta.color : '#18181b') : '#a1a1aa';
   }
 
   const workspaceMeta = document.getElementById('workspace-meta');
-  if (workspaceMeta) workspaceMeta.style.display = 'block';
+  if (workspaceMeta) workspaceMeta.style.display = showAlert ? 'block' : 'none';
   const workspaceStatusLine = document.getElementById('workspace-status-line');
   if (workspaceStatusLine) {
-    workspaceStatusLine.textContent = `状态：${statusMeta.label}`;
+    workspaceStatusLine.textContent = showAlert ? statusMeta.label : '';
     workspaceStatusLine.style.color = statusMeta.color;
   }
   const workspaceSelectedLine = document.getElementById('workspace-selected-line');
   if (workspaceSelectedLine) {
-    workspaceSelectedLine.textContent = formatWorkspaceLine('已选', selectedRoot);
+    workspaceSelectedLine.textContent = showAlert ? formatWorkspaceLine('当前目录', selectedRoot) : '';
   }
   const workspaceEffectiveLine = document.getElementById('workspace-effective-line');
   if (workspaceEffectiveLine) {
-    workspaceEffectiveLine.textContent = formatWorkspaceLine('生效', effectiveRoot);
+    workspaceEffectiveLine.textContent = showAlert ? formatWorkspaceLine('当前生效目录', effectiveRoot) : '';
   }
   const workspaceDetailLine = document.getElementById('workspace-detail-line');
   if (workspaceDetailLine) {
-    if (info.detail) {
+    if (showAlert && info.detail) {
       workspaceDetailLine.style.display = 'block';
-      workspaceDetailLine.textContent = `说明：${info.detail}`;
+      workspaceDetailLine.textContent = info.detail;
     } else {
       workspaceDetailLine.style.display = 'none';
       workspaceDetailLine.textContent = '';
@@ -1390,27 +1399,27 @@ function renderWorkspaceState(workspaceInfo) {
   renderWorkspaceCandidates('workspace-candidates', info);
 
   const mcpWsPath = document.getElementById('mcp-workspace-path');
-  if (mcpWsPath) mcpWsPath.textContent = effectiveRoot || '未设置';
+  if (mcpWsPath) mcpWsPath.textContent = displayRoot || '未设置';
   const mcpWorkspaceMeta = document.getElementById('mcp-workspace-meta');
-  if (mcpWorkspaceMeta) mcpWorkspaceMeta.style.display = 'block';
+  if (mcpWorkspaceMeta) mcpWorkspaceMeta.style.display = showAlert ? 'block' : 'none';
   const mcpWorkspaceStatus = document.getElementById('mcp-workspace-status');
   if (mcpWorkspaceStatus) {
-    mcpWorkspaceStatus.textContent = `状态：${statusMeta.label}`;
+    mcpWorkspaceStatus.textContent = showAlert ? statusMeta.label : '';
     mcpWorkspaceStatus.style.color = statusMeta.color;
   }
   const mcpWorkspaceSelected = document.getElementById('mcp-workspace-selected');
   if (mcpWorkspaceSelected) {
-    mcpWorkspaceSelected.textContent = formatWorkspaceLine('已选', selectedRoot);
+    mcpWorkspaceSelected.textContent = showAlert ? formatWorkspaceLine('当前目录', selectedRoot) : '';
   }
   const mcpWorkspaceEffective = document.getElementById('mcp-workspace-effective');
   if (mcpWorkspaceEffective) {
-    mcpWorkspaceEffective.textContent = formatWorkspaceLine('生效', effectiveRoot);
+    mcpWorkspaceEffective.textContent = showAlert ? formatWorkspaceLine('当前生效目录', effectiveRoot) : '';
   }
   const mcpWorkspaceDetail = document.getElementById('mcp-workspace-detail');
   if (mcpWorkspaceDetail) {
-    if (info.detail) {
+    if (showAlert && info.detail) {
       mcpWorkspaceDetail.style.display = 'block';
-      mcpWorkspaceDetail.textContent = `说明：${info.detail}`;
+      mcpWorkspaceDetail.textContent = info.detail;
     } else {
       mcpWorkspaceDetail.style.display = 'none';
       mcpWorkspaceDetail.textContent = '';

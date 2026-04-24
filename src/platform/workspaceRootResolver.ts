@@ -157,7 +157,7 @@ export async function resolveWorkspaceRoot(
       effectiveRoot: "",
       gitRoot: null,
       kind: "unset",
-      detail: "No workspace folder is currently selected.",
+      detail: "当前还没有选择工作区文件夹。",
     };
   }
 
@@ -168,8 +168,7 @@ export async function resolveWorkspaceRoot(
       effectiveRoot: selectedRoot,
       gitRoot: null,
       kind: "missing",
-      detail:
-        "The selected workspace folder is missing or inaccessible. Review and verification will run without git diff until you choose a valid repository folder.",
+      detail: "当前工作区路径不存在或无法访问。",
     };
   }
 
@@ -189,7 +188,7 @@ export async function resolveWorkspaceRoot(
       effectiveRoot: selectedRoot,
       gitRoot: containingGitRoot,
       kind: "inside_git_repo",
-      detail: `Selected folder is inside git repository ${containingGitRoot}.`,
+      detail: `当前目录位于 Git 仓库内：${containingGitRoot}`,
     };
   }
 
@@ -200,8 +199,7 @@ export async function resolveWorkspaceRoot(
       effectiveRoot: selectedRoot,
       gitRoot: null,
       kind: "non_git_workspace",
-      detail:
-        "The selected folder is not a git repository. Review and verification will run in degraded mode without git diff until you choose a repository folder.",
+      detail: "当前目录不是 Git 仓库。",
     };
   }
 
@@ -212,7 +210,7 @@ export async function resolveWorkspaceRoot(
       effectiveRoot: nestedGitRoot,
       gitRoot: nestedGitRoot,
       kind: "nested_git_root",
-      detail: `Auto-resolved nested git repository ${nestedGitRoot}.`,
+      detail: `已自动定位到嵌套仓库：${nestedGitRoot}`,
     };
   }
 
@@ -221,8 +219,7 @@ export async function resolveWorkspaceRoot(
     effectiveRoot: selectedRoot,
     gitRoot: null,
     kind: "ambiguous_nested_git_roots",
-    detail:
-      "The selected folder is not a git repository and contains multiple nested repository candidates. Review and verification will run in degraded mode until you choose one repository folder directly.",
+    detail: "当前目录下检测到多个候选仓库，请直接选择目标仓库。",
     candidates: nestedGitRoots,
   };
 }
