@@ -3,6 +3,10 @@ export type ChatPromptIntent =
   | "image_generate"
   | "image_edit";
 
+const ACKNOWLEDGMENT_PATTERNS = [
+  /^(好|好的|嗯|哦|哈|ok|okay|行|了解|明白|收到|谢谢|谢|nice|cool|great|perfect|thanks|thx)[\s!！。]*$/i,
+];
+
 const GENERATE_PATTERNS = [
   /生成.*(图|图片|海报|封面|头像)/i,
   /做(一张|个)?.*(图|图片|海报|封面|头像)/i,
@@ -48,15 +52,21 @@ export function determineChatPromptIntent(options: {
   const looksLikeEdit = matchesAnyPattern(prompt, EDIT_PATTERNS);
 
   if (options.hasRecentGeneratedImageContext) {
+    if (looksLikeGenerate && !looksLikeEdit) {
+      return "image_generate";
+    }
     if (looksLikeQuestion && !looksLikeEdit) {
       return "chat";
     }
-    if (looksLikeGenerate && !looksLikeEdit) {
-      return "image_generate";
+    if (matchesAnyPattern(prompt, ACKNOWLEDGMENT_PATTERNS)) {
+      return "chat";
     }
     return "image_edit";
   }
 
+  if (looksLikeEdit && options.hasAttachments) {
+    return "image_edit";
+  }
   if (looksLikeGenerate || options.hasAttachments) {
     return "image_generate";
   }

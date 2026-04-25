@@ -20,13 +20,15 @@
   - `npm run check:electron`
 - 当前验证基线：
   - `145` 个测试文件
-  - `982` 个测试通过
+  - `1001` 个测试通过
 - 本批 Claude parity 已同步收口项：
   - 文档/规则：Claude 源码优先、handoff、gap analysis、source-reference、UTF-8 without BOM。
   - Renderer：Electron Markdown 与 `/verify` report 渲染以 Claude `marked.lexer()` token 模型为 baseline。
   - Verification：concrete target gate、问候/空范围 `PARTIAL`、工作区证据兜底、语言跟随、diff/provenance/report fence 处理。
   - Tasks/toolRuntime：`local_bash` shell task 语义、Claude-style id、Task 工具合同、非交互 UTF-8 PowerShell 输出、`TaskOutput` abort wait。
   - Compact/session lifecycle：可见 transcript 与模型侧 compact history 分离，runtime state 持久化 workspace root 与 compact metadata。
+  - TaskStop remote 语义：adapter-backed `remote_agent` 停止后记录 Claude-style `killed`；没有 stop 通道的 remote task 仍拒绝，不伪造停止成功。
+  - LSP：file-backed 操作按 Claude `LSPTool.validateInput` 做缺失文件、非普通文件、超过 10MB 的预检，UNC 路径跳过本地 probe；`workspaceSymbols` 允许省略/空查询并转发 `query: ""`。
 - Electron 路由规则：
   - 必须先识别斜杠命令，再做普通聊天 / 图片意图推断。
   - 否则最近生成图上下文会错误劫持 `/compact` 这类命令，把它们误路由到图片编辑流程。
@@ -95,7 +97,7 @@
 
 ### 3. 验证基线登记
 
-- 当前登记基线：`145` 个测试文件，`982` 个测试通过。
+- 当前登记基线：`145` 个测试文件，`1001` 个测试通过。
 - 当前登记通过命令：
   - `npm test`
   - `npm run check`
@@ -163,6 +165,10 @@
   - 部分结果 / 参数壳
   - 历史 UI 遗留
 - 后续文档和实现描述里，不要再把旧 `Image Lab` 写成产品主入口。
+- 意图分流 `chatPromptIntent.ts` 的已知正确优先级（2026-04-25 修复）：
+  - `hasRecentGeneratedImageContext=true` 时：生成意图 > 问句 > 确认语 > 默认 `image_edit`。
+  - `hasRecentGeneratedImageContext=false` 时：有附件 + 编辑意图 → `image_edit`；有附件或生成意图 → `image_generate`；其余 → `chat`。
+  - 纯确认语（"好的"、"ok"、"嗯"）绝不能触发 `image_edit`，已通过 `ACKNOWLEDGMENT_PATTERNS` 拦截。
 
 ### 4. Prompt Library 是辅助抽屉，不是独立主页面
 
@@ -221,10 +227,11 @@
 - background shell command 应登记为 `local_bash`，并保留 Claude-style `shell_id` / `task_id` 语义；不要再和 `local_agent` 混在一起。
 - shell command 输出要走非交互 UTF-8 PowerShell，并清理 ANSI 噪声，避免验证报告和 task output 被编码或控制符污染。
 - `TaskStop` 不能在 stop 通道不存在时伪造“已取消”。
+- `TaskStop` 对 adapter-backed remote task 要记录 Claude-style `killed` 终态；无 stop pathway 的 remote task 仍必须拒绝。
 - built-in inspection 任务要保留 `command_text / prompt / plan_file_path / diff_ref` provenance。
 - `TaskGet`、`TaskOutput` 对缺失任务必须返回结构化 `not_found`，不能返回含糊状态。
 - `TaskOutput` 的阻塞等待必须传递当前 `abortSignal`，这和 Claude `TaskOutputTool` 的 wait lifecycle 一致；用户取消后不能继续挂住后台任务输出等待。
-- remote / detached background task parity 仍然是未完成项，不能在文档里写成已闭环。
+- adapter-backed remote stop 已有 `killed` 语义；完整 hosted / detached remote background task parity 仍然是未完成项，不能在文档里写成已闭环。
 
 ### 2. Verification / Review Phase 2
 
@@ -253,7 +260,8 @@
 
 ### 4. LSP / Worktree Phase 2
 
-- file-backed LSP 操作要在 runtime 入口前校验 `filePath`，不能把 undefined 文档 URI 放进 VS Code。
+- file-backed LSP 操作要在 runtime 入口前按 Claude `LSPTool.validateInput` 做文件预检：缺失文件、非普通文件、超过 10MB 直接失败；UNC 路径跳过本地 `stat` probe，避免网络路径预检阻塞。
+- `workspaceSymbols` 的 `query` 可以省略或为空字符串，传给 provider 的值应是 `""`，不能被本地 schema 误拦截。
 - gitignored 过滤要前置到 definition / implementation / references / workspaceSymbols / call hierarchy 这些入口。
 - `maxResults` 必须在更外层先收口，避免深层结果再裁切。
 - Worktree 要做：

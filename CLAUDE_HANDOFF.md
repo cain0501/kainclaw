@@ -9,7 +9,7 @@
   - `npm run build:electron`
   - `npm run check:electron`
   - `145` 个测试文件
-  - `982` 个测试通过
+  - `1001` 个测试通过
 - 本批已同步的收口项覆盖 `890510a..00076dc`，不只包含最后一次 `TaskOutput` 修复：
   - `890510a`：同步 Claude 源码优先规则、handoff、gap analysis、source-reference 与编码约束。
   - `b95c258`：Electron Markdown / `/verify` report 渲染按 Claude `marked.lexer()` token 模型重建，并 vendor `marked` 运行时。
@@ -17,6 +17,10 @@
   - `d1fc143`：background task / toolRuntime 对齐 Claude shell task 语义，包括 `local_bash`、Claude-style id、`TaskGet` / `TaskOutput` 输入合同、`TaskStop` 缺失/不支持行为、非交互 UTF-8 PowerShell 输出。
   - `fcea9f4`：compact/session lifecycle 对齐，保留可见 transcript，把模型侧 compact 历史放进 sidecar runtime state，并持久化 workspace / compact metadata。
   - `00076dc`：`TaskOutput` 阻塞等待传递 `ToolContext.abortSignal`，用户取消后不继续挂住 task wait。
+- 本地后续 Claude parity 收口项也已登记到本文档：
+  - `TaskStop` 对 adapter-backed `remote_agent` 会记录 Claude-style `killed` 终态；缺少 remote stop pathway 时仍拒绝，不伪造停止成功。
+  - LSP file-backed 操作按 Claude `LSPTool.validateInput` 做入口预检：缺失文件、非普通文件、超过 10MB 直接失败；UNC 路径跳过本地 `stat` probe。
+  - `workspaceSymbols` 允许省略或传空查询，并向 VS Code provider 转发 `query: ""`，不再被本地 schema 误拦截。
 - 强实现规则已经生效：
   - 如果本地 Claude Code 源码已经包含目标功能、行为、工作流、prompt contract、renderer 行为、tool/runtime 路径或 session 生命周期，必须先读取该源码，并把源码逻辑作为实现 baseline 复刻。
   - KainClaw 自研标准只用于 Claude 源码没有覆盖的能力，或用于 Claude-compatible baseline 之上的薄适配层。
@@ -31,6 +35,8 @@
   - README 输出、嵌套代码围栏、四反引号围栏都会保持字面量显示，不再打断报告结构。
 - `marked` 现在是 Electron renderer 的运行时依赖；`npm run build:electron` 会把 `node_modules/marked/lib/marked.umd.js` 复制到 `dist-electron/electron/renderer/vendor/marked.umd.js`。
 - `TaskOutput` 阻塞等待后台任务输出时，已经按 Claude `TaskOutputTool` 生命周期把 `ToolContext.abortSignal` 传入 task wait；用户取消后不会继续挂住后台输出等待。
+- `TaskStop` 的 remote stop 语义已经更接近 Claude：adapter-backed remote task 停止后进入 `killed`，无 stop 通道的 remote task 仍明确报不支持。
+- LSP runtime 已补齐 Claude-style 文件预检与 `workspaceSymbols` 空查询转发；server-manager / provider-availability 这类更深 LSP parity 仍可继续收口。
 - Electron 桌面壳已把这些斜杠命令接回真实的 `src/` host/runtime 路径：
   - `/todo`
   - `/compact`
@@ -59,7 +65,7 @@
 - 项目主线仍然是与官方 Claude Code 能力持续对齐；图片、Office、Local Bridge、User Modeling、Auto Skill Generation 都属于扩展能力。
 - 对 Claude 源码已有能力，必须先按源码逻辑复刻 baseline，再接 KainClaw 的 VS Code / Electron / storage / IPC 适配。
 - Electron Markdown 与 `/verify` report 渲染已按 Claude-style `marked.lexer()` token 基线收口；verification 的 command/output 是结构化 raw text，不再依赖 fence 平衡。
-- 当前 Tasks / toolRuntime parity 已补齐本批 shell task 基线，但 remote / detached background task parity 仍未闭环。
+- 当前 Tasks / toolRuntime parity 已补齐本批 shell task 基线，并补上 adapter-backed remote `TaskStop -> killed`；完整 hosted / detached remote background task parity 仍未闭环。
 - 当前 Compact parity 已补齐可见 transcript 与模型侧 sidecar history 分离，但更深 token / transcript lifecycle 仍可继续收口。
 
 ## 当前验证边界
@@ -127,6 +133,10 @@
 - 图片结果已支持本地持久化恢复。
 - 图片批量生成会保留批次，不会覆盖原图。
 - Prompt history 只记录明确的生成/编辑提交，不记录无关普通聊天输入。
+- 意图分流逻辑已修复三处 bug（2026-04-25）：
+  - 有附件 + 编辑意图时正确路由到 `image_edit`，不再误判为 `image_generate`。
+  - 有图片上下文时，生成意图优先级高于问句，"生成一张海报，怎么样？"不再被误判为普通聊天。
+  - 有图片上下文时，纯确认语（"好的"、"嗯"、"ok"）不再默认触发 `image_edit`。
 
 ## Prompt Library 当前状态
 
@@ -174,7 +184,7 @@
   - Thinking / Effort / Fast mode
   - Compact / Auto-compact
   - Auto-Memory
-  - LSP phase 1 + 部分 phase 2
+  - LSP phase 1 + 部分 phase 2（file preflight / workspaceSymbols query parity 已补齐）
   - Worktree phase 1
   - Hooks 执行链
   - Custom Agents registry

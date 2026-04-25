@@ -10,7 +10,7 @@
   - `npm run check:electron`
 - 当前自动化基线：
   - `145` 个测试文件
-  - `982` 个测试通过
+  - `1001` 个测试通过
 - 强规则已收口：凡是 Claude 源码已有的功能、行为、工作流、prompt contract、renderer 行为、tool/runtime 路径或 session 生命周期，必须先读 Claude 源码并按其逻辑复刻基线；只有 Claude 源码没有的 KainClaw 扩展，才按 KainClaw 自研标准开发。
 - 本批已同步的 Claude parity 收口项覆盖 `890510a..00076dc`：
   - 文档/规则：Claude 源码优先、handoff、gap analysis、source-reference、UTF-8 without BOM。
@@ -18,6 +18,8 @@
   - Verification：concrete target gate、问候/空范围 `PARTIAL`、项目证据兜底、语言跟随、diff/provenance/report fence 处理。
   - Tasks/toolRuntime：`local_bash` shell task 语义、Claude-style task id、`TaskGet` / `TaskOutput` / `TaskStop` 合同、非交互 UTF-8 PowerShell 输出、`TaskOutput` abort wait。
   - Compact/session lifecycle：可见 transcript 与模型侧 compact history 分离，workspace root 与 compact metadata 随 runtime state 持久化。
+  - TaskStop remote：adapter-backed `remote_agent` 停止后记录 Claude-style `killed`；无 remote stop pathway 时仍明确拒绝。
+  - LSP：file-backed 操作按 Claude `LSPTool.validateInput` 做文件预检，`workspaceSymbols` 允许省略/空查询并转发 `query: ""`。
 - 本轮 Markdown / `/verify` 渲染修复已按 Claude 源码逻辑对齐：
   - 参考 `E:\claudecodejingiang\src\components\Markdown.tsx`
   - 参考 `E:\claudecodejingiang\src\utils\markdown.ts`
@@ -29,6 +31,8 @@
   - README 输出、嵌套代码围栏、四反引号围栏不再破坏报告显示
 - `marked` 已加入依赖，`build:electron` 会把 `node_modules/marked/lib/marked.umd.js` 复制到 `dist-electron/electron/renderer/vendor/marked.umd.js`。
 - `TaskOutput` 阻塞等待后台任务输出时已对齐 Claude `TaskOutputTool` 的取消语义，会把 `ToolContext.abortSignal` 传给 task wait，避免用户取消后继续等待。
+- `TaskStop` 对 adapter-backed remote task 已补齐 Claude-style `killed` 终态；没有 stop 通道的 remote task 仍不伪造成功。
+- LSP runtime 已补齐 Claude-style file preflight 与 `workspaceSymbols` empty-query 转发；更深 server-manager / provider-availability parity 仍未完成。
 - Electron 壳当前已重新接回并验证这些斜杠命令：
   - `/todo`
   - `/compact`
@@ -72,14 +76,14 @@
 | 会话持久化 / 导出 / 恢复 | 已实现 | `src/storage/sessionRepository.ts` `src/sessionListHost.ts` `src/savedSessionHost.ts` | 会话管理 UI 仍可继续打磨 |
 | MCP runtime | 已实现 | `src/mcpRuntime.ts` `src/mcpRuntime.helpers.ts` | OAuth / PKCE / prompts / templates parity 未完全收口 |
 | 文件 / 命令 / 浏览器工具 | 已实现 | `src/toolRuntime.ts` `src/browserRuntime.ts` | Browser automation parity 仍未完全对齐 |
-| Tasks / background command | 部分实现 | `src/tasks/taskRuntime.ts` `src/backgroundTaskHost.ts` `src/backgroundCommandWorker.ts` `src/toolRuntime.ts` | `local_bash`、Claude-style id、Task 工具合同、UTF-8 shell 输出和 `TaskOutput` abort wait 已对齐；remote / detached background task parity 未完成 |
+| Tasks / background command | 部分实现 | `src/tasks/taskRuntime.ts` `src/backgroundTaskHost.ts` `src/backgroundCommandWorker.ts` `src/toolRuntime.ts` | `local_bash`、Claude-style id、Task 工具合同、UTF-8 shell 输出、`TaskOutput` abort wait 和 adapter-backed remote `TaskStop -> killed` 已对齐；完整 hosted / detached background task parity 未完成 |
 | built-in Review | 部分实现 | `src/review/runner.ts` `src/agent/built-in/reviewAgent.ts` | ultrareview、远程 review 生命周期仍未完善 |
 | built-in Verification | 部分实现 | `src/verification/runner.ts` `src/agent/built-in/verificationAgent.ts` `src/inspectionPromptHost.ts` `src/inspectionWorkspace.ts` | scope gate、workspace evidence fallback、locale、diff/provenance/report fence 已补齐；hosted / detached verification parity 未完成 |
 | Plan Mode | 部分实现 | `src/planMode/planMode.ts` `src/planModeHost.ts` `src/planMode/planModePrompt.ts` | 更完整的官方 plan workflow 仍缺 |
 | Thinking / Effort / Fast mode | 部分实现 | `src/thinkingEffort/effort.ts` `src/thinkingEffort/thinking.ts` `src/thinkingEffort/fastMode.ts` | phase 2 parity 仍未完全收口 |
 | Compact / Auto-compact | 部分实现 | `src/compact/compact.ts` `src/compact/autoCompact.ts` `src/compactHost.ts` `src/storage/sessionRepository.ts` | 可见 transcript 与模型侧 sidecar history 分离已补齐；token / transcript lifecycle 更深 parity 未收尾 |
 | Auto-Memory | 部分实现 | `src/autoMemory/paths.ts` `src/autoMemory/extractor.ts` `src/autoMemoryHost.ts` | memory orchestration 更深 parity 未完成 |
-| LSP | 部分实现 | `src/lsp/lspRuntime.ts` `src/lsp/formatters.ts` `src/lsp/types.ts` | server-manager / provider-availability parity 未完成 |
+| LSP | 部分实现 | `src/lsp/lspRuntime.ts` `src/lsp/formatters.ts` `src/lsp/types.ts` | file-backed preflight 与 `workspaceSymbols` 空查询已按 Claude baseline 补齐；server-manager / provider-availability parity 未完成 |
 | Worktree | 部分实现 | `src/worktree/runtime.ts` `src/worktree/types.ts` | 完整 worktree 产品流未完成 |
 | Hooks 执行链 | 部分实现 | `src/hooks/hooksExecutor.ts` `src/hooks/hooksTrigger.ts` `src/hooksRegistry.ts` | 触发点接线和产品面仍未完全接齐 |
 | Custom Agents | 部分实现 | `src/customAgentsRegistry.ts` `src/promptCommandHost.ts` | wizard、完整执行面、桌面 UI 仍未完成 |
@@ -99,7 +103,7 @@
 | Electron Markdown / verification report rendering | 已实现 | `electron/renderer/index.html` `electron/rendererMarkdown.test.ts` `package.json` | 已按 Claude `marked.lexer()` token 模型重建主路径；后续若继续改 Markdown 行为，仍必须先对照 Claude 源码 |
 | Auto Skill Generation | 已实现 | `src/skills/skillStore.ts` `src/skills/skillDistiller.ts` `src/backgroundTaskHost.ts` | 产品面与治理面仍可继续收口 |
 | User Modeling | 已实现 | `src/userModel/profileStore.ts` `src/userModel/profileDistiller.ts` | UI 管理面仍未完整 |
-| 图片聊天工作流 | 已实现 | `src/imageGeneration/imageWorkflowOrchestrator.ts` `electron/ElectronChatPanel.ts` | 当前已迁到聊天主链，但仍是扩展能力 |
+| 图片聊天工作流 | 已实现 | `src/imageGeneration/imageWorkflowOrchestrator.ts` `src/imageGeneration/chatPromptIntent.ts` `electron/ElectronChatPanel.ts` | 当前已迁到聊天主链，但仍是扩展能力；意图分流已修复三处 bug（2026-04-25）：附件+编辑意图误判为生成、生成与问句优先级倒置、确认语误触发编辑 |
 | 图片模型配置 | 已实现 | `src/storage/settingsRepository.ts` `src/imageGeneration/openAIImageClient.ts` | UI 仍可继续收口 |
 | Prompt Library | 已实现 | `src/imageGeneration/promptLibraryRepository.ts` `src/imageGeneration/promptLibraryBuiltins.ts` | 后续可继续做资产治理与展示优化 |
 | 找参考图 | 部分实现 | `src/imageGeneration/imageMaterialSearch.ts` `src/imageGeneration/imageWorkflowOrchestrator.ts` | 当前仍是过渡方案，长期目标仍是网页资料搜索后再抽视觉线索 / 可用图片 |
@@ -119,6 +123,7 @@
 - 核心 AI/runtime 能力已经稳定存在：Provider、会话持久化、MCP runtime、文件/命令/浏览器工具、Tasks/background command、Review/Verification、Thinking/Effort/Fast、Compact/Auto-Memory、LSP、Worktree、Hooks、Custom Agents、Skills registry。
 - Electron 现在应被准确描述为“可打包、可验证的桌面内测壳”，而不是完整正式客户端。
 - Electron Markdown 与 `/verify` report 渲染已从自研 regex/line parser 收口到 Claude-style `marked.lexer()` token 基线，并对 verification 的 command/output 使用结构化 raw text 渲染。
+- LSP runtime 已按 Claude `LSPTool.validateInput` 补齐文件预检，并允许 `workspaceSymbols` 省略/空查询。
 - 图片主链已经从旧 `Image Lab` 页面迁到聊天流；旧 `Image Lab` 更接近底层承载壳和历史 UI，而不是产品主入口。
 - Prompt Library 已经升级成 `src/` 数据层驱动，而不再只是 renderer 原型。
 - `Local Bridge` 已从纯规划进入最小可运行实现阶段；Word Add-in 只读 MVP 也已落地。
