@@ -2,7 +2,7 @@
 
 ## 当前覆盖说明 / Current Override - 2026-04-25
 
-- `/verify` 报告渲染、Electron Markdown 与 TaskOutput abort parity 修复后的验证基线：
+- 本批 Claude parity 收口后的验证基线：
   - `npm test`
   - `npm run check`
   - `npm run build`
@@ -10,6 +10,13 @@
   - `npm run check:electron`
   - `145` 个测试文件
   - `982` 个测试通过
+- 本批已同步的收口项覆盖 `890510a..00076dc`，不只包含最后一次 `TaskOutput` 修复：
+  - `890510a`：同步 Claude 源码优先规则、handoff、gap analysis、source-reference 与编码约束。
+  - `b95c258`：Electron Markdown / `/verify` report 渲染按 Claude `marked.lexer()` token 模型重建，并 vendor `marked` 运行时。
+  - `d235163`：`/verify` 增加 concrete target gate、问候/空范围 `PARTIAL`、工作区项目证据兜底、语言跟随、diff/provenance/report fence 处理。
+  - `d1fc143`：background task / toolRuntime 对齐 Claude shell task 语义，包括 `local_bash`、Claude-style id、`TaskGet` / `TaskOutput` 输入合同、`TaskStop` 缺失/不支持行为、非交互 UTF-8 PowerShell 输出。
+  - `fcea9f4`：compact/session lifecycle 对齐，保留可见 transcript，把模型侧 compact 历史放进 sidecar runtime state，并持久化 workspace / compact metadata。
+  - `00076dc`：`TaskOutput` 阻塞等待传递 `ToolContext.abortSignal`，用户取消后不继续挂住 task wait。
 - 强实现规则已经生效：
   - 如果本地 Claude Code 源码已经包含目标功能、行为、工作流、prompt contract、renderer 行为、tool/runtime 路径或 session 生命周期，必须先读取该源码，并把源码逻辑作为实现 baseline 复刻。
   - KainClaw 自研标准只用于 Claude 源码没有覆盖的能力，或用于 Claude-compatible baseline 之上的薄适配层。
@@ -52,6 +59,8 @@
 - 项目主线仍然是与官方 Claude Code 能力持续对齐；图片、Office、Local Bridge、User Modeling、Auto Skill Generation 都属于扩展能力。
 - 对 Claude 源码已有能力，必须先按源码逻辑复刻 baseline，再接 KainClaw 的 VS Code / Electron / storage / IPC 适配。
 - Electron Markdown 与 `/verify` report 渲染已按 Claude-style `marked.lexer()` token 基线收口；verification 的 command/output 是结构化 raw text，不再依赖 fence 平衡。
+- 当前 Tasks / toolRuntime parity 已补齐本批 shell task 基线，但 remote / detached background task parity 仍未闭环。
+- 当前 Compact parity 已补齐可见 transcript 与模型侧 sidecar history 分离，但更深 token / transcript lifecycle 仍可继续收口。
 
 ## 当前验证边界
 

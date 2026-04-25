@@ -12,6 +12,12 @@
   - `145` 个测试文件
   - `982` 个测试通过
 - 强规则已收口：凡是 Claude 源码已有的功能、行为、工作流、prompt contract、renderer 行为、tool/runtime 路径或 session 生命周期，必须先读 Claude 源码并按其逻辑复刻基线；只有 Claude 源码没有的 KainClaw 扩展，才按 KainClaw 自研标准开发。
+- 本批已同步的 Claude parity 收口项覆盖 `890510a..00076dc`：
+  - 文档/规则：Claude 源码优先、handoff、gap analysis、source-reference、UTF-8 without BOM。
+  - Renderer：Electron Markdown 与 `/verify` report 渲染改为 Claude-style `marked.lexer()` token baseline，命令和输出按结构化 raw text 渲染。
+  - Verification：concrete target gate、问候/空范围 `PARTIAL`、项目证据兜底、语言跟随、diff/provenance/report fence 处理。
+  - Tasks/toolRuntime：`local_bash` shell task 语义、Claude-style task id、`TaskGet` / `TaskOutput` / `TaskStop` 合同、非交互 UTF-8 PowerShell 输出、`TaskOutput` abort wait。
+  - Compact/session lifecycle：可见 transcript 与模型侧 compact history 分离，workspace root 与 compact metadata 随 runtime state 持久化。
 - 本轮 Markdown / `/verify` 渲染修复已按 Claude 源码逻辑对齐：
   - 参考 `E:\claudecodejingiang\src\components\Markdown.tsx`
   - 参考 `E:\claudecodejingiang\src\utils\markdown.ts`
@@ -66,12 +72,12 @@
 | 会话持久化 / 导出 / 恢复 | 已实现 | `src/storage/sessionRepository.ts` `src/sessionListHost.ts` `src/savedSessionHost.ts` | 会话管理 UI 仍可继续打磨 |
 | MCP runtime | 已实现 | `src/mcpRuntime.ts` `src/mcpRuntime.helpers.ts` | OAuth / PKCE / prompts / templates parity 未完全收口 |
 | 文件 / 命令 / 浏览器工具 | 已实现 | `src/toolRuntime.ts` `src/browserRuntime.ts` | Browser automation parity 仍未完全对齐 |
-| Tasks / background command | 部分实现 | `src/tasks/taskRuntime.ts` `src/backgroundTaskHost.ts` `src/backgroundCommandWorker.ts` `src/toolRuntime.ts` | `TaskOutput` abort wait 已对齐；remote / detached background task parity 未完成 |
+| Tasks / background command | 部分实现 | `src/tasks/taskRuntime.ts` `src/backgroundTaskHost.ts` `src/backgroundCommandWorker.ts` `src/toolRuntime.ts` | `local_bash`、Claude-style id、Task 工具合同、UTF-8 shell 输出和 `TaskOutput` abort wait 已对齐；remote / detached background task parity 未完成 |
 | built-in Review | 部分实现 | `src/review/runner.ts` `src/agent/built-in/reviewAgent.ts` | ultrareview、远程 review 生命周期仍未完善 |
-| built-in Verification | 部分实现 | `src/verification/runner.ts` `src/agent/built-in/verificationAgent.ts` | hosted / detached verification parity 未完成 |
+| built-in Verification | 部分实现 | `src/verification/runner.ts` `src/agent/built-in/verificationAgent.ts` `src/inspectionPromptHost.ts` `src/inspectionWorkspace.ts` | scope gate、workspace evidence fallback、locale、diff/provenance/report fence 已补齐；hosted / detached verification parity 未完成 |
 | Plan Mode | 部分实现 | `src/planMode/planMode.ts` `src/planModeHost.ts` `src/planMode/planModePrompt.ts` | 更完整的官方 plan workflow 仍缺 |
 | Thinking / Effort / Fast mode | 部分实现 | `src/thinkingEffort/effort.ts` `src/thinkingEffort/thinking.ts` `src/thinkingEffort/fastMode.ts` | phase 2 parity 仍未完全收口 |
-| Compact / Auto-compact | 部分实现 | `src/compact/compact.ts` `src/compact/autoCompact.ts` `src/compactHost.ts` | transcript / token lifecycle 更深 parity 未收尾 |
+| Compact / Auto-compact | 部分实现 | `src/compact/compact.ts` `src/compact/autoCompact.ts` `src/compactHost.ts` `src/storage/sessionRepository.ts` | 可见 transcript 与模型侧 sidecar history 分离已补齐；token / transcript lifecycle 更深 parity 未收尾 |
 | Auto-Memory | 部分实现 | `src/autoMemory/paths.ts` `src/autoMemory/extractor.ts` `src/autoMemoryHost.ts` | memory orchestration 更深 parity 未完成 |
 | LSP | 部分实现 | `src/lsp/lspRuntime.ts` `src/lsp/formatters.ts` `src/lsp/types.ts` | server-manager / provider-availability parity 未完成 |
 | Worktree | 部分实现 | `src/worktree/runtime.ts` `src/worktree/types.ts` | 完整 worktree 产品流未完成 |

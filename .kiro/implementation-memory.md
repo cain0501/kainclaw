@@ -21,6 +21,12 @@
 - 当前验证基线：
   - `145` 个测试文件
   - `982` 个测试通过
+- 本批 Claude parity 已同步收口项：
+  - 文档/规则：Claude 源码优先、handoff、gap analysis、source-reference、UTF-8 without BOM。
+  - Renderer：Electron Markdown 与 `/verify` report 渲染以 Claude `marked.lexer()` token 模型为 baseline。
+  - Verification：concrete target gate、问候/空范围 `PARTIAL`、工作区证据兜底、语言跟随、diff/provenance/report fence 处理。
+  - Tasks/toolRuntime：`local_bash` shell task 语义、Claude-style id、Task 工具合同、非交互 UTF-8 PowerShell 输出、`TaskOutput` abort wait。
+  - Compact/session lifecycle：可见 transcript 与模型侧 compact history 分离，runtime state 持久化 workspace root 与 compact metadata。
 - Electron 路由规则：
   - 必须先识别斜杠命令，再做普通聊天 / 图片意图推断。
   - 否则最近生成图上下文会错误劫持 `/compact` 这类命令，把它们误路由到图片编辑流程。
@@ -89,7 +95,7 @@
 
 ### 3. 验证基线登记
 
-- 当前登记基线：`145` 个测试文件，`970` 个测试通过。
+- 当前登记基线：`145` 个测试文件，`982` 个测试通过。
 - 当前登记通过命令：
   - `npm test`
   - `npm run check`
@@ -212,6 +218,8 @@
 ### 1. `tasks / toolRuntime` Phase 2
 
 - detached local background command 需要把状态、输出文件刷新、duplicate-run reuse、停止回收这几条链都做完整。
+- background shell command 应登记为 `local_bash`，并保留 Claude-style `shell_id` / `task_id` 语义；不要再和 `local_agent` 混在一起。
+- shell command 输出要走非交互 UTF-8 PowerShell，并清理 ANSI 噪声，避免验证报告和 task output 被编码或控制符污染。
 - `TaskStop` 不能在 stop 通道不存在时伪造“已取消”。
 - built-in inspection 任务要保留 `command_text / prompt / plan_file_path / diff_ref` provenance。
 - `TaskGet`、`TaskOutput` 对缺失任务必须返回结构化 `not_found`，不能返回含糊状态。
@@ -222,6 +230,9 @@
 
 - Verification 只有 `PASS` 才能算成功收口。
 - `FAIL`、`PARTIAL` 必须保留为真实终态，而不是被吞掉。
+- `/verify` 必须先确认存在具体可检查实现目标；问候/泛聊天/空范围应直接 `VERDICT: PARTIAL`。
+- 只有在工作区存在真实项目证据时，缺少会话原始任务才可以回退到“验证当前工作区项目状态”。
+- 中文用户的说明主体应跟随中文，但 `/verify` 的结构化标签仍保留英文 literal。
 - diff-aware review / verification 是关键收口点：
   - 本地 git range
   - 公开 GitHub PR / compare URL
@@ -232,6 +243,8 @@
 
 ### 3. Compact Phase 2
 
+- compact 后不能改写或丢失用户可见 transcript；模型侧 compacted history 应放进 runtime sidecar state。
+- session runtime state 要能持久化 `workspaceRoot`、`modelConversation` 和 compact metadata，VS Code 与 Electron host 都要能恢复。
 - compact 不能丢 attachment-only user message。
 - compact token 估算必须把 image attachment 算进去，否则阈值会严重失真。
 - assistant tool-call message 也要保留和计数。
