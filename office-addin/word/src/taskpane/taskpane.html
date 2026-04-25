@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="en">
+<html lang="zh-CN">
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
@@ -9,69 +9,113 @@
   <body>
     <main class="app-shell">
       <header class="hero">
-        <p class="eyebrow">KainClaw Local Bridge</p>
-        <h1>Word Add-in Skeleton</h1>
-        <p class="subtitle">
-          This skeleton only validates the Local Bridge session, auth, context, and proxy flow.
-        </p>
-      </header>
-
-      <section class="status-card">
-        <div class="status-row">
-          <span class="label">Bridge</span>
-          <span id="bridge-status" class="value">Connecting…</span>
-        </div>
-        <div class="status-row">
-          <span class="label">Provider</span>
+        <p class="eyebrow">KainClaw AI 助手</p>
+        <div class="status-row compact">
+          <span class="label">状态</span>
+          <span id="bridge-status" class="value">连接中…</span>
+          <span class="label">提供商</span>
           <span id="provider-status" class="value">—</span>
         </div>
-        <div class="status-row">
-          <span class="label">Session</span>
-          <span id="session-status" class="value mono">—</span>
+        <div class="status-row compact">
+          <span class="label">文档</span>
+          <span id="document-status" class="value">未加载</span>
         </div>
-        <div class="status-row">
-          <span class="label">Document</span>
-          <span id="document-status" class="value">Not loaded</span>
-        </div>
-      </section>
+      </header>
 
-      <section class="chat-card">
+      <nav class="tab-bar">
+        <button class="tab-btn active" data-tab="qa">问答</button>
+        <button class="tab-btn" data-tab="edit">编辑</button>
+        <button class="tab-btn" data-tab="comments">批注</button>
+      </nav>
+
+      <!-- ── 问答模式 ── -->
+      <section id="tab-qa" class="tab-panel active chat-card">
         <div class="context-toolbar">
-          <button id="refresh-context-button" type="button">Refresh Document Context</button>
+          <button id="refresh-context-button" type="button">刷新文档上下文</button>
         </div>
+
         <section class="selection-card">
           <div class="selection-header">
-            <h2>Selection</h2>
-            <span id="selection-summary" class="selection-summary">No active selection</span>
+            <h2>选区</h2>
+            <span id="selection-summary" class="selection-summary">无选区</span>
           </div>
           <div id="selection-preview" class="selection-preview"></div>
           <label class="selection-toggle">
             <input id="selection-mode-toggle" type="checkbox" checked />
-            Prefer selection when available
+            有选区时优先使用选区
           </label>
           <div class="selection-actions">
-            <button id="refresh-selection-button" type="button">Refresh Selection</button>
+            <button id="refresh-selection-button" type="button">刷新选区</button>
           </div>
         </section>
+
         <section class="selected-context-card">
           <div class="selected-context-header">
-            <h2>Selected Context</h2>
+            <h2>上下文范围</h2>
             <span id="selected-context-summary" class="selected-context-summary">
-              No scoped context selected yet
+              尚未选择上下文
             </span>
           </div>
           <div id="selected-context-list" class="selected-context-list"></div>
         </section>
+
         <div id="message-list" class="message-list"></div>
 
         <form id="prompt-form" class="prompt-form">
           <textarea
             id="prompt-input"
             rows="4"
-            placeholder="Send a test prompt through the Local Bridge…"
+            placeholder="向 AI 提问，回答会引用文档段落…"
           ></textarea>
-          <button id="send-button" type="submit">Send</button>
+          <button id="send-button" type="submit">发送</button>
         </form>
+      </section>
+
+      <!-- ── 编辑模式 ── -->
+      <section id="tab-edit" class="tab-panel edit-card" hidden>
+        <p class="edit-hint">
+          在 Word 中选中要修改的文字，然后在下方描述修改意图，AI 会生成替换文本。
+        </p>
+
+        <section class="selection-card">
+          <div class="selection-header">
+            <h2>当前选区</h2>
+            <span id="edit-selection-summary" class="selection-summary">无选区</span>
+          </div>
+          <div id="edit-selection-preview" class="selection-preview"></div>
+          <button id="edit-refresh-selection" type="button">刷新选区</button>
+        </section>
+
+        <div id="edit-preview" class="edit-preview" hidden>
+          <h3>AI 生成的替换文本</h3>
+          <div id="edit-result-text" class="edit-result-text"></div>
+          <div class="edit-actions">
+            <button id="apply-edit-button" type="button" class="btn-primary">直接替换</button>
+            <button id="apply-edit-track-button" type="button">以修订模式替换</button>
+            <button id="discard-edit-button" type="button">丢弃</button>
+          </div>
+        </div>
+
+        <form id="edit-form" class="prompt-form">
+          <textarea
+            id="edit-prompt-input"
+            rows="4"
+            placeholder="描述修改意图，例如：把这段翻译成英文 / 让语气更正式 / 精简到50字以内…"
+          ></textarea>
+          <button id="edit-send-button" type="submit">生成修改</button>
+        </form>
+        <div id="edit-status" class="edit-status"></div>
+      </section>
+
+      <!-- ── 批注模式 ── -->
+      <section id="tab-comments" class="tab-panel comments-card" hidden>
+        <div class="comments-toolbar">
+          <button id="load-comments-button" type="button">加载批注</button>
+        </div>
+        <div id="comments-list" class="comments-list">
+          <p class="comments-empty">点击"加载批注"查看文档中的批注。</p>
+        </div>
+        <div id="comment-status" class="edit-status"></div>
       </section>
     </main>
 
