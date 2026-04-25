@@ -20,7 +20,7 @@
   - `npm run check:electron`
 - 当前验证基线：
   - `145` 个测试文件
-  - `1001` 个测试通过
+  - `1019` 个测试通过
 - 本批 Claude parity 已同步收口项：
   - 文档/规则：Claude 源码优先、handoff、gap analysis、source-reference、UTF-8 without BOM。
   - Renderer：Electron Markdown 与 `/verify` report 渲染以 Claude `marked.lexer()` token 模型为 baseline。
@@ -29,6 +29,11 @@
   - Compact/session lifecycle：可见 transcript 与模型侧 compact history 分离，runtime state 持久化 workspace root 与 compact metadata。
   - TaskStop remote 语义：adapter-backed `remote_agent` 停止后记录 Claude-style `killed`；没有 stop 通道的 remote task 仍拒绝，不伪造停止成功。
   - LSP：file-backed 操作按 Claude `LSPTool.validateInput` 做缺失文件、非普通文件、超过 10MB 的预检，UNC 路径跳过本地 probe；`workspaceSymbols` 允许省略/空查询并转发 `query: ""`。
+  - LSP provider availability：provider 返回 `undefined` 时按 no-provider 状态返回；没有 LSP runtime 时不暴露 `LSP` 工具。
+  - LSP operation naming：工具入口接受 Claude 官方单数名 `documentSymbol` / `workspaceSymbol`，适配层归一化到内部 `documentSymbols` / `workspaceSymbols`，避免把官方命名误判为 unsupported operation。
+  - LSP provider response hardening：provider 返回 malformed location / symbol / call hierarchy 数据时，先过滤缺失 URI/range/location 的结果，或在 call hierarchy 中降级显示 `<unknown location>`，避免一个坏响应打断整个 LSP 工具。
+  - ToolSearchTool：搜索合同按 Claude `ToolSearchTool` 源码收口，支持 `select:ToolA,ToolB`、裸工具名精确选择、`mcp__server` 前缀、`+required optional` 必选词搜索，以及 `max_results` 输入别名。
+  - Task tool aliases：`KillShell` 归一到 `TaskStop`，`AgentOutputTool` / `BashOutputTool` 归一到 `TaskOutput`；ToolSearch 对这些 deprecated Claude aliases 返回 canonical 工具名。
 - Electron 路由规则：
   - 必须先识别斜杠命令，再做普通聊天 / 图片意图推断。
   - 否则最近生成图上下文会错误劫持 `/compact` 这类命令，把它们误路由到图片编辑流程。
@@ -66,7 +71,7 @@
   - `Command run` 和 `Output observed` 要按原始捕获文本处理，并渲染为转义后的 `<pre><code>` 块。
   - 不能依赖命令 / 输出里的 Markdown 代码围栏是否平衡；README 输出和嵌套代码围栏都必须按字面量保留。
 
-更新时间：2026-04-25
+更新时间：2026-04-26
 
 ## 使用规则
 
@@ -97,7 +102,7 @@
 
 ### 3. 验证基线登记
 
-- 当前登记基线：`145` 个测试文件，`1001` 个测试通过。
+- 当前登记基线：`145` 个测试文件，`1019` 个测试通过。
 - 当前登记通过命令：
   - `npm test`
   - `npm run check`
@@ -262,6 +267,9 @@
 
 - file-backed LSP 操作要在 runtime 入口前按 Claude `LSPTool.validateInput` 做文件预检：缺失文件、非普通文件、超过 10MB 直接失败；UNC 路径跳过本地 `stat` probe，避免网络路径预检阻塞。
 - `workspaceSymbols` 的 `query` 可以省略或为空字符串，传给 provider 的值应是 `""`，不能被本地 schema 误拦截。
+- LSP provider 返回 `undefined` 要表示 provider/server 不可用，不能混同为“有 provider 但空结果”；无 LSP runtime 的 workspace 不应把 `LSP` 工具暴露给模型或 ToolSearch。
+- ToolSearchTool 的搜索语法必须以 Claude `ToolSearchTool.ts` 为 baseline：`select:` 直接选工具、裸工具名精确选中、`mcp__server` 前缀匹配 MCP 工具、`+required` 作为必选词、`max_results` 作为官方输入别名。KainClaw 只做当前可用工具和 MCP 动态工具聚合适配。
+- Task 工具的 deprecated aliases 也属于 Claude 源码合同：`KillShell` 必须路由到 `TaskStop`，`AgentOutputTool` / `BashOutputTool` 必须路由到 `TaskOutput`。但 `TaskOutput` 的输入仍按官方合同只接受 `task_id`，不要因为 `KillShell` 兼容而给 `TaskOutput` 增加 `shell_id`。
 - gitignored 过滤要前置到 definition / implementation / references / workspaceSymbols / call hierarchy 这些入口。
 - `maxResults` 必须在更外层先收口，避免深层结果再裁切。
 - Worktree 要做：

@@ -1,6 +1,6 @@
 # Claude Handoff / Claude 交接说明
 
-## 当前覆盖说明 / Current Override - 2026-04-25
+## 当前覆盖说明 / Current Override - 2026-04-27
 
 - 本批 Claude parity 收口后的验证基线：
   - `npm test`
@@ -9,7 +9,10 @@
   - `npm run build:electron`
   - `npm run check:electron`
   - `145` 个测试文件
-  - `1001` 个测试通过
+  - `1019` 个测试通过
+- 本批新增收口项（`79a8f82`、`022c0ef`）：
+  - `79a8f82`：LSP formatter malformed 响应防御、`normalizeLspOperation`（documentSymbol/workspaceSymbol 官方单数名）、provider unavailable 与空结果区分、`getBuiltInToolDefinitions({ lspAvailable })` 替换静态 `toolDefinitions`、ToolSearch 搜索合同按 Claude ToolSearchTool 源码收口。
+  - `022c0ef`：Word Add-in 写回能力——`documentEditor.ts`（replaceSelection / Track Changes）、`commentHandler.ts`（批注读取与 AI 处理）、taskpane 三标签页（问答 / 编辑 / 批注）、manifest.xml VersionOverrides 功能区按钮、webpack + tsconfig 打包骨架。
 - 本批已同步的收口项覆盖 `890510a..00076dc`，不只包含最后一次 `TaskOutput` 修复：
   - `890510a`：同步 Claude 源码优先规则、handoff、gap analysis、source-reference 与编码约束。
   - `b95c258`：Electron Markdown / `/verify` report 渲染按 Claude `marked.lexer()` token 模型重建，并 vendor `marked` 运行时。
@@ -21,6 +24,11 @@
   - `TaskStop` 对 adapter-backed `remote_agent` 会记录 Claude-style `killed` 终态；缺少 remote stop pathway 时仍拒绝，不伪造停止成功。
   - LSP file-backed 操作按 Claude `LSPTool.validateInput` 做入口预检：缺失文件、非普通文件、超过 10MB 直接失败；UNC 路径跳过本地 `stat` probe。
   - `workspaceSymbols` 允许省略或传空查询，并向 VS Code provider 转发 `query: ""`，不再被本地 schema 误拦截。
+  - LSP provider availability：VS Code provider 返回 `undefined` 时按 Claude 的 no-server/no-provider 状态返回，不再混成空结果；没有 LSP runtime 时不再暴露 `LSP` 工具。
+  - LSP operation naming：工具入口已接受 Claude 官方单数名 `documentSymbol` / `workspaceSymbol`，并在 KainClaw 适配层归一化到现有内部 runtime 操作 `documentSymbols` / `workspaceSymbols`。
+  - LSP provider response hardening：对 provider 返回缺失 URI、range、location、call target 的 malformed 结果做过滤或 `<unknown location>` 降级，避免 gitignored 过滤和 formatter 直接崩溃。
+  - ToolSearchTool：按 Claude `ToolSearchTool` 搜索合同补齐 `select:ToolA,ToolB`、裸工具名精确选择、`mcp__server` 前缀、`+required optional` 必选词搜索，以及 `max_results` 输入别名。
+  - Task tool aliases：按 Claude `TaskOutputTool` / `TaskStopTool` 源码补齐 deprecated aliases，`AgentOutputTool` / `BashOutputTool` 归一到 `TaskOutput`，`KillShell` 归一到 `TaskStop`；ToolSearch 也会把这些旧名解析到 canonical 工具。
 - 强实现规则已经生效：
   - 如果本地 Claude Code 源码已经包含目标功能、行为、工作流、prompt contract、renderer 行为、tool/runtime 路径或 session 生命周期，必须先读取该源码，并把源码逻辑作为实现 baseline 复刻。
   - KainClaw 自研标准只用于 Claude 源码没有覆盖的能力，或用于 Claude-compatible baseline 之上的薄适配层。
@@ -36,7 +44,9 @@
 - `marked` 现在是 Electron renderer 的运行时依赖；`npm run build:electron` 会把 `node_modules/marked/lib/marked.umd.js` 复制到 `dist-electron/electron/renderer/vendor/marked.umd.js`。
 - `TaskOutput` 阻塞等待后台任务输出时，已经按 Claude `TaskOutputTool` 生命周期把 `ToolContext.abortSignal` 传入 task wait；用户取消后不会继续挂住后台输出等待。
 - `TaskStop` 的 remote stop 语义已经更接近 Claude：adapter-backed remote task 停止后进入 `killed`，无 stop 通道的 remote task 仍明确报不支持。
-- LSP runtime 已补齐 Claude-style 文件预检与 `workspaceSymbols` 空查询转发；server-manager / provider-availability 这类更深 LSP parity 仍可继续收口。
+- LSP runtime 已补齐 Claude-style 文件预检、`workspaceSymbols` 空查询转发、provider unavailable 返回、无 runtime 时的工具暴露过滤、`documentSymbol` / `workspaceSymbol` 官方单数操作名入口，以及 malformed provider response 防御；更深 server lifecycle / plugin-backed provider discovery parity 仍可继续收口。
+- ToolSearchTool 已按 Claude `ToolSearchTool` 源码搜索合同收口：支持 `select:` 多选、裸工具名、`mcp__server` 前缀、`+required` 必选词与 `max_results`；KainClaw 侧只保留当前可用工具与 MCP 动态工具聚合的适配层。
+- Task 工具旧名兼容已按 Claude 源码收口：`KillShell`、`AgentOutputTool`、`BashOutputTool` 不再报 unknown tool，而是进入对应 canonical Task handler；`TaskOutput` 仍保持 Claude 官方 `task_id` 输入合同，不接受 `shell_id`。
 - Electron 桌面壳已把这些斜杠命令接回真实的 `src/` host/runtime 路径：
   - `/todo`
   - `/compact`
@@ -52,7 +62,7 @@
   - workspace badge 直接显示目录名，不再显示 `需确认` 这类技术状态标签。
   - 非 Git 目录不再在 workspace 区域常驻显示 “not a git repo” 警告。
 
-更新时间：2026-04-25
+更新时间：2026-04-27
 
 ## 当前状态总览
 
@@ -184,7 +194,7 @@
   - Thinking / Effort / Fast mode
   - Compact / Auto-compact
   - Auto-Memory
-  - LSP phase 1 + 部分 phase 2（file preflight / workspaceSymbols query parity 已补齐）
+  - LSP phase 1 + 部分 phase 2（file preflight / workspaceSymbols query / provider availability parity 已补齐）
   - Worktree phase 1
   - Hooks 执行链
   - Custom Agents registry
@@ -234,22 +244,25 @@
 
 ### Office / Word
 
-- Word Add-in skeleton 已落地：
-  - `office-addin/word/manifest.xml`
-  - taskpane html / css / ts
-  - `documentReader.ts`
-  - `documentSelection.ts`
-- `src/officeBridge/` 当前已有最小只读问答与 citation 上下文链路：
-  - `bridgeClient.ts`
-  - `wordDocumentContext.ts`
-  - `wordQuestionAnswer.ts`
-  - `wordSelectionContext.ts`
-  - `wordSelectedContextView.ts`
-- 当前阶段仍然是：
-  - 只读问答
-  - 选区上下文
-  - citation 命中
-- 还不是完整 Office 编辑产品流。
+- Word Add-in 已完成以下能力：
+  - `office-addin/word/manifest.xml`（含 VersionOverrides 功能区按钮）
+  - `documentReader.ts` / `documentSelection.ts`（读取）
+  - `documentEditor.ts`（写回：replaceSelection、Track Changes）
+  - `commentHandler.ts`（批注读取与 AI 处理）
+  - taskpane 三标签页 UI：问答 / 编辑 / 批注
+  - `package.json` / `webpack.config.js` / `tsconfig.json`（sideload 打包骨架）
+- `src/officeBridge/` 已有完整桥接层：
+  - `bridgeClient.ts`、`wordDocumentContext.ts`、`wordQuestionAnswer.ts`
+  - `wordSelectionContext.ts`、`wordSelectedContextView.ts`
+- 当前已可用能力：
+  - 文档问答（citation 可点击跳转）
+  - 选区感知上下文
+  - AI 写回选中文字（直接替换 / Track Changes）
+  - 批注列表加载与 AI 一键处理
+- 还未完成：
+  - sideload 实际打包测试（需安装 Add-in 子依赖 `npm install` 后 `npm run build`）
+  - Excel / PowerPoint Add-in（尚未开始）
+  - 跨应用 session 上下文共享
 
 ## 当前明确未完成
 
