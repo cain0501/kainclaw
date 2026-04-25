@@ -165,7 +165,7 @@
   - 部分结果 / 参数壳
   - 历史 UI 遗留
 - 后续文档和实现描述里，不要再把旧 `Image Lab` 写成产品主入口。
-- 意图分流 `chatPromptIntent.ts` 的已知正确优先级（2026-04-25 修复）：
+- 意图分流 `chatPromptIntent.ts` 的已知正确优先级（2026-04-25，Claude 修复）：
   - `hasRecentGeneratedImageContext=true` 时：生成意图 > 问句 > 确认语 > 默认 `image_edit`。
   - `hasRecentGeneratedImageContext=false` 时：有附件 + 编辑意图 → `image_edit`；有附件或生成意图 → `image_generate`；其余 → `chat`。
   - 纯确认语（"好的"、"ok"、"嗯"）绝不能触发 `image_edit`，已通过 `ACKNOWLEDGMENT_PATTERNS` 拦截。

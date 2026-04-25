@@ -103,7 +103,7 @@
 | Electron Markdown / verification report rendering | 已实现 | `electron/renderer/index.html` `electron/rendererMarkdown.test.ts` `package.json` | 已按 Claude `marked.lexer()` token 模型重建主路径；后续若继续改 Markdown 行为，仍必须先对照 Claude 源码 |
 | Auto Skill Generation | 已实现 | `src/skills/skillStore.ts` `src/skills/skillDistiller.ts` `src/backgroundTaskHost.ts` | 产品面与治理面仍可继续收口 |
 | User Modeling | 已实现 | `src/userModel/profileStore.ts` `src/userModel/profileDistiller.ts` | UI 管理面仍未完整 |
-| 图片聊天工作流 | 已实现 | `src/imageGeneration/imageWorkflowOrchestrator.ts` `src/imageGeneration/chatPromptIntent.ts` `electron/ElectronChatPanel.ts` | 当前已迁到聊天主链，但仍是扩展能力；意图分流已修复三处 bug（2026-04-25）：附件+编辑意图误判为生成、生成与问句优先级倒置、确认语误触发编辑 |
+| 图片聊天工作流 | 已实现 | `src/imageGeneration/imageWorkflowOrchestrator.ts` `src/imageGeneration/chatPromptIntent.ts` `electron/ElectronChatPanel.ts` | 当前已迁到聊天主链，但仍是扩展能力；意图分流已修复三处 bug（2026-04-25，Claude）：附件+编辑意图误判为生成、生成与问句优先级倒置、确认语误触发编辑 |
 | 图片模型配置 | 已实现 | `src/storage/settingsRepository.ts` `src/imageGeneration/openAIImageClient.ts` | UI 仍可继续收口 |
 | Prompt Library | 已实现 | `src/imageGeneration/promptLibraryRepository.ts` `src/imageGeneration/promptLibraryBuiltins.ts` | 后续可继续做资产治理与展示优化 |
 | 找参考图 | 部分实现 | `src/imageGeneration/imageMaterialSearch.ts` `src/imageGeneration/imageWorkflowOrchestrator.ts` | 当前仍是过渡方案，长期目标仍是网页资料搜索后再抽视觉线索 / 可用图片 |
