@@ -49,6 +49,21 @@ describe("review runner helpers", () => {
     expect(request).not.toContain("Review the current workspace changes.");
   });
 
+  it("uses Claude PR review workflow when a PR number is provided", () => {
+    const request = buildReviewRequest({
+      originalTask: "Review PR",
+      changedFiles: [],
+      approachSummary: "No implementation summary available.",
+      transcript: "USER: /review 123",
+      prNumber: "123",
+    });
+
+    expect(request).toContain("Review pull request #123.");
+    expect(request).toContain("Run `gh pr view 123` to get PR details.");
+    expect(request).toContain("Run `gh pr diff 123` to get the PR diff.");
+    expect(request).not.toContain("Review the current workspace changes.");
+  });
+
   it("injects diff content into the request when provided", () => {
     const diffContent =
       "diff --git a/src/auth.ts b/src/auth.ts\n+export function newMiddleware() {}";

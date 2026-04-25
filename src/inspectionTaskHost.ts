@@ -88,17 +88,17 @@ export type RunBuiltInInspectionSessionOptions<TResult> = {
 function getInspectionExtraGuidance(
   commandText: string,
   commandPrefix: string,
-  diffRef?: string,
+  commandTarget?: string,
 ): string {
   const rest = commandText.slice(commandPrefix.length).trim();
   if (!rest) {
     return "";
   }
 
-  const guidance = !diffRef
+  const guidance = !commandTarget
     ? rest
-    : rest.startsWith(diffRef)
-      ? rest.slice(diffRef.length).trim()
+    : rest.startsWith(commandTarget)
+      ? rest.slice(commandTarget.length).trim()
       : rest;
 
   return guidance.replace(/^--\s*/, "").trim();
@@ -178,10 +178,15 @@ export async function runBuiltInInspectionSession<TResult>(
     typeof options.taskContextMetadata?.diffRef === "string"
       ? options.taskContextMetadata.diffRef
       : undefined;
+  const commandTarget =
+    diffRef ??
+    (typeof options.taskContextMetadata?.reviewPrNumber === "string"
+      ? options.taskContextMetadata.reviewPrNumber
+      : undefined);
   const extraGuidance = getInspectionExtraGuidance(
     options.commandText,
     options.commandPrefix,
-    diffRef,
+    commandTarget,
   );
   const originalTask =
     options.promptForTask ?? findOriginalTaskForInspection(options.sessionMessages);

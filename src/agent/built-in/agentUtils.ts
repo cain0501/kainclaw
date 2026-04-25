@@ -137,11 +137,30 @@ function looksLikeExplicitDiffRef(candidate: string): boolean {
 }
 
 export function parseReviewDiffRef(commandText: string): string | undefined {
+  if (parseReviewPrNumber(commandText)) {
+    return undefined;
+  }
+
   return parseDiffRefForCommand(commandText, "/review");
 }
 
 export function parseVerificationDiffRef(commandText: string): string | undefined {
   return parseDiffRefForCommand(commandText, "/verify");
+}
+
+export function parseReviewPrNumber(commandText: string): string | undefined {
+  const trimmed = commandText.trim();
+  if (!trimmed.startsWith("/review")) {
+    return undefined;
+  }
+
+  const rest = trimmed.slice("/review".length).trim();
+  if (!rest) {
+    return undefined;
+  }
+
+  const [candidate] = rest.split(/\s+/);
+  return /^\d+$/.test(candidate ?? "") ? candidate : undefined;
 }
 
 function looksLikeRemoteDiffUrl(candidate: string): boolean {

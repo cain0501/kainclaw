@@ -25,6 +25,11 @@ export type RunReviewAgentOptions = {
   planContent?: string | null;
   extraGuidance?: string;
   /**
+   * Claude /review treats a numeric argument as a GitHub PR number, not as a
+   * git diff ref. The review agent should inspect it with `gh pr view/diff`.
+   */
+  prNumber?: string;
+  /**
    * When set, the review uses this git diff ref (e.g. "HEAD~3..HEAD",
    * "main...HEAD") instead of `git status` to determine changed files.
    * The actual diff content is also injected into the review request.
@@ -44,6 +49,8 @@ export function buildReviewRequest(options: {
   planFilePath?: string;
   planContent?: string | null;
   extraGuidance?: string;
+  /** Numeric PR number from Claude-compatible `/review <number>` commands. */
+  prNumber?: string;
   /** When present, the review targets this git diff range (not the working tree). */
   diffRef?: string;
   /** Actual diff content from `git diff` for the diffRef range. */
@@ -54,7 +61,9 @@ export function buildReviewRequest(options: {
       ? options.changedFiles.map(file => `- ${file}`).join("\n")
       : "- [git status unavailable or no changed files detected]";
 
-  const intro = options.diffRef
+  const intro = options.prNumber
+    ? `Review pull request #${options.prNumber}.`
+    : options.diffRef
     ? `Review the changes in \`${options.diffRef}\`.`
     : "Review the current workspace changes.";
 
@@ -68,6 +77,28 @@ export function buildReviewRequest(options: {
 
   if (options.diffContent?.trim()) {
     parts.push(`## Diff\n\`\`\`diff\n${options.diffContent.trim()}\n\`\`\``);
+  }
+
+  if (options.prNumber) {
+    parts.push(
+      [
+        "## Claude /review PR workflow",
+        `PR number: ${options.prNumber}`,
+        `Run \`gh pr view ${options.prNumber}\` to get PR details.`,
+        `Run \`gh pr diff ${options.prNumber}\` to get the PR diff.`,
+        "Use the PR details, diff, and surrounding code to produce the review.",
+        "If the GitHub CLI command is unavailable or fails, report that limitation instead of silently reviewing unrelated workspace changes.",
+      ].join("\n"),
+    );
+  } else if (!options.diffRef) {
+    parts.push(
+      [
+        "## Claude /review local workflow",
+        "Claude's local `/review` command lists open PRs with `gh pr list` when no PR number is provided.",
+        "KainClaw may also review the current workspace changes when the host supplied a concrete workspace-change target.",
+        "If the user clearly wants a PR review and no PR number was provided, run `gh pr list` and ask for the PR number instead of guessing.",
+      ].join("\n"),
+    );
   }
 
   if (options.planFilePath) {
@@ -109,7 +140,9 @@ export async function runReviewAgent(
         getChangedFilesFromDiff(options.workspaceRoot, options.diffRef),
         getDiffContent(options.workspaceRoot, options.diffRef),
       ])
-    : [await getChangedFiles(options.workspaceRoot), ""];
+    : options.prNumber
+      ? [[], ""]
+      : [await getChangedFiles(options.workspaceRoot), ""];
 
   const approachSummary = getLatestAssistantSummary(
     options.messages,
@@ -127,6 +160,7 @@ export async function runReviewAgent(
         planFilePath: options.planFilePath,
         planContent: options.planContent,
         extraGuidance: options.extraGuidance,
+        prNumber: options.prNumber,
         diffRef: options.diffRef,
         diffContent: diffContent || undefined,
       }),

@@ -457,6 +457,150 @@ describe("inspectionPromptHost", () => {
     expect(updateMood).toHaveBeenCalledWith(2, true);
   });
 
+  it("blocks review when there is no original task or workspace project evidence", async () => {
+    const workspaceRoot = await fs.mkdtemp(path.join(os.tmpdir(), "review-empty-workspace-"));
+    try {
+      const recordAssistantReply = vi.fn(async () => undefined);
+      const runReviewSession = vi.fn(async () => ({
+        taskId: "review-should-not-run",
+        report: "review report",
+      }));
+
+      const handled = await handleReviewPromptCommand({
+        commandText: "/review",
+        workspaceRoot,
+        config: {
+          type: "anthropic",
+          apiKey: "secret",
+          model: "claude-sonnet",
+        },
+        envMap: {},
+        runtime: { getToolContext: () => ({}) as any },
+        tools: [],
+        runtimeOptions: {},
+        effortLevel: "medium",
+        sessionMessages: [{ role: "user", content: "/review" }],
+        blockedByPlanMode: false,
+        onToken: () => undefined,
+        onToolStart: () => undefined,
+        onToolEnd: () => undefined,
+        addPhaseActivity: () => "activity-review-no-target",
+        finishPhaseActivity: () => undefined,
+        recordAssistantReply,
+        setCompanionState: () => undefined,
+        clearStreamingText: () => undefined,
+        updateMood: async () => undefined,
+        isAbortLikeError: () => false,
+        runReviewSession,
+        buildFollowUpMessage: () => "",
+      });
+
+      expect(handled).toBe(true);
+      expect(runReviewSession).not.toHaveBeenCalled();
+      expect(recordAssistantReply).toHaveBeenCalledWith(
+        "There is no reviewable original task or change target in this conversation yet. Give me a real implementation task, PR/diff range, or finish workspace changes before running `/review`.",
+        false,
+      );
+    } finally {
+      await fs.rm(workspaceRoot, { recursive: true, force: true });
+    }
+  });
+
+  it("short-circuits greeting-only review requests", async () => {
+    const recordAssistantReply = vi.fn(async () => undefined);
+    const runReviewSession = vi.fn(async () => ({
+      taskId: "review-should-not-run",
+      report: "review report",
+    }));
+
+    const handled = await handleReviewPromptCommand({
+      commandText: "/review",
+      workspaceRoot: "E:\\repo",
+      config: {
+        type: "anthropic",
+        apiKey: "secret",
+        model: "claude-sonnet",
+      },
+      envMap: {},
+      runtime: { getToolContext: () => ({}) as any },
+      tools: [],
+      runtimeOptions: {},
+      effortLevel: "medium",
+      sessionMessages: [{ role: "user", content: "你好" }],
+      blockedByPlanMode: false,
+      onToken: () => undefined,
+      onToolStart: () => undefined,
+      onToolEnd: () => undefined,
+      addPhaseActivity: () => "activity-review-greeting",
+      finishPhaseActivity: () => undefined,
+      recordAssistantReply,
+      setCompanionState: () => undefined,
+      clearStreamingText: () => undefined,
+      updateMood: async () => undefined,
+      isAbortLikeError: () => false,
+      runReviewSession,
+      buildFollowUpMessage: () => "",
+    });
+
+    expect(handled).toBe(true);
+    expect(runReviewSession).not.toHaveBeenCalled();
+    expect(recordAssistantReply).toHaveBeenCalledWith(
+      "当前原始任务 `你好` 只是问候/泛聊天，不是可审查的实现请求或 PR/diff 目标。本次不进入代码审查流程。请先给出真实实现任务、PR 或 diff 范围后再运行 `/review`。",
+      false,
+    );
+  });
+
+  it("allows review to proceed without a prior task when the workspace itself has project evidence", async () => {
+    const workspaceRoot = await fs.mkdtemp(path.join(os.tmpdir(), "review-project-evidence-"));
+    try {
+      await fs.writeFile(path.join(workspaceRoot, "package.json"), "{\"scripts\":{}}\n", "utf8");
+      const recordAssistantReply = vi.fn(async () => undefined);
+      const runReviewSession = vi.fn(async () => ({
+        taskId: "review-workspace-only",
+        report: "review report",
+      }));
+
+      const handled = await handleReviewPromptCommand({
+        commandText: "/review",
+        workspaceRoot,
+        config: {
+          type: "anthropic",
+          apiKey: "secret",
+          model: "claude-sonnet",
+        },
+        envMap: {},
+        runtime: { getToolContext: () => ({}) as any },
+        tools: [],
+        runtimeOptions: {},
+        effortLevel: "medium",
+        sessionMessages: [{ role: "user", content: "/review" }],
+        blockedByPlanMode: false,
+        onToken: () => undefined,
+        onToolStart: () => undefined,
+        onToolEnd: () => undefined,
+        addPhaseActivity: () => "activity-review-workspace-fallback",
+        finishPhaseActivity: () => undefined,
+        recordAssistantReply,
+        setCompanionState: () => undefined,
+        clearStreamingText: () => undefined,
+        updateMood: async () => undefined,
+        isAbortLikeError: () => false,
+        runReviewSession,
+        buildFollowUpMessage: () => "",
+      });
+
+      expect(handled).toBe(true);
+      expect(runReviewSession).toHaveBeenCalledWith(
+        expect.objectContaining({
+          promptForTask: "Review the current workspace/project changes.",
+        }),
+      );
+      expect(recordAssistantReply).toHaveBeenCalledWith("review report", undefined);
+    } finally {
+      await fs.rm(workspaceRoot, { recursive: true, force: true });
+    }
+  });
+
   it("localizes review duplicate status for Chinese conversations", async () => {
     const recordAssistantReply = vi.fn(async () => undefined);
     const finishPhaseActivity = vi.fn();

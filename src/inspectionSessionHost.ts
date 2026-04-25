@@ -1,5 +1,6 @@
 import type { ConversationMessage } from "./agent/built-in/agentUtils";
 import {
+  parseReviewPrNumber,
   parseReviewDiffRef,
   parseVerificationDiffRef,
 } from "./agent/built-in/agentUtils";
@@ -188,6 +189,7 @@ export async function runReviewInspectionSession(
   // When the command text contains a git ref (e.g. "/review HEAD~3..HEAD"),
   // pass it through so the review agent uses that diff range rather than
   // the current working-tree status.
+  const prNumber = parseReviewPrNumber(options.commandText);
   const diffRef = parseReviewDiffRef(options.commandText);
   const reviewTaskContextMetadata = {
     ...(pendingPlanVerification
@@ -197,6 +199,7 @@ export async function runReviewInspectionSession(
           hasPlanContent: !!pendingPlanVerification.planContent?.trim(),
         }
       : {}),
+    ...(prNumber ? { reviewPrNumber: prNumber } : {}),
     ...(diffRef ? { diffRef } : {}),
   };
 
@@ -213,7 +216,8 @@ export async function runReviewInspectionSession(
     runtimeToolContext: options.runtime.getToolContext(),
     conversationHistory: options.conversationHistory,
     sessionMessages: options.sessionMessages,
-    promptForTask: getOriginalTaskForInspection(options.sessionMessages),
+    promptForTask:
+      options.promptForTask ?? getOriginalTaskForInspection(options.sessionMessages),
     backgroundTaskHost: options.backgroundTaskHost,
     taskContextMetadata:
       Object.keys(reviewTaskContextMetadata).length > 0
@@ -234,6 +238,7 @@ export async function runReviewInspectionSession(
         planFilePath: pendingPlanVerification?.planFilePath,
         planContent: pendingPlanVerification?.planContent ?? null,
         extraGuidance: sessionOptions.extraGuidance,
+        prNumber,
         diffRef,
         onToken: sessionOptions.onToken,
         onToolStart: sessionOptions.onToolStart,

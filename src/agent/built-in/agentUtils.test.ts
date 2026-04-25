@@ -7,6 +7,7 @@ import {
   getRecentTranscript,
   getChangedFilesFromDiff,
   getDiffContent,
+  parseReviewPrNumber,
   parseReviewDiffRef,
   parseVerificationDiffRef,
   truncate,
@@ -35,6 +36,11 @@ describe("parseReviewDiffRef", () => {
 
   it("parses a short commit hash", () => {
     expect(parseReviewDiffRef("/review abc1234")).toBe("abc1234");
+  });
+
+  it("does not treat a numeric PR argument as a git diff ref", () => {
+    expect(parseReviewDiffRef("/review 123")).toBeUndefined();
+    expect(parseReviewDiffRef("/review 123 focus on regressions")).toBeUndefined();
   });
 
   it("returns undefined for bare /review with no argument", () => {
@@ -69,6 +75,19 @@ describe("parseReviewDiffRef", () => {
     expect(parseReviewDiffRef("/review https://github.com/openai/codex/pull/123")).toBe(
       "https://github.com/openai/codex/pull/123",
     );
+  });
+});
+
+describe("parseReviewPrNumber", () => {
+  it("parses numeric PR arguments from /review", () => {
+    expect(parseReviewPrNumber("/review 123")).toBe("123");
+    expect(parseReviewPrNumber("/review 123 focus on regressions")).toBe("123");
+  });
+
+  it("returns undefined for non-numeric review targets", () => {
+    expect(parseReviewPrNumber("/review main...HEAD")).toBeUndefined();
+    expect(parseReviewPrNumber("/review feature/my-branch")).toBeUndefined();
+    expect(parseReviewPrNumber("/verify 123")).toBeUndefined();
   });
 });
 

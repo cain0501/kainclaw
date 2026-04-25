@@ -692,6 +692,107 @@ describe("inspectionSessionHost", () => {
     });
   });
 
+  it("treats numeric review arguments as PR numbers and strips them from guidance", async () => {
+    getOriginalTaskForInspectionMock.mockReturnValue("Review pull request");
+    runReviewAgentMock.mockResolvedValue("review report");
+    runBuiltInInspectionSessionMock.mockImplementationOnce(async options => {
+      expect(options.taskContextMetadata).toMatchObject({
+        reviewPrNumber: "123",
+      });
+      expect(options.taskContextMetadata?.diffRef).toBeUndefined();
+
+      const result = await options.runAgentSession({
+        provider: { runStep: vi.fn() },
+        tools: [],
+        toolContext: {} as any,
+        messages: [],
+        workspaceRoot: "E:\\claudecodejingiang\\vscode-extension",
+        originalTask: "Review pull request",
+        extraGuidance: "focus on auth regressions",
+      } as any);
+
+      return {
+        taskId: "review-pr-number",
+        result,
+      };
+    });
+
+    await runReviewInspectionSession({
+      commandText: "/review 123 focus on auth regressions",
+      workspaceRoot: "E:\\claudecodejingiang\\vscode-extension",
+      config: {
+        type: "anthropic",
+        apiKey: "secret",
+        model: "claude-sonnet",
+      },
+      effortLevel: undefined,
+      runtime: {
+        getToolContext: () => ({ mode: "all" } as any),
+      },
+      tools: [],
+      conversationHistory: [],
+      sessionMessages: [
+        { role: "user", content: "Review pull request" },
+      ],
+      backgroundTaskHost: {
+        runBuiltInAgentSession: runBuiltInInspectionSessionMock,
+      } as any,
+      findActiveBuiltInAgentTask: async () => undefined,
+      createProvider: () => ({ runStep: vi.fn() } as any),
+    });
+
+    expect(runReviewAgentMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        prNumber: "123",
+        diffRef: undefined,
+        extraGuidance: "focus on auth regressions",
+      }),
+    );
+  });
+
+  it("prefers explicit review promptForTask over session fallback text", async () => {
+    getOriginalTaskForInspectionMock.mockReturnValue("No original task found in the current conversation.");
+    runBuiltInInspectionSessionMock.mockImplementationOnce(async options => {
+      expect(options.promptForTask).toBe("Review the current workspace/project changes.");
+
+      return {
+        taskId: "review-explicit-prompt",
+        result: "review report",
+      };
+    });
+
+    const result = await runReviewInspectionSession({
+      commandText: "/review",
+      workspaceRoot: "E:\\claudecodejingiang\\vscode-extension",
+      promptForTask: "Review the current workspace/project changes.",
+      config: {
+        type: "anthropic",
+        apiKey: "secret",
+        model: "claude-sonnet",
+      },
+      effortLevel: undefined,
+      runtime: {
+        getToolContext: () => ({ mode: "all" } as any),
+      },
+      tools: [],
+      conversationHistory: [],
+      sessionMessages: [
+        { role: "user", content: "/review" },
+      ],
+      backgroundTaskHost: {
+        runBuiltInAgentSession: runBuiltInInspectionSessionMock,
+      } as any,
+      findActiveBuiltInAgentTask: async () => undefined,
+      createProvider: () => ({ runStep: vi.fn() } as any),
+    });
+
+    expect(getOriginalTaskForInspectionMock).not.toHaveBeenCalled();
+    expect(result).toEqual({
+      taskId: "review-explicit-prompt",
+      report: "review report",
+    });
+  });
+
   it("keeps diffRef and strips it from review extra guidance for mixed commands", async () => {
     getOriginalTaskForInspectionMock.mockReturnValue("Review recent implementation");
     runReviewAgentMock.mockResolvedValue("review report");

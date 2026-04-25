@@ -306,6 +306,51 @@ describe("inspectionTaskHost helpers", () => {
     expect(runAgentSession).toHaveBeenCalledTimes(1);
   });
 
+  it("strips review PR number from extraGuidance for Claude-compatible review commands", async () => {
+    const runBuiltInAgentSession = vi.fn(async (options: any) => {
+      expect(options.taskDescription).toBe("Review agent: focus on auth regressions");
+      expect(options.taskMetadata.metadata).toMatchObject({
+        reviewPrNumber: "123",
+        extraGuidance: "focus on auth regressions",
+        commandText: "/review 123 focus on auth regressions",
+      });
+      return await options.run(
+        { onToolStart: () => undefined, onToolEnd: () => undefined },
+        new AbortController().signal,
+      );
+    });
+    const runAgentSession = vi.fn(async (options: any) => {
+      expect(options.extraGuidance).toBe("focus on auth regressions");
+      return "review report";
+    });
+
+    const result = await runBuiltInInspectionSession({
+      agentType: "review",
+      agentLabel: "Review agent",
+      taskIdPrefix: "review",
+      commandPrefix: "/review",
+      commandText: "/review 123 focus on auth regressions",
+      workspaceRoot: "E:\\claudecodejingiang\\vscode-extension",
+      config: { type: "anthropic", apiKey: "secret", model: "claude-sonnet" },
+      effortLevel: undefined,
+      tools: [],
+      runtimeToolContext: {} as any,
+      conversationHistory: [{ role: "user", content: "Review PR" }],
+      sessionMessages: [{ role: "user", content: "Review PR" }],
+      taskContextMetadata: { reviewPrNumber: "123" },
+      backgroundTaskHost: { runBuiltInAgentSession } as any,
+      findActiveBuiltInAgentTask: async () => undefined,
+      createProvider: () => ({ runStep: vi.fn() }),
+      selectTools: tools => tools,
+      selectToolContext: context => context,
+      runAgentSession,
+      finalizeSuccess: report => ({ status: "completed", result: report, output: report }),
+    });
+
+    expect(result.result).toBe("review report");
+    expect(runAgentSession).toHaveBeenCalledTimes(1);
+  });
+
   it("strips an explicit separator from non-diff inspection guidance", async () => {
     const runBuiltInAgentSession = vi.fn(async (options: any) => {
       expect(options.taskDescription).toBe("Review agent: focus on auth regressions");

@@ -68,6 +68,9 @@ type InspectionUiText = {
   verificationAbortActivityDetail: string;
   verificationAbortReply: string;
   verificationDuplicateActivityDetail: string;
+  reviewNoOriginalTask: string;
+  reviewWorkspaceFallbackTask: string;
+  reviewGreetingOnlyTask: (originalTask: string) => string;
   reviewBlockedByPlanMode: string;
   reviewPhaseLabel: string;
   reviewPhaseDetail: string;
@@ -94,6 +97,11 @@ function getInspectionUiText(locale: InspectionLocale): InspectionUiText {
       verificationAbortActivityDetail: "验证已取消",
       verificationAbortReply: "验证已在完成前取消。",
       verificationDuplicateActivityDetail: "验证已在运行",
+      reviewNoOriginalTask:
+        "当前对话里还没有可审查的原始任务或改动目标。先给我一个真实实现任务、PR/diff 范围，或者在当前项目里完成改动后再运行 `/review`。",
+      reviewWorkspaceFallbackTask: "审查当前工作区项目改动",
+      reviewGreetingOnlyTask: originalTask =>
+        `当前原始任务 \`${originalTask}\` 只是问候/泛聊天，不是可审查的实现请求或 PR/diff 目标。本次不进入代码审查流程。请先给出真实实现任务、PR 或 diff 范围后再运行 \`/review\`。`,
       reviewBlockedByPlanMode:
         "Plan Mode 仍在开启中，先退出 Plan Mode 再运行 `/review`。",
       reviewPhaseLabel: "正在进行审查",
@@ -120,6 +128,11 @@ function getInspectionUiText(locale: InspectionLocale): InspectionUiText {
     verificationAbortActivityDetail: "Verification cancelled",
     verificationAbortReply: "Verification was cancelled before completion.",
     verificationDuplicateActivityDetail: "Verification already running",
+    reviewNoOriginalTask:
+      "There is no reviewable original task or change target in this conversation yet. Give me a real implementation task, PR/diff range, or finish workspace changes before running `/review`.",
+    reviewWorkspaceFallbackTask: "Review the current workspace/project changes.",
+    reviewGreetingOnlyTask: originalTask =>
+      `The original task \`${originalTask}\` is only a greeting / generic chat request, not a reviewable implementation request or PR/diff target. Review will not run yet. Give me a real implementation task, PR, or diff range before running \`/review\`.`,
     reviewBlockedByPlanMode:
       "Plan Mode is still active. Exit Plan Mode before running `/review`.",
     reviewPhaseLabel: "Running review",
@@ -144,6 +157,7 @@ export async function handleVerificationPromptCommand(
       tools: ToolDefinition[];
       runtimeOptions: ProviderRuntimeOptions;
       effortLevel: EffortLevel | undefined;
+      promptForTask?: string;
       onToken?: (token: string) => void;
       onToolStart?: (
         toolName: string,
@@ -267,6 +281,7 @@ export async function handleReviewPromptCommand(
       tools: ToolDefinition[];
       runtimeOptions: ProviderRuntimeOptions;
       effortLevel: EffortLevel | undefined;
+      promptForTask?: string;
       onToken?: (token: string) => void;
       onToolStart?: (
         toolName: string,
@@ -284,6 +299,24 @@ export async function handleReviewPromptCommand(
 ): Promise<boolean> {
   const locale = inferInspectionLocale(options.commandText, options.sessionMessages);
   const uiText = getInspectionUiText(locale);
+  const inspectionPrompt = findOriginalTaskForInspection(options.sessionMessages);
+  const promptForTask = inspectionPrompt
+    ?? (await hasWorkspaceProjectEvidence(options.workspaceRoot)
+      ? uiText.reviewWorkspaceFallbackTask
+      : null);
+  if (options.commandText.startsWith("/review") && !promptForTask) {
+    await options.recordAssistantReply(uiText.reviewNoOriginalTask, false);
+    return true;
+  }
+
+  if (inspectionPrompt && isGreetingOnlyInspectionTask(inspectionPrompt)) {
+    await options.recordAssistantReply(
+      uiText.reviewGreetingOnlyTask(inspectionPrompt),
+      false,
+    );
+    return true;
+  }
+
   const commandResult = await runInspectionCommandFlow({
     commandText: options.commandText,
     commandPrefix: "/review",
@@ -309,6 +342,7 @@ export async function handleReviewPromptCommand(
     runSession: hooks =>
       options.runReviewSession({
         commandText: options.commandText,
+        ...(promptForTask ? { promptForTask } : {}),
         workspaceRoot: options.workspaceRoot,
         config: options.config,
         envMap: options.envMap,
