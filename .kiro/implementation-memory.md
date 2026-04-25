@@ -470,20 +470,21 @@
 - Electron `main.ts` 当前会真实启动 `LocalBridgeRuntime`。
 - Local Bridge 状态会并入 Electron 状态发布。
 
-### 2. Office 当前仍是最小只读链
+### 2. Word Add-in 已进入写回阶段（2026-04-27，Claude）
 
-- `office-addin/word/` 已有最小 Word Add-in skeleton。
-- `src/officeBridge/` 当前稳定落地的是：
-  - `bridgeClient.ts`
-  - `wordDocumentContext.ts`
-  - `wordQuestionAnswer.ts`
-  - `wordSelectionContext.ts`
-  - `wordSelectedContextView.ts`
-- 当前重点仍是：
-  - 选区上下文
-  - citation 命中
-  - 只读问答
-- 还不是完整编辑产品流。
+- `office-addin/word/src/documentEditor.ts`：
+  - `replaceSelection` 直接替换选中文字（继承段落样式）。
+  - `replaceSelectionWithTracking` 以 Track Changes 模式替换，完成后关闭追踪。
+  - `getSelectedText` 读取当前选中文字，作为 AI 编辑的输入来源。
+- `office-addin/word/src/commentHandler.ts`：
+  - `getOpenComments` 读取所有未解决批注（含锚定文字）。
+  - `resolveComment` 替换锚定范围文字并回复批注（非破坏性，作者可手动决定是否接受）。
+- taskpane 三标签页：
+  - 问答标签：原有 Q&A + citation 跳转保留。
+  - 编辑标签：选区 + 意图输入 → AI 生成替换文字 → 直接替换或 Track Changes 替换。
+  - 批注标签：加载所有批注 → AI 一键处理（改文字 + 回复）。
+- 打包：`package.json` + `webpack.config.js` + `tsconfig.json` 已落地，可在 `office-addin/word/` 执行 `npm install && npm run dev` 后 sideload。
+- `src/officeBridge/` 层面保持不变（bridgeClient / wordDocumentContext / wordQuestionAnswer / wordSelectionContext / wordSelectedContextView）。
 
 ## 当前仍应诚实登记的未完成项
 

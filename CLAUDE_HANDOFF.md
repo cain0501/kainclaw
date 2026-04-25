@@ -12,7 +12,7 @@
   - `1019` 个测试通过
 - 本批新增收口项（`79a8f82`、`022c0ef`）：
   - `79a8f82`：LSP formatter malformed 响应防御、`normalizeLspOperation`（documentSymbol/workspaceSymbol 官方单数名）、provider unavailable 与空结果区分、`getBuiltInToolDefinitions({ lspAvailable })` 替换静态 `toolDefinitions`、ToolSearch 搜索合同按 Claude ToolSearchTool 源码收口。
-  - `022c0ef`：Word Add-in 写回能力——`documentEditor.ts`（replaceSelection / Track Changes）、`commentHandler.ts`（批注读取与 AI 处理）、taskpane 三标签页（问答 / 编辑 / 批注）、manifest.xml VersionOverrides 功能区按钮、webpack + tsconfig 打包骨架。
+  - `022c0ef`：Word Add-in 写回能力——`documentEditor.ts`（replaceSelection / Track Changes）、`commentHandler.ts`（批注读取与 AI 处理）、taskpane 三标签页（问答 / 编辑 / 批注）、manifest.xml VersionOverrides 功能区按钮、webpack + tsconfig 打包骨架。（2026-04-27，Claude）
 - 本批已同步的收口项覆盖 `890510a..00076dc`，不只包含最后一次 `TaskOutput` 修复：
   - `890510a`：同步 Claude 源码优先规则、handoff、gap analysis、source-reference 与编码约束。
   - `b95c258`：Electron Markdown / `/verify` report 渲染按 Claude `marked.lexer()` token 模型重建，并 vendor `marked` 运行时。
@@ -254,7 +254,7 @@
 - `src/officeBridge/` 已有完整桥接层：
   - `bridgeClient.ts`、`wordDocumentContext.ts`、`wordQuestionAnswer.ts`
   - `wordSelectionContext.ts`、`wordSelectedContextView.ts`
-- 当前已可用能力：
+- 当前已可用能力（写回部分 2026-04-27，Claude）：
   - 文档问答（citation 可点击跳转）
   - 选区感知上下文
   - AI 写回选中文字（直接替换 / Track Changes）
