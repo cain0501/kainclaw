@@ -401,7 +401,10 @@ function normalizeState(
             ? preservesRunningStateAfterRestart
               ? task.status
               : "lost"
-            : task.status === "completed" || task.status === "cancelled" || task.status === "lost"
+            : task.status === "completed" ||
+                task.status === "cancelled" ||
+                task.status === "killed" ||
+                task.status === "lost"
               ? task.status
               : "failed";
 

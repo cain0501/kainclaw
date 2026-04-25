@@ -435,6 +435,44 @@ describe("PersistentTaskRuntimeStore background tasks", () => {
     expect(task && isBackgroundTaskLostAfterRestart(task)).toBe(false);
   });
 
+  it("preserves Claude-style killed remote background tasks across reload", async () => {
+    const storageRoot = await fs.mkdtemp(path.join(os.tmpdir(), "cain-task-runtime-remote-"));
+    tempDirs.push(storageRoot);
+    const store = new PersistentTaskRuntimeStore(storageRoot);
+    const runtime = store.getConversationRuntime(
+      "E:\\claudecodejingiang\\vscode-extension",
+      "remote-killed",
+    );
+
+    await runtime.registerBackgroundTask({
+      id: "remote-killed",
+      taskType: "remote_agent",
+      status: "killed",
+      description: "remote review task",
+      command: "Review PR #42 remotely",
+      metadata: {
+        remoteTaskType: "ultrareview",
+        sessionId: "sess-killed",
+      },
+      output: "remote task stopped",
+      result: "Stopped by TaskStop.",
+    });
+
+    const reloadedRuntime = new PersistentTaskRuntimeStore(storageRoot).getConversationRuntime(
+      "E:\\claudecodejingiang\\vscode-extension",
+      "remote-killed",
+    );
+    const task = await reloadedRuntime.getBackgroundTask("remote-killed");
+
+    expect(task).toMatchObject({
+      id: "remote-killed",
+      taskType: "remote_agent",
+      status: "killed",
+      result: "Stopped by TaskStop.",
+    });
+    expect(task && isBackgroundTaskLostAfterRestart(task)).toBe(false);
+  });
+
   it("persists structured task timestamps and updates updatedAt on mutation", async () => {
     const runtime = await createRuntime();
 

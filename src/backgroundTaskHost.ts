@@ -63,7 +63,7 @@ export type ReusableBackgroundCommand = {
 
 export type StoppedActiveBackgroundTask = {
   taskId: string;
-  taskType: Extract<BackgroundTaskType, "local_bash" | "local_agent" | "built_in_agent">;
+  taskType: BackgroundTaskType;
   command: string;
 };
 
@@ -90,6 +90,7 @@ type BackgroundTaskHostOptions = {
     request: DetachedBackgroundCommandLaunchRequest,
   ) => Promise<DetachedBackgroundCommandLaunchResult>;
   stopDetachedProcess?: (pid: number) => Promise<void>;
+  archiveRemoteSession?: (sessionId: string) => Promise<void>;
 };
 
 export class BackgroundTaskHost {
@@ -131,12 +132,43 @@ export class BackgroundTaskHost {
       return undefined;
     }
 
-    const task = await this.options.getTaskRuntime(workspaceRoot).getBackgroundTask(taskId);
-    const detached = task
-      ? parseDetachedBackgroundTaskMetadata(task.metadata)
-      : null;
+    const taskRuntime = this.options.getTaskRuntime(workspaceRoot);
+    const task = await taskRuntime.getBackgroundTask(taskId);
+    if (!task) {
+      return undefined;
+    }
 
-    if (!task || !detached) {
+    if (task.taskType === "remote_agent") {
+      if (task.status !== "running") {
+        return undefined;
+      }
+
+      if (!this.options.archiveRemoteSession) {
+        return undefined;
+      }
+
+      const sessionId =
+        typeof task.metadata?.sessionId === "string" && task.metadata.sessionId.trim()
+          ? task.metadata.sessionId.trim()
+          : undefined;
+      if (sessionId) {
+        void this.options.archiveRemoteSession(sessionId).catch(() => undefined);
+      }
+
+      await taskRuntime.updateBackgroundTask(taskId, {
+        status: "killed",
+        result: "Stopped by TaskStop.",
+      });
+
+      return {
+        taskId,
+        taskType: "remote_agent",
+        command: task.command ?? task.description,
+      };
+    }
+
+    const detached = parseDetachedBackgroundTaskMetadata(task.metadata);
+    if (!detached) {
       return undefined;
     }
 
@@ -445,6 +477,8 @@ function buildBuiltInAgentTerminalOutputMarker(
       return detail ? `[failed] ${detail}` : "[failed] Task failed.";
     case "cancelled":
       return detail ? `[cancelled] ${detail}` : "[cancelled] Task cancelled.";
+    case "killed":
+      return detail ? `[killed] ${detail}` : "[killed] Task stopped.";
     case "pending":
     case "running":
     case "completed":

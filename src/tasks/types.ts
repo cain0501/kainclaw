@@ -12,6 +12,7 @@ export type BackgroundTaskStatus =
   | "completed"
   | "failed"
   | "lost"
+  | "killed"
   | "cancelled";
 
 export type TaskRecord = {

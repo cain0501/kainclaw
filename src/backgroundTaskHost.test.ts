@@ -347,6 +347,47 @@ describe("backgroundTaskHost helpers", () => {
     await expect(fs.readFile(detached!.cancelPath!, "utf8")).resolves.toBe("cancelled");
   });
 
+  it("stops remote agent tasks only through a configured archive adapter", async () => {
+    const storageRoot = await createStorageRoot("cain-background-host-");
+    const runtime = await createTaskRuntime(storageRoot);
+    const archiveRemoteSession = vi.fn(async () => undefined);
+    const host = new BackgroundTaskHost({
+      storageRoot,
+      getTaskRuntime: () => runtime,
+      archiveRemoteSession,
+    });
+
+    await runtime.registerBackgroundTask({
+      id: "remote-stop",
+      taskType: "remote_agent",
+      status: "running",
+      description: "remote review task",
+      command: "Review PR #42 remotely",
+      metadata: {
+        remoteTaskType: "ultrareview",
+        sessionId: "sess-remote-stop",
+      },
+      output: "remote review started",
+    });
+
+    const stopped = await host.stopTask(
+      "remote-stop",
+      "E:\\claudecodejingiang\\vscode-extension",
+    );
+    const storedTask = await runtime.getBackgroundTask("remote-stop");
+
+    expect(stopped).toEqual({
+      taskId: "remote-stop",
+      taskType: "remote_agent",
+      command: "Review PR #42 remotely",
+    });
+    expect(archiveRemoteSession).toHaveBeenCalledWith("sess-remote-stop");
+    expect(storedTask).toMatchObject({
+      status: "killed",
+      result: "Stopped by TaskStop.",
+    });
+  });
+
   it("uses Claude-style local_bash task IDs for background commands by default", async () => {
     const storageRoot = await createStorageRoot("cain-background-host-");
     const runtime = await createTaskRuntime(storageRoot);
