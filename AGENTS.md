@@ -19,7 +19,7 @@
 它还约束我怎么工作：
 
 - 做功能前先看规格和现状，不要凭记忆乱改
-- 官方 Claude Code 对齐优先，Cain 扩展第二
+- 官方 Claude Code 对齐优先，kainclaw 扩展第二
 - 能复用官方源码，就优先复用，不要平行重写
 - 改动尽量小、可审查、可回退
 - 高风险区域要谨慎：
@@ -61,6 +61,19 @@
 - Browser automation via Playwright
 - Validation and schema parsing via `zod`
 
+## Encoding Hygiene
+
+- All user-visible text files must use `UTF-8 without BOM`.
+- Do not use terminal mojibake alone to judge file corruption. Verify suspect files by decoding their raw bytes as UTF-8.
+- If a text file has already been corrupted by bad transcoding, do not continue incremental edits on the mojibake content. Rewrite the affected section or file from clean UTF-8 text.
+- Treat these as encoding high-risk files:
+  - `CLAUDE_HANDOFF.md`
+  - `.kiro/official-gap-analysis.md`
+  - `.kiro/implementation-memory.md`
+  - `electron/renderer/index.html`
+  - any `.ts` / `.md` / `.html` file containing Chinese user-visible copy
+- After editing a high-risk text file, run a script-level UTF-8 decode check before handoff or commit.
+
 ## Codex Working Boundary
 
 - Implement against the current spec; do not rewrite product logic on your own.
@@ -71,12 +84,20 @@
 - Prefer the smallest change that satisfies the approved scope.
 - Scope smell: if a task is drifting beyond about 8 files, stop and re-check whether the change is still aligned with spec.
 
+## Claude Source Parity Rule
+
+- Strong rule: if a feature, behavior, workflow, prompt contract, renderer behavior, tool/runtime path, or session lifecycle exists in the local Claude Code source, inspect the Claude source first and replicate its logic as the baseline.
+- Only add thin KainClaw adapters for host differences such as VS Code, Electron, storage paths, IPC, or product-specific UI wiring.
+- Do not replace Claude-covered behavior with prompt-only constraints, regex guesses, or parallel homegrown implementations when source logic is available.
+- KainClaw-specific engineering standards apply only to capabilities that do not exist in the Claude source, or to clearly isolated kainclaw extensions layered after the Claude-compatible baseline.
+- When fixing repeated regressions in a Claude-covered area, treat the upstream source behavior as the acceptance oracle before writing or changing tests.
+
 ## Required Workflow
 
 ### 1. Before starting implementation
 
 - Read `.kiro/specs/v1-product-spec.md` and confirm the current task matches the latest accepted spec.
-- Read `.kiro/official-gap-analysis.md` when the work is part of official-Claude capability migration, and keep "official parity first, Cain extensions second" as the decision rule.
+- Read `.kiro/official-gap-analysis.md` when the work is part of official-Claude capability migration, and keep "official parity first, kainclaw extensions second" as the decision rule.
 - Keep one more product constraint in view: "VS Code is for local testing; Windows program is the real product target."
 - Review existing code paths before editing; prefer reuse over adding new parallel logic.
 - Run the equivalent of `/plan-eng-review` before larger changes:
@@ -99,7 +120,7 @@ Note:
 ### 2. During implementation
 
 - Keep changes tightly scoped to the approved task.
-- Prefer copying official source modules directly over rewriting them. Only add thin Cain/VS Code adapters where environment differences make direct reuse impossible.
+- Prefer copying official source modules directly over rewriting them. Only add thin kainclaw/VS Code adapters where environment differences make direct reuse impossible.
 - Do not create parallel homegrown implementations of an official capability when the upstream source can be copied or lightly adapted.
 - Favor boring, reviewable code over clever abstractions. If a refactor increases indirection without reducing risk, do not do it.
 - Avoid VS Code-only coupling when it would make later Windows packaging harder. Prefer host abstractions and reusable runtime modules over extension-specific entanglement.

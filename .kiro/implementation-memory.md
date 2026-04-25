@@ -1,49 +1,64 @@
 # 实现记忆
 
-## Current Override - 2026-04-25
+## 当前覆盖说明 / Current Override - 2026-04-25
 
-- Electron shell command wiring rule:
-  - If a capability already exists in `src/` as a mature host/runtime path, prefer wiring the desktop shell back into that path instead of inventing a desktop-only rewrite.
-- This round confirmed a concrete example:
-  - `/todo` can be restored by giving the Electron shell a real task runtime in `ToolContext`.
-  - `/compact` can be restored by reusing `handleCompactCommandWithHost(...)`.
-  - `/review` and `/verify` can be restored by reusing `handleReviewCommandWithHost(...)` and `handleVerificationCommandWithHost(...)`.
-- Electron shell conversation hygiene rule:
-  - User-facing slash-command replies should still be shown and persisted in the session,
-  - but replies that are not meant to become future model context must be marked and filtered out of later provider history.
-  - Internal follow-up strings for background inspection retrieval, such as `Review task saved as ...` / `TaskOutput`, should stay hidden from desktop-shell end users unless an operator/debug surface explicitly asks for them.
-- This round validated:
+- Electron shell 命令接线规则：
+  - 如果某个能力已经在 `src/` 里有成熟的 host/runtime 路径，优先把桌面壳接回那条路径，不要发明 desktop-only 的平行重写。
+- 本轮确认的具体例子：
+  - `/todo` 可以通过给 Electron shell 的 `ToolContext` 接入真实 task runtime 来恢复。
+  - `/compact` 可以复用 `handleCompactCommandWithHost(...)` 恢复。
+  - `/review` 和 `/verify` 可以复用 `handleReviewCommandWithHost(...)` 与 `handleVerificationCommandWithHost(...)` 恢复。
+- Electron shell 会话卫生规则：
+  - 面向用户的斜杠命令回复仍然要展示，并持久化进当前 session。
+  - 但不应该进入后续模型上下文的回复，必须打标并从后续 provider history 里过滤掉。
+  - `Review task saved as ...` / `TaskOutput` 这类 background inspection retrieval 的内部 follow-up 字符串，除非进入 operator/debug 界面，否则不要展示给桌面壳终端用户。
+- 本轮验证过：
   - `npm test`
   - `npm run check`
   - `npm run build`
-- Current verified baseline after this round:
-  - `144` test files
-  - `940` tests passed
-- `npm run build:electron` was not rerun in this round by the agent.
-- Electron routing rule:
-  - Slash commands must be recognized before chat/image intent inference.
-  - Otherwise recent generated-image context will incorrectly hijack commands such as `/compact` into image-edit flows.
-- Electron workspace resolution rule:
-  - The selected workspace is the user-selected folder, not the git repo root.
-  - Git repo detection is a separate inspection-only concern. Do not globally rewrite the workspace just because a nested repo was found.
-  - If the selected folder is a collaboration parent folder with one nested repo, `/review` and `/verify` may resolve that repo for git diff purposes, but ordinary chat/runtime flows should stay on the selected workspace.
-  - If Electron cannot identify a unique repo, `/review` and `/verify` must warn that local git diff context is degraded instead of pretending inspection still has a trustworthy repo root.
-  - For `/review` and `/verify`, inspection repo resolution must be applied before provider resolution, MCP tool loading, runtime construction, and command dispatch. Do not wait until only the final handler boundary to switch roots.
-  - Electron IPC workspace updates must support clearing the workspace back to `unset`; empty-string updates are valid state transitions, not no-ops.
-- Electron workspace UI rule:
-  - Keep normal workspace resolution quiet. Auto-descend to the real repo should usually just update the effective workspace, not open a large diagnostic panel.
-  - Reserve expanded workspace UI for exceptional states: non-git degradation, missing paths, or multiple candidate repos.
-  - When multiple nested repo candidates exist, expose clickable candidate repo choices in the shell instead of making the user manually retry path guesses.
-  - Workspace badges should show the directory label directly. Do not prepend technical status tags such as `需确认` in the default user-facing shell.
-- Electron runtime consistency rule:
-  - Electron chat/runtime, MCP workspace display, and Local Bridge runtime context should all consume the selected workspace path.
-  - Only git-sensitive inspection flows should switch to separately resolved repo context.
-- Built-in inspection language rule:
-  - `/review` and `/verify` should follow the user's language by default.
-  - If the user is Chinese, write the explanatory body in Simplified Chinese.
-  - `/verify` still keeps the required English structural labels and the literal `VERDICT:` line.
+  - `npm run build:electron`
+  - `npm run check:electron`
+- 当前验证基线：
+  - `145` 个测试文件
+  - `970` 个测试通过
+- Electron 路由规则：
+  - 必须先识别斜杠命令，再做普通聊天 / 图片意图推断。
+  - 否则最近生成图上下文会错误劫持 `/compact` 这类命令，把它们误路由到图片编辑流程。
+- Electron workspace 解析规则：
+  - 选中的 workspace 是用户选中的文件夹，不是 git repo root。
+  - Git repo detection 是单独的 inspection-only 事项；不能因为发现嵌套 repo 就全局改写 workspace。
+  - 如果选中的是协作父目录，并且里面只有一个嵌套 repo，`/review` 和 `/verify` 可以为了 git diff 解析那个 repo；但普通 chat/runtime 流程仍应留在用户选中的 workspace。
+  - 如果 Electron 无法识别唯一 repo，`/review` 和 `/verify` 必须提示本地 git diff 上下文降级，不能假装 inspection 仍有可信 repo root。
+  - 对 `/review` 和 `/verify`，inspection repo resolution 必须在 provider resolution、MCP tool loading、runtime construction 和 command dispatch 之前完成；不能拖到最终 handler 边界才切 root。
+  - Electron IPC 的 workspace 更新必须支持清空回 `unset`；空字符串更新是合法状态转换，不是 no-op。
+- Electron workspace UI 规则：
+  - 正常 workspace 解析要保持安静；自动下降到真实 repo 时，通常只更新 effective workspace，不打开大块诊断面板。
+  - 只有异常状态才展开 workspace UI，例如非 Git 降级、路径缺失、多个候选 repo。
+  - 多个嵌套 repo 候选同时存在时，要在 shell 里暴露可点击候选项，不要让用户手动反复猜路径。
+  - workspace badge 应直接显示目录名；默认用户界面不要加 `需确认` 这类技术状态前缀。
+- Electron runtime 一致性规则：
+  - Electron chat/runtime、MCP workspace 展示、Local Bridge runtime context 都应使用用户选中的 workspace path。
+  - 只有 git-sensitive inspection flows 才切到单独解析出的 repo context。
+- 内置 inspection 语言规则：
+  - `/review` 和 `/verify` 默认应跟随用户语言。
+  - 如果用户使用中文，说明主体用简体中文。
+  - `/verify` 仍保留必须的英文结构标签和字面量 `VERDICT:` 行。
+- 强源码对齐规则：
+  - 如果本地 Claude Code 源码包含目标功能、行为、工作流、prompt contract、renderer 行为、tool/runtime 路径或 session 生命周期，必须先检查并复刻源码逻辑。
+  - 不要用 prompt-only 约束、regex 猜测或平行自研实现替代 Claude 已覆盖的行为。
+  - KainClaw-specific 标准只用于 Claude 没有等价行为的区域，或用于 Claude-compatible baseline 之后的 VS Code / Electron / storage / IPC 薄适配。
+- Electron Markdown renderer 规则：
+  - Markdown 行为的 Claude 源码参考是 `E:\claudecodejingiang\src\components\Markdown.tsx` 和 `E:\claudecodejingiang\src\utils\markdown.ts`。
+  - Electron renderer 应以 Claude 的 `marked.lexer()` 块级 token 模型为 baseline，不应再使用 regex/line-parser Markdown 实现作为主路径。
+  - 除非已经明确审查 raw HTML passthrough / XSS 风险，否则不要在 sandbox renderer 里调用 `marked.parse()`；当前实现是 token-render，并转义 raw HTML。
+  - `marked` 是 renderer 的运行时依赖，`build:electron` 必须把 `node_modules/marked/lib/marked.umd.js` 复制到 `dist-electron/electron/renderer/vendor/marked.umd.js`。
+- `/verify` 报告渲染规则：
+  - Verification reports 是结构化报告，不是普通 Markdown。
+  - 通过 `### Check:`、`Command run:`、`Output observed:`、`Result:`、`VERDICT:` 这些必需标签识别。
+  - `Command run` 和 `Output observed` 要按原始捕获文本处理，并渲染为转义后的 `<pre><code>` 块。
+  - 不能依赖命令 / 输出里的 Markdown 代码围栏是否平衡；README 输出和嵌套代码围栏都必须按字面量保留。
 
-更新时间：2026-04-24
+更新时间：2026-04-25
 
 ## 使用规则
 
@@ -74,12 +89,13 @@
 
 ### 3. 验证基线登记
 
-- 当前登记基线：`137` 个测试文件，`891` 个测试通过。
+- 当前登记基线：`145` 个测试文件，`970` 个测试通过。
 - 当前登记通过命令：
   - `npm test`
   - `npm run check`
   - `npm run build`
   - `npm run build:electron`
+  - `npm run check:electron`
 - 当前高风险宿主入口仍然是 `src/extension.ts`。
 
 ### 4. 当前核心能力分层
@@ -101,7 +117,7 @@
 - Custom Agents registry
 - Skills registry
 
-#### 4.2 Cain 扩展能力
+#### 4.2 KainClaw 扩展能力
 
 - Auto skill generation
 - User modeling
@@ -174,11 +190,13 @@
   - Custom Agents / Skills registry
 - 这些能力在文档里必须始终可见，否则后续 agent 很容易误判项目重点。
 
-### 2. 官方对齐优先，Cain 扩展第二
+### 2. 官方对齐优先，KainClaw 扩展第二
 
 - 做产品和文档判断时，默认顺序是：
   - 先判断这是不是官方 Claude Code 主核心能力。
-  - 再判断这是不是 Cain 的扩展能力。
+  - 再判断这是不是 KainClaw 的扩展能力。
+- 如果官方 Claude Code 源码已经实现了该行为，源码逻辑就是验收基线；先复刻源码，再接 KainClaw 的 VS Code / Electron / storage / IPC 适配。
+- 不能用提示词约束、测试补丁或本地 regex 猜测替代官方源码里已经存在的行为。
 - 如果两者混在一起写，必须显式标出“主核心”和“扩展”。
 - 图片、Office、Local Bridge 这些扩展能力可以很重要，但不应覆盖主核心叙事。
 

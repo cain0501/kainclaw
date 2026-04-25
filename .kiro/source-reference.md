@@ -6,6 +6,20 @@
 
 ---
 
+## Appendix: Markdown / verification report rendering
+
+| Claude source file | Purpose |
+|------|------|
+| `src/components/Markdown.tsx` | Main Markdown renderer. Uses `marked.lexer()` to tokenize Markdown into block tokens before rendering. Streaming rendering advances only at safe block boundaries. |
+| `src/utils/markdown.ts` | Token formatting logic for headings, code blocks, lists, tables, links, blockquotes, and inline emphasis. |
+
+KainClaw parity notes:
+
+- Electron renderer Markdown must follow the Claude block-token model instead of regex-only Markdown rewriting.
+- `/verify` reports have an additional product protocol layer: `Command run` and `Output observed` are structured raw-output sections and must be rendered as escaped plain text, not re-parsed as Markdown.
+- If README or command output contains nested triple-backtick fences, the renderer must preserve them inside the output code block.
+
+
 ## 1. 多 Agent / Swarm 并行协作
 
 ### 1.1 Swarm 核心系统

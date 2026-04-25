@@ -1,29 +1,42 @@
-# Claude Handoff
+# Claude Handoff / Claude 交接说明
 
-## Current Override - 2026-04-25
+## 当前覆盖说明 / Current Override - 2026-04-25
 
-- This round validated:
+- `/verify` 报告渲染与 Electron Markdown 对齐修复后的验证基线：
   - `npm test`
   - `npm run check`
   - `npm run build`
-- Current verified baseline after this round:
-  - `144` test files
-  - `940` tests passed
-- `npm run build:electron` was not rerun in this round by the agent. Electron shell launch/runtime verification remains user-run.
-- Electron desktop shell now wires these slash commands back into the real `src/` host/runtime path:
+  - `npm run build:electron`
+  - `npm run check:electron`
+  - `145` 个测试文件
+  - `970` 个测试通过
+- 强实现规则已经生效：
+  - 如果本地 Claude Code 源码已经包含目标功能、行为、工作流、prompt contract、renderer 行为、tool/runtime 路径或 session 生命周期，必须先读取该源码，并把源码逻辑作为实现 baseline 复刻。
+  - KainClaw 自研标准只用于 Claude 源码没有覆盖的能力，或用于 Claude-compatible baseline 之上的薄适配层。
+- Electron Markdown 渲染已重新按 Claude 源码对齐：
+  - `E:\claudecodejingiang\src\components\Markdown.tsx`
+  - `E:\claudecodejingiang\src\utils\markdown.ts`
+  - 渲染器主路径现在使用 `marked.lexer()` 的块级 token 解析，不再把自研 regex/line parser 作为主逻辑。
+  - 原始 HTML 仍然会被转义；Electron 仍保持 `sandbox: true` 和 `nodeIntegration: false`。
+- `/verify` 报告渲染不再依赖 Markdown 代码围栏是否完整：
+  - 通过 `### Check:`、`Command run:`、`Output observed:`、`Result:`、`VERDICT:` 这些必需标签识别报告。
+  - `Command run` 和 `Output observed` 会作为结构化原始文本解析，并通过转义后的 `<pre><code>` 渲染。
+  - README 输出、嵌套代码围栏、四反引号围栏都会保持字面量显示，不再打断报告结构。
+- `marked` 现在是 Electron renderer 的运行时依赖；`npm run build:electron` 会把 `node_modules/marked/lib/marked.umd.js` 复制到 `dist-electron/electron/renderer/vendor/marked.umd.js`。
+- Electron 桌面壳已把这些斜杠命令接回真实的 `src/` host/runtime 路径：
   - `/todo`
   - `/compact`
   - `/review`
   - `/verify`
-- Electron workspace and git inspection semantics are now separated:
-  - the selected workspace remains the user-selected directory
-  - `/review` and `/verify` resolve git context separately as inspection-only repo context
-  - inspection repo resolution now happens before provider/runtime/MCP tool setup
-  - `workspace:set` now supports clearing back to `unset`
-- Electron user-facing review/verify copy was tightened:
-  - internal follow-up text such as `Review task saved as ...`, `TaskOutput`, and `task_id` is hidden from end users
-  - workspace badges show the directory label directly instead of technical tags such as `需确认`
-  - non-git folders no longer show a persistent “not a git repo” warning in the workspace area
+- Electron 的 workspace 与 git inspection 语义已经拆开：
+  - 选中的 workspace 仍然是用户选中的目录。
+  - `/review` 和 `/verify` 会单独解析 git 上下文，只作为 inspection repo context 使用。
+  - inspection repo 会在 provider/runtime/MCP tool 构建之前完成解析。
+  - `workspace:set` 现在支持清空回 `unset`。
+- Electron 面向用户的 review/verify 文案已经收口：
+  - `Review task saved as ...`、`TaskOutput`、`task_id` 这类内部 follow-up 文本不再展示给终端用户。
+  - workspace badge 直接显示目录名，不再显示 `需确认` 这类技术状态标签。
+  - 非 Git 目录不再在 workspace 区域常驻显示 “not a git repo” 警告。
 
 更新时间：2026-04-25
 
@@ -36,6 +49,8 @@
 - 核心能力仍然必须优先落在 `src/` 的 runtime / service / adapter 层。
 - Electron 只做桌面壳、权限、IPC、UI，不应继续承接新的核心业务逻辑。
 - 项目主线仍然是与官方 Claude Code 能力持续对齐；图片、Office、Local Bridge、User Modeling、Auto Skill Generation 都属于扩展能力。
+- 对 Claude 源码已有能力，必须先按源码逻辑复刻 baseline，再接 KainClaw 的 VS Code / Electron / storage / IPC 适配。
+- Electron Markdown 与 `/verify` report 渲染已按 Claude-style `marked.lexer()` token 基线收口；verification 的 command/output 是结构化 raw text，不再依赖 fence 平衡。
 
 ## 当前验证边界
 
@@ -43,8 +58,9 @@
   - `npm test`
   - `npm run check`
   - `npm run build`
-- 不默认执行：
+- 涉及 Electron 壳、renderer、Markdown、IPC 或桌面可见行为时还必须执行：
   - `npm run build:electron`
+  - `npm run check:electron`
 - Electron 启动与手测由用户执行：
   - `npm run start:electron`
 

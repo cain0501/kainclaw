@@ -1,179 +1,170 @@
-# KainClaw vs 瀹樻柟 Claude Code 鑳藉姏瀵硅处
+# KainClaw vs 官方 Claude Code 能力对账
 
-## Current Override - 2026-04-25
+## 当前覆盖说明 / Current Override - 2026-04-25
 
-- This round validated:
+- 本轮已验证：
   - `npm test`
   - `npm run check`
   - `npm run build`
-- Current verified baseline after this round:
-  - `144` test files
-  - `940` tests passed
-- `npm run build:electron` was not rerun in this round by the agent. Electron verification remains user-run.
-- Electron shell parity moved forward one step:
+  - `npm run build:electron`
+  - `npm run check:electron`
+- 当前自动化基线：
+  - `145` 个测试文件
+  - `970` 个测试通过
+- 强规则已收口：凡是 Claude 源码已有的功能、行为、工作流、prompt contract、renderer 行为、tool/runtime 路径或 session 生命周期，必须先读 Claude 源码并按其逻辑复刻基线；只有 Claude 源码没有的 KainClaw 扩展，才按 KainClaw 自研标准开发。
+- 本轮 Markdown / `/verify` 渲染修复已按 Claude 源码逻辑对齐：
+  - 参考 `E:\claudecodejingiang\src\components\Markdown.tsx`
+  - 参考 `E:\claudecodejingiang\src\utils\markdown.ts`
+  - Electron renderer 主路径改为 `marked.lexer()` 的块级 token 解析，不再以自研 regex/line parser 作为主逻辑
+  - 仍保留原始 HTML 转义、Electron sandbox 与 `nodeIntegration: false`
+- `/verify` 报告渲染器已从 Markdown 代码围栏依赖改为结构化报告渲染：
+  - 通过 `### Check:` / `Command run:` / `Output observed:` / `Result:` / `VERDICT:` 识别 verification report
+  - `Command run` 与 `Output observed` 作为原始文本解析并转义渲染到 `<pre><code>`
+  - README 输出、嵌套代码围栏、四反引号围栏不再破坏报告显示
+- `marked` 已加入依赖，`build:electron` 会把 `node_modules/marked/lib/marked.umd.js` 复制到 `dist-electron/electron/renderer/vendor/marked.umd.js`。
+- Electron 壳当前已重新接回并验证这些斜杠命令：
   - `/todo`
   - `/compact`
   - `/review`
   - `/verify`
-  are no longer desktop-shell hard blocks.
-- This is still shell wiring work, not a new capability family. The value is that the Electron validation shell now reuses existing `src/` task / compact / inspection host paths instead of rejecting these commands up front.
-- Electron workspace selection now has a parity-hardening layer for git-backed inspection:
-  - the selected workspace remains the user-chosen folder and is no longer globally rewritten to a repo root
-  - `/review` and `/verify` resolve git context separately, so a parent workspace with one nested repo can still yield the correct local diff
-  - when no unique repo can be identified, `/review` and `/verify` warn that they are running without reliable local git diff context
-- Follow-up hardening closed two Electron shell regressions:
-  - inspection commands now resolve provider/runtime/MCP tool context against the inspection repo root from the start of the command path, not only inside the final review/verify handler
-  - Electron IPC workspace updates can now clear the workspace back to `unset` instead of silently ignoring empty selections
-- Electron user-facing polish also moved forward:
-  - internal inspection follow-up strings such as `Review task saved as ...` are now suppressed in the desktop shell
-  - workspace badges no longer prepend technical status tags like `需确认`; they show the directory label directly
-- Electron workspace parity also moved forward at the UI/runtime boundary:
-  - the shell now keeps normal auto-descend mostly silent instead of always expanding a diagnostic workspace card
-  - only exceptional workspace states stay expanded in the UI, such as non-git degradation, missing paths, or multiple candidate repos
-  - when multiple nested repos are found, the shell still exposes candidate repo buttons instead of leaving the user to re-guess the correct path manually
-  - normal chat/runtime and Local Bridge flows now stay attached to the selected workspace path instead of inheriting git-only repo resolution
-- Electron slash-command routing now runs before image-intent routing, so command inputs are no longer misclassified as image-edit prompts when recent image context exists.
-- Review / verification output policy moved one step closer to expected product behavior: by default the body follows the user's language, and Chinese users should now receive Simplified Chinese explanatory text while `/verify` keeps the required English structural labels.
+- Electron 中斜杠命令的识别顺序已先于图片意图判断，避免 `/compact` 等命令被最近图片上下文误判成生图或改图请求。
+- `/review`、`/verify` 现在会默认跟随用户语言输出；中文用户会收到中文主体说明，`/verify` 仍保留必要的英文结构标签。
+- Electron 的 workspace 与 git repo 语义已经拆开：
+  - `workspace` 始终是用户选中的目录
+  - `/review`、`/verify` 等依赖 Git 的流程单独解析 inspection repo root
+  - inspection repo 解析会在 provider/runtime/MCP tool 上下文构建之前生效
+  - `workspace:set` 现在支持清空回 `unset`
+- Electron 用户态文案已收口：
+  - 不再显示 `Review task saved as ...` / `TaskOutput` / `task_id`
+  - workspace badge 直接显示目录名，不再显示 `需确认` 这类技术态标签
 
-鏇存柊鏃堕棿锛?026-04-24
+## 使用规则
 
-## 浣跨敤瑙勫垯
+- 这份文档只记录当前代码真实状态与对官方能力的对账结果，不再保留流水账式历史。
+- 判断优先级：
+  - 先看官方 Claude Code 主线能力是否已经对齐
+  - 再看 KainClaw 扩展能力是否独立成立
+- 文档保存格式统一为 `UTF-8 without BOM`。
 
-- 鏈枃浠跺彧鎵挎媴涓€浠朵簨锛氳褰曗€滃綋鍓嶄唬鐮佺姸鎬佲€濅笌鈥滃畼鏂?Claude Code 鐩爣鑳藉姏鈥濈殑瀵硅处缁撴灉銆?- 鍙淮鎶ょ姸鎬併€佽瘉鎹€佺己鍙ｅ拰闃舵浼樺厛绾э紝涓嶅啀杩藉姞娴佹按璐﹀紡鍙樻洿鍘嗗彶銆?- 浠讳綍鎵╁睍鑳藉姏閮藉繀椤绘槑纭爣娉ㄤ负鎵╁睍锛屼笉寰楄鐩栧畼鏂?parity 涓荤嚎銆?- 缁熶竴浠?UTF-8 without BOM 淇濆瓨銆?
-鐘舵€佸畾涔夛細
+## 当前整体判断
 
-- `宸插疄鐜癭锛氬綋鍓嶉」鐩唴宸叉湁鍙敤瀹炵幇锛屽彲浣滀负鐪熷疄鑳藉姏鐧昏銆?- `閮ㄥ垎瀹炵幇`锛氬凡鏈夐鏋舵垨瀛愰泦锛屼絾璺濈鐩爣浠嶆湁鏄庢樉宸窛銆?- `鏈疄鐜癭锛氬綋鍓嶆病鏈夊搴斿疄鐜般€?- `鏄庣‘涓嶅仛`锛氬綋鍓嶉樁娈垫槑纭帓闄わ紝涓嶈繘鍏ヨ繎鏈熷璐﹁寖鍥淬€?
-## 褰撳墠鎬讳綋鍒ゆ柇
+- `vscode-extension/` 仍然是本地验证壳，不是最终产品形态。
+- 当前能打包、能验证的是 Electron 内测壳，不是完整 Windows 正式客户端。
+- 核心能力仍然必须优先落在 `src/` 的 runtime / service / adapter 层，Electron 只做桌面壳、权限、IPC、UI。
+- 项目主线仍是“官方 Claude Code 能力对齐优先，KainClaw 扩展第二”。
+- 对官方 Claude Code 已存在的能力，源码逻辑是验收基线；提示词约束或本地猜测不能替代源码 parity。
+- 图片、Office、Local Bridge、User Modeling、Auto Skill Generation 都是扩展能力，但不能覆盖官方 parity 主线叙事。
 
-- 褰撳墠椤圭洰宸茬粡鏄竴涓彲鐢ㄧ殑鏈湴 AI 鍔╂墜楠岃瘉澹筹紝浣嗚繕涓嶆槸鏈€缁堜氦浠樺舰鎬併€?- `vscode-extension/` 浠嶆槸鏈湴楠岃瘉澹筹紱鏈€缁堜氦浠樼洰鏍囦粛鐒舵槸 Windows 绋嬪簭銆?- 褰撳墠鍙墦鍖呫€佸彲楠岃瘉鐨勬槸 Electron 鍐呮祴澹筹紝涓嶆槸瀹屾暣鍔熻兘 Windows 姝ｅ紡瀹㈡埛绔€?- 褰撳墠涓荤嚎浠嶇劧鏄€滃畼鏂?Claude Code 鑳藉姏瀵归綈浼樺厛锛孋ain 鎵╁睍鑳藉姏绗簩鈥濄€?- 鏍稿績鑳藉姏蹇呴』缁х画浼樺厛钀藉湪 `src/` runtime / service / adapter锛汦lectron 鍙仛妗岄潰澹炽€佹潈闄愩€両PC銆乁I銆?- 鍥惧儚銆丱ffice銆丩ocal Bridge銆乁ser Modeling銆丄uto Skill Generation 閮芥槸閲嶈鎵╁睍闈紝浣嗕笉鑳藉湪鏂囨。鍙欎簨閲屽弽瀹负涓汇€?- 褰撳墠楠岃瘉鍩虹嚎鐧昏锛?  - `137` 涓祴璇曟枃浠?  - `891` 涓祴璇曢€氳繃
-  - 閫氳繃鍛戒护锛歚npm test`銆乣npm run check`銆乣npm run build`銆乣npm run build:electron`
+## 能力矩阵
 
-## 鑳藉姏鐭╅樀
+### 官方对齐主线
 
-### 瀹樻柟瀵归綈涓荤嚎
-
-| 鑳藉姏 | 褰撳墠鐘舵€?| 浠ｇ爜璇佹嵁 | 褰撳墠缂哄彛 |
+| 能力 | 当前状态 | 代码证据 | 当前缺口 |
 | --- | --- | --- | --- |
-| Provider 涓婚摼 | 宸插疄鐜?| `src/agent/providers/anthropicAdapter.ts` `src/agent/providers/openAIAdapter.ts` `src/agent/providers/claudeCliAdapter.ts` | 鏇村箍鐨?provider 鐢熸€佷笌鏇存繁鍗忚鍏煎浠嶅彲缁х画琛ラ綈 |
-| 浼氳瘽鎸佷箙鍖?/ 瀵煎嚭 / 鎭㈠ | 宸插疄鐜?| `src/storage/sessionRepository.ts` `src/sessionListHost.ts` `src/savedSessionHost.ts` | 浼氳瘽绠＄悊 UI 浠嶅彲缁х画鎵撶（ |
-| MCP runtime | 宸插疄鐜?| `src/mcpRuntime.ts` `src/mcpRuntime.helpers.ts` | OAuth / PKCE / prompts / templates parity 鏈畬鎴?|
-| 鏂囦欢宸ュ叿 / 鍛戒护宸ュ叿 / 娴忚鍣ㄥ伐鍏?| 宸插疄鐜?| `src/toolRuntime.ts` `src/browserRuntime.ts` | Browser automation parity 浠嶆湭瀹屾暣瀵归綈 |
-| Tasks / background command | 閮ㄥ垎瀹炵幇 | `src/tasks/taskRuntime.ts` `src/backgroundTaskHost.ts` `src/backgroundCommandWorker.ts` | remote / detached background task parity 鏈敹灏?|
-| built-in Review | 閮ㄥ垎瀹炵幇 | `src/review/runner.ts` `src/agent/built-in/reviewAgent.ts` | ultrareview銆佽繙绔?review 鐢熷懡鍛ㄦ湡浠嶆湭瀹屽杽 |
-| built-in Verification | 閮ㄥ垎瀹炵幇 | `src/verification/runner.ts` `src/agent/built-in/verificationAgent.ts` | hosted / detached verification parity 鏈畬鎴?|
-| Plan Mode | 閮ㄥ垎瀹炵幇 | `src/planMode/planMode.ts` `src/planModeHost.ts` `src/planMode/planModePrompt.ts` | 鏇村畬鏁寸殑瀹樻柟 plan workflow 浠嶇己 |
-| Thinking / Effort / Fast mode | 閮ㄥ垎瀹炵幇 | `src/thinkingEffort/effort.ts` `src/thinkingEffort/thinking.ts` `src/thinkingEffort/fastMode.ts` | 鏇存繁 phase 2 parity 浠嶆湭瀹屾垚 |
-| Compact / Auto-compact | 閮ㄥ垎瀹炵幇 | `src/compact/compact.ts` `src/compact/autoCompact.ts` `src/compactHost.ts` | transcript / token lifecycle 鏇存繁瀵归綈浠嶆湭瀹屾垚 |
-| Auto-Memory | 閮ㄥ垎瀹炵幇 | `src/autoMemory/paths.ts` `src/autoMemory/extractor.ts` `src/autoMemoryHost.ts` | memory orchestration 鏇存繁瀵归綈浠嶆湭瀹屾垚 |
-| LSP | 閮ㄥ垎瀹炵幇 | `src/lsp/lspRuntime.ts` `src/lsp/formatters.ts` `src/lsp/types.ts` | server-manager / provider-availability parity 鏈畬鎴?|
-| Worktree | 閮ㄥ垎瀹炵幇 | `src/worktree/runtime.ts` `src/worktree/types.ts` | 瀹屾暣 worktree 浜у搧娴佹湭瀹屾垚 |
-| Hooks 鎵ц閾?| 閮ㄥ垎瀹炵幇 | `src/hooks/hooksExecutor.ts` `src/hooks/hooksTrigger.ts` `src/hooksRegistry.ts` | 瑙﹀彂鐐规帴绾垮拰浜у搧闈粛鏈畬鍏ㄦ帴榻?|
-| Custom Agents | 閮ㄥ垎瀹炵幇 | `src/customAgentsRegistry.ts` `src/promptCommandHost.ts` | wizard銆佸畬鏁存墽琛岄潰銆佹闈?UI 浠嶆湭瀹屾垚 |
-| Skills registry | 閮ㄥ垎瀹炵幇 | `src/skillsRegistry.ts` `src/customSkillsRegistry.ts` `src/promptCommandHost.ts` | 璺濈瀹樻柟瀹屾暣 Skills 浣撶郴浠嶆湁宸窛 |
-| Slash commands 浣撶郴 | 閮ㄥ垎瀹炵幇 | `src/promptCommandHost.ts` `src/extension.ts` | 褰撳墠宸叉敞鍐?`/commands /agents /skills /hooks /add-dir /files /plan /compact /mcp /memory /todo /tools /review /verify`锛屼絾瑕嗙洊鐜囦粛浣?|
-| Voice mode | 鏈疄鐜?| 鏃?| 褰撳墠娌℃湁瀵瑰簲瀹炵幇 |
-| Prompt suggestion | 鏈疄鐜?| 鏃?| 褰撳墠娌℃湁瀵瑰簲瀹炵幇 |
-| Plugin / Skills 甯傚満 | 鏈疄鐜?| 鏃?| 褰撳墠娌℃湁瀵瑰簲瀹炵幇 |
+| Provider 主链 | 已实现 | `src/agent/providers/anthropicAdapter.ts` `src/agent/providers/openAIAdapter.ts` `src/agent/providers/claudeCliAdapter.ts` | 更广的 provider 生态与更深协议兼容仍可继续补齐 |
+| 会话持久化 / 导出 / 恢复 | 已实现 | `src/storage/sessionRepository.ts` `src/sessionListHost.ts` `src/savedSessionHost.ts` | 会话管理 UI 仍可继续打磨 |
+| MCP runtime | 已实现 | `src/mcpRuntime.ts` `src/mcpRuntime.helpers.ts` | OAuth / PKCE / prompts / templates parity 未完全收口 |
+| 文件 / 命令 / 浏览器工具 | 已实现 | `src/toolRuntime.ts` `src/browserRuntime.ts` | Browser automation parity 仍未完全对齐 |
+| Tasks / background command | 部分实现 | `src/tasks/taskRuntime.ts` `src/backgroundTaskHost.ts` `src/backgroundCommandWorker.ts` | remote / detached background task parity 未完成 |
+| built-in Review | 部分实现 | `src/review/runner.ts` `src/agent/built-in/reviewAgent.ts` | ultrareview、远程 review 生命周期仍未完善 |
+| built-in Verification | 部分实现 | `src/verification/runner.ts` `src/agent/built-in/verificationAgent.ts` | hosted / detached verification parity 未完成 |
+| Plan Mode | 部分实现 | `src/planMode/planMode.ts` `src/planModeHost.ts` `src/planMode/planModePrompt.ts` | 更完整的官方 plan workflow 仍缺 |
+| Thinking / Effort / Fast mode | 部分实现 | `src/thinkingEffort/effort.ts` `src/thinkingEffort/thinking.ts` `src/thinkingEffort/fastMode.ts` | phase 2 parity 仍未完全收口 |
+| Compact / Auto-compact | 部分实现 | `src/compact/compact.ts` `src/compact/autoCompact.ts` `src/compactHost.ts` | transcript / token lifecycle 更深 parity 未收尾 |
+| Auto-Memory | 部分实现 | `src/autoMemory/paths.ts` `src/autoMemory/extractor.ts` `src/autoMemoryHost.ts` | memory orchestration 更深 parity 未完成 |
+| LSP | 部分实现 | `src/lsp/lspRuntime.ts` `src/lsp/formatters.ts` `src/lsp/types.ts` | server-manager / provider-availability parity 未完成 |
+| Worktree | 部分实现 | `src/worktree/runtime.ts` `src/worktree/types.ts` | 完整 worktree 产品流未完成 |
+| Hooks 执行链 | 部分实现 | `src/hooks/hooksExecutor.ts` `src/hooks/hooksTrigger.ts` `src/hooksRegistry.ts` | 触发点接线和产品面仍未完全接齐 |
+| Custom Agents | 部分实现 | `src/customAgentsRegistry.ts` `src/promptCommandHost.ts` | wizard、完整执行面、桌面 UI 仍未完成 |
+| Skills registry | 部分实现 | `src/skillsRegistry.ts` `src/customSkillsRegistry.ts` `src/promptCommandHost.ts` | 距离官方完整 Skills 体系仍有差距 |
+| Slash commands 体系 | 部分实现 | `src/promptCommandHost.ts` `src/extension.ts` | 当前已接 `/commands /agents /skills /hooks /add-dir /files /plan /compact /mcp /memory /todo /tools /review /verify`，但覆盖率仍是子集 |
+| Voice mode | 未实现 | 无 | 当前没有对应实现 |
+| Prompt suggestion | 未实现 | 无 | 当前没有对应实现 |
+| Plugin / Skills 市场 | 未实现 | 无 | 当前没有对应实现 |
 
-### Cain 鎵╁睍涓庢闈㈣兘鍔?
-| 鑳藉姏 | 褰撳墠鐘舵€?| 浠ｇ爜璇佹嵁 | 褰撳墠缂哄彛 |
+### KainClaw 扩展与桌面能力
+
+| 能力 | 当前状态 | 代码证据 | 当前缺口 |
 | --- | --- | --- | --- |
-| Electron 妗岄潰楠岃瘉澹?| 宸插疄鐜?| `electron/main.ts` `electron/preload.ts` `electron/ElectronChatPanel.ts` `electron/renderer/index.html` | 褰撳墠鏄唴娴嬪３锛屼笉鏄畬鏁?Windows 姝ｅ紡瀹㈡埛绔?|
-| Auto Skill Generation | 宸插疄鐜?| `src/skills/skillStore.ts` `src/skills/skillDistiller.ts` `src/backgroundTaskHost.ts` | 浜у搧闈㈠拰娌荤悊闈粛鍙户缁敹鍙?|
-| User Modeling | 宸插疄鐜?| `src/userModel/profileStore.ts` `src/userModel/profileDistiller.ts` | UI 绠＄悊闈粛鏈畬鏁?|
-| 鍥惧儚鑱婂ぉ宸ヤ綔娴?| 宸插疄鐜?| `src/imageGeneration/imageWorkflowOrchestrator.ts` `electron/ElectronChatPanel.ts` `electron/renderer/index.html` | 褰撳墠宸茬Щ鍒拌亰澶╀富閾撅紝浣嗕粛鏄墿灞曢潰锛屼笉鏄富鏍稿績 |
-| 鍥惧儚妯″瀷閰嶇疆 | 宸插疄鐜?| `src/storage/settingsRepository.ts` `src/imageGeneration/openAIImageClient.ts` `electron/renderer/index.html` | UI 浠嶅彲缁х画鏀跺彛 |
-| Prompt Library | 宸插疄鐜?| `src/imageGeneration/promptLibraryRepository.ts` `src/imageGeneration/promptLibraryBuiltins.ts` | 鍚庣画鍙户缁仛璧勪骇娌荤悊涓庡睍绀轰綋楠?|
-| 鍙傝€冨浘鎼滅储 | 閮ㄥ垎瀹炵幇 | `src/imageGeneration/imageMaterialSearch.ts` `src/imageGeneration/imageWorkflowOrchestrator.ts` | 褰撳墠鏄€滀袱娈靛紡浠诲姟鍑嗗 + 鐧惧害鍥剧墖鎶撳彇鈥濈殑杩囨浮閾撅紝闀挎湡鐩爣浠嶆槸缃戦〉璧勬枡鎼滅储鍚庢娊瑙嗚绾跨储/鍙敤鍥剧墖 |
-| 鍥惧儚缁撴灉鏈湴鍖栨寔涔呭寲 | 宸插疄鐜?| `src/imageGeneration/imageLabGalleryStore.ts` `electron/ElectronChatPanel.ts` | 缂撳瓨涓庢竻鐞嗙瓥鐣ヤ粛鍙户缁紭鍖?|
-| DesktopRuntimeServices 娉ㄥ叆灞?| 閮ㄥ垎瀹炵幇 | `src/platform/desktopRuntimeServices.ts` `electron/main.ts` | 褰撳墠 Electron 鐪熸鎺ヤ笂鐨勫彧鏈?`localBridgeRuntime` |
-| Local Bridge runtime | 宸插疄鐜?| `src/localBridge/localBridgeRuntime.ts` `src/localBridge/localBridgeProxy.ts` `src/localBridge/localBridgeSession.ts` | 鏈€灏忛棴鐜凡钀藉湴锛屽畬鏁?token 鐢熷懡鍛ㄦ湡涓庢洿骞夸笟鍔￠潰鏈畬鎴?|
-| Word Add-in 鏈€灏忛摼璺?| 閮ㄥ垎瀹炵幇 | `office-addin/word/manifest.xml` `src/officeBridge/bridgeClient.ts` `src/officeBridge/wordQuestionAnswer.ts` | 褰撳墠鍙埌鍙闂瓟 / 閫夊尯涓婁笅鏂?/ citation 鍛戒腑锛屽畬鏁?Office 涓氬姟閾炬湭瀹屾垚 |
-| Browser Bridge runtime | 鏈疄鐜?| `src/platform/browserBridgeRuntime.ts` | 褰撳墠鍙湁鎺ュ彛锛屾病鏈変富娴佺▼瀹炵幇 |
-| Desktop automation / Computer Use | 鏈疄鐜?| `src/platform/desktopAutomationRuntime.ts` | 褰撳墠鍙湁鎺ュ彛锛屾病鏈変富娴佺▼瀹炵幇 |
-| Scheduler / Cron runtime | 鏈疄鐜?| `src/platform/schedulerRuntime.ts` | 褰撳墠鍙湁鎺ュ彛锛屾病鏈変富娴佺▼瀹炵幇 |
-| 浼佷笟 MDM / managed settings | 鏄庣‘涓嶅仛 | 鏃?| 褰撳墠闃舵鏄庣‘鎺掗櫎 |
+| Electron 桌面验证壳 | 已实现 | `electron/main.ts` `electron/preload.ts` `electron/ElectronChatPanel.ts` `electron/renderer/index.html` | 当前是内测壳，不是完整 Windows 正式客户端 |
+| Electron workspace / git inspection 适配 | 已实现 | `electron/ElectronChatPanel.ts` `src/platform/workspaceRootResolver.ts` | submodule / linked worktree / `git` 不可用边界仍需继续压测 |
+| Electron inspection 用户态收口 | 已实现 | `src/inspectionPromptHost.ts` `electron/ElectronChatPanel.ts` `electron/renderer/index.html` | 仍可继续减少工程味文案 |
+| Electron Markdown / verification report rendering | 已实现 | `electron/renderer/index.html` `electron/rendererMarkdown.test.ts` `package.json` | 已按 Claude `marked.lexer()` token 模型重建主路径；后续若继续改 Markdown 行为，仍必须先对照 Claude 源码 |
+| Auto Skill Generation | 已实现 | `src/skills/skillStore.ts` `src/skills/skillDistiller.ts` `src/backgroundTaskHost.ts` | 产品面与治理面仍可继续收口 |
+| User Modeling | 已实现 | `src/userModel/profileStore.ts` `src/userModel/profileDistiller.ts` | UI 管理面仍未完整 |
+| 图片聊天工作流 | 已实现 | `src/imageGeneration/imageWorkflowOrchestrator.ts` `electron/ElectronChatPanel.ts` | 当前已迁到聊天主链，但仍是扩展能力 |
+| 图片模型配置 | 已实现 | `src/storage/settingsRepository.ts` `src/imageGeneration/openAIImageClient.ts` | UI 仍可继续收口 |
+| Prompt Library | 已实现 | `src/imageGeneration/promptLibraryRepository.ts` `src/imageGeneration/promptLibraryBuiltins.ts` | 后续可继续做资产治理与展示优化 |
+| 找参考图 | 部分实现 | `src/imageGeneration/imageMaterialSearch.ts` `src/imageGeneration/imageWorkflowOrchestrator.ts` | 当前仍是过渡方案，长期目标仍是网页资料搜索后再抽视觉线索 / 可用图片 |
+| 图片结果本地化持久化 | 已实现 | `src/imageGeneration/imageLabGalleryStore.ts` `electron/ElectronChatPanel.ts` | 缓存与清理策略仍可继续优化 |
+| DesktopRuntimeServices 注入层 | 部分实现 | `src/platform/desktopRuntimeServices.ts` `electron/main.ts` | 当前 Electron 真正接上的仅 `localBridgeRuntime` |
+| Local Bridge runtime | 已实现 | `src/localBridge/localBridgeRuntime.ts` `src/localBridge/localBridgeProxy.ts` `src/localBridge/localBridgeSession.ts` | token 生命周期与更广业务面未完成 |
+| Word Add-in 最小链路 | 部分实现 | `office-addin/word/manifest.xml` `src/officeBridge/bridgeClient.ts` `src/officeBridge/wordQuestionAnswer.ts` | 当前只到只读问答 / 选区上下文 / citation 命中，完整 Office 业务流未完成 |
+| Browser Bridge runtime | 未实现 | `src/platform/browserBridgeRuntime.ts` | 当前仅接口层，没有主流程实现 |
+| Desktop automation / Computer Use | 未实现 | `src/platform/desktopAutomationRuntime.ts` | 当前仅接口层，没有主流程实现 |
+| Scheduler / Cron runtime | 未实现 | `src/platform/schedulerRuntime.ts` | 当前仅接口层，没有主流程实现 |
+| 企业 MDM / managed settings | 明确不做 | 无 | 当前阶段明确排除 |
 
-## 褰撳墠浠ｇ爜鐘舵€佺殑琛ュ厖璇存槑
+## 当前代码状态补充说明
 
-### 宸茬粡鏄庢樉绋冲畾涓嬫潵鐨勪富绾?
-- 鏍稿績 AI/runtime 鑳藉姏宸茬粡绋冲畾瀛樺湪锛歅rovider銆佷細璇濇寔涔呭寲銆丮CP runtime銆佹枃浠?鍛戒护/娴忚鍣ㄥ伐鍏枫€乀asks/background command銆丷eview/Verification銆乀hinking/Effort/Fast銆丆ompact/Auto-Memory銆丩SP銆乄orktree銆丠ooks銆丆ustom Agents銆丼kills registry銆?- Electron 鐜板湪搴旇鍑嗙‘鎻忚堪涓衡€滃彲鎵撳寘銆佸彲楠岃瘉鐨勬闈㈠唴娴嬪３鈥濓紝鑰屼笉鏄畬鏁村鎴风銆?- 鍥惧儚涓婚摼宸茬粡浠庢棫 `Image Lab` 椤甸潰杩佸埌鑱婂ぉ娴侊紱鏃?`Image Lab` 鏇存帴杩戝簳灞傛壙杞藉３鍜屽巻鍙?UI锛岃€屼笉鏄骇鍝佷富鍏ュ彛銆?- Prompt Library 宸茬粡鍗囩骇涓?`src/` 鏁版嵁灞傞┍鍔紝涓嶅啀鍙槸 renderer 鍘熷瀷銆?- `Local Bridge` 宸茬粡浠庣函瑙勫垝杩涘叆鏈€灏忓彲杩愯瀹炵幇闃舵锛學ord Add-in 鍙 MVP 涓婚摼涔熷凡鏈夎惤鍦版枃浠朵笌浠ｇ爜璺緞銆?- 2026-04-15 鍒?2026-04-20 鐨勫畼鏂?parity 鏀跺熬涓荤嚎宸茬粡姣旇緝娓呮锛?  - `tasks / toolRuntime`
-  - `verification`
-  - `compact`
-  - `lsp / worktree`
-  - `extension.ts / handlePrompt` 瀹夸富鍑忓€?
-### 褰撳墠鏈€澶у墿浣欓闄╁尯
+### 已经比较稳定的主线
 
-- `src/extension.ts` 浠嶆槸楂橀闄╁涓诲叆鍙ｏ紝铏界劧宸茬粡鎶藉嚭澶ч噺 host/helper锛屼絾鎬绘帶閫昏緫浠嶅帤銆?- `electron/renderer/index.html` 涓?`electron/ElectronChatPanel.ts` 浠嶇劧鏄獙璇佸３灞傦紝涓嶅簲缁х画鍫嗘柊鐨勬牳蹇冧笟鍔￠€昏緫銆?- `DesktopRuntimeServices` 閲岀湡姝ｆ帴涓婄殑 runtime 浠嶇劧澶皯锛宍desktopAutomationRuntime / browserBridgeRuntime / schedulerRuntime` 杩樺仠鐣欏湪杈圭晫灞傘€?- 褰撳墠鈥滄壘鍙傝€冨浘鈥濊櫧鐒跺凡浠庡浗澶栧浘搴?API 鍒囪蛋锛屾敼涓烘洿绗﹀悎涓浗澶ч檰鐢ㄦ埛鐜鐨勬悳绱㈤摼锛屼絾浠嶆槸杩囨浮鎬侊紝涓嶆槸鏈€缁堝舰鎬併€?
-## 褰撳墠浼樺厛椤哄簭锛圥hase 2 鏀跺熬锛?
-1. `tasks / toolRuntime` 鏀跺熬
-2. Verification Agent 鏀跺熬
-3. Compact 鏀跺熬
-4. LSP / Worktree 鏇存繁 parity
-5. `src/extension.ts` 瀹夸富鍑忓€虹户缁笅娌夊埌 host / runtime / adapter
+- 核心 AI/runtime 能力已经稳定存在：Provider、会话持久化、MCP runtime、文件/命令/浏览器工具、Tasks/background command、Review/Verification、Thinking/Effort/Fast、Compact/Auto-Memory、LSP、Worktree、Hooks、Custom Agents、Skills registry。
+- Electron 现在应被准确描述为“可打包、可验证的桌面内测壳”，而不是完整正式客户端。
+- Electron Markdown 与 `/verify` report 渲染已从自研 regex/line parser 收口到 Claude-style `marked.lexer()` token 基线，并对 verification 的 command/output 使用结构化 raw text 渲染。
+- 图片主链已经从旧 `Image Lab` 页面迁到聊天流；旧 `Image Lab` 更接近底层承载壳和历史 UI，而不是产品主入口。
+- Prompt Library 已经升级成 `src/` 数据层驱动，而不再只是 renderer 原型。
+- `Local Bridge` 已从纯规划进入最小可运行实现阶段；Word Add-in 只读 MVP 也已落地。
 
-## Phase 3 鍔熻兘绉帇锛堝綋鍓?Phase 2 瀹屾垚鍚庡紑濮嬶級
+### 当前最大剩余风险区
 
-### 绗竴姊槦锛氭牳蹇冩墿灞曟€ч鏋?
-- 鏂滄潬鍛戒护浣撶郴鎵╁睍锛氬湪鐜版湁娉ㄥ唽琛ㄩ鏋朵笂缁х画琛ュ懡浠よ鐩栫巼銆?- Skills 鍐呯疆鎶€鑳戒綋绯伙細瀹屽杽 SkillTool銆佸唴缃?skill 娉ㄥ唽涓庢闈㈡墽琛岄潰銆?- Hooks 鑷姩鍖栨鏋讹細缁х画琛?toolRuntime / promptCommandHost / promptTurnHost 瑙﹀彂鐐广€?- Custom Agents锛氳ˉ wizard銆佹墽琛岄€氳矾銆佺鐞嗛潰銆?
-### 绗簩姊槦锛氱敤鎴蜂綋楠屾彁鍗?
-- Memory 绠＄悊 UI
-- Context 绠＄悊 UI
-- Prompt suggestion
-- TodoWriteTool 鐨勫畬鏁翠骇鍝佹祦
+- `src/extension.ts` 仍是高风险宿主入口，虽然已经抽出大量 host/helper，但总控逻辑依然偏厚。
+- `electron/renderer/index.html` 与 `electron/ElectronChatPanel.ts` 仍是验证壳层，不应继续堆新的核心业务逻辑。
+- `DesktopRuntimeServices` 里真正接上的 runtime 仍然太少，`desktopAutomationRuntime / browserBridgeRuntime / schedulerRuntime` 还停留在边界层。
+- 当前“找参考图”虽然已切到更符合中国大陆用户环境的搜索链，但仍是过渡态，不是最终资料搜索编排层。
 
-### 绗笁姊槦锛氶珮绾ц兘鍔?
-- Cron / Scheduler
-- Voice mode
-- WorkflowTool
-- REPL Tool
-- ToolSearchTool 娣卞寲
+## 当前优先顺序
 
-### 绗洓姊槦锛氬钩鍙扮骇鑳藉姏锛堥暱鏈燂級
+1. 继续把宿主总控逻辑从 `extension.ts` 往 host / runtime / adapter 下沉
+2. 继续收桌面壳的真实可用子集，不虚报未接好的能力
+3. 继续补 `/review`、`/verify`、任务与工具链相关 parity 的边界测试
+4. 继续维持三份主文档为“当前状态”写法，不再回到流水账
 
-- Plugin / Skills 甯傚満
-- Advisor 鍙屾ā鍨嬮€氶亾
-- 璇婃柇涓庝娇鐢ㄥ懡浠わ紙`/doctor`銆乣/usage`銆乣/cost`銆乣/stats` 绛夛級
-- Notebook 缂栬緫
-- Bridge / 杩滅▼鎺у埗
+## 相关规格与参考路径
 
-### 鏄庣‘涓嶅湪 Phase 3 鑼冨洿鍐?
-- 浼佷笟 MDM / managed settings
+### 主规格与参考
 
-## Phase 4 鍔熻兘绉帇锛圵indows 瀹㈡埛绔畬鎴愬悗寮€濮嬶級
-
-### Office 鐢熸€侊紙Word / Excel / PowerPoint Add-in锛?
-- Windows 瀹㈡埛绔?`Local Bridge` 瀹屾暣浜у搧鍖?- Word Add-in MVP 瀹屾暣闂幆
-- KainClaw 璁剧疆闈㈤噷鐨?Office 瀹夎涓庣姸鎬佸叆鍙?- Word Add-in 瀹屾暣缂栬緫娴?- Excel Add-in
-- PowerPoint Add-in
-- 璺ㄥ簲鐢ㄤ笂涓嬫枃鍏变韩
-- AI 瑙嗚璁捐鐢熸垚绛夐暱鏈熸帰绱㈠瀷鎵╁睍
-
-## 鐩稿叧瑙勬牸涓庡弬鑰冭矾寰?
-杩欎唤瀵硅处鏂囨。鍙洖绛斺€滅幇鍦ㄥ仛鍒板摢銆佽繕宸粈涔堚€濄€傚鏋滆缁х画鎺ㄨ繘鏌愪釜鑳藉姏锛岀洿鎺ヨ烦鍒板搴旇鏍硷細
-
-### 涓昏鏍间笌鍙傝€?
-- 涓讳骇鍝佽鏍硷細
+- 主产品规格：
   - `E:\claudecodejingiang\vscode-extension\.kiro\specs\v1-product-spec.md`
-- 瀹樻柟婧愮爜鑳藉姏绱㈠紩锛?  - `E:\claudecodejingiang\vscode-extension\.kiro\source-reference.md`
-- 鏂囨。鎭㈠鑽夌锛?  - `E:\claudecodejingiang\vscode-extension\.kiro\recovery-draft-2026-04-24.md`
-  - 浠呯敤浜庢仮澶嶆棫涓讳綋鍜屽巻鍙茶〃杩帮紝涓嶄綔涓哄綋鍓嶇姸鎬佺湡婧愩€?
-### Phase 3 / Phase 4 瀵瑰簲瑙勬牸
+- 官方源码能力索引：
+  - `E:\claudecodejingiang\vscode-extension\.kiro\source-reference.md`
+- 文档恢复草稿：
+  - `E:\claudecodejingiang\vscode-extension\.kiro\recovery-draft-2026-04-24.md`
+  - 仅用于回收旧文档主体与历史表述，不作为当前状态真源
 
-- Computer Use / Browser Bridge锛?  - `E:\claudecodejingiang\vscode-extension\.kiro\specs\computer-use-browser-bridge.md`
-- Office Add-in / Local Bridge锛?  - `E:\claudecodejingiang\vscode-extension\.kiro\specs\office-addin-ecosystem.md`
-- Hooks锛?  - `E:\claudecodejingiang\vscode-extension\.kiro\specs\p3-hooks-execution-chain.md`
-- Custom Agents锛?  - `E:\claudecodejingiang\vscode-extension\.kiro\specs\p3-custom-agents-wizard.md`
-- Cron / Scheduler锛?  - `E:\claudecodejingiang\vscode-extension\.kiro\specs\p3-cron-scheduled-tasks.md`
-- 璺ㄤ細璇濇悳绱細
+### Phase 3 / Phase 4 对应规格
+
+- Computer Use / Browser Bridge：
+  - `E:\claudecodejingiang\vscode-extension\.kiro\specs\computer-use-browser-bridge.md`
+- Office Add-in / Local Bridge：
+  - `E:\claudecodejingiang\vscode-extension\.kiro\specs\office-addin-ecosystem.md`
+- Hooks：
+  - `E:\claudecodejingiang\vscode-extension\.kiro\specs\p3-hooks-execution-chain.md`
+- Custom Agents：
+  - `E:\claudecodejingiang\vscode-extension\.kiro\specs\p3-custom-agents-wizard.md`
+- Cron / Scheduler：
+  - `E:\claudecodejingiang\vscode-extension\.kiro\specs\p3-cron-scheduled-tasks.md`
+- 跨会话搜索：
   - `E:\claudecodejingiang\vscode-extension\.kiro\specs\x01-cross-session-search.md`
-- User Modeling锛?  - `E:\claudecodejingiang\vscode-extension\.kiro\specs\x02-user-modeling.md`
-- Message Gateway锛?  - `E:\claudecodejingiang\vscode-extension\.kiro\specs\x03-message-gateway.md`
-- Companion锛?  - `E:\claudecodejingiang\vscode-extension\.kiro\specs\f09-companion.md`
-- Auto Skill Generation锛?  - `E:\claudecodejingiang\vscode-extension\.kiro\specs\f11-auto-skill-generation.md`
-- KainClaw Design锛?  - `E:\claudecodejingiang\vscode-extension\.kiro\specs\kainclaw-design.md`
-- Worker 鏉冮檺杈圭晫锛?  - `E:\claudecodejingiang\vscode-extension\.kiro\specs\p05-worker-permissions.md`
-
-## Latest Sync - 2026-04-24
-
-- 褰撳墠鏂囨。涓讳綋鎭㈠鍒扳€滃畼鏂?parity 涓荤嚎浼樺厛鈥濈殑鍐欐硶锛屼笉鍐嶆妸鍥剧墖鑳藉姏璇啓鎴愰」鐩富鏍稿績銆?- 楠岃瘉鍩虹嚎鐧昏鏇存柊涓猴細`137` 涓祴璇曟枃浠躲€乣891` 涓祴璇曢€氳繃锛沗npm test`銆乣npm run check`銆乣npm run build`銆乣npm run build:electron` 涓哄綋鍓嶉€氳繃鍛戒护銆?- `Local Bridge` 宸蹭粠绾鍒掓敼鍐欎负鈥滄渶灏忓彲杩愯瀹炵幇宸茶惤鍦帮紝瀹屾暣涓氬姟閾炬湭瀹屾垚鈥濄€?- `Word Add-in` 宸蹭粠绾鍒掓敼鍐欎负鈥滃彧璇?MVP 涓婚摼鎺ㄨ繘涓€濄€?- 鍥惧儚閾捐矾宸叉槑纭褰曚负鑱婂ぉ涓婚摼鎵╁睍鑳藉姏锛屽寘鍚浘鍍忔ā鍨嬪閰嶇疆銆丳rompt Library 鏁版嵁灞傘€佺粨鏋滄湰鍦版寔涔呭寲銆佸弬鑰冨浘鎼滅储杩囨浮閾剧瓑褰撳墠浜嬪疄銆?
+- User Modeling：
+  - `E:\claudecodejingiang\vscode-extension\.kiro\specs\x02-user-modeling.md`
+- Message Gateway：
+  - `E:\claudecodejingiang\vscode-extension\.kiro\specs\x03-message-gateway.md`
+- Companion：
+  - `E:\claudecodejingiang\vscode-extension\.kiro\specs\f09-companion.md`
+- Auto Skill Generation：
+  - `E:\claudecodejingiang\vscode-extension\.kiro\specs\f11-auto-skill-generation.md`
+- KainClaw Design：
+  - `E:\claudecodejingiang\vscode-extension\.kiro\specs\kainclaw-design.md`
+- Worker 权限边界：
+  - `E:\claudecodejingiang\vscode-extension\.kiro\specs\p05-worker-permissions.md`

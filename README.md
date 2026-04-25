@@ -145,6 +145,21 @@ Electron 当前已经是可运行的内测壳，但它还不是完整正式客�
 - 参考图搜索
 - 双语可见的图片反推提示词
 
+## Verification / Markdown 渲染说明
+
+当前 Electron 聊天渲染已经按 Claude Code 源码逻辑收口到块级 Markdown 解析路径：
+
+- 普通消息 Markdown 使用 `marked.lexer()` 先解析为 block token，再由 Electron renderer 做安全 HTML 输出。
+- Electron 构建会把 `node_modules/marked/lib/marked.umd.js` 复制到 `dist-electron/electron/renderer/vendor/marked.umd.js`。
+- Electron renderer 仍保持 `sandbox: true`、`nodeIntegration: false`，不通过放开 Node 权限加载 Markdown 依赖。
+- `/verify` 报告使用结构化专用渲染：`Command run` 和 `Output observed` 一律作为纯文本代码块展示，不再交给 Markdown 二次解析。
+- 因此 README、测试输出或命令输出中包含三反引号代码块时，不应再破坏 `/verify` 报告结构。
+
+对应 Claude 源码参考：
+
+- `E:\claudecodejingiang\src\components\Markdown.tsx`
+- `E:\claudecodejingiang\src\utils\markdown.ts`
+
 ## 当前仍在推进的方向
 
 - `tasks / toolRuntime` 更深 parity
