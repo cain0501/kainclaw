@@ -2,7 +2,11 @@ import { promises as fs } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { executeTool, type ToolContext } from "./toolRuntime";
+import {
+  buildUtf8PowerShellEncodedCommand,
+  executeTool,
+  type ToolContext,
+} from "./toolRuntime";
 import {
   BACKGROUND_TASK_RUNTIME_RESTART_ERROR,
   PersistentTaskRuntimeStore,
@@ -70,14 +74,33 @@ async function pause(ms = 5) {
   await new Promise(resolve => setTimeout(resolve, ms));
 }
 
+function parseJsonToolContent<T>(content: string): T {
+  return JSON.parse(content) as T;
+}
+
 afterEach(async () => {
   await Promise.all(
     tempDirs.splice(0).map(dir => fs.rm(dir, { recursive: true, force: true })),
   );
 });
 
+describe("toolRuntime PowerShell helpers", () => {
+  it("wraps commands with UTF-8 console setup before encoding them", () => {
+    const encoded = buildUtf8PowerShellEncodedCommand(
+      "Get-ChildItem -Force | Select-Object Name",
+    );
+    const decoded = Buffer.from(encoded, "base64").toString("utf16le");
+
+    expect(decoded).toContain("[Console]::InputEncoding = $utf8");
+    expect(decoded).toContain("[Console]::OutputEncoding = $utf8");
+    expect(decoded).toContain("$OutputEncoding = $utf8");
+    expect(decoded).toContain("$ProgressPreference = 'SilentlyContinue'");
+    expect(decoded).toContain("Get-ChildItem -Force | Select-Object Name");
+  });
+});
+
 describe("toolRuntime background task semantics", () => {
-  it("TaskStop is idempotent for already completed background tasks", async () => {
+  it("TaskStop rejects already completed background tasks like Claude stopTask", async () => {
     const context = await createTaskContext();
     await context.tasks!.registerBackgroundTask({
       id: "done-task",
@@ -88,23 +111,17 @@ describe("toolRuntime background task semantics", () => {
       output: "done",
     });
 
-    const result = await executeTool("TaskStop", { task_id: "done-task" }, context);
-
-    expect(result.summary).toContain("already completed");
-    expect(result.content).toContain("<final_status>completed</final_status>");
-    expect(result.content).toContain(
-      "<workspace_root>E:\\claudecodejingiang\\vscode-extension</workspace_root>",
-    );
+    await expect(
+      executeTool("TaskStop", { task_id: "done-task" }, context),
+    ).rejects.toThrow("Task done-task is not running (status: completed)");
   });
 
-  it("TaskStop returns structured not_found output for unknown task ids", async () => {
+  it("TaskStop rejects unknown task ids like Claude stopTask", async () => {
     const context = await createTaskContext();
 
-    const result = await executeTool("TaskStop", { task_id: "missing-stop-task" }, context);
-
-    expect(result.summary).toContain("Task missing-stop-task not found");
-    expect(result.content).toContain("<retrieval_status>not_found</retrieval_status>");
-    expect(result.content).toContain("<task_id>missing-stop-task</task_id>");
+    await expect(
+      executeTool("TaskStop", { task_id: "missing-stop-task" }, context),
+    ).rejects.toThrow("No task found with ID: missing-stop-task");
   });
 
   it("TaskGet reports not_ready semantics for running background tasks", async () => {
@@ -127,7 +144,7 @@ describe("toolRuntime background task semantics", () => {
     );
   });
 
-  it("TaskGet accepts task_id aliases for background tasks", async () => {
+  it("TaskGet follows Claude input contract and requires taskId", async () => {
     const context = await createTaskContext();
     await context.tasks!.registerBackgroundTask({
       id: "running-task-alias",
@@ -138,10 +155,9 @@ describe("toolRuntime background task semantics", () => {
       output: "partial",
     });
 
-    const result = await executeTool("TaskGet", { task_id: "running-task-alias" }, context);
-
-    expect(result.summary).toContain("not ready yet");
-    expect(result.content).toContain("<task_id>running-task-alias</task_id>");
+    await expect(
+      executeTool("TaskGet", { task_id: "running-task-alias" }, context),
+    ).rejects.toThrow("taskId is required");
   });
 
   it("TaskGet includes follow-up guidance for running remote background tasks", async () => {
@@ -553,7 +569,7 @@ describe("toolRuntime background task semantics", () => {
     const result = await executeTool("TaskGet", { taskId: "review-meta-task" }, context);
     const outputResult = await executeTool(
       "TaskOutput",
-      { taskId: "review-meta-task" },
+      { task_id: "review-meta-task" },
       context,
     );
 
@@ -918,16 +934,16 @@ describe("toolRuntime background task semantics", () => {
     expect(result.content).toContain("<diff_ref>main...HEAD</diff_ref>");
   });
 
-  it("TaskStop returns tag-based output for running background tasks", async () => {
+  it("TaskStop returns Claude-compatible JSON output for running background tasks", async () => {
     const context = await createTaskContext();
     context.stopBackgroundTask = async taskId => ({
       taskId,
-      taskType: "local_agent",
+      taskType: "local_bash",
       command: "npm run build",
     });
     await context.tasks!.registerBackgroundTask({
       id: "running-stop",
-      taskType: "local_agent",
+      taskType: "local_bash",
       status: "running",
       description: "running task",
       workspaceRoot: "E:\\claudecodejingiang\\vscode-extension",
@@ -938,15 +954,15 @@ describe("toolRuntime background task semantics", () => {
     const result = await executeTool("TaskStop", { task_id: "running-stop" }, context);
 
     expect(result.summary).toContain("Stopped background task");
-    expect(result.content).toContain("<task_id>running-stop</task_id>");
-    expect(result.content).toContain("<task_type>local_agent</task_type>");
-    expect(result.content).toContain("<final_status>cancelled</final_status>");
-    expect(result.content).toContain(
-      "<workspace_root>E:\\claudecodejingiang\\vscode-extension</workspace_root>",
-    );
+    expect(parseJsonToolContent(result.content)).toEqual({
+      message: "Successfully stopped task: running-stop (npm run build)",
+      task_id: "running-stop",
+      task_type: "local_bash",
+      command: "npm run build",
+    });
   });
 
-  it("TaskStop preserves built-in inspection provenance for stopped diff-aware tasks", async () => {
+  it("TaskStop returns only the Claude stop payload for diff-aware built-in tasks", async () => {
     const context = await createTaskContext();
     context.stopBackgroundTask = async taskId => ({
       taskId,
@@ -978,43 +994,42 @@ describe("toolRuntime background task semantics", () => {
     );
 
     expect(result.summary).toContain("Stopped background task");
-    expect(result.content).toContain("<agent_type>review</agent_type>");
-    expect(result.content).toContain("<agent_source>built-in</agent_source>");
-    expect(result.content).toContain("<description>review task</description>");
-    expect(result.content).toContain(
-      "<command_text>/review main...HEAD -- focus on regressions</command_text>",
-    );
-    expect(result.content).toContain("<prompt>Review the recent diff</prompt>");
-    expect(result.content).toContain("<extra_guidance>focus on regressions</extra_guidance>");
-    expect(result.content).toContain("<plan_file_path>.omx/plans/review.md</plan_file_path>");
-    expect(result.content).toContain("<diff_ref>main...HEAD</diff_ref>");
-    expect(result.content).toContain("<final_status>cancelled</final_status>");
+    expect(parseJsonToolContent(result.content)).toEqual({
+      message: "Successfully stopped task: review-stop-provenance (Run review task)",
+      task_id: "review-stop-provenance",
+      task_type: "built_in_agent",
+      command: "Run review task",
+    });
   });
 
-  it("TaskStop accepts taskId aliases for background tasks", async () => {
+  it("TaskStop accepts shell_id for deprecated KillShell compatibility", async () => {
     const context = await createTaskContext();
     context.stopBackgroundTask = async taskId => ({
       taskId,
-      taskType: "local_agent",
+      taskType: "local_bash",
       command: "npm run build",
     });
     await context.tasks!.registerBackgroundTask({
       id: "running-stop-alias",
-      taskType: "local_agent",
+      taskType: "local_bash",
       status: "running",
       description: "running alias task",
       command: "npm run build",
       output: "partial",
     });
 
-    const result = await executeTool("TaskStop", { taskId: "running-stop-alias" }, context);
+    const result = await executeTool("TaskStop", { shell_id: "running-stop-alias" }, context);
 
     expect(result.summary).toContain("Stopped background task");
-    expect(result.content).toContain("<task_id>running-stop-alias</task_id>");
-    expect(result.content).toContain("<final_status>cancelled</final_status>");
+    expect(parseJsonToolContent(result.content)).toEqual({
+      message: "Successfully stopped task: running-stop-alias (npm run build)",
+      task_id: "running-stop-alias",
+      task_type: "local_bash",
+      command: "npm run build",
+    });
   });
 
-  it("TaskStop preserves verification verdict provenance for completed built-in tasks", async () => {
+  it("TaskStop rejects completed built-in tasks instead of returning provenance", async () => {
     const context = await createTaskContext();
     await context.tasks!.registerBackgroundTask({
       id: "verify-completed-stop",
@@ -1035,26 +1050,12 @@ describe("toolRuntime background task semantics", () => {
       result: "PASS",
     });
 
-    const result = await executeTool(
-      "TaskStop",
-      { task_id: "verify-completed-stop" },
-      context,
-    );
-
-    expect(result.summary).toContain("already completed");
-    expect(result.content).toContain("<agent_type>verification</agent_type>");
-    expect(result.content).toContain(
-      "<command_text>/verify HEAD~2..HEAD -- focus on tests</command_text>",
-    );
-    expect(result.content).toContain("<prompt>Verify the recent change set</prompt>");
-    expect(result.content).toContain("<verification_verdict>PASS</verification_verdict>");
-    expect(result.content).toContain("<plan_file_path>.omx/plans/verify.md</plan_file_path>");
-    expect(result.content).toContain("<diff_ref>HEAD~2..HEAD</diff_ref>");
-    expect(result.content).toContain("<final_status>completed</final_status>");
-    expect(result.content).not.toContain("<follow_up_hint>");
+    await expect(
+      executeTool("TaskStop", { task_id: "verify-completed-stop" }, context),
+    ).rejects.toThrow("Task verify-completed-stop is not running (status: completed)");
   });
 
-  it("TaskStop does not fake cancellation for remote tasks without a stop pathway", async () => {
+  it("TaskStop rejects running remote tasks without a stop pathway", async () => {
     const context = await createTaskContext();
     await context.tasks!.registerBackgroundTask({
       id: "remote-running-stop",
@@ -1069,20 +1070,15 @@ describe("toolRuntime background task semantics", () => {
       output: "remote task started",
     });
 
-    const result = await executeTool("TaskStop", { task_id: "remote-running-stop" }, context);
+    await expect(
+      executeTool("TaskStop", { task_id: "remote-running-stop" }, context),
+    ).rejects.toThrow("Unsupported task type: remote_agent");
     const storedTask = await context.tasks!.getBackgroundTask("remote-running-stop");
 
-    expect(result.summary).toContain("cannot be stopped from this runtime");
-    expect(result.content).toContain("<task_type>remote_agent</task_type>");
-    expect(result.content).toContain("<remote_task_type>ultrareview</remote_task_type>");
-    expect(result.content).toContain("<session_id>sess-123</session_id>");
-    expect(result.content).toContain("<final_status>running</final_status>");
-    expect(result.content).toContain("No remote stop action is available");
-    expect(result.content).toContain("<follow_up_hint>Remote task is still running. Check remote session sess-123 for live progress.</follow_up_hint>");
     expect(storedTask?.status).toBe("running");
   });
 
-  it("TaskStop does not claim a completed remote task is still running", async () => {
+  it("TaskStop rejects completed remote tasks", async () => {
     const context = await createTaskContext();
     await context.tasks!.registerBackgroundTask({
       id: "remote-completed-stop",
@@ -1098,16 +1094,12 @@ describe("toolRuntime background task semantics", () => {
       output: "remote task completed",
     });
 
-    const result = await executeTool("TaskStop", { task_id: "remote-completed-stop" }, context);
-
-    expect(result.summary).toContain("already completed");
-    expect(result.content).toContain("<remote_task_type>verification</remote_task_type>");
-    expect(result.content).toContain("<session_id>sess-completed-123</session_id>");
-    expect(result.content).toContain("<session_url>https://claude.ai/code/sessions/sess-completed-123</session_url>");
-    expect(result.content).not.toContain("<follow_up_hint>");
+    await expect(
+      executeTool("TaskStop", { task_id: "remote-completed-stop" }, context),
+    ).rejects.toThrow("Task remote-completed-stop is not running (status: completed)");
   });
 
-  it("TaskStop reports lost runtime-restart tasks without pretending they were stoppable", async () => {
+  it("TaskStop rejects lost runtime-restart tasks", async () => {
     const context = await createTaskContext();
     await context.tasks!.registerBackgroundTask({
       id: "lost-stop",
@@ -1120,11 +1112,9 @@ describe("toolRuntime background task semantics", () => {
       error: BACKGROUND_TASK_RUNTIME_RESTART_ERROR,
     });
 
-    const result = await executeTool("TaskStop", { task_id: "lost-stop" }, context);
-
-    expect(result.summary).toContain("was lost after runtime restart");
-    expect(result.content).toContain("<final_status>lost</final_status>");
-    expect(result.content).toContain("No stop action was possible");
+    await expect(
+      executeTool("TaskStop", { task_id: "lost-stop" }, context),
+    ).rejects.toThrow("Task lost-stop is not running (status: lost)");
   });
 
   it("TaskOutput distinguishes cancelled terminal state in summary", async () => {
@@ -1187,7 +1177,7 @@ describe("toolRuntime background task semantics", () => {
     expect(result.content).toContain("<retrieval_status>not_ready</retrieval_status>");
   });
 
-  it("TaskOutput accepts shell_id aliases for background tasks", async () => {
+  it("TaskOutput follows Claude input contract and rejects shell_id aliases", async () => {
     const context = await createTaskContext();
     await context.tasks!.registerBackgroundTask({
       id: "running-output-alias",
@@ -1197,15 +1187,13 @@ describe("toolRuntime background task semantics", () => {
       output: "partial output",
     });
 
-    const result = await executeTool(
-      "TaskOutput",
-      { shell_id: "running-output-alias", block: false },
-      context,
-    );
-
-    expect(result.summary).toContain("not ready yet");
-    expect(result.content).toContain("<task_id>running-output-alias</task_id>");
-    expect(result.content).toContain("<retrieval_status>not_ready</retrieval_status>");
+    await expect(
+      executeTool(
+        "TaskOutput",
+        { shell_id: "running-output-alias", block: false },
+        context,
+      ),
+    ).rejects.toThrow("task_id is required");
   });
 
   it("TaskOutput returns structured not_found output for unknown task ids", async () => {

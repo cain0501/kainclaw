@@ -1,6 +1,10 @@
 export type TaskStatus = "pending" | "in_progress" | "completed";
 
-export type BackgroundTaskType = "local_agent" | "built_in_agent" | "remote_agent";
+export type BackgroundTaskType =
+  | "local_bash"
+  | "local_agent"
+  | "built_in_agent"
+  | "remote_agent";
 
 export type BackgroundTaskStatus =
   | "pending"

@@ -140,6 +140,19 @@ export type ToolExecutionResult = {
   content: string;
 };
 
+export function buildUtf8PowerShellEncodedCommand(command: string): string {
+  const script = [
+    "$utf8 = [System.Text.UTF8Encoding]::new($false)",
+    "[Console]::InputEncoding = $utf8",
+    "[Console]::OutputEncoding = $utf8",
+    "$OutputEncoding = $utf8",
+    "$ProgressPreference = 'SilentlyContinue'",
+    command,
+  ].join("\n");
+
+  return Buffer.from(script, "utf16le").toString("base64");
+}
+
 export type ToolDefinition = {
   name: string;
   description: string;
@@ -226,6 +239,7 @@ export type PlanVerificationToolAdapter = {
 export type ToolContext = {
   workspaceRoot: string;
   invokerKind?: "main" | "worker";
+  abortSignal?: AbortSignal;
   runVerification?: (request: {
     extraGuidance?: string;
     diffRef?: string;
@@ -404,6 +418,14 @@ export function toSafeText(value: string, maxLength = 12000): string {
   }
 
   return `${value.slice(0, maxLength)}\n\n[truncated ${value.length - maxLength} chars]`;
+}
+
+export function stripAnsiEscapeCodes(value: string): string {
+  return value.replace(
+    // Covers CSI, OSC, and a few single-character escape forms commonly emitted by CLIs.
+    /\u001B(?:\][^\u0007]*(?:\u0007|\u001B\\)|\[[0-?]*[ -/]*[@-~]|[@-Z\\-_])/g,
+    "",
+  );
 }
 
 export function searchToolDefinitions(
@@ -682,15 +704,21 @@ type ParsedTaskListFilters = {
   limit?: number;
 };
 
-function parseTaskIdentifierInput(input: ToolInput, requiredField = "taskId"): string {
-  const taskId =
-    typeof input.taskId === "string"
-      ? input.taskId.trim()
-      : typeof input.task_id === "string"
-        ? input.task_id.trim()
-        : typeof input.shell_id === "string"
-          ? input.shell_id.trim()
-          : "";
+type TaskIdentifierField = "taskId" | "task_id" | "shell_id";
+
+function parseTaskIdentifierInput(
+  input: ToolInput,
+  requiredField = "taskId",
+  fields: readonly TaskIdentifierField[] = ["taskId", "task_id", "shell_id"],
+): string {
+  let taskId = "";
+  for (const field of fields) {
+    const value = input[field];
+    if (typeof value === "string" && value.trim()) {
+      taskId = value.trim();
+      break;
+    }
+  }
 
   if (!taskId) {
     throw new Error(`${requiredField} is required`);
@@ -1478,96 +1506,6 @@ function parseInspectionDiffRefInput(input: ToolInput): string | undefined {
   return diffRef;
 }
 
-function formatTaskStopResultContent(options: {
-  taskId: string;
-  taskType: string;
-  command: string;
-  finalStatus: string;
-  message: string;
-  workspaceRoot?: string;
-  task?: BackgroundTaskRecord;
-}): string {
-  const parts = [
-    `<task_id>${options.taskId}</task_id>`,
-    `<task_type>${options.taskType}</task_type>`,
-    ...(options.workspaceRoot ? [`<workspace_root>${options.workspaceRoot}</workspace_root>`] : []),
-    `<command>${options.command}</command>`,
-  ];
-
-  if (options.task) {
-    if (options.task.agentType) {
-      parts.push(`<agent_type>${options.task.agentType}</agent_type>`);
-    }
-    if (options.task.agentSource) {
-      parts.push(`<agent_source>${options.task.agentSource}</agent_source>`);
-    }
-    if (options.task.description) {
-      parts.push(`<description>${options.task.description}</description>`);
-    }
-    const commandText = getBackgroundTaskCommandText(options.task);
-    if (commandText) {
-      parts.push(`<command_text>${commandText}</command_text>`);
-    }
-    const prompt = getBackgroundTaskPrompt(options.task);
-    if (prompt) {
-      parts.push(`<prompt>${prompt}</prompt>`);
-    }
-    if (typeof options.task.metadata?.extraGuidance === "string") {
-      parts.push(`<extra_guidance>${options.task.metadata.extraGuidance}</extra_guidance>`);
-    }
-    if (typeof options.task.metadata?.verificationVerdict === "string") {
-      parts.push(
-        `<verification_verdict>${options.task.metadata.verificationVerdict}</verification_verdict>`,
-      );
-    }
-    if (typeof options.task.metadata?.planFilePath === "string") {
-      parts.push(`<plan_file_path>${options.task.metadata.planFilePath}</plan_file_path>`);
-    }
-    if (typeof options.task.metadata?.diffRef === "string") {
-      parts.push(`<diff_ref>${options.task.metadata.diffRef}</diff_ref>`);
-    }
-  }
-
-  if (options.task?.taskType === "remote_agent") {
-    if (typeof options.task.metadata?.remoteTaskType === "string") {
-      parts.push(`<remote_task_type>${options.task.metadata.remoteTaskType}</remote_task_type>`);
-    }
-    if (typeof options.task.metadata?.sessionId === "string") {
-      parts.push(`<session_id>${options.task.metadata.sessionId}</session_id>`);
-    }
-    if (typeof options.task.metadata?.sessionUrl === "string") {
-      parts.push(`<session_url>${options.task.metadata.sessionUrl}</session_url>`);
-    }
-    if (options.task.status === "pending" || options.task.status === "running") {
-      const followUpHint = getRemoteBackgroundTaskFollowUpHint(options.task, "not_ready");
-      if (followUpHint) {
-        parts.push(`<follow_up_hint>${followUpHint}</follow_up_hint>`);
-      }
-    }
-  }
-
-  parts.push(
-    `<final_status>${options.finalStatus}</final_status>`,
-    `<message>${options.message}</message>`,
-  );
-
-  return parts.join("\n");
-}
-
-function getUnavailableTaskStopSummary(task: BackgroundTaskRecord): string {
-  return task.taskType === "remote_agent"
-    ? `Remote background task ${task.id} cannot be stopped from this runtime`
-    : `No stop action is available for background task ${task.id}`;
-}
-
-function getUnavailableTaskStopMessage(task: BackgroundTaskRecord): string {
-  if (task.taskType === "remote_agent") {
-    return `Task ${task.id} is a remote background task. No remote stop action is available from the current runtime yet.`;
-  }
-
-  return `Task ${task.id} is still ${task.status}, but no stop action is available from the current runtime.`;
-}
-
 function formatExitWorktreeSummary(result: ExitWorktreeResult): string {
   if (result.message.startsWith("No-op:")) {
     return "No active worktree session";
@@ -1908,16 +1846,25 @@ const handlers: Record<string, ToolHandler> = {
 
     const { stdout, stderr } = await execFileAsync(
       "powershell.exe",
-      ["-NoLogo", "-NoProfile", "-Command", command],
+      [
+        "-NoLogo",
+        "-NoProfile",
+        "-NonInteractive",
+        "-EncodedCommand",
+        buildUtf8PowerShellEncodedCommand(command),
+      ],
       {
         cwd: context.workspaceRoot,
         timeout: 15_000,
+        ...(context.abortSignal ? { signal: context.abortSignal } : {}),
         windowsHide: true,
         maxBuffer: 1024 * 1024,
       },
     );
 
-    const mergedOutput = [stdout.trim(), stderr.trim()].filter(Boolean).join("\n");
+    const mergedOutput = stripAnsiEscapeCodes(
+      [stdout.trim(), stderr.trim()].filter(Boolean).join("\n"),
+    );
 
     return {
       summary: `Ran command: ${command}`,
@@ -2308,7 +2255,7 @@ const handlers: Record<string, ToolHandler> = {
   },
 
   async TaskGet(input, context) {
-    const taskId = parseTaskIdentifierInput(input);
+    const taskId = parseTaskIdentifierInput(input, "taskId", ["taskId"]);
 
     const runtime = getTasks(context);
     const task = await runtime.getTask(taskId);
@@ -2570,41 +2517,15 @@ const handlers: Record<string, ToolHandler> = {
   },
 
   async TaskStop(input, context) {
-    const taskId = parseTaskIdentifierInput(input, "task_id");
+    const taskId = parseTaskIdentifierInput(input, "task_id", ["task_id", "shell_id"]);
 
     const task = await getTasks(context).getBackgroundTask(taskId);
     if (!task) {
-      return formatTaskNotFoundResult(taskId);
+      throw new Error(`No task found with ID: ${taskId}`);
     }
 
-    if (isBackgroundTaskLostAfterRestart(task)) {
-      return {
-        summary: `Background task ${taskId} was lost after runtime restart`,
-        content: formatTaskStopResultContent({
-          taskId,
-          taskType: task.taskType,
-          workspaceRoot: task.workspaceRoot,
-          command: task.command ?? task.description,
-          finalStatus: task.status,
-          message: `Task ${taskId} was already lost when the task runtime restarted. No stop action was possible.`,
-          task,
-        }),
-      };
-    }
-
-    if (task.status !== "running" && task.status !== "pending") {
-      return {
-        summary: `Background task ${taskId} is already ${task.status}`,
-        content: formatTaskStopResultContent({
-          taskId,
-          taskType: task.taskType,
-          workspaceRoot: task.workspaceRoot,
-          command: task.command ?? task.description,
-          finalStatus: task.status,
-          message: `Task ${taskId} is already ${task.status}. No stop action was needed.`,
-          task,
-        }),
-      };
+    if (task.status !== "running") {
+      throw new Error(`Task ${taskId} is not running (status: ${task.status})`);
     }
 
     const stopped =
@@ -2613,21 +2534,11 @@ const handlers: Record<string, ToolHandler> = {
         : undefined;
 
     if (!stopped) {
-      return {
-        summary: getUnavailableTaskStopSummary(task),
-        content: formatTaskStopResultContent({
-          taskId,
-          taskType: task.taskType,
-          workspaceRoot: task.workspaceRoot,
-          command: task.command ?? task.description,
-          finalStatus: task.status,
-          message: getUnavailableTaskStopMessage(task),
-          task,
-        }),
-      };
+      throw new Error(`Unsupported task type: ${task.taskType}`);
     }
 
-    const updated = await getTasks(context).updateBackgroundTask(taskId, {
+    const command = stopped.command ?? task.command ?? task.description;
+    await getTasks(context).updateBackgroundTask(taskId, {
       status: "cancelled",
       error: "Stopped by TaskStop.",
       ...(stopped ? { result: "Stopped by TaskStop." } : {}),
@@ -2635,20 +2546,17 @@ const handlers: Record<string, ToolHandler> = {
 
     return {
       summary: `Stopped background task ${taskId}`,
-      content: formatTaskStopResultContent({
-        taskId,
-        taskType: stopped?.taskType ?? task.taskType,
-        workspaceRoot: task.workspaceRoot,
-        command: stopped?.command ?? task.command ?? task.description,
-        finalStatus: updated?.status ?? "cancelled",
-        message: `Successfully stopped task: ${taskId} (${stopped?.command ?? task.command ?? task.description})`,
-        task,
+      content: JSON.stringify({
+        message: `Successfully stopped task: ${taskId} (${command})`,
+        task_id: taskId,
+        task_type: stopped.taskType ?? task.taskType,
+        command,
       }),
     };
   },
 
   async TaskOutput(input, context) {
-    const taskId = parseTaskIdentifierInput(input, "task_id");
+    const taskId = parseTaskIdentifierInput(input, "task_id", ["task_id"]);
     const block = input.block !== false;
     const timeout =
       typeof input.timeout === "number" && Number.isFinite(input.timeout)
@@ -3315,14 +3223,6 @@ export const toolDefinitions: ToolDefinition[] = [
           type: "string",
           description: "Task ID to retrieve.",
         },
-        task_id: {
-          type: "string",
-          description: "Compatibility alias for taskId.",
-        },
-        shell_id: {
-          type: "string",
-          description: "Deprecated alias for taskId.",
-        },
       },
       required: ["taskId"],
     },
@@ -3420,10 +3320,6 @@ export const toolDefinitions: ToolDefinition[] = [
     input_schema: {
       type: "object",
       properties: {
-        taskId: {
-          type: "string",
-          description: "Compatibility alias for task_id.",
-        },
         task_id: {
           type: "string",
           description: "Background task ID to stop.",
@@ -3446,10 +3342,6 @@ export const toolDefinitions: ToolDefinition[] = [
     input_schema: {
       type: "object",
       properties: {
-        taskId: {
-          type: "string",
-          description: "Compatibility alias for task_id.",
-        },
         task_id: {
           type: "string",
           description: "Background task ID to inspect.",

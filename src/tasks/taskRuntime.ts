@@ -145,6 +145,10 @@ export function assertTaskDependencyMutationsAreValid(
 }
 
 function normalizeBackgroundTaskType(taskType: unknown): BackgroundTaskType {
+  if (taskType === "local_bash") {
+    return "local_bash";
+  }
+
   if (taskType === "built_in_agent" || taskType === "verification_agent") {
     return "built_in_agent";
   }

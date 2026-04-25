@@ -10,6 +10,7 @@ import {
   normalizeFetchedHtml,
   resolveWorkspacePath,
   searchToolDefinitions,
+  stripAnsiEscapeCodes,
   toSafeText,
 } from "./toolRuntime";
 
@@ -51,6 +52,12 @@ describe("toolRuntime helpers", () => {
 
     expect(result).toContain("abcdef");
     expect(result).toContain("[truncated 4 chars]");
+  });
+
+  it("strips ANSI escape sequences from terminal output", () => {
+    const raw = "\u001b[1mPASS\u001b[22m \u001b[32msrc/foo.test.ts\u001b[39m";
+
+    expect(stripAnsiEscapeCodes(raw)).toBe("PASS src/foo.test.ts");
   });
 
   it("converts glob patterns into regexes", () => {

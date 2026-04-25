@@ -258,6 +258,7 @@ describe("backgroundTaskHost helpers", () => {
     expect(reusable).toEqual(started);
 
     const initialTask = await runtime.getBackgroundTask("cmd-1");
+    expect(initialTask?.taskType).toBe("local_bash");
     const detached = initialTask?.metadata?.detached as
       | { statePath?: string; outputPath?: string }
       | undefined;
@@ -339,10 +340,29 @@ describe("backgroundTaskHost helpers", () => {
 
     expect(stopped).toEqual({
       taskId: "cmd-stop",
-      taskType: "local_agent",
+      taskType: "local_bash",
       command: "npm run build",
     });
     expect(stopDetachedProcess).toHaveBeenCalledWith(12345);
     await expect(fs.readFile(detached!.cancelPath!, "utf8")).resolves.toBe("cancelled");
+  });
+
+  it("uses Claude-style local_bash task IDs for background commands by default", async () => {
+    const storageRoot = await createStorageRoot("cain-background-host-");
+    const runtime = await createTaskRuntime(storageRoot);
+    const host = new BackgroundTaskHost({
+      storageRoot,
+      getTaskRuntime: () => runtime,
+      launchDetachedBackgroundCommand: async () => ({ runnerPid: 4242 }),
+    });
+
+    const started = await host.runBackgroundCommand({
+      workspaceRoot: "E:\\claudecodejingiang\\vscode-extension",
+      command: "npm run build",
+    });
+    const task = await runtime.getBackgroundTask(started.taskId);
+
+    expect(started.taskId).toMatch(/^b[0-9a-z]{8}$/);
+    expect(task?.taskType).toBe("local_bash");
   });
 });

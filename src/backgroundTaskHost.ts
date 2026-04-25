@@ -1,4 +1,3 @@
-import { randomUUID } from "node:crypto";
 import { spawn } from "node:child_process";
 import { promises as fs } from "node:fs";
 import path from "node:path";
@@ -10,8 +9,10 @@ import {
 } from "./hostRuntimeHelpers";
 import type {
   BackgroundTaskRecord,
+  BackgroundTaskType,
   ConversationTaskRuntime,
 } from "./tasks/types";
+import { generateBackgroundTaskId } from "./tasks/taskIds";
 import type { SkillStore } from "./skills/skillStore";
 import type { IProviderAdapter } from "./agent/providers/IProviderAdapter";
 import { distillAndSaveSkill, meetsDistillationThreshold } from "./skills/skillDistiller";
@@ -62,7 +63,7 @@ export type ReusableBackgroundCommand = {
 
 export type StoppedActiveBackgroundTask = {
   taskId: string;
-  taskType: "local_agent" | "built_in_agent";
+  taskType: Extract<BackgroundTaskType, "local_bash" | "local_agent" | "built_in_agent">;
   command: string;
 };
 
@@ -150,7 +151,7 @@ export class BackgroundTaskHost {
 
     return {
       taskId,
-      taskType: "local_agent",
+      taskType: task.taskType === "local_bash" ? "local_bash" : "local_agent",
       command: task.command ?? task.description,
     };
   }
@@ -162,7 +163,7 @@ export class BackgroundTaskHost {
     const trimmedCommand = command.trim();
     const taskRuntime = this.options.getTaskRuntime(workspaceRoot);
     const existingCommandTask = (await taskRuntime.listBackgroundTasks()).find(task =>
-      task.taskType === "local_agent" &&
+      (task.taskType === "local_bash" || task.taskType === "local_agent") &&
       task.workspaceRoot === workspaceRoot &&
       task.command === trimmedCommand &&
       (task.status === "running" || task.status === "pending"),
@@ -340,7 +341,7 @@ export class BackgroundTaskHost {
     const trimmedCommand = options.command.trim();
     const taskDescription = buildBackgroundCommandTaskDescription(trimmedCommand);
     const taskId = this.options.createBackgroundCommandTaskId?.()
-      ?? `cmd-${Date.now()}-${randomUUID().slice(0, 8)}`;
+      ?? generateBackgroundTaskId("local_bash");
     const timeoutMs = this.options.backgroundCommandTimeoutMs ?? BACKGROUND_COMMAND_TIMEOUT_MS;
     const artifactPaths = this.getDetachedCommandArtifactPaths(taskId);
     const initialOutput = `Started background command:\n${trimmedCommand}\n`;
@@ -386,7 +387,7 @@ export class BackgroundTaskHost {
 
     await taskRuntime.registerBackgroundTask({
       id: taskId,
-      taskType: "local_agent",
+      taskType: "local_bash",
       status: "running",
       description: taskDescription,
       workspaceRoot: options.workspaceRoot,
