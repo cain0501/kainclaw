@@ -1,4 +1,4 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="zh-CN">
 <head>
 <meta charset="UTF-8">
@@ -139,6 +139,21 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-seri
 .msg-bubble pre{background:#18181b;color:#e4e4e7;padding:10px 12px;border-radius:6px;font-family:'SF Mono',Consolas,'Roboto Mono',monospace;font-size:11px;line-height:1.6;overflow-x:auto;margin:6px 0;white-space:pre-wrap}
 .msg-bubble code{background:rgba(0,0,0,.07);padding:1px 5px;border-radius:3px;font-family:'SF Mono',Consolas,'Roboto Mono',monospace;font-size:12px}
 .msg-bubble.user code{background:rgba(255,255,255,.2)}
+.msg-bubble p{margin:0 0 6px}
+.msg-bubble p:last-child{margin-bottom:0}
+.msg-bubble h1,.msg-bubble h2,.msg-bubble h3,.msg-bubble h4,.msg-bubble h5,.msg-bubble h6{margin:4px 0 6px;font-weight:700;line-height:1.35}
+.msg-bubble ul,.msg-bubble ol{margin:4px 0 6px;padding-left:20px}
+.msg-bubble blockquote{margin:6px 0;padding-left:10px;border-left:3px solid #d4d4d8;color:#52525b}
+.msg-bubble table{border-collapse:collapse;margin:6px 0;font-size:12px;max-width:100%;display:block;overflow-x:auto}
+.msg-bubble th,.msg-bubble td{border:1px solid #d4d4d8;padding:4px 6px;text-align:left}
+.msg-bubble th{background:#e4e4e7;font-weight:700}
+.msg-bubble a{color:#2563eb;text-decoration:none}
+.msg-bubble a:hover{text-decoration:underline}
+.verify-report{display:flex;flex-direction:column;gap:7px}
+.verify-check-title{font-size:13px;font-weight:700;color:#18181b;margin-top:2px}
+.verify-label{font-size:12px;font-weight:600;color:#3f3f46;margin-top:2px}
+.verify-result{font-size:12px;color:#27272a}
+.verify-verdict{font-size:12px;font-weight:700;color:#18181b;margin-top:4px}
 .msg-meta{font-size:11px;color:#a1a1aa;margin-top:4px;padding:0 2px}
 .msg-streaming{opacity:.7}
 .typing-dots span{display:inline-block;width:5px;height:5px;border-radius:50%;background:#a1a1aa;margin:0 1px;animation:blink 1.2s infinite}
@@ -881,6 +896,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-seri
   </div>
 </div>
 
+<script src="./vendor/marked.umd.js"></script>
 <script>
 // IPC Bridge
 const vscode = window.acquireVsCodeApi();
@@ -1771,7 +1787,8 @@ function renderMessage(m, messageIndex) {
   const isUser = m.role === 'user';
   const isError = m.kind === 'error';
   const cls = isError ? 'error' : (isUser ? 'user' : 'assistant');
-  let content = renderMarkdown(m.content || '');
+  const rawContent = m.content || '';
+  let content = renderMessageContent(rawContent, isUser);
 
   let attHtml = '';
   if (m.attachments && m.attachments.length > 0) {
@@ -1812,17 +1829,444 @@ function renderMessage(m, messageIndex) {
   </div>`;
 }
 
+function renderMessageContent(text, isUser = false) {
+  if (!isUser && isVerificationReport(text)) {
+    return renderVerificationReport(text);
+  }
+  return renderMarkdown(text);
+}
+
+function isVerificationReport(text) {
+  const content = String(text || '');
+  return /^### Check:/m.test(content)
+    && /^Command run:\s*$/m.test(content)
+    && /^Output observed:\s*$/m.test(content)
+    && /^Result:\s*(PASS|FAIL)/m.test(content)
+    && /^VERDICT:\s*(PASS|FAIL|PARTIAL)\s*$/m.test(content);
+}
+
+function renderVerificationReport(text) {
+  const report = parseVerificationReport(text);
+  if (report.checks.length === 0) {
+    return renderMarkdown(text);
+  }
+
+  const parts = ['<div class="verify-report">'];
+  for (const check of report.checks) {
+    parts.push(`<div class="verify-check-title">### Check: ${renderInlineMarkdown(check.title)}</div>`);
+    if (check.command) {
+      parts.push('<div class="verify-label">Command run:</div>');
+      parts.push(`<pre><code>${escapeHtml(check.command)}</code></pre>`);
+    }
+    if (check.output) {
+      parts.push('<div class="verify-label">Output observed:</div>');
+      parts.push(`<pre><code>${escapeHtml(check.output)}</code></pre>`);
+    }
+    if (check.result) {
+      parts.push(`<div class="verify-result">${renderInlineMarkdown(check.result)}</div>`);
+    }
+  }
+  if (report.verdict) {
+    parts.push(`<div class="verify-verdict">${escapeHtml(report.verdict)}</div>`);
+  }
+  parts.push('</div>');
+  return parts.join('');
+}
+
+function parseVerificationReport(text) {
+  const lines = String(text || '').split(/\r?\n/);
+  const checks = [];
+  let verdict = '';
+
+  for (let lineIndex = 0; lineIndex < lines.length;) {
+    const trimmedLine = lines[lineIndex].trim();
+    const checkMatch = trimmedLine.match(/^### Check:\s*(.*)$/);
+
+    if (isVerificationVerdictLine(trimmedLine)) {
+      verdict = trimmedLine;
+      lineIndex += 1;
+      continue;
+    }
+
+    if (!checkMatch) {
+      lineIndex += 1;
+      continue;
+    }
+
+    const check = {
+      title: checkMatch[1] || '',
+      command: '',
+      output: '',
+      result: '',
+    };
+    lineIndex += 1;
+
+    while (lineIndex < lines.length) {
+      const currentLine = lines[lineIndex];
+      const currentTrimmed = currentLine.trim();
+
+      if (/^### Check:/.test(currentTrimmed) || isVerificationVerdictLine(currentTrimmed)) {
+        break;
+      }
+
+      if (currentTrimmed === 'Command run:') {
+        const block = readVerificationBlock(lines, lineIndex + 1, line =>
+          line.trim() === 'Output observed:'
+          || /^Result:/.test(line.trim())
+          || /^### Check:/.test(line.trim())
+          || isVerificationVerdictLine(line.trim()),
+          'command',
+        );
+        check.command = block.content;
+        lineIndex = block.nextIndex;
+        continue;
+      }
+
+      if (currentTrimmed === 'Output observed:') {
+        const block = readVerificationBlock(lines, lineIndex + 1, line =>
+          /^Result:/.test(line.trim())
+          || /^### Check:/.test(line.trim())
+          || isVerificationVerdictLine(line.trim()),
+          'output',
+        );
+        check.output = block.content;
+        lineIndex = block.nextIndex;
+        continue;
+      }
+
+      if (/^Result:/.test(currentTrimmed)) {
+        check.result = currentTrimmed;
+      }
+
+      lineIndex += 1;
+    }
+
+    checks.push(check);
+  }
+
+  return { checks, verdict };
+}
+
+function readVerificationBlock(lines, startIndex, isTerminatorLine, blockKind) {
+  let endIndex = startIndex;
+  while (endIndex < lines.length && !isTerminatorLine(lines[endIndex])) {
+    endIndex += 1;
+  }
+
+  return {
+    content: stripVerificationFenceEnvelope(lines.slice(startIndex, endIndex), blockKind).join('\n'),
+    nextIndex: endIndex,
+  };
+}
+
+function stripVerificationFenceEnvelope(lines, blockKind) {
+  if (lines.length === 0) {
+    return lines;
+  }
+
+  const openingFence = getMarkdownFenceInfo(lines[0]);
+  if (!openingFence) {
+    return lines;
+  }
+
+  const contentLines = lines.slice(1);
+  let closingIndex = contentLines.length - 1;
+  while (closingIndex >= 0 && contentLines[closingIndex].trim() === '') {
+    closingIndex -= 1;
+  }
+
+  if (
+    closingIndex >= 0
+    && isClosingMarkdownFence(contentLines[closingIndex], openingFence.char, openingFence.length)
+    && shouldStripVerificationClosingFence(contentLines, closingIndex, openingFence, blockKind)
+  ) {
+    return [
+      ...contentLines.slice(0, closingIndex),
+      ...contentLines.slice(closingIndex + 1),
+    ];
+  }
+
+  return contentLines;
+}
+
+function shouldStripVerificationClosingFence(contentLines, closingIndex, openingFence, blockKind) {
+  if (blockKind === 'command' || openingFence.char === '~') {
+    return true;
+  }
+
+  let nestedFenceCount = 0;
+  for (let index = 0; index <= closingIndex; index += 1) {
+    const line = contentLines[index];
+    if (
+      getMarkdownFenceInfo(line)
+      || isClosingMarkdownFence(line, openingFence.char, openingFence.length)
+    ) {
+      nestedFenceCount += 1;
+    }
+  }
+
+  return nestedFenceCount === 1 || nestedFenceCount >= 3;
+}
+
+function getMarkdownFenceInfo(line) {
+  const match = String(line || '').match(/^\s{0,3}(`{3,}|~{3,})([a-zA-Z0-9_-]*)?\s*$/);
+  if (!match) {
+    return null;
+  }
+  return {
+    char: match[1][0],
+    length: match[1].length,
+  };
+}
+
+function isVerificationVerdictLine(line) {
+  return /^VERDICT:\s*(PASS|FAIL|PARTIAL)\s*$/.test(line);
+}
+
+let rendererMarkedConfigured = false;
+
+function getRendererMarkedApi() {
+  if (typeof marked !== 'undefined' && marked && typeof marked.lexer === 'function') {
+    return marked;
+  }
+  if (typeof globalThis !== 'undefined' && globalThis.marked && typeof globalThis.marked.lexer === 'function') {
+    return globalThis.marked;
+  }
+  return null;
+}
+
+function configureRendererMarked(api) {
+  if (rendererMarkedConfigured || !api || typeof api.use !== 'function') {
+    return;
+  }
+  api.use({
+    tokenizer: {
+      del() {
+        return undefined;
+      },
+    },
+  });
+  rendererMarkedConfigured = true;
+}
+
 function renderMarkdown(text) {
-  // Code blocks
-  text = text.replace(/```(\w*)\n?([\s\S]*?)```/g, (_, lang, code) =>
-    `<pre><code>${escapeHtml(code.trim())}</code></pre>`);
-  // Inline code
-  text = text.replace(/`([^`]+)`/g, (_, c) => `<code>${escapeHtml(c)}</code>`);
-  // Bold
-  text = text.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
-  // Newlines
-  text = text.replace(/\n/g, '<br>');
-  return text;
+  const api = getRendererMarkedApi();
+  if (!api) {
+    return renderLineBasedMarkdown(text);
+  }
+
+  configureRendererMarked(api);
+  const tokens = api.lexer(String(text || ''));
+  return tokens.map(token => renderMarkdownToken(token)).join('').trim();
+}
+
+function renderMarkdownToken(token, listDepth = 0, orderedListNumber = null, parent = null) {
+  switch (token.type) {
+    case 'space':
+    case 'def':
+      return '';
+    case 'hr':
+      return '<hr>';
+    case 'heading': {
+      const depth = Math.max(1, Math.min(6, Number(token.depth || 3)));
+      return `<h${depth}>${renderMarkdownInlineTokens(token.tokens || [])}</h${depth}>`;
+    }
+    case 'code':
+      return `<pre><code>${escapeHtml(token.text || '')}</code></pre>`;
+    case 'blockquote':
+      return `<blockquote>${(token.tokens || []).map(child => renderMarkdownToken(child)).join('')}</blockquote>`;
+    case 'list': {
+      const tag = token.ordered ? 'ol' : 'ul';
+      const start = token.ordered && Number(token.start) > 1
+        ? ` start="${Number(token.start)}"`
+        : '';
+      return `<${tag}${start}>${(token.items || []).map((item, index) =>
+        renderMarkdownToken(
+          item,
+          listDepth + 1,
+          token.ordered ? Number(token.start || 1) + index : null,
+          token,
+        ),
+      ).join('')}</${tag}>`;
+    }
+    case 'list_item': {
+      const checkbox = token.task
+        ? `<input type="checkbox" disabled${token.checked ? ' checked' : ''}> `
+        : '';
+      const body = (token.tokens || [])
+        .map(child => renderMarkdownToken(child, listDepth, orderedListNumber, token))
+        .join('');
+      return `<li>${checkbox}${body}</li>`;
+    }
+    case 'paragraph':
+      return `<p>${renderMarkdownInlineTokens(token.tokens || [])}</p>`;
+    case 'text':
+      if (Array.isArray(token.tokens) && token.tokens.length > 0) {
+        return parent?.type === 'list_item'
+          ? renderMarkdownInlineTokens(token.tokens)
+          : `<p>${renderMarkdownInlineTokens(token.tokens)}</p>`;
+      }
+      return parent?.type === 'list_item'
+        ? escapeHtml(token.text || '')
+        : `<p>${escapeHtml(token.text || '')}</p>`;
+    case 'table':
+      return renderMarkdownTable(token);
+    case 'html':
+      return `<p>${escapeHtml(token.raw || token.text || '').replace(/\n/g, '<br>')}</p>`;
+    default:
+      if (Array.isArray(token.tokens)) {
+        return renderMarkdownInlineTokens(token.tokens);
+      }
+      return escapeHtml(token.raw || token.text || '');
+  }
+}
+
+function renderMarkdownInlineTokens(tokens) {
+  return (tokens || []).map(token => renderMarkdownInlineToken(token)).join('');
+}
+
+function renderMarkdownInlineToken(token) {
+  switch (token.type) {
+    case 'escape':
+    case 'text':
+      return escapeHtml(token.text || '');
+    case 'codespan':
+      return `<code>${escapeHtml(token.text || '')}</code>`;
+    case 'strong':
+      return `<strong>${renderMarkdownInlineTokens(token.tokens || [])}</strong>`;
+    case 'em':
+      return `<em>${renderMarkdownInlineTokens(token.tokens || [])}</em>`;
+    case 'br':
+      return '<br>';
+    case 'del':
+      return renderMarkdownInlineTokens(token.tokens || []);
+    case 'link': {
+      const label = renderMarkdownInlineTokens(token.tokens || []);
+      const href = sanitizeMarkdownHref(token.href || '');
+      return href
+        ? `<a href="${escapeHtml(href)}" target="_blank" rel="noreferrer">${label}</a>`
+        : label;
+    }
+    case 'image': {
+      const alt = escapeHtml(token.text || token.href || '');
+      const href = sanitizeMarkdownHref(token.href || '');
+      return href
+        ? `<a href="${escapeHtml(href)}" target="_blank" rel="noreferrer">${alt}</a>`
+        : alt;
+    }
+    case 'html':
+      return escapeHtml(token.raw || token.text || '');
+    default:
+      if (Array.isArray(token.tokens)) {
+        return renderMarkdownInlineTokens(token.tokens);
+      }
+      return escapeHtml(token.raw || token.text || '');
+  }
+}
+
+function renderMarkdownTable(token) {
+  const align = Array.isArray(token.align) ? token.align : [];
+  const headers = (token.header || []).map((cell, index) => {
+    const style = getMarkdownTableAlignStyle(align[index]);
+    return `<th${style}>${renderMarkdownInlineTokens(cell.tokens || [])}</th>`;
+  }).join('');
+  const rows = (token.rows || []).map(row =>
+    `<tr>${(row || []).map((cell, index) => {
+      const style = getMarkdownTableAlignStyle(align[index]);
+      return `<td${style}>${renderMarkdownInlineTokens(cell.tokens || [])}</td>`;
+    }).join('')}</tr>`,
+  ).join('');
+  return `<table><thead><tr>${headers}</tr></thead><tbody>${rows}</tbody></table>`;
+}
+
+function getMarkdownTableAlignStyle(align) {
+  if (!align) {
+    return '';
+  }
+  return ` style="text-align:${escapeHtml(String(align))}"`;
+}
+
+function sanitizeMarkdownHref(href) {
+  const value = String(href || '').trim();
+  if (!value) {
+    return '';
+  }
+  if (/^(https?:|mailto:)/i.test(value) || /^[./#]/.test(value)) {
+    return value;
+  }
+  return '';
+}
+
+function renderLineBasedMarkdown(text) {
+  const lines = String(text || '').split(/\r?\n/);
+  const parts = [];
+  let textLines = [];
+  let codeLines = [];
+  let codeFenceChar = '';
+  let codeFenceLength = 0;
+
+  const flushText = () => {
+    if (textLines.length === 0) return;
+    parts.push(renderInlineMarkdown(textLines.join('\n')));
+    textLines = [];
+  };
+
+  const flushCode = () => {
+    parts.push(`<pre><code>${escapeHtml(codeLines.join('\n'))}</code></pre>`);
+    codeLines = [];
+  };
+
+  for (const line of lines) {
+    if (!codeFenceChar) {
+      const openingFence = line.match(/^\s{0,3}(`{3,}|~{3,})([a-zA-Z0-9_-]*)?\s*$/);
+      if (openingFence) {
+        flushText();
+        codeFenceChar = openingFence[1][0];
+        codeFenceLength = openingFence[1].length;
+        continue;
+      }
+      textLines.push(line);
+      continue;
+    }
+
+    if (isClosingMarkdownFence(line, codeFenceChar, codeFenceLength)) {
+      flushCode();
+      codeFenceChar = '';
+      codeFenceLength = 0;
+      continue;
+    }
+
+    codeLines.push(line);
+  }
+
+  if (codeFenceChar) {
+    flushCode();
+  }
+  flushText();
+
+  return parts.join('');
+}
+
+function isClosingMarkdownFence(line, fenceChar, fenceLength) {
+  const trimmed = line.trim();
+  if (trimmed.length < fenceLength) return false;
+  for (let index = 0; index < trimmed.length; index += 1) {
+    if (trimmed[index] !== fenceChar) return false;
+  }
+  return true;
+}
+
+function renderInlineMarkdown(text) {
+  return text
+    .split(/(`[^`\n]+`)/g)
+    .map(part => {
+      if (/^`[^`\n]+`$/.test(part)) {
+        return `<code>${escapeHtml(part.slice(1, -1))}</code>`;
+      }
+      return escapeHtml(part).replace(/\*\*([^*\n]+)\*\*/g, '<strong>$1</strong>');
+    })
+    .join('')
+    .replace(/\n/g, '<br>');
 }
 
 function escapeHtml(s) {

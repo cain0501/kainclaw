@@ -62,7 +62,7 @@
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "check": "tsc --noEmit -p tsconfig.json",
-    "build:electron": "tsc -p tsconfig.electron.json && node -e \"require('fs').cpSync('electron/renderer','dist-electron/electron/renderer',{recursive:true})\"",
+    "build:electron": "tsc -p tsconfig.electron.json && node -e \"const fs=require('fs');fs.cpSync('electron/renderer','dist-electron/electron/renderer',{recursive:true});fs.mkdirSync('dist-electron/electron/renderer/vendor',{recursive:true});fs.copyFileSync('node_modules/marked/lib/marked.umd.js','dist-electron/electron/renderer/vendor/marked.umd.js')\"",
     "check:electron": "tsc --noEmit -p tsconfig.electron.json",
     "start:image-api": "npm run build && node dist/imageGeneration/imageApiServer.js",
     "start:electron": "npm run build:electron && node scripts/start-electron.cjs",
@@ -81,6 +81,7 @@
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.29.0",
     "diff": "^8.0.4",
+    "marked": "^18.0.2",
     "playwright": "^1.58.2",
     "zod": "^4.3.6"
   }
