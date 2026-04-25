@@ -1,4 +1,5 @@
 import { execFile } from "node:child_process";
+import { stat } from "node:fs/promises";
 import path from "node:path";
 import { promisify } from "node:util";
 import * as vscode from "vscode";
@@ -17,6 +18,7 @@ import {
 import type { LspOperation, LspQueryInput } from "./types";
 
 const execFileAsync = promisify(execFile);
+const MAX_LSP_FILE_SIZE_BYTES = 10_000_000;
 
 export type LspToolAdapter = {
   query(input: LspQueryInput): Promise<ToolExecutionResult>;
@@ -62,6 +64,46 @@ function resolveRequiredFilePath(
   }
 
   return trimmedFilePath;
+}
+
+function isUncPath(absolutePath: string): boolean {
+  return absolutePath.startsWith("\\\\") || absolutePath.startsWith("//");
+}
+
+async function assertLspFileAccessible(
+  inputPath: string,
+  absolutePath: string,
+): Promise<ToolExecutionResult | undefined> {
+  // Match Claude's LSP safety guard: avoid preflight filesystem probes on UNC
+  // paths so Windows does not leak credentials through implicit auth.
+  if (isUncPath(absolutePath)) {
+    return undefined;
+  }
+
+  let fileStats;
+  try {
+    fileStats = await stat(absolutePath);
+  } catch (error) {
+    const err = error as NodeJS.ErrnoException;
+    if (err.code === "ENOENT") {
+      throw new Error(`File does not exist: ${inputPath}`);
+    }
+
+    throw new Error(`Cannot access file: ${inputPath}. ${err.message}`);
+  }
+
+  if (!fileStats.isFile()) {
+    throw new Error(`Path is not a file: ${inputPath}`);
+  }
+
+  if (fileStats.size > MAX_LSP_FILE_SIZE_BYTES) {
+    return {
+      summary: "LSP file too large for analysis",
+      content: `File too large for LSP analysis (${Math.ceil(fileStats.size / 1_000_000)}MB exceeds 10MB limit)`,
+    };
+  }
+
+  return undefined;
 }
 
 function hasOpenDocument(documentUri: vscode.Uri): boolean {
@@ -315,6 +357,11 @@ export class VsCodeLspRuntime implements LspToolAdapter {
     const wasDocumentOpen = documentUri ? hasOpenDocument(documentUri) : false;
 
     if (documentUri) {
+      const preflightResult = await assertLspFileAccessible(filePath!, absolutePath!);
+      if (preflightResult) {
+        return preflightResult;
+      }
+
       await vscode.workspace.openTextDocument(documentUri);
     }
 

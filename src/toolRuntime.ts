@@ -8,6 +8,7 @@ import type { LspToolAdapter } from "./lsp/lspRuntime";
 import { LSP_OPERATIONS, LSP_TOOL_NAME } from "./lsp/types";
 import type {
   BackgroundTaskRecord,
+  BackgroundTaskStatus,
   ConversationTaskRuntime,
   TaskRecord,
   TaskStatus,
@@ -54,6 +55,9 @@ const BASE_READ_ONLY_COMMAND_PREFIXES = [
   "git log",
   "git branch",
   "git show",
+  "gh pr list",
+  "gh pr view",
+  "gh pr diff",
   "node -v",
   "npm -v",
 ];
@@ -746,6 +750,7 @@ function parseTaskListFilters(input: ToolInput): ParsedTaskListFilters {
       rawStatus !== "running" &&
       rawStatus !== "failed" &&
       rawStatus !== "lost" &&
+      rawStatus !== "killed" &&
       rawStatus !== "cancelled"
     ) {
       throw new Error(`Unsupported TaskList status: ${rawStatus}`);
@@ -816,6 +821,7 @@ function matchesBackgroundTaskFilters(
     filters.status !== "running" &&
     filters.status !== "failed" &&
     filters.status !== "lost" &&
+    filters.status !== "killed" &&
     filters.status !== "cancelled"
   ) {
     return false;
@@ -897,6 +903,7 @@ function formatBackgroundTaskStatusCounts(
     completed: 0,
     failed: 0,
     lost: 0,
+    killed: 0,
     cancelled: 0,
   };
 
@@ -904,7 +911,7 @@ function formatBackgroundTaskStatusCounts(
     counts[task.status] += 1;
   }
 
-  return `${label}: pending=${counts.pending}, running=${counts.running}, completed=${counts.completed}, failed=${counts.failed}, lost=${counts.lost}, cancelled=${counts.cancelled}`;
+  return `${label}: pending=${counts.pending}, running=${counts.running}, completed=${counts.completed}, failed=${counts.failed}, lost=${counts.lost}, killed=${counts.killed}, cancelled=${counts.cancelled}`;
 }
 
 async function validateTaskUpdateDependencies(
@@ -1051,8 +1058,12 @@ function formatBackgroundTaskSummary(task: BackgroundTaskRecord): string {
     typeof task.metadata?.diffRef === "string"
       ? ` | diffRef ${task.metadata.diffRef}`
       : "";
+  const reviewPrNumber =
+    typeof task.metadata?.reviewPrNumber === "string"
+      ? ` | pr #${task.metadata.reviewPrNumber}`
+      : "";
   const details = formatBackgroundTaskSummaryDetails(task);
-  return `@${task.id} [${task.status}] ${label}${remoteTaskType}${diffRef}${details}${workspaceRoot}${runtimeState} | created ${createdAt} | updated ${updatedAt}`;
+  return `@${task.id} [${task.status}] ${label}${remoteTaskType}${reviewPrNumber}${diffRef}${details}${workspaceRoot}${runtimeState} | created ${createdAt} | updated ${updatedAt}`;
 }
 
 type SearchFilesResult = {
@@ -1331,6 +1342,9 @@ function formatBackgroundTaskOutput(
   if (typeof task.metadata?.diffRef === "string") {
     parts.push(`<diff_ref>${task.metadata.diffRef}</diff_ref>`);
   }
+  if (typeof task.metadata?.reviewPrNumber === "string") {
+    parts.push(`<review_pr_number>${task.metadata.reviewPrNumber}</review_pr_number>`);
+  }
   if (task.metadata) {
     parts.push(`<metadata>\n${JSON.stringify(task.metadata, null, 2)}\n</metadata>`);
   }
@@ -1395,6 +1409,10 @@ function getBackgroundTaskGetSummary(
 
   if (task.status === "cancelled") {
     return `Loaded cancelled background task ${task.id}`;
+  }
+
+  if (task.status === "killed") {
+    return `Loaded killed background task ${task.id}`;
   }
 
   if (task.status === "lost") {
@@ -2096,7 +2114,7 @@ const handlers: Record<string, ToolHandler> = {
     const line = typeof input.line === "number" ? input.line : undefined;
     const character = typeof input.character === "number" ? input.character : undefined;
     const query =
-      typeof input.query === "string" && input.query.trim() !== ""
+      typeof input.query === "string"
         ? input.query.trim()
         : undefined;
     const severity =
@@ -2128,10 +2146,6 @@ const handlers: Record<string, ToolHandler> = {
       throw new Error("line and character are required for this LSP operation");
     }
 
-    if (operation === "workspaceSymbols" && !query) {
-      throw new Error("query is required for workspaceSymbols");
-    }
-
     if (
       severity !== undefined &&
       severity !== "error" &&
@@ -2147,7 +2161,7 @@ const handlers: Record<string, ToolHandler> = {
       filePath,
       line,
       character,
-      query,
+      query: operation === "workspaceSymbols" ? query ?? "" : query,
       severity: severity as "error" | "warning" | "info" | "hint" | undefined,
       maxResults,
       itemIndex,
@@ -2538,10 +2552,12 @@ const handlers: Record<string, ToolHandler> = {
     }
 
     const command = stopped.command ?? task.command ?? task.description;
+    const stoppedStatus: BackgroundTaskStatus =
+      task.taskType === "remote_agent" ? "killed" : "cancelled";
     await getTasks(context).updateBackgroundTask(taskId, {
-      status: "cancelled",
-      error: "Stopped by TaskStop.",
-      ...(stopped ? { result: "Stopped by TaskStop." } : {}),
+      status: stoppedStatus,
+      ...(stoppedStatus === "cancelled" ? { error: "Stopped by TaskStop." } : {}),
+      result: "Stopped by TaskStop.",
     });
 
     return {
@@ -2615,6 +2631,8 @@ const handlers: Record<string, ToolHandler> = {
         ? `Retrieved completed output for task ${taskId}`
         : completedTask.status === "cancelled"
           ? `Retrieved cancelled output for task ${taskId}`
+          : completedTask.status === "killed"
+            ? `Retrieved killed output for task ${taskId}`
           : completedTask.status === "lost"
             ? `Retrieved lost output for task ${taskId}`
           : `Retrieved failed output for task ${taskId}`;
@@ -3129,7 +3147,7 @@ export const toolDefinitions: ToolDefinition[] = [
         },
         query: {
           type: "string",
-          description: "Workspace symbol search query. Required for workspaceSymbols.",
+          description: "Optional workspace symbol search query. Omit or pass an empty string to request all workspace symbols.",
         },
         severity: {
           type: "string",

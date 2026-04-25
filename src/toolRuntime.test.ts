@@ -250,7 +250,7 @@ describe("toolRuntime background task semantics", () => {
       "TaskList filters: kind=background, status=running, query=build, limit=1",
     );
     expect(backgroundResult.content).toContain(
-      "Background task counts (filtered): pending=0, running=1, completed=0, failed=0, lost=0, cancelled=0",
+      "Background task counts (filtered): pending=0, running=1, completed=0, failed=0, lost=0, killed=0, cancelled=0",
     );
     expect(backgroundResult.content).toContain("@build-bg-running [running]");
     expect(backgroundResult.content).not.toContain("@review-bg-done");
@@ -1078,6 +1078,42 @@ describe("toolRuntime background task semantics", () => {
     expect(storedTask?.status).toBe("running");
   });
 
+  it("TaskStop records Claude-style killed status for adapter-backed remote tasks", async () => {
+    const context = await createTaskContext();
+    context.stopBackgroundTask = async taskId => ({
+      taskId,
+      taskType: "remote_agent",
+      command: "Review PR #42 remotely",
+    });
+    await context.tasks!.registerBackgroundTask({
+      id: "remote-running-kill",
+      taskType: "remote_agent",
+      status: "running",
+      description: "remote running task",
+      command: "Review PR #42 remotely",
+      metadata: {
+        remoteTaskType: "ultrareview",
+        sessionId: "sess-456",
+      },
+      output: "remote task started",
+    });
+
+    const result = await executeTool("TaskStop", { task_id: "remote-running-kill" }, context);
+    const storedTask = await context.tasks!.getBackgroundTask("remote-running-kill");
+
+    expect(parseJsonToolContent(result.content)).toEqual({
+      message: "Successfully stopped task: remote-running-kill (Review PR #42 remotely)",
+      task_id: "remote-running-kill",
+      task_type: "remote_agent",
+      command: "Review PR #42 remotely",
+    });
+    expect(storedTask).toMatchObject({
+      status: "killed",
+      result: "Stopped by TaskStop.",
+    });
+    expect(storedTask?.error).toBeUndefined();
+  });
+
   it("TaskStop rejects completed remote tasks", async () => {
     const context = await createTaskContext();
     await context.tasks!.registerBackgroundTask({
@@ -1134,6 +1170,30 @@ describe("toolRuntime background task semantics", () => {
     expect(result.content).toContain("<description>cancelled task</description>");
     expect(result.content).toContain("<command>npm run build</command>");
     expect(result.content).toContain("<status>cancelled</status>");
+  });
+
+  it("TaskOutput distinguishes killed remote terminal state in summary", async () => {
+    const context = await createTaskContext();
+    await context.tasks!.registerBackgroundTask({
+      id: "killed-remote-task",
+      taskType: "remote_agent",
+      status: "killed",
+      description: "killed remote task",
+      command: "Review PR #42 remotely",
+      metadata: {
+        remoteTaskType: "ultrareview",
+        sessionId: "sess-killed",
+      },
+      output: "remote stopped",
+      result: "Stopped by TaskStop.",
+    });
+
+    const result = await executeTool("TaskOutput", { task_id: "killed-remote-task" }, context);
+
+    expect(result.summary).toContain("killed output");
+    expect(result.content).toContain("<task_type>remote_agent</task_type>");
+    expect(result.content).toContain("<status>killed</status>");
+    expect(result.content).toContain("<result>\nStopped by TaskStop.\n</result>");
   });
 
   it("TaskOutput reports lost retrieval status for restart-failed tasks", async () => {
@@ -1544,7 +1604,7 @@ describe("toolRuntime background task semantics", () => {
     expect(result.content).toContain("updated ");
     expect(result.content).toContain("root E:\\claudecodejingiang\\vscode-extension");
     expect(result.content).toContain(
-      "Background task counts: pending=0, running=1, completed=0, failed=0, lost=0, cancelled=0",
+      "Background task counts: pending=0, running=1, completed=0, failed=0, lost=0, killed=0, cancelled=0",
     );
   });
 
@@ -1702,7 +1762,7 @@ describe("toolRuntime background task semantics", () => {
     expect(result.summary).toContain("Typed into browser field");
   });
 
-  it("LSP rejects unsupported operations and missing required inputs", async () => {
+  it("LSP rejects unsupported operations and missing file-backed inputs", async () => {
     const context: ToolContext = {
       workspaceRoot: "E:\\claudecodejingiang\\vscode-extension",
       lsp: {
@@ -1720,7 +1780,7 @@ describe("toolRuntime background task semantics", () => {
 
     await expect(
       executeTool("LSP", { operation: "workspaceSymbols" }, context),
-    ).rejects.toThrow(/query is required for workspaceSymbols/);
+    ).resolves.toEqual({ summary: "", content: "" });
   });
 
   it("LSP forwards normalized query input to the lsp adapter", async () => {
@@ -1757,6 +1817,39 @@ describe("toolRuntime background task semantics", () => {
     ]);
     expect(result.summary).toBe("ok");
     expect(result.content).toBe("done");
+  });
+
+  it("LSP forwards an empty workspaceSymbols query when omitted", async () => {
+    const calls: Array<Record<string, unknown>> = [];
+    const context: ToolContext = {
+      workspaceRoot: "E:\\claudecodejingiang\\vscode-extension",
+      lsp: {
+        query: async input => {
+          calls.push(input as Record<string, unknown>);
+          return { summary: "workspace symbols", content: "all symbols" };
+        },
+      },
+    };
+
+    const result = await executeTool(
+      "LSP",
+      {
+        operation: "workspaceSymbols",
+      },
+      context,
+    );
+
+    expect(calls).toEqual([
+      {
+        operation: "workspaceSymbols",
+        filePath: undefined,
+        line: undefined,
+        character: undefined,
+        query: "",
+      },
+    ]);
+    expect(result.summary).toBe("workspace symbols");
+    expect(result.content).toBe("all symbols");
   });
 
   it("fetch_url rejects invalid and unsupported URLs", async () => {
@@ -1815,6 +1908,29 @@ describe("toolRuntime background task semantics", () => {
     const result = await executeTool("TaskList", { kind: "background" }, context);
 
     expect(result.content).toContain("@review-diffref [completed] review agent | diffRef main...HEAD");
+  });
+
+  it("TaskList, TaskGet, and TaskOutput surface review PR number provenance", async () => {
+    const context = await createTaskContext();
+    await context.tasks!.registerBackgroundTask({
+      id: "review-pr-number",
+      taskType: "built_in_agent",
+      agentType: "review",
+      agentSource: "built-in",
+      agentColor: "blue",
+      status: "completed",
+      description: "review PR task",
+      metadata: { reviewPrNumber: "123" },
+      output: "done",
+    });
+
+    const listResult = await executeTool("TaskList", { kind: "background" }, context);
+    const getResult = await executeTool("TaskGet", { taskId: "review-pr-number" }, context);
+    const outputResult = await executeTool("TaskOutput", { task_id: "review-pr-number" }, context);
+
+    expect(listResult.content).toContain("@review-pr-number [completed] review agent | pr #123");
+    expect(getResult.content).toContain("<review_pr_number>123</review_pr_number>");
+    expect(outputResult.content).toContain("<review_pr_number>123</review_pr_number>");
   });
 
   it("TaskGet and TaskOutput surface diffRef for verification background tasks", async () => {

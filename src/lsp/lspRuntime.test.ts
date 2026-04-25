@@ -6,12 +6,14 @@ const {
   getDiagnostics,
   textDocuments,
   execFile,
+  stat,
 } = vi.hoisted(() => ({
   executeCommand: vi.fn(),
   openTextDocument: vi.fn(),
   getDiagnostics: vi.fn(),
   textDocuments: [] as Array<{ uri: { fsPath: string } }>,
   execFile: vi.fn(),
+  stat: vi.fn(),
 }));
 
 vi.mock("vscode", () => {
@@ -54,6 +56,7 @@ vi.mock("vscode", () => {
 });
 
 vi.mock("node:child_process", () => ({ execFile }));
+vi.mock("node:fs/promises", () => ({ stat }));
 
 import {
   LSP_EMPTY_RESULT_RETRY_DELAY_MS,
@@ -71,6 +74,10 @@ describe("lsp runtime helpers", () => {
     openTextDocument.mockImplementation(async uri => {
       textDocuments.push({ uri });
       return { uri };
+    });
+    stat.mockResolvedValue({
+      isFile: () => true,
+      size: 0,
     });
     // Default: git check-ignore exits with code 1 (no paths ignored → no filtering)
     execFile.mockImplementation(
@@ -120,6 +127,61 @@ describe("lsp runtime helpers", () => {
       }),
     ).rejects.toThrow(/filePath is required for goToDefinition/);
 
+    expect(openTextDocument).not.toHaveBeenCalled();
+    expect(executeCommand).not.toHaveBeenCalled();
+  });
+
+  it("fails before opening VS Code documents when the target file is missing", async () => {
+    const runtime = new VsCodeLspRuntime(() => "E:\\claudecodejingiang\\vscode-extension");
+    stat.mockRejectedValueOnce(Object.assign(new Error("missing"), { code: "ENOENT" }));
+
+    await expect(
+      runtime.query({
+        operation: "goToDefinition",
+        filePath: "src/lsp/missing.ts",
+        line: 5,
+        character: 9,
+      }),
+    ).rejects.toThrow(/File does not exist: src\/lsp\/missing.ts/);
+
+    expect(openTextDocument).not.toHaveBeenCalled();
+    expect(executeCommand).not.toHaveBeenCalled();
+  });
+
+  it("fails before opening VS Code documents when the target path is not a file", async () => {
+    const runtime = new VsCodeLspRuntime(() => "E:\\claudecodejingiang\\vscode-extension");
+    stat.mockResolvedValueOnce({
+      isFile: () => false,
+      size: 0,
+    });
+
+    await expect(
+      runtime.query({
+        operation: "hover",
+        filePath: "src/lsp",
+        line: 5,
+        character: 9,
+      }),
+    ).rejects.toThrow(/Path is not a file: src\/lsp/);
+
+    expect(openTextDocument).not.toHaveBeenCalled();
+    expect(executeCommand).not.toHaveBeenCalled();
+  });
+
+  it("returns a bounded result before opening VS Code documents for oversized files", async () => {
+    const runtime = new VsCodeLspRuntime(() => "E:\\claudecodejingiang\\vscode-extension");
+    stat.mockResolvedValueOnce({
+      isFile: () => true,
+      size: 10_000_001,
+    });
+
+    const result = await runtime.query({
+      operation: "documentSymbols",
+      filePath: "src/lsp/huge.ts",
+    });
+
+    expect(result.summary).toBe("LSP file too large for analysis");
+    expect(result.content).toContain("exceeds 10MB limit");
     expect(openTextDocument).not.toHaveBeenCalled();
     expect(executeCommand).not.toHaveBeenCalled();
   });
@@ -339,6 +401,10 @@ describe("lsp gitignored filtering", () => {
     openTextDocument.mockImplementation(async (uri: { fsPath: string }) => {
       textDocuments.push({ uri });
       return { uri };
+    });
+    stat.mockResolvedValue({
+      isFile: () => true,
+      size: 0,
     });
     // Default: exit code 1 (no paths ignored)
     execFile.mockImplementation(
