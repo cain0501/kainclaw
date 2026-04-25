@@ -680,6 +680,174 @@ describe("toolRuntime background task semantics", () => {
     expect(mcpResult.content).toContain("mcp__github__create_issue");
   });
 
+  it("ToolSearchTool supports Claude select, MCP prefix, required terms, and max_results", async () => {
+    const context: ToolContext = {
+      workspaceRoot: "E:\\claudecodejingiang\\vscode-extension",
+      mcp: {
+        getToolDefinitions: async () => [
+          {
+            name: "mcp__github__create_issue",
+            description: "Create a GitHub issue",
+            input_schema: { type: "object", properties: {} },
+          },
+          {
+            name: "mcp__github__list_pull_requests",
+            description: "List GitHub pull requests",
+            input_schema: { type: "object", properties: {} },
+          },
+          {
+            name: "mcp__slack__send_message",
+            description: "Send a Slack message",
+            input_schema: { type: "object", properties: {} },
+          },
+        ],
+        executeTool: async () => {
+          throw new Error("not used");
+        },
+        listResources: async () => {
+          throw new Error("not used");
+        },
+        readResource: async () => {
+          throw new Error("not used");
+        },
+      },
+    };
+
+    const selected = await executeTool(
+      "ToolSearchTool",
+      { query: "select:RunReview,mcp__github__create_issue,missing" },
+      context,
+    );
+
+    expect(selected.content).toContain("RunReview");
+    expect(selected.content).toContain("mcp__github__create_issue");
+    expect(selected.content).not.toContain("- missing");
+
+    const prefixed = await executeTool(
+      "ToolSearchTool",
+      { query: "mcp__github", max_results: 1 },
+      context,
+    );
+
+    expect(prefixed.content).toContain("mcp__github__create_issue");
+    expect(prefixed.content).not.toContain("mcp__github__list_pull_requests");
+    expect(prefixed.content).not.toContain("mcp__slack__send_message");
+
+    const required = await executeTool(
+      "ToolSearchTool",
+      { query: "+github issue", maxResults: 10 },
+      context,
+    );
+
+    expect(required.content).toContain("mcp__github__create_issue");
+    expect(required.content).not.toContain("mcp__slack__send_message");
+  });
+
+  it("ToolSearchTool resolves deprecated Claude task aliases to canonical tools", async () => {
+    const context: ToolContext = {
+      workspaceRoot: "E:\\claudecodejingiang\\vscode-extension",
+    };
+
+    const exact = await executeTool(
+      "ToolSearchTool",
+      { query: "KillShell", maxResults: 10 },
+      context,
+    );
+    const selected = await executeTool(
+      "ToolSearchTool",
+      { query: "select:AgentOutputTool,BashOutputTool", maxResults: 10 },
+      context,
+    );
+
+    expect(exact.content).toContain("- TaskStop");
+    expect(exact.content).not.toContain("- KillShell");
+    expect(selected.content).toContain("- TaskOutput");
+    expect(selected.content.match(/- TaskOutput/g)).toHaveLength(1);
+    expect(selected.content).not.toContain("- AgentOutputTool");
+    expect(selected.content).not.toContain("- BashOutputTool");
+  });
+
+  it("ToolSearchTool does not advertise LSP when the runtime is unavailable", async () => {
+    const unavailableContext: ToolContext = {
+      workspaceRoot: "E:\\claudecodejingiang\\vscode-extension",
+    };
+
+    const unavailableResult = await executeTool(
+      "ToolSearchTool",
+      { query: "LSP", maxResults: 10 },
+      unavailableContext,
+    );
+
+    expect(unavailableResult.content).not.toContain("- LSP");
+
+    const availableContext: ToolContext = {
+      workspaceRoot: "E:\\claudecodejingiang\\vscode-extension",
+      lsp: {
+        isAvailable: () => true,
+        query: async () => ({ summary: "ok", content: "ok" }),
+      },
+    };
+
+    const availableResult = await executeTool(
+      "ToolSearchTool",
+      { query: "LSP", maxResults: 10 },
+      availableContext,
+    );
+
+    expect(availableResult.content).toContain("- LSP");
+  });
+
+  it("LSP accepts Claude documentSymbol and forwards the internal operation", async () => {
+    const query = vi.fn(async () => ({ summary: "ok", content: "ok" }));
+    const context: ToolContext = {
+      workspaceRoot: "E:\\claudecodejingiang\\vscode-extension",
+      lsp: {
+        query,
+      },
+    };
+
+    const result = await executeTool(
+      "LSP",
+      { operation: "documentSymbol", filePath: "src/lsp/types.ts" },
+      context,
+    );
+
+    expect(result.summary).toBe("ok");
+    expect(query).toHaveBeenCalledWith({
+      operation: "documentSymbols",
+      filePath: "src/lsp/types.ts",
+      line: undefined,
+      character: undefined,
+      query: undefined,
+      severity: undefined,
+      maxResults: undefined,
+      itemIndex: undefined,
+    });
+  });
+
+  it("LSP accepts Claude workspaceSymbol and forwards an empty query", async () => {
+    const query = vi.fn(async () => ({ summary: "ok", content: "ok" }));
+    const context: ToolContext = {
+      workspaceRoot: "E:\\claudecodejingiang\\vscode-extension",
+      lsp: {
+        query,
+      },
+    };
+
+    await executeTool("LSP", { operation: "workspaceSymbol" }, context);
+
+    expect(query).toHaveBeenCalledWith({
+      operation: "workspaceSymbols",
+      filePath: undefined,
+      line: undefined,
+      character: undefined,
+      query: "",
+      severity: undefined,
+      maxResults: undefined,
+      itemIndex: undefined,
+    });
+  });
+
   it("TaskList orders structured tasks by status priority", async () => {
     const context = await createTaskContext();
     const first = await context.tasks!.createTask({
@@ -1029,6 +1197,37 @@ describe("toolRuntime background task semantics", () => {
     });
   });
 
+  it("TaskStop accepts the deprecated KillShell tool alias like Claude", async () => {
+    const context = await createTaskContext();
+    context.stopBackgroundTask = async taskId => ({
+      taskId,
+      taskType: "local_bash",
+      command: "npm run build",
+    });
+    await context.tasks!.registerBackgroundTask({
+      id: "running-killshell-alias",
+      taskType: "local_bash",
+      status: "running",
+      description: "running KillShell alias task",
+      command: "npm run build",
+      output: "partial",
+    });
+
+    const result = await executeTool(
+      "KillShell",
+      { shell_id: "running-killshell-alias" },
+      context,
+    );
+
+    expect(result.summary).toContain("Stopped background task");
+    expect(parseJsonToolContent(result.content)).toEqual({
+      message: "Successfully stopped task: running-killshell-alias (npm run build)",
+      task_id: "running-killshell-alias",
+      task_type: "local_bash",
+      command: "npm run build",
+    });
+  });
+
   it("TaskStop rejects completed built-in tasks instead of returning provenance", async () => {
     const context = await createTaskContext();
     await context.tasks!.registerBackgroundTask({
@@ -1235,6 +1434,36 @@ describe("toolRuntime background task semantics", () => {
 
     expect(result.summary).toContain("not ready yet");
     expect(result.content).toContain("<retrieval_status>not_ready</retrieval_status>");
+  });
+
+  it("TaskOutput accepts deprecated AgentOutputTool and BashOutputTool aliases like Claude", async () => {
+    const context = await createTaskContext();
+    await context.tasks!.registerBackgroundTask({
+      id: "completed-output-alias",
+      taskType: "local_bash",
+      status: "completed",
+      description: "completed output alias task",
+      command: "npm run build",
+      output: "build ok",
+      result: "build ok",
+    });
+
+    const agentAliasResult = await executeTool(
+      "AgentOutputTool",
+      { task_id: "completed-output-alias", block: false },
+      context,
+    );
+    const bashAliasResult = await executeTool(
+      "BashOutputTool",
+      { task_id: "completed-output-alias", block: false },
+      context,
+    );
+
+    for (const result of [agentAliasResult, bashAliasResult]) {
+      expect(result.summary).toContain("Retrieved output");
+      expect(result.content).toContain("<task_id>completed-output-alias</task_id>");
+      expect(result.content).toContain("<output>\nbuild ok\n</output>");
+    }
   });
 
   it("TaskOutput follows Claude input contract and rejects shell_id aliases", async () => {

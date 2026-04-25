@@ -5,7 +5,7 @@ import { promisify } from "node:util";
 import { createPatch } from "diff";
 import { isPlanWritablePath } from "./planMode/planMode";
 import type { LspToolAdapter } from "./lsp/lspRuntime";
-import { LSP_OPERATIONS, LSP_TOOL_NAME } from "./lsp/types";
+import { LSP_TOOL_NAME, normalizeLspOperation } from "./lsp/types";
 import type {
   BackgroundTaskRecord,
   BackgroundTaskStatus,
@@ -172,6 +172,7 @@ export type ToolDefinition = {
     idempotentHint?: boolean;
     openWorldHint?: boolean;
   };
+  aliases?: string[];
 };
 
 export type WriteApprovalRequest = {
@@ -432,6 +433,85 @@ export function stripAnsiEscapeCodes(value: string): string {
   );
 }
 
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function parseToolNameForSearch(name: string): {
+  parts: string[];
+  full: string;
+  isMcp: boolean;
+} {
+  if (name.startsWith("mcp__")) {
+    const withoutPrefix = name.replace(/^mcp__/, "").toLowerCase();
+    const parts = withoutPrefix.split("__").flatMap(part => part.split("_"));
+    return {
+      parts: parts.filter(Boolean),
+      full: withoutPrefix.replace(/__/g, " ").replace(/_/g, " "),
+      isMcp: true,
+    };
+  }
+
+  const parts = name
+    .replace(/([a-z])([A-Z])/g, "$1 $2")
+    .replace(/_/g, " ")
+    .toLowerCase()
+    .split(/\s+/)
+    .filter(Boolean);
+
+  return {
+    parts,
+    full: parts.join(" "),
+    isMcp: false,
+  };
+}
+
+function compileSearchTermPatterns(terms: string[]): Map<string, RegExp> {
+  const patterns = new Map<string, RegExp>();
+  for (const term of terms) {
+    if (!patterns.has(term)) {
+      patterns.set(term, new RegExp(`\\b${escapeRegExp(term)}\\b`));
+    }
+  }
+  return patterns;
+}
+
+function toolMatchesSearchTerm(
+  tool: ToolDefinition,
+  term: string,
+  pattern: RegExp,
+): boolean {
+  const parsedNames = [tool.name, ...(tool.aliases ?? [])].map(parseToolNameForSearch);
+  const description = tool.description.toLowerCase();
+  const title = tool.annotations?.title?.toLowerCase() ?? "";
+
+  return (
+    parsedNames.some(parsedName =>
+      parsedName.parts.includes(term) ||
+      parsedName.parts.some(part => part.includes(term)) ||
+      parsedName.full.includes(term),
+    ) ||
+    pattern.test(description) ||
+    (!!title && pattern.test(title))
+  );
+}
+
+function toolNameMatches(tool: ToolDefinition, normalizedName: string): boolean {
+  return [tool.name, ...(tool.aliases ?? [])].some(
+    candidate => candidate.toLowerCase() === normalizedName,
+  );
+}
+
+const TOOL_NAME_ALIASES = new Map<string, string>([
+  ["KillShell", "TaskStop"],
+  ["AgentOutputTool", "TaskOutput"],
+  ["BashOutputTool", "TaskOutput"],
+]);
+
+function normalizeToolName(name: string): string {
+  return TOOL_NAME_ALIASES.get(name) ?? name;
+}
+
 export function searchToolDefinitions(
   tools: ToolDefinition[],
   query: string,
@@ -446,29 +526,87 @@ export function searchToolDefinitions(
       .slice(0, limitedResults);
   }
 
-  const ranked = tools
+  const selectMatch = normalizedQuery.match(/^select:(.+)$/i);
+  if (selectMatch) {
+    const selectedTools: ToolDefinition[] = [];
+    for (const requestedName of selectMatch[1]!
+      .split(",")
+      .map(name => name.trim())
+      .filter(Boolean)) {
+      const tool = tools.find(candidate => toolNameMatches(candidate, requestedName));
+      if (tool && !selectedTools.some(selected => selected.name === tool.name)) {
+        selectedTools.push(tool);
+      }
+    }
+    return selectedTools.slice(0, limitedResults);
+  }
+
+  const exactMatch = tools.find(tool => toolNameMatches(tool, normalizedQuery));
+  if (exactMatch) {
+    return [exactMatch];
+  }
+
+  if (normalizedQuery.startsWith("mcp__") && normalizedQuery.length > 5) {
+    const prefixMatches = tools
+      .filter(tool => tool.name.toLowerCase().startsWith(normalizedQuery))
+      .sort((left, right) => left.name.localeCompare(right.name))
+      .slice(0, limitedResults);
+    if (prefixMatches.length > 0) {
+      return prefixMatches;
+    }
+  }
+
+  const queryTerms = normalizedQuery.split(/\s+/).filter(Boolean);
+  const requiredTerms: string[] = [];
+  const optionalTerms: string[] = [];
+  for (const term of queryTerms) {
+    if (term.startsWith("+") && term.length > 1) {
+      requiredTerms.push(term.slice(1));
+    } else {
+      optionalTerms.push(term);
+    }
+  }
+
+  const scoringTerms = requiredTerms.length > 0
+    ? [...requiredTerms, ...optionalTerms]
+    : queryTerms;
+  const termPatterns = compileSearchTermPatterns(scoringTerms);
+
+  const candidateTools = requiredTerms.length === 0
+    ? tools
+    : tools.filter(tool =>
+        requiredTerms.every(term =>
+          toolMatchesSearchTerm(tool, term, termPatterns.get(term)!),
+        ),
+      );
+
+  const ranked = candidateTools
     .map(tool => {
-      const name = tool.name.toLowerCase();
+      const parsedName = parseToolNameForSearch(tool.name);
       const title = tool.annotations?.title?.toLowerCase() ?? "";
       const description = tool.description.toLowerCase();
       let score = 0;
 
-      if (name === normalizedQuery) {
-        score += 100;
-      } else if (name.startsWith(normalizedQuery)) {
-        score += 80;
-      } else if (name.includes(normalizedQuery)) {
-        score += 60;
-      }
+      for (const term of scoringTerms) {
+        const pattern = termPatterns.get(term)!;
 
-      if (title.startsWith(normalizedQuery)) {
-        score += 40;
-      } else if (title.includes(normalizedQuery)) {
-        score += 20;
-      }
+        if (parsedName.parts.includes(term)) {
+          score += parsedName.isMcp ? 12 : 10;
+        } else if (parsedName.parts.some(part => part.includes(term))) {
+          score += parsedName.isMcp ? 6 : 5;
+        }
 
-      if (description.includes(normalizedQuery)) {
-        score += 10;
+        if (parsedName.full.includes(term) && score === 0) {
+          score += 3;
+        }
+
+        if (title && pattern.test(title)) {
+          score += 4;
+        }
+
+        if (pattern.test(description)) {
+          score += 2;
+        }
       }
 
       return { tool, score };
@@ -2102,10 +2240,10 @@ const handlers: Record<string, ToolHandler> = {
 
   async [LSP_TOOL_NAME](input, context) {
     const rawOperation = typeof input.operation === "string" ? input.operation : "";
-    if (!LSP_OPERATIONS.includes(rawOperation as (typeof LSP_OPERATIONS)[number])) {
+    const operation = normalizeLspOperation(rawOperation);
+    if (!operation) {
       throw new Error(`Unsupported LSP operation: ${String(input.operation ?? "")}`);
     }
-    const operation = rawOperation as (typeof LSP_OPERATIONS)[number];
 
     const filePath =
       typeof input.filePath === "string" && input.filePath.trim() !== ""
@@ -2872,13 +3010,19 @@ const handlers: Record<string, ToolHandler> = {
 
   async ToolSearchTool(input, context) {
     const query = typeof input.query === "string" ? input.query : "";
+    const rawMaxResults =
+      typeof input.max_results === "number"
+        ? input.max_results
+        : input.maxResults;
     const maxResults =
-      typeof input.maxResults === "number" && Number.isFinite(input.maxResults)
-        ? Math.max(1, Math.min(100, Math.floor(input.maxResults)))
+      typeof rawMaxResults === "number" && Number.isFinite(rawMaxResults)
+        ? Math.max(1, Math.min(100, Math.floor(rawMaxResults)))
         : TOOL_SEARCH_RESULT_LIMIT;
 
     const availableTools = [
-      ...toolDefinitions,
+      ...getBuiltInToolDefinitions({
+        lspAvailable: context.lsp?.isAvailable?.() ?? !!context.lsp,
+      }),
       ...(context.mcp ? await context.mcp.getToolDefinitions() : []),
     ];
     const dedupedTools = Array.from(
@@ -3125,17 +3269,17 @@ export const toolDefinitions: ToolDefinition[] = [
   },
   {
     name: LSP_TOOL_NAME,
-    description: "Interact with Language Server Protocol providers for code intelligence. Supported operations: goToDefinition, goToImplementation, findReferences, hover, documentSymbols, documentDiagnostics, workspaceSymbols, prepareCallHierarchy, incomingCalls, outgoingCalls.",
+    description: "Interact with Language Server Protocol providers for code intelligence. Supported operations: goToDefinition, goToImplementation, findReferences, hover, documentSymbol/documentSymbols, documentDiagnostics, workspaceSymbol/workspaceSymbols, prepareCallHierarchy, incomingCalls, outgoingCalls.",
     input_schema: {
       type: "object",
       properties: {
         operation: {
           type: "string",
-          description: "One of: goToDefinition, goToImplementation, findReferences, hover, documentSymbols, documentDiagnostics, workspaceSymbols, prepareCallHierarchy, incomingCalls, outgoingCalls.",
+          description: "One of: goToDefinition, goToImplementation, findReferences, hover, documentSymbol/documentSymbols, documentDiagnostics, workspaceSymbol/workspaceSymbols, prepareCallHierarchy, incomingCalls, outgoingCalls.",
         },
         filePath: {
           type: "string",
-          description: "File path relative to the workspace root. Required for location-based operations, documentSymbols, and documentDiagnostics.",
+          description: "File path relative to the workspace root. Required for location-based operations, documentSymbol/documentSymbols, and documentDiagnostics.",
         },
         line: {
           type: "number",
@@ -3336,6 +3480,7 @@ export const toolDefinitions: ToolDefinition[] = [
   {
     name: "TaskStop",
     description: "Stop a running background task by ID.",
+    aliases: ["KillShell"],
     input_schema: {
       type: "object",
       properties: {
@@ -3358,6 +3503,7 @@ export const toolDefinitions: ToolDefinition[] = [
     name: "TaskOutput",
     description:
       "Read output from a background task by ID, including provenance metadata and detached output file paths when available. Use block=true to wait for completion or block=false for a non-blocking status check.",
+    aliases: ["AgentOutputTool", "BashOutputTool"],
     input_schema: {
       type: "object",
       properties: {
@@ -3384,17 +3530,21 @@ export const toolDefinitions: ToolDefinition[] = [
   {
     name: "ToolSearchTool",
     description:
-      "Search available tools by name or description. Includes built-in tools and configured MCP tools in the current workspace runtime.",
+      "Search available tools by name or description. Supports Claude-style query forms: select:<tool_name>, mcp__server prefixes, and +required keyword terms.",
     input_schema: {
       type: "object",
       properties: {
         query: {
           type: "string",
-          description: "Optional case-insensitive search query. Leave empty to list the first page of tools.",
+          description: 'Optional search query. Use "select:ToolA,ToolB" for direct selection, "mcp__server" for MCP prefixes, or "+required optional" for required keyword search.',
         },
         maxResults: {
           type: "number",
           description: "Optional positive limit for returned tools. Defaults to 20.",
+        },
+        max_results: {
+          type: "number",
+          description: "Claude-compatible alias for maxResults.",
         },
       },
     },
@@ -3795,6 +3945,13 @@ export const toolDefinitions: ToolDefinition[] = [
   },
 ];
 
+export function getBuiltInToolDefinitions(options: {
+  lspAvailable?: boolean;
+} = {}): ToolDefinition[] {
+  const lspAvailable = options.lspAvailable ?? true;
+  return toolDefinitions.filter(tool => lspAvailable || tool.name !== LSP_TOOL_NAME);
+}
+
 export function getOpenAIToolsPayload(tools: ToolDefinition[] = toolDefinitions) {
   return tools.map(tool => ({
     type: "function" as const,
@@ -3811,7 +3968,7 @@ export async function executeTool(
   input: ToolInput,
   context: ToolContext,
 ): Promise<ToolExecutionResult> {
-  let effectiveName = name;
+  let effectiveName = normalizeToolName(name);
   let effectiveInput = input;
   let handler = handlers[effectiveName];
 

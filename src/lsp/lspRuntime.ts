@@ -21,6 +21,7 @@ const execFileAsync = promisify(execFile);
 const MAX_LSP_FILE_SIZE_BYTES = 10_000_000;
 
 export type LspToolAdapter = {
+  isAvailable?(): boolean;
   query(input: LspQueryInput): Promise<ToolExecutionResult>;
 };
 
@@ -131,6 +132,20 @@ function isEmptyResult(operation: LspOperation, result: unknown): boolean {
       throw new Error(`Unsupported LSP operation: ${exhaustiveCheck}`);
     }
   }
+}
+
+function formatProviderUnavailableResult(
+  operation: LspOperation,
+  absolutePath: string | undefined,
+): ToolExecutionResult {
+  const extension = absolutePath ? path.extname(absolutePath) : "";
+  const target =
+    extension ? `file type: ${extension}` : `operation: ${operation}`;
+
+  return {
+    summary: "No LSP provider available",
+    content: `No LSP provider available for ${target}.`,
+  };
 }
 
 async function waitForLspWarmup(): Promise<void> {
@@ -258,79 +273,124 @@ export async function getGitIgnoredPaths(
   }
 }
 
-function getLocationFsPath(loc: vscode.Location | vscode.LocationLink): string {
-  if ("targetUri" in loc) {
-    return (loc as vscode.LocationLink).targetUri.fsPath;
-  }
-  return (loc as vscode.Location).uri.fsPath;
+function getUriFsPath(uri: vscode.Uri | undefined): string | undefined {
+  return typeof uri?.fsPath === "string" && uri.fsPath.trim() !== ""
+    ? uri.fsPath
+    : undefined;
 }
 
-function getCallHierarchyItemFsPath(item: vscode.CallHierarchyItem): string {
-  return item.uri.fsPath;
+function getLocationFsPath(loc: vscode.Location | vscode.LocationLink): string | undefined {
+  if ("targetUri" in loc) {
+    return getUriFsPath((loc as vscode.LocationLink).targetUri);
+  }
+  return getUriFsPath((loc as vscode.Location).uri);
+}
+
+function getSymbolFsPath(symbol: vscode.SymbolInformation): string | undefined {
+  return getUriFsPath(symbol.location?.uri);
+}
+
+function getCallHierarchyItemFsPath(item: vscode.CallHierarchyItem | undefined): string | undefined {
+  return getUriFsPath(item?.uri);
 }
 
 async function filterGitIgnoredLocations<T extends vscode.Location | vscode.LocationLink>(
   workspaceRoot: string,
   items: T[],
 ): Promise<T[]> {
-  const paths = items.map(getLocationFsPath);
+  const paths = items.map(getLocationFsPath).filter((path): path is string => !!path);
+  if (paths.length === 0) {
+    return [];
+  }
   const ignored = await getGitIgnoredPaths(workspaceRoot, paths);
   if (ignored.size === 0) {
-    return items;
+    return items.filter(item => !!getLocationFsPath(item));
   }
-  return items.filter(item => !ignored.has(getLocationFsPath(item)));
+  return items.filter(item => {
+    const fsPath = getLocationFsPath(item);
+    return !!fsPath && !ignored.has(fsPath);
+  });
 }
 
 async function filterGitIgnoredSymbols(
   workspaceRoot: string,
   items: vscode.SymbolInformation[],
 ): Promise<vscode.SymbolInformation[]> {
-  const paths = items.map(s => s.location.uri.fsPath);
+  const paths = items.map(getSymbolFsPath).filter((path): path is string => !!path);
+  if (paths.length === 0) {
+    return [];
+  }
   const ignored = await getGitIgnoredPaths(workspaceRoot, paths);
   if (ignored.size === 0) {
-    return items;
+    return items.filter(item => !!getSymbolFsPath(item));
   }
-  return items.filter(s => !ignored.has(s.location.uri.fsPath));
+  return items.filter(item => {
+    const fsPath = getSymbolFsPath(item);
+    return !!fsPath && !ignored.has(fsPath);
+  });
 }
 
 async function filterGitIgnoredCallHierarchyItems(
   workspaceRoot: string,
   items: vscode.CallHierarchyItem[],
 ): Promise<vscode.CallHierarchyItem[]> {
-  const paths = items.map(getCallHierarchyItemFsPath);
-  const ignored = await getGitIgnoredPaths(workspaceRoot, paths);
+  const paths = items.map(getCallHierarchyItemFsPath).filter((path): path is string => !!path);
+  const ignored = paths.length > 0
+    ? await getGitIgnoredPaths(workspaceRoot, paths)
+    : new Set<string>();
   if (ignored.size === 0) {
     return items;
   }
-  return items.filter(item => !ignored.has(getCallHierarchyItemFsPath(item)));
+  return items.filter(item => {
+    const fsPath = getCallHierarchyItemFsPath(item);
+    return !fsPath || !ignored.has(fsPath);
+  });
 }
 
 async function filterGitIgnoredIncomingCalls(
   workspaceRoot: string,
   calls: vscode.CallHierarchyIncomingCall[],
 ): Promise<vscode.CallHierarchyIncomingCall[]> {
-  const paths = calls.map(call => getCallHierarchyItemFsPath(call.from));
-  const ignored = await getGitIgnoredPaths(workspaceRoot, paths);
+  const paths = calls
+    .map(call => getCallHierarchyItemFsPath(call.from))
+    .filter((path): path is string => !!path);
+  const ignored = paths.length > 0
+    ? await getGitIgnoredPaths(workspaceRoot, paths)
+    : new Set<string>();
   if (ignored.size === 0) {
     return calls;
   }
-  return calls.filter(call => !ignored.has(getCallHierarchyItemFsPath(call.from)));
+  return calls.filter(call => {
+    const fsPath = getCallHierarchyItemFsPath(call.from);
+    return !fsPath || !ignored.has(fsPath);
+  });
 }
 
 async function filterGitIgnoredOutgoingCalls(
   workspaceRoot: string,
   calls: vscode.CallHierarchyOutgoingCall[],
 ): Promise<vscode.CallHierarchyOutgoingCall[]> {
-  const paths = calls.map(call => getCallHierarchyItemFsPath(call.to));
-  const ignored = await getGitIgnoredPaths(workspaceRoot, paths);
+  const paths = calls
+    .map(call => getCallHierarchyItemFsPath(call.to))
+    .filter((path): path is string => !!path);
+  const ignored = paths.length > 0
+    ? await getGitIgnoredPaths(workspaceRoot, paths)
+    : new Set<string>();
   if (ignored.size === 0) {
     return calls;
   }
-  return calls.filter(call => !ignored.has(getCallHierarchyItemFsPath(call.to)));
+  return calls.filter(call => {
+    const fsPath = getCallHierarchyItemFsPath(call.to);
+    return !fsPath || !ignored.has(fsPath);
+  });
 }
 
 export class VsCodeLspRuntime implements LspToolAdapter {
   constructor(private readonly getWorkspaceRoot: () => string) {}
+
+  isAvailable(): boolean {
+    return true;
+  }
 
   async query(input: LspQueryInput): Promise<ToolExecutionResult> {
     const workspaceRoot = this.getWorkspaceRoot();
@@ -408,6 +468,13 @@ export class VsCodeLspRuntime implements LspToolAdapter {
           query,
         },
       );
+    }
+
+    if (
+      operationResult === undefined &&
+      input.operation !== "documentDiagnostics"
+    ) {
+      return formatProviderUnavailableResult(input.operation, absolutePath);
     }
 
     let formatted: { text: string; resultCount: number; fileCount: number };

@@ -89,6 +89,8 @@ import {
   formatDocumentDiagnosticsResult,
   formatDocumentSymbolsResult,
   formatHoverResults,
+  formatIncomingCallsResult,
+  formatReferencesResult,
   formatWorkspaceSymbolsResult,
 } from "./formatters";
 
@@ -206,5 +208,92 @@ describe("lsp formatters", () => {
     );
     expect(workspaceResult.text).toContain('Found 1 workspace symbol(s) for "runAgent"');
     expect(workspaceResult.text).toContain("runAgent (Function) @ src/agent/agentRunner.ts:21:9");
+  });
+
+  it("filters malformed location and symbol results instead of throwing", () => {
+    const definitionResult = formatDefinitionResult(
+      "E:\\claudecodejingiang\\vscode-extension",
+      [
+        {
+          range: {
+            start: { line: 1, character: 1 },
+            end: { line: 1, character: 5 },
+          },
+        },
+        new vscode.Location(
+          { fsPath: "E:\\claudecodejingiang\\vscode-extension\\src\\real.ts" } as any,
+          {
+            start: { line: 9, character: 4 },
+            end: { line: 9, character: 10 },
+          } as any,
+        ),
+      ] as any,
+    );
+
+    expect(definitionResult.resultCount).toBe(1);
+    expect(definitionResult.text).toContain("src/real.ts:10:5");
+
+    const referencesResult = formatReferencesResult(
+      "E:\\claudecodejingiang\\vscode-extension",
+      [
+        {
+          range: {
+            start: { line: 1, character: 1 },
+            end: { line: 1, character: 5 },
+          },
+        },
+      ] as any,
+    );
+    expect(referencesResult.resultCount).toBe(0);
+    expect(referencesResult.text).toContain("No references found");
+
+    const workspaceResult = formatWorkspaceSymbolsResult(
+      "E:\\claudecodejingiang\\vscode-extension",
+      "broken",
+      [
+        {
+          name: "brokenSymbol",
+          kind: vscode.SymbolKind.Function,
+          location: {
+            range: {
+              start: { line: 1, character: 1 },
+              end: { line: 1, character: 5 },
+            },
+          },
+        },
+      ] as any,
+    );
+    expect(workspaceResult.resultCount).toBe(0);
+    expect(workspaceResult.text).toContain('No workspace symbols found for "broken"');
+  });
+
+  it("keeps malformed call hierarchy items bounded with an unknown location", () => {
+    const result = formatIncomingCallsResult(
+      "E:\\claudecodejingiang\\vscode-extension",
+      [
+        {} as any,
+        {
+          from: {
+            name: "callerWithoutUri",
+            kind: vscode.SymbolKind.Function,
+            selectionRange: {
+              start: { line: 4, character: 2 },
+              end: { line: 4, character: 8 },
+            },
+          },
+          fromRanges: [
+            {
+              start: { line: 4, character: 2 },
+              end: { line: 4, character: 8 },
+            },
+          ],
+        } as any,
+      ],
+    );
+
+    expect(result.resultCount).toBe(1);
+    expect(result.fileCount).toBe(0);
+    expect(result.text).toContain("callerWithoutUri");
+    expect(result.text).toContain("<unknown location>");
   });
 });

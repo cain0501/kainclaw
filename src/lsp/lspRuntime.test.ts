@@ -369,6 +369,45 @@ describe("lsp runtime helpers", () => {
       vi.useRealTimers();
     }
   });
+
+  it("reports provider unavailable when VS Code returns undefined after warmup", async () => {
+    vi.useFakeTimers();
+
+    try {
+      const runtime = new VsCodeLspRuntime(() => "E:\\claudecodejingiang\\vscode-extension");
+      executeCommand.mockResolvedValueOnce(undefined).mockResolvedValueOnce(undefined);
+
+      const resultPromise = runtime.query({
+        operation: "goToDefinition",
+        filePath: "src/agent/agentRunner.ts",
+        line: 10,
+        character: 5,
+      });
+
+      await vi.advanceTimersByTimeAsync(LSP_EMPTY_RESULT_RETRY_DELAY_MS);
+      const result = await resultPromise;
+
+      expect(executeCommand).toHaveBeenCalledTimes(2);
+      expect(result.summary).toBe("No LSP provider available");
+      expect(result.content).toContain("No LSP provider available for file type: .ts");
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("reports provider unavailable for workspace symbols when no provider answers", async () => {
+    const runtime = new VsCodeLspRuntime(() => "E:\\claudecodejingiang\\vscode-extension");
+    executeCommand.mockResolvedValueOnce(undefined);
+
+    const result = await runtime.query({
+      operation: "workspaceSymbols",
+      query: "",
+    });
+
+    expect(executeCommand).toHaveBeenCalledWith("vscode.executeWorkspaceSymbolProvider", "");
+    expect(result.summary).toBe("No LSP provider available");
+    expect(result.content).toContain("operation: workspaceSymbols");
+  });
 });
 
 describe("lsp gitignored filtering", () => {
@@ -637,6 +676,85 @@ describe("lsp gitignored filtering", () => {
     expect(result.content).not.toContain("ignoredFn");
     // Only 1 result after filtering; no hidden-count notice expected
     expect(result.content).not.toContain("omitted by maxResults");
+  });
+
+  it("filters malformed workspace symbols before applying maxResults", async () => {
+    const runtime = new VsCodeLspRuntime(() => workspaceRoot);
+    executeCommand.mockResolvedValueOnce([
+      {
+        name: "brokenFn",
+        kind: 12,
+        location: {
+          range: { start: { line: 5, character: 0 }, end: { line: 5, character: 8 } },
+        },
+      },
+      {
+        name: "realFn",
+        kind: 12,
+        location: {
+          uri: { fsPath: `${workspaceRoot}\\src\\agent\\agentRunner.ts` },
+          range: { start: { line: 20, character: 0 }, end: { line: 20, character: 6 } },
+        },
+      },
+    ]);
+
+    const result = await runtime.query({
+      operation: "workspaceSymbols",
+      query: "Fn",
+      maxResults: 1,
+    });
+
+    expect(result.content).toContain("realFn");
+    expect(result.content).not.toContain("brokenFn");
+    expect(result.content).not.toContain("omitted by maxResults");
+  });
+
+  it("filters malformed locations from reference results without crashing", async () => {
+    const runtime = new VsCodeLspRuntime(() => workspaceRoot);
+    executeCommand.mockResolvedValueOnce([
+      {
+        range: { start: { line: 1, character: 0 }, end: { line: 1, character: 8 } },
+      },
+      {
+        uri: { fsPath: `${workspaceRoot}\\src\\agent\\agentRunner.ts` },
+        range: { start: { line: 10, character: 0 }, end: { line: 10, character: 8 } },
+      },
+    ]);
+
+    const result = await runtime.query({
+      operation: "findReferences",
+      filePath: "src/agent/agentRunner.ts",
+      line: 5,
+      character: 3,
+    });
+
+    expect(result.summary).toContain("returned 1 result");
+    expect(result.content).toContain("agentRunner.ts");
+  });
+
+  it("keeps malformed call hierarchy items bounded instead of crashing gitignored filtering", async () => {
+    const runtime = new VsCodeLspRuntime(() => workspaceRoot);
+    executeCommand.mockResolvedValueOnce([
+      {
+        name: "unknownItem",
+        kind: 12,
+        selectionRange: {
+          start: { line: 1, character: 1 },
+          end: { line: 1, character: 8 },
+        },
+      },
+    ]);
+
+    const result = await runtime.query({
+      operation: "prepareCallHierarchy",
+      filePath: "src/lsp/lspRuntime.ts",
+      line: 5,
+      character: 3,
+    });
+
+    expect(result.summary).toContain("returned 1 result");
+    expect(result.content).toContain("unknownItem");
+    expect(result.content).toContain("<unknown location>");
   });
 
   it("falls back gracefully when git is unavailable for findReferences", async () => {

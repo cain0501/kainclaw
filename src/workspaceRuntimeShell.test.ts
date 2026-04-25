@@ -31,7 +31,13 @@ vi.mock("./lsp/lspRuntime", () => ({
 }));
 
 vi.mock("./toolRuntime", () => ({
-  toolDefinitions: [{ name: "read_file" }],
+  getBuiltInToolDefinitions: (
+    { lspAvailable = true }: { lspAvailable?: boolean } = {},
+  ) =>
+    [
+      { name: "read_file" },
+      ...(lspAvailable ? [{ name: "LSP" }] : []),
+    ],
 }));
 
 import { WorkspaceRuntime } from "./workspaceRuntimeShell";
@@ -145,6 +151,7 @@ describe("workspaceRuntimeShell", () => {
 
     await expect(runtime.getToolDefinitions()).resolves.toEqual([
       { name: "read_file" },
+      { name: "LSP" },
       { name: "mcp_tool" },
     ]);
     await expect(runtime.getMcpStatusSummary()).resolves.toEqual([
@@ -156,5 +163,36 @@ describe("workspaceRuntimeShell", () => {
     expect(mcpRuntimeMock.markConfigDirty).toHaveBeenCalledTimes(1);
     expect(browserRuntimeMock.dispose).toHaveBeenCalledTimes(1);
     expect(mcpRuntimeMock.dispose).toHaveBeenCalledTimes(1);
+  });
+
+  it("omits the LSP tool when LSP runtime is disabled", async () => {
+    const runtime = new WorkspaceRuntime(
+      () => "E:\\repo",
+      {},
+      vi.fn(async () => true),
+      vi.fn(async () => true),
+      vi.fn(),
+      {
+        getState: () => ({ active: false }),
+        enter: async () => ({ planFilePath: "", planContent: "" }),
+        getPlanContent: async () => null,
+        exit: async () => ({ planFilePath: "", planContent: "" }),
+      },
+      () => undefined,
+      () => ({}) as any,
+      () => ({}) as any,
+      vi.fn(async () => ({ taskId: "", taskType: "", command: "" })),
+      vi.fn(async () => ({ taskId: "", verdict: "PASS" as const, report: "" })),
+      vi.fn(async () => ({ taskId: "", report: "" })),
+      vi.fn(async () => ({ taskId: "", command: "", workspaceRoot: "" })),
+      vi.fn(async () => null),
+      undefined,
+      false,
+    );
+
+    await expect(runtime.getToolDefinitions()).resolves.toEqual([
+      { name: "read_file" },
+      { name: "mcp_tool" },
+    ]);
   });
 });

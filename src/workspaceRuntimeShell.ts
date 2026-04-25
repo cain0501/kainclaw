@@ -1,6 +1,13 @@
 import { BrowserRuntime } from "./browserRuntime";
 import { McpRuntime, type McpServerStatusSummary } from "./mcpRuntime";
-import { toolDefinitions, type ToolActionApprovalRequest, type ToolContext, type ToolDefinition, type ToolLifecycleEvent, type WriteApprovalRequest } from "./toolRuntime";
+import {
+  getBuiltInToolDefinitions,
+  type ToolActionApprovalRequest,
+  type ToolContext,
+  type ToolDefinition,
+  type ToolLifecycleEvent,
+  type WriteApprovalRequest,
+} from "./toolRuntime";
 import { VsCodeLspRuntime } from "./lsp/lspRuntime";
 import type { ConversationTaskRuntime } from "./tasks/types";
 import type { ConversationWorktreeRuntime } from "./worktree/types";
@@ -84,7 +91,10 @@ export class WorkspaceRuntime {
 
   async getToolDefinitions(): Promise<ToolDefinition[]> {
     const mcpTools = await this.mcpRuntime.getToolDefinitions();
-    return [...toolDefinitions, ...mcpTools];
+    const builtInTools = getBuiltInToolDefinitions({
+      lspAvailable: this.lspRuntime?.isAvailable?.() ?? !!this.lspRuntime,
+    });
+    return [...builtInTools, ...mcpTools];
   }
 
   async getMcpStatusSummary(): Promise<McpServerStatusSummary[]> {

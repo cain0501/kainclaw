@@ -9,20 +9,63 @@ function formatWorkspacePath(workspaceRoot: string, targetPath: string): string 
   return relativePath.replace(/\\/g, "/");
 }
 
-function uriToPath(workspaceRoot: string, uri: vscode.Uri): string {
-  return formatWorkspacePath(workspaceRoot, uri.fsPath);
+function getUriFsPath(uri: vscode.Uri | undefined): string | undefined {
+  return typeof uri?.fsPath === "string" && uri.fsPath.trim() !== ""
+    ? uri.fsPath
+    : undefined;
+}
+
+function uriToPath(workspaceRoot: string, uri: vscode.Uri | undefined): string {
+  const fsPath = getUriFsPath(uri);
+  return fsPath ? formatWorkspacePath(workspaceRoot, fsPath) : "<unknown location>";
+}
+
+function getLocationUri(location: vscode.Location | vscode.LocationLink): vscode.Uri | undefined {
+  return "targetUri" in location
+    ? (location as vscode.LocationLink).targetUri
+    : (location as vscode.Location).uri;
+}
+
+function getLocationRange(
+  location: vscode.Location | vscode.LocationLink,
+): vscode.Range | undefined {
+  if ("targetUri" in location) {
+    return (location as vscode.LocationLink).targetSelectionRange
+      ?? (location as vscode.LocationLink).targetRange;
+  }
+
+  return (location as vscode.Location).range;
+}
+
+function hasUsableLocation(
+  location: vscode.Location | vscode.LocationLink | undefined,
+): location is vscode.Location | vscode.LocationLink {
+  return !!location && !!getUriFsPath(getLocationUri(location)) && !!getLocationRange(location)?.start;
+}
+
+function getUniqueFileCount(uris: Array<vscode.Uri | undefined>): number {
+  return new Set(
+    uris
+      .map(getUriFsPath)
+      .filter((fsPath): fsPath is string => !!fsPath),
+  ).size;
 }
 
 function formatLocation(workspaceRoot: string, location: vscode.Location): string {
-  return `${uriToPath(workspaceRoot, location.uri)}:${location.range.start.line + 1}:${location.range.start.character + 1}`;
+  const filePath = uriToPath(workspaceRoot, location.uri);
+  const start = location.range?.start;
+  if (!start) {
+    return `${filePath}:?:?`;
+  }
+  return `${filePath}:${start.line + 1}:${start.character + 1}`;
 }
 
 function toLocation(location: vscode.Location | vscode.LocationLink): vscode.Location {
   if ("targetUri" in location) {
-    return new vscode.Location(
-      location.targetUri,
-      location.targetSelectionRange ?? location.targetRange,
-    );
+    return {
+      uri: location.targetUri,
+      range: location.targetSelectionRange ?? location.targetRange,
+    } as vscode.Location;
   }
 
   return location;
@@ -55,8 +98,12 @@ function formatCallHierarchyItem(
   item: vscode.CallHierarchyItem,
 ): string {
   const filePath = uriToPath(workspaceRoot, item.uri);
-  const line = item.selectionRange.start.line + 1;
-  const character = item.selectionRange.start.character + 1;
+  const start = item.selectionRange?.start ?? item.range?.start;
+  if (!getUriFsPath(item.uri) || !start) {
+    return `${item.name} (${item.kind}) - <unknown location>`;
+  }
+  const line = start.line + 1;
+  const character = start.character + 1;
   return `${item.name} (${item.kind}) - ${filePath}:${line}:${character}`;
 }
 
@@ -72,8 +119,19 @@ export function formatDefinitionResult(
     };
   }
 
-  const locations = (Array.isArray(result) ? result : [result]).map(toLocation);
-  const fileCount = new Set(locations.map(location => location.uri.fsPath)).size;
+  const locations = (Array.isArray(result) ? result : [result])
+    .filter(hasUsableLocation)
+    .map(toLocation);
+
+  if (locations.length === 0) {
+    return {
+      text: "No definition found. The symbol may not be resolvable here, or the language provider may still be initializing.",
+      resultCount: 0,
+      fileCount: 0,
+    };
+  }
+
+  const fileCount = getUniqueFileCount(locations.map(location => location.uri));
 
   if (locations.length === 1) {
     return {
@@ -142,7 +200,17 @@ export function formatDocumentSymbolsResult(
     };
   }
 
-  const infoSymbols = symbols as vscode.SymbolInformation[];
+  const infoSymbols = (symbols as vscode.SymbolInformation[]).filter(
+    symbol => !!getUriFsPath(symbol.location?.uri) && !!symbol.location?.range?.start,
+  );
+  if (infoSymbols.length === 0) {
+    return {
+      text: "No document symbols found. The file may not expose symbols, or the language provider may still be initializing.",
+      resultCount: 0,
+      fileCount: 0,
+    };
+  }
+
   return {
     text: `Document symbols for ${filePath}:\n${infoSymbols
       .map(
@@ -154,7 +222,7 @@ export function formatDocumentSymbolsResult(
       )
       .join("\n")}`,
     resultCount: infoSymbols.length,
-    fileCount: new Set(infoSymbols.map(symbol => symbol.location.uri.fsPath)).size,
+    fileCount: getUniqueFileCount(infoSymbols.map(symbol => symbol.location.uri)),
   };
 }
 
@@ -171,8 +239,20 @@ export function formatWorkspaceSymbolsResult(
     };
   }
 
+  const validSymbols = symbols.filter(
+    symbol => !!getUriFsPath(symbol.location?.uri) && !!symbol.location?.range?.start,
+  );
+
+  if (validSymbols.length === 0) {
+    return {
+      text: `No workspace symbols found for "${query}". The workspace may not contain matching symbols, or the language provider may still be indexing.`,
+      resultCount: 0,
+      fileCount: 0,
+    };
+  }
+
   return {
-    text: `Found ${symbols.length} workspace symbol(s) for "${query}":\n${symbols
+    text: `Found ${validSymbols.length} workspace symbol(s) for "${query}":\n${validSymbols
       .map(
         symbol =>
           `- ${symbol.name} (${getSymbolKindLabel(symbol.kind)}) @ ${formatLocation(
@@ -181,8 +261,8 @@ export function formatWorkspaceSymbolsResult(
           )}`,
       )
       .join("\n")}`,
-    resultCount: symbols.length,
-    fileCount: new Set(symbols.map(symbol => symbol.location.uri.fsPath)).size,
+    resultCount: validSymbols.length,
+    fileCount: getUniqueFileCount(validSymbols.map(symbol => symbol.location.uri)),
   };
 }
 
@@ -240,15 +320,25 @@ export function formatReferencesResult(
     };
   }
 
+  const validReferences = references.filter(reference => hasUsableLocation(reference));
+
+  if (validReferences.length === 0) {
+    return {
+      text: "No references found. The symbol may have no usages, or the language provider may still be indexing the workspace.",
+      resultCount: 0,
+      fileCount: 0,
+    };
+  }
+
   const byFile = new Map<string, vscode.Location[]>();
-  for (const reference of references) {
+  for (const reference of validReferences) {
     const filePath = uriToPath(workspaceRoot, reference.uri);
     const entries = byFile.get(filePath) ?? [];
     entries.push(reference);
     byFile.set(filePath, entries);
   }
 
-  const lines = [`Found ${references.length} references across ${byFile.size} files:`];
+  const lines = [`Found ${validReferences.length} references across ${byFile.size} files:`];
   for (const [filePath, fileReferences] of byFile) {
     lines.push(`${filePath}:`);
     for (const reference of fileReferences) {
@@ -260,7 +350,7 @@ export function formatReferencesResult(
 
   return {
     text: lines.join("\n"),
-    resultCount: references.length,
+    resultCount: validReferences.length,
     fileCount: byFile.size,
   };
 }
@@ -312,7 +402,7 @@ export function formatPrepareCallHierarchyResult(
       .map(item => `- ${formatCallHierarchyItem(workspaceRoot, item)}`)
       .join("\n")}`,
     resultCount: items.length,
-    fileCount: new Set(items.map(item => item.uri.fsPath)).size,
+    fileCount: getUniqueFileCount(items.map(item => item.uri)),
   };
 }
 
@@ -320,7 +410,8 @@ export function formatIncomingCallsResult(
   workspaceRoot: string,
   calls: vscode.CallHierarchyIncomingCall[] | undefined,
 ): { text: string; resultCount: number; fileCount: number } {
-  if (!calls || calls.length === 0) {
+  const validCalls = calls?.filter(call => !!call.from) ?? [];
+  if (validCalls.length === 0) {
     return {
       text: "No incoming calls found. The symbol may have no callers, or the language provider may still be initializing.",
       resultCount: 0,
@@ -329,7 +420,7 @@ export function formatIncomingCallsResult(
   }
 
   return {
-    text: `Found ${calls.length} incoming call(s):\n${calls
+    text: `Found ${validCalls.length} incoming call(s):\n${validCalls
       .map(call => {
         const ranges = call.fromRanges
           .map(range => `${range.start.line + 1}:${range.start.character + 1}`)
@@ -337,8 +428,8 @@ export function formatIncomingCallsResult(
         return `- ${formatCallHierarchyItem(workspaceRoot, call.from)}${ranges ? ` | from ${ranges}` : ""}`;
       })
       .join("\n")}`,
-    resultCount: calls.length,
-    fileCount: new Set(calls.map(call => call.from.uri.fsPath)).size,
+    resultCount: validCalls.length,
+    fileCount: getUniqueFileCount(validCalls.map(call => call.from.uri)),
   };
 }
 
@@ -346,7 +437,8 @@ export function formatOutgoingCallsResult(
   workspaceRoot: string,
   calls: vscode.CallHierarchyOutgoingCall[] | undefined,
 ): { text: string; resultCount: number; fileCount: number } {
-  if (!calls || calls.length === 0) {
+  const validCalls = calls?.filter(call => !!call.to) ?? [];
+  if (validCalls.length === 0) {
     return {
       text: "No outgoing calls found. The symbol may have no callees, or the language provider may still be initializing.",
       resultCount: 0,
@@ -355,7 +447,7 @@ export function formatOutgoingCallsResult(
   }
 
   return {
-    text: `Found ${calls.length} outgoing call(s):\n${calls
+    text: `Found ${validCalls.length} outgoing call(s):\n${validCalls
       .map(call => {
         const ranges = call.fromRanges
           .map(range => `${range.start.line + 1}:${range.start.character + 1}`)
@@ -363,7 +455,7 @@ export function formatOutgoingCallsResult(
         return `- ${formatCallHierarchyItem(workspaceRoot, call.to)}${ranges ? ` | from ${ranges}` : ""}`;
       })
       .join("\n")}`,
-    resultCount: calls.length,
-    fileCount: new Set(calls.map(call => call.to.uri.fsPath)).size,
+    resultCount: validCalls.length,
+    fileCount: getUniqueFileCount(validCalls.map(call => call.to.uri)),
   };
 }
