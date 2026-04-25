@@ -99,6 +99,22 @@ export function buildVerificationRequest(options: {
   );
 
   parts.push(
+    "## Report formatting rules\nUse triple-tilde fenced code blocks for both `Command run:` and `Output observed:` so markdown characters stay literal. Do not use triple-backtick fences for these blocks. The `Output observed:` block must contain only raw command output (or `[no output]`) with no analysis or summary text mixed in. If output is long, truncate inside the fenced block and keep all reasoning in the `Result:` line.",
+  );
+
+  parts.push(
+    "## Fence rule\nAlways use `~~~powershell` for `Command run:` and `~~~text` for `Output observed:`. Raw Markdown files often contain their own triple-backtick fences, so backtick fences can break the rendered report.",
+  );
+
+  parts.push(
+    "## Result line rule\nKeep each `Result:` line concise: one short sentence with the verdict and the key reason only. Do not append a paragraph, changelog, or extended commentary there.",
+  );
+
+  parts.push(
+    "## Verification scope gate\n`/verify` is for checking a concrete implementation or change request, not for greeting-only or generic chat turns. Before issuing PASS or FAIL, confirm that there is a real implementation target and recognizable project evidence to exercise. If the original task is only a greeting / generic chat request, or the workspace has no recognizable code/project/build evidence and no concrete implementation target can be established, do not award PASS. Explain the missing verification target and end with `VERDICT: PARTIAL`.",
+  );
+
+  parts.push(
     "Focus on direct verification of the workspace as it exists now. Do not trust transcript claims without running checks.",
   );
 
@@ -111,6 +127,144 @@ export function getVerificationTools(tools: ToolDefinition[]): ToolDefinition[] 
 
 export function getVerificationToolContext(context: ToolContext): ToolContext {
   return getReadOnlyAgentToolContext(context);
+}
+
+function getFenceInfo(line: string):
+  | { marker: string; char: "`" | "~"; length: number }
+  | undefined {
+  const match = line.match(/^\s*(`{3,}|~{3,})([a-zA-Z0-9_-]*)?\s*$/);
+  if (!match) {
+    return undefined;
+  }
+
+  const marker = match[1];
+  return {
+    marker,
+    char: marker[0] as "`" | "~",
+    length: marker.length,
+  };
+}
+
+function isClosingFenceLine(
+  line: string,
+  fenceChar: "`" | "~",
+  fenceLength: number,
+): boolean {
+  const trimmed = line.trim();
+  if (trimmed.length < fenceLength) {
+    return false;
+  }
+  return [...trimmed].every(char => char === fenceChar);
+}
+
+function buildTildeFence(contentLines: string[]): string {
+  let longestRun = 0;
+  for (const line of contentLines) {
+    for (const match of line.matchAll(/~+/g)) {
+      longestRun = Math.max(longestRun, match[0].length);
+    }
+  }
+  return "~".repeat(Math.max(3, longestRun + 1));
+}
+
+function normalizeVerificationReportBlock(options: {
+  lines: string[];
+  labelIndex: number;
+  language: "powershell" | "text";
+  isNextSectionLine: (line: string) => boolean;
+}): { normalizedLines: string[]; nextIndex: number } | undefined {
+  const openingFenceIndex = options.labelIndex + 1;
+  const openingFence = options.lines[openingFenceIndex]
+    ? getFenceInfo(options.lines[openingFenceIndex])
+    : undefined;
+  if (!openingFence) {
+    return undefined;
+  }
+
+  let nextSectionIndex = -1;
+  for (
+    let lineIndex = openingFenceIndex + 1;
+    lineIndex < options.lines.length;
+    lineIndex += 1
+  ) {
+    if (options.isNextSectionLine(options.lines[lineIndex])) {
+      nextSectionIndex = lineIndex;
+      break;
+    }
+  }
+
+  if (nextSectionIndex === -1) {
+    return undefined;
+  }
+
+  let contentEndIndex = nextSectionIndex;
+  if (
+    contentEndIndex > openingFenceIndex + 1 &&
+    isClosingFenceLine(
+      options.lines[contentEndIndex - 1],
+      openingFence.char,
+      openingFence.length,
+    )
+  ) {
+    contentEndIndex -= 1;
+  }
+
+  const contentLines = options.lines.slice(openingFenceIndex + 1, contentEndIndex);
+  const fence = buildTildeFence(contentLines);
+  return {
+    normalizedLines: [
+      options.lines[options.labelIndex],
+      `${fence}${options.language}`,
+      ...contentLines,
+      fence,
+    ],
+    nextIndex: nextSectionIndex,
+  };
+}
+
+export function normalizeVerificationReportFences(report: string): string {
+  const lines = report.split(/\r?\n/);
+  const normalizedLines: string[] = [];
+
+  for (let lineIndex = 0; lineIndex < lines.length;) {
+    const trimmedLine = lines[lineIndex].trim();
+
+    if (trimmedLine === "Command run:") {
+      const normalized = normalizeVerificationReportBlock({
+        lines,
+        labelIndex: lineIndex,
+        language: "powershell",
+        isNextSectionLine: line => line.trim() === "Output observed:",
+      });
+      if (normalized) {
+        normalizedLines.push(...normalized.normalizedLines);
+        lineIndex = normalized.nextIndex;
+        continue;
+      }
+    }
+
+    if (trimmedLine === "Output observed:") {
+      const normalized = normalizeVerificationReportBlock({
+        lines,
+        labelIndex: lineIndex,
+        language: "text",
+        isNextSectionLine: line =>
+          line.startsWith("Result:") ||
+          line.startsWith("### Check:") ||
+          line.startsWith("VERDICT:"),
+      });
+      if (normalized) {
+        normalizedLines.push(...normalized.normalizedLines);
+        lineIndex = normalized.nextIndex;
+        continue;
+      }
+    }
+
+    normalizedLines.push(lines[lineIndex]);
+    lineIndex += 1;
+  }
+
+  return normalizedLines.join("\n");
 }
 
 export async function runVerificationAgent(
@@ -136,7 +290,7 @@ export async function runVerificationAgent(
   });
 
   const history: NormalizedMessage[] = [{ role: "user", content: request }];
-  const report = await runAgent(history, {
+  const report = normalizeVerificationReportFences(await runAgent(history, {
     provider: options.provider,
     tools: options.tools,
     toolContext: options.toolContext,
@@ -145,7 +299,7 @@ export async function runVerificationAgent(
     onToolEnd: options.onToolEnd,
     abortSignal: options.abortSignal,
     maxTurns: 24,
-  });
+  }));
 
   const verdict = extractVerificationVerdict(report) ?? "PARTIAL";
   const finalReport = extractVerificationVerdict(report)

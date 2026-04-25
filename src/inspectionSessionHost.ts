@@ -45,6 +45,7 @@ type PendingPlanVerificationLike = {
 type SharedInspectionOptions = {
   commandText: string;
   workspaceRoot: string;
+  promptForTask?: string;
   config: ProviderConfig;
   effortLevel: EffortLevel | undefined;
   runtime: InspectionRuntimeLike;
@@ -98,6 +99,7 @@ export async function runVerificationInspectionSession(
     taskIdPrefix: "verify",
     commandPrefix: "/verify",
     commandText: options.commandText,
+    ...(options.promptForTask ? { promptForTask: options.promptForTask } : {}),
     workspaceRoot: options.workspaceRoot,
     config: options.config,
     effortLevel: options.effortLevel,

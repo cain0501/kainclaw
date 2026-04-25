@@ -3,8 +3,14 @@ import { describeToolName as formatToolDisplayName } from "./hostRuntimeHelpers"
 import { runInspectionCommandFlow } from "./inspectionCommandHost";
 import {
   findOriginalTaskForInspection,
+  isGreetingOnlyInspectionTask,
   isDuplicateBuiltInAgentRunError,
 } from "./inspectionTaskHost";
+import {
+  inferInspectionLocale,
+  type InspectionLocale,
+} from "./inspectionLocale";
+import { hasWorkspaceProjectEvidence } from "./inspectionWorkspace";
 import type { VerificationVerdict } from "./verification/prompt";
 import type { EffortLevel, ProviderRuntimeOptions } from "./thinkingEffort/types";
 import type { ToolDefinition } from "./toolRuntime";
@@ -51,6 +57,81 @@ type SharedOptions = {
   isAbortLikeError: (error: unknown) => boolean;
 };
 
+type InspectionUiText = {
+  verificationNoOriginalTask: string;
+  verificationWorkspaceFallbackTask: string;
+  verificationGreetingOnlyTask: (originalTask: string) => string;
+  verificationBlockedByPlanMode: string;
+  verificationPhaseLabel: string;
+  verificationPhaseDetail: string;
+  verificationToolActivityLabel: (toolName: string) => string;
+  verificationAbortActivityDetail: string;
+  verificationAbortReply: string;
+  verificationDuplicateActivityDetail: string;
+  reviewBlockedByPlanMode: string;
+  reviewPhaseLabel: string;
+  reviewPhaseDetail: string;
+  reviewToolActivityLabel: (toolName: string) => string;
+  reviewAbortActivityDetail: string;
+  reviewAbortReply: string;
+  reviewDuplicateActivityDetail: string;
+};
+
+function getInspectionUiText(locale: InspectionLocale): InspectionUiText {
+  if (locale === "zh-CN") {
+    return {
+      verificationNoOriginalTask:
+        "当前对话里还没有可验证的原始任务。先给我一个真实实现任务，或者先完成一轮实现后再运行 `/verify`。",
+      verificationWorkspaceFallbackTask: "验证当前工作区项目状态",
+      verificationGreetingOnlyTask: originalTask =>
+        `当前原始任务 \`${originalTask}\` 只是问候/泛聊天，不是可验证的实现请求。本次不进入实现验证流程。请先给出真实实现任务后再运行 \`/verify\`。\n\nVERDICT: PARTIAL`,
+      verificationBlockedByPlanMode:
+        "Plan Mode 仍在开启中，先退出 Plan Mode 再运行 `/verify`。",
+      verificationPhaseLabel: "正在进行验证",
+      verificationPhaseDetail:
+        "Verification agent 正在运行构建、测试与对抗性检查",
+      verificationToolActivityLabel: toolName => `验证中：${toolName}`,
+      verificationAbortActivityDetail: "验证已取消",
+      verificationAbortReply: "验证已在完成前取消。",
+      verificationDuplicateActivityDetail: "验证已在运行",
+      reviewBlockedByPlanMode:
+        "Plan Mode 仍在开启中，先退出 Plan Mode 再运行 `/review`。",
+      reviewPhaseLabel: "正在进行审查",
+      reviewPhaseDetail: "Review agent 正在检查当前改动与潜在风险",
+      reviewToolActivityLabel: toolName => `审查中：${toolName}`,
+      reviewAbortActivityDetail: "审查已取消",
+      reviewAbortReply: "审查已在完成前取消。",
+      reviewDuplicateActivityDetail: "审查已在运行",
+    };
+  }
+
+  return {
+    verificationNoOriginalTask:
+      "There is no original task in this conversation yet. Give me a real implementation task first, or finish a round of implementation before running `/verify`.",
+    verificationWorkspaceFallbackTask: "Verify the current workspace/project state.",
+    verificationGreetingOnlyTask: originalTask =>
+      `The original task \`${originalTask}\` is only a greeting / generic chat request, not a verifiable implementation request. Verification will not run yet. Give me a real implementation task before running \`/verify\`.\n\nVERDICT: PARTIAL`,
+    verificationBlockedByPlanMode:
+      "Plan Mode is still active. Exit Plan Mode before running `/verify`.",
+    verificationPhaseLabel: "Running verification",
+    verificationPhaseDetail:
+      "The verification agent is running builds, tests, and adversarial checks.",
+    verificationToolActivityLabel: toolName => `Verifying: ${toolName}`,
+    verificationAbortActivityDetail: "Verification cancelled",
+    verificationAbortReply: "Verification was cancelled before completion.",
+    verificationDuplicateActivityDetail: "Verification already running",
+    reviewBlockedByPlanMode:
+      "Plan Mode is still active. Exit Plan Mode before running `/review`.",
+    reviewPhaseLabel: "Running review",
+    reviewPhaseDetail:
+      "The review agent is checking the current changes and potential risks.",
+    reviewToolActivityLabel: toolName => `Reviewing: ${toolName}`,
+    reviewAbortActivityDetail: "Review cancelled",
+    reviewAbortReply: "Review was cancelled before completion.",
+    reviewDuplicateActivityDetail: "Review already running",
+  };
+}
+
 export async function handleVerificationPromptCommand(
   options: SharedOptions & {
     blockedByPlanMode: boolean;
@@ -79,10 +160,21 @@ export async function handleVerificationPromptCommand(
     onUnexpectedError: (message: string, activityId: string) => void;
   },
 ): Promise<boolean> {
+  const locale = inferInspectionLocale(options.commandText, options.sessionMessages);
+  const uiText = getInspectionUiText(locale);
   const inspectionPrompt = findOriginalTaskForInspection(options.sessionMessages);
-  if (options.commandText.startsWith("/verify") && !inspectionPrompt) {
+  const promptForTask = inspectionPrompt
+    ?? (await hasWorkspaceProjectEvidence(options.workspaceRoot)
+      ? uiText.verificationWorkspaceFallbackTask
+      : null);
+  if (options.commandText.startsWith("/verify") && !promptForTask) {
+    await options.recordAssistantReply(uiText.verificationNoOriginalTask, false);
+    return true;
+  }
+
+  if (inspectionPrompt && isGreetingOnlyInspectionTask(inspectionPrompt)) {
     await options.recordAssistantReply(
-      "当前对话里还没有可验证的原始任务。先给我一个真实实现任务，或者先完成一轮实现后再运行 `/verify`。",
+      uiText.verificationGreetingOnlyTask(inspectionPrompt),
       false,
     );
     return true;
@@ -92,10 +184,11 @@ export async function handleVerificationPromptCommand(
     commandText: options.commandText,
     commandPrefix: "/verify",
     blockedByPlanMode: options.blockedByPlanMode,
-    blockedByPlanModeMessage: "Plan Mode 仍在开启中，先退出 Plan Mode 再运行 `/verify`。",
-    phaseLabel: "正在进行验证",
-    phaseDetail: "验证 agent 正在运行构建、测试与对抗性检查",
-    toolActivityLabel: toolName => `验证中：${formatToolDisplayName(toolName)}`,
+    blockedByPlanModeMessage: uiText.verificationBlockedByPlanMode,
+    phaseLabel: uiText.verificationPhaseLabel,
+    phaseDetail: uiText.verificationPhaseDetail,
+    toolActivityLabel: toolName =>
+      uiText.verificationToolActivityLabel(formatToolDisplayName(toolName)),
     onToken: options.onToken,
     onToolStart: ({ toolName, input, execId }) =>
       options.onToolStart(toolName, input, execId),
@@ -112,6 +205,7 @@ export async function handleVerificationPromptCommand(
     runSession: hooks =>
       options.runVerificationSession({
         commandText: options.commandText,
+        ...(promptForTask ? { promptForTask } : {}),
         workspaceRoot: options.workspaceRoot,
         config: options.config,
         envMap: options.envMap,
@@ -145,13 +239,13 @@ export async function handleVerificationPromptCommand(
     },
     onAbort: async () => ({
       activityStatus: "done" as const,
-      activityDetail: "Verification cancelled",
-      reply: "Verification was cancelled before completion.",
+      activityDetail: uiText.verificationAbortActivityDetail,
+      reply: uiText.verificationAbortReply,
       companionState: "idle" as const,
     }),
     onDuplicate: async message => ({
       activityStatus: "done" as const,
-      activityDetail: "Verification already running",
+      activityDetail: uiText.verificationDuplicateActivityDetail,
       reply: message,
       companionState: "idle" as const,
     }),
@@ -188,14 +282,17 @@ export async function handleReviewPromptCommand(
     buildFollowUpMessage: (label: string, taskId: string) => string | undefined;
   },
 ): Promise<boolean> {
+  const locale = inferInspectionLocale(options.commandText, options.sessionMessages);
+  const uiText = getInspectionUiText(locale);
   const commandResult = await runInspectionCommandFlow({
     commandText: options.commandText,
     commandPrefix: "/review",
     blockedByPlanMode: options.blockedByPlanMode,
-    blockedByPlanModeMessage: "Plan Mode 仍在开启中，先退出 Plan Mode 再运行 `/review`。",
-    phaseLabel: "正在进行审查",
-    phaseDetail: "Review agent 正在检查当前改动与潜在风险",
-    toolActivityLabel: toolName => `审查中：${formatToolDisplayName(toolName)}`,
+    blockedByPlanModeMessage: uiText.reviewBlockedByPlanMode,
+    phaseLabel: uiText.reviewPhaseLabel,
+    phaseDetail: uiText.reviewPhaseDetail,
+    toolActivityLabel: toolName =>
+      uiText.reviewToolActivityLabel(formatToolDisplayName(toolName)),
     onToken: options.onToken,
     onToolStart: ({ toolName, input, execId }) =>
       options.onToolStart(toolName, input, execId),
@@ -243,13 +340,13 @@ export async function handleReviewPromptCommand(
     },
     onAbort: async () => ({
       activityStatus: "done" as const,
-      activityDetail: "Review cancelled",
-      reply: "Review was cancelled before completion.",
+      activityDetail: uiText.reviewAbortActivityDetail,
+      reply: uiText.reviewAbortReply,
       companionState: "idle" as const,
     }),
     onDuplicate: async message => ({
       activityStatus: "done" as const,
-      activityDetail: "Review already running",
+      activityDetail: uiText.reviewDuplicateActivityDetail,
       reply: message,
       companionState: "idle" as const,
     }),

@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 import {
   findOriginalTaskForInspection,
   getOriginalTaskForInspection,
+  isGreetingOnlyInspectionTask,
   isDuplicateBuiltInAgentRunError,
   runBuiltInInspectionSession,
 } from "./inspectionTaskHost";
@@ -50,6 +51,13 @@ describe("inspectionTaskHost helpers", () => {
       ),
     ).toBe(true);
     expect(isDuplicateBuiltInAgentRunError(new Error("plain error"))).toBe(false);
+  });
+
+  it("detects greeting-only tasks so verification can short-circuit to PARTIAL", () => {
+    expect(isGreetingOnlyInspectionTask("你好")).toBe(true);
+    expect(isGreetingOnlyInspectionTask("hello")).toBe(true);
+    expect(isGreetingOnlyInspectionTask("  Hello there! ")).toBe(true);
+    expect(isGreetingOnlyInspectionTask("Implement detached task recovery")).toBe(false);
   });
 
   it("prepares and launches a shared built-in inspection session", async () => {

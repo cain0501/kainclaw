@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { buildVerificationRequest, getApproachSummary } from "./runner";
+import {
+  buildVerificationRequest,
+  getApproachSummary,
+  normalizeVerificationReportFences,
+} from "./runner";
 
 describe("verification runner helpers", () => {
   it("uses the latest non-empty assistant message as the approach summary", () => {
@@ -82,6 +86,92 @@ describe("verification runner helpers", () => {
     expect(request).toContain("Simplified Chinese");
     expect(request).toContain("### Check:");
     expect(request).toContain("VERDICT:");
+  });
+
+  it("requires fenced blocks and raw-only output in verification reports", () => {
+    const request = buildVerificationRequest({
+      originalTask: "Verify the current workspace/project state.",
+      changedFiles: ["src/toolRuntime.ts"],
+      approachSummary: "Tightened verification formatting rules.",
+      transcript: "USER: /verify\n\nASSISTANT: running verifier",
+    });
+
+    expect(request).toContain("## Report formatting rules");
+    expect(request).toContain("triple-tilde fenced code blocks");
+    expect(request).toContain("Do not use triple-backtick fences");
+    expect(request).toContain("must contain only raw command output");
+    expect(request).toContain("keep all reasoning in the `Result:` line");
+  });
+
+  it("requires concise Result lines in verification reports", () => {
+    const request = buildVerificationRequest({
+      originalTask: "Verify the current workspace/project state.",
+      changedFiles: ["src/toolRuntime.ts"],
+      approachSummary: "Tightened verification formatting rules.",
+      transcript: "USER: /verify\n\nASSISTANT: running verifier",
+    });
+
+    expect(request).toContain("## Result line rule");
+    expect(request).toContain("one short sentence");
+    expect(request).toContain("Do not append a paragraph");
+  });
+
+  it("requires tilde outer fences so raw Markdown output stays literal", () => {
+    const request = buildVerificationRequest({
+      originalTask: "Verify Markdown rendering.",
+      changedFiles: ["README.md"],
+      approachSummary: "Tightened verification report fence rules.",
+      transcript: "USER: /verify\n\nASSISTANT: running verifier",
+    });
+
+    expect(request).toContain("## Fence rule");
+    expect(request).toContain("Always use `~~~powershell`");
+    expect(request).toContain("`~~~text`");
+    expect(request).toContain("backtick fences can break the rendered report");
+  });
+
+  it("normalizes verification report command and output blocks to tilde fences", () => {
+    const report = [
+      "### Check: Read README",
+      "Command run:",
+      "```powershell",
+      "Get-Content README.md",
+      "```",
+      "Output observed:",
+      "```text",
+      "# Title",
+      "```powershell",
+      "npm install",
+      "```",
+      "### 2. Run tests",
+      "npm test",
+      "```",
+      "Result: PASS README rendered.",
+      "",
+      "VERDICT: PASS",
+    ].join("\n");
+
+    const normalized = normalizeVerificationReportFences(report);
+
+    expect(normalized).toContain("Command run:\n~~~powershell\nGet-Content README.md\n~~~");
+    expect(normalized).toContain(
+      "Output observed:\n~~~text\n# Title\n```powershell\nnpm install\n```\n### 2. Run tests\nnpm test\n~~~",
+    );
+  });
+
+  it("includes the verification scope gate for non-implementation conversations", () => {
+    const request = buildVerificationRequest({
+      originalTask: "你好",
+      changedFiles: [],
+      approachSummary:
+        "No assistant implementation summary was found in the current conversation. Use the transcript excerpt and workspace state.",
+      transcript: "USER: 你好\n\nASSISTANT: 你好，有什么可以帮你？",
+    });
+
+    expect(request).toContain("## Verification scope gate");
+    expect(request).toContain("greeting / generic chat request");
+    expect(request).toContain("do not award PASS");
+    expect(request).toContain("VERDICT: PARTIAL");
   });
 
   it("omits the diff section when diffContent is empty", () => {

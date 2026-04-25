@@ -65,6 +65,7 @@ describe("inspectionHost", () => {
     const result = await runVerificationSessionWithHost({
       commandText: "/verify",
       workspaceRoot: "E:\\repo",
+      promptForTask: "Verify the current workspace/project state.",
       config: { type: "anthropic", apiKey: "secret", model: "claude-sonnet" },
       envMap: { HELLO: "world" },
       runtime: {
@@ -96,6 +97,7 @@ describe("inspectionHost", () => {
     const call = runVerificationInspectionSessionMock.mock.calls[0]?.[0];
     expect(call.commandText).toBe("/verify");
     expect(call.workspaceRoot).toBe("E:\\repo");
+    expect(call.promptForTask).toBe("Verify the current workspace/project state.");
     expect(call.conversationHistory).toEqual([{ role: "user", content: "task" }]);
     expect(call.sessionMessages).toEqual([{ role: "user", content: "task" }]);
     expect(call.pendingPlanVerification?.planFilePath).toBe(".omx/plans/test.md");
@@ -203,7 +205,7 @@ describe("inspectionHost", () => {
     expect(onStreamingToken).toHaveBeenCalledWith("tok");
     expect(startToolExecution).toHaveBeenCalledWith(
       "exec-1",
-      "正在执行 read file",
+      "Verifying: read file",
       expect.any(String),
     );
     expect(finishToolExecution).toHaveBeenCalledWith("exec-1", "done", "ok");
@@ -262,10 +264,61 @@ describe("inspectionHost", () => {
     expect(onStreamingToken).toHaveBeenCalledWith("tok");
     expect(startToolExecution).toHaveBeenCalledWith(
       "exec-2",
-      "瀹℃煡涓細grep",
+      "Reviewing: grep",
       expect.any(String),
     );
     expect(finishToolExecution).toHaveBeenCalledWith("exec-2", "error", "warn");
+  });
+
+  it("uses Chinese review tool labels when the conversation is Chinese", async () => {
+    const startToolExecution = vi.fn();
+
+    handleReviewPromptCommandMock.mockImplementation(async (options: any) => {
+      options.onToolStart("grep", { pattern: "TODO" }, "exec-zh-review");
+      return true;
+    });
+
+    await handleReviewCommandWithHost({
+      commandText: "/review",
+      workspaceRoot: "E:\\repo",
+      config: { type: "anthropic", apiKey: "secret", model: "claude-sonnet" },
+      envMap: { HELLO: "world" },
+      runtime: {
+        getToolContext: () =>
+          ({ workspaceRoot: "E:\\repo", invokerKind: "main" }) as any,
+        getToolDefinitions: async () => [{ name: "grep" }] as any,
+        getMcpStatusSummary: async () => [] as any,
+      },
+      tools: [{ name: "grep" }] as any,
+      runtimeOptions: { fastMode: true },
+      effortLevel: "medium",
+      sessionMessages: [{ role: "user", content: "请审查这个改动" }],
+      blockedByPlanMode: false,
+      getConversationHistory: () => [{ role: "user", content: "请审查这个改动" }],
+      getPendingPlanVerification: () => undefined,
+      backgroundTaskHost: {
+        runBuiltInAgentSession: vi.fn(),
+        buildFollowUpMessage: vi.fn(() => "follow-up"),
+      } as any,
+      findActiveBuiltInAgentTask: vi.fn(async () => undefined),
+      createProviderAdapter: vi.fn(() => ({}) as any),
+      onStreamingToken: vi.fn(),
+      startToolExecution,
+      finishToolExecution: vi.fn(),
+      addPhaseActivity: vi.fn(() => "activity-zh-review"),
+      finishPhaseActivity: vi.fn(),
+      recordAssistantReply: vi.fn(async () => undefined),
+      setCompanionState: vi.fn(),
+      clearStreamingText: vi.fn(),
+      updateMood: vi.fn(async () => undefined),
+      isAbortLikeError: vi.fn(() => false),
+    });
+
+    expect(startToolExecution).toHaveBeenCalledWith(
+      "exec-zh-review",
+      "审查中：grep",
+      expect.any(String),
+    );
   });
 
   it("adapts verification tool launch callbacks to the host-backed session runner", async () => {

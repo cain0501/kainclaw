@@ -108,6 +108,39 @@ function isSlashCommandMessage(content: string): boolean {
   return parsePromptSlashCommand(content) !== null;
 }
 
+const GREETING_ONLY_TASK_PATTERNS = [
+  "hi",
+  "hello",
+  "hey",
+  "yo",
+  "你好",
+  "您好",
+  "嗨",
+  "哈喽",
+  "hello there",
+  "早上好",
+  "上午好",
+  "中午好",
+  "下午好",
+  "晚上好",
+  "在吗",
+];
+
+export function isGreetingOnlyInspectionTask(content: string): boolean {
+  const normalized = content
+    .trim()
+    .toLowerCase()
+    .replace(/[`"'“”‘’\s,.!?，。！？]+/gu, "");
+
+  if (!normalized) {
+    return false;
+  }
+
+  return GREETING_ONLY_TASK_PATTERNS.some(pattern =>
+    pattern.replace(/\s+/g, "") === normalized,
+  );
+}
+
 export function findOriginalTaskForInspection(
   messages: InspectionMessage[],
 ): string | null {

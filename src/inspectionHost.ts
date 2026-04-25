@@ -1,11 +1,11 @@
 import type { IProviderAdapter, ProviderConfig } from "./agent/providers/IProviderAdapter";
 import type { BackgroundTaskHost } from "./backgroundTaskHost";
 import type { PendingPlanVerificationState } from "./conversationRuntimeStateHost";
-import { getToolRunningLabel } from "./hostUi";
 import {
   describeToolInput as formatToolInputPreview,
   describeToolName as formatToolDisplayName,
 } from "./hostRuntimeHelpers";
+import { inferInspectionLocale } from "./inspectionLocale";
 import {
   handleReviewPromptCommand,
   handleVerificationPromptCommand,
@@ -37,9 +37,22 @@ type InspectionRuntimeLike = {
   getToolContext: () => ToolContext;
 };
 
+function getInspectionToolRunningLabel(
+  kind: "review" | "verification",
+  toolName: string,
+  locale: "zh-CN" | "en",
+): string {
+  if (locale === "zh-CN") {
+    return kind === "review" ? `审查中：${toolName}` : `验证中：${toolName}`;
+  }
+
+  return kind === "review" ? `Reviewing: ${toolName}` : `Verifying: ${toolName}`;
+}
+
 type SharedInspectionSessionHostOptions<TRuntime extends InspectionRuntimeLike> = {
   commandText: string;
   workspaceRoot: string;
+  promptForTask?: string;
   config: ProviderConfig;
   envMap: Record<string, string>;
   runtime: TRuntime;
@@ -137,6 +150,7 @@ export async function runVerificationSessionWithHost<TRuntime extends Inspection
   return runVerificationInspectionSession({
     commandText: options.commandText,
     workspaceRoot: options.workspaceRoot,
+    ...(options.promptForTask ? { promptForTask: options.promptForTask } : {}),
     config: options.config,
     effortLevel: options.effortLevel,
     runtime: options.runtime,
@@ -300,15 +314,18 @@ export async function handleVerificationCommandWithHost<
   TRuntime extends WorkspaceRuntimeLike & InspectionRuntimeLike,
 >(
   options: SharedInspectionCommandHostOptions<TRuntime> & {
+    promptForTask?: string;
     markPendingPlanVerificationStarted: () => void;
     markPendingPlanVerificationCompleted: () => void;
     resetPendingPlanVerificationToAwaitingStart: () => void;
     onUnexpectedError: (message: string, activityId: string) => void;
   },
 ): Promise<boolean> {
+  const locale = inferInspectionLocale(options.commandText, options.sessionMessages);
   return handleVerificationPromptCommand({
     commandText: options.commandText,
     workspaceRoot: options.workspaceRoot,
+    ...(options.promptForTask ? { promptForTask: options.promptForTask } : {}),
     config: options.config,
     envMap: options.envMap,
     runtime: options.runtime,
@@ -321,7 +338,11 @@ export async function handleVerificationCommandWithHost<
     onToolStart: (toolName, input, execId) => {
       options.startToolExecution(
         execId,
-        getToolRunningLabel(formatToolDisplayName(toolName)),
+        getInspectionToolRunningLabel(
+          "verification",
+          formatToolDisplayName(toolName),
+          locale,
+        ),
         formatToolInputPreview(input),
       );
     },
@@ -367,6 +388,7 @@ export async function handleReviewCommandWithHost<
 >(
   options: SharedInspectionCommandHostOptions<TRuntime>,
 ): Promise<boolean> {
+  const locale = inferInspectionLocale(options.commandText, options.sessionMessages);
   return handleReviewPromptCommand({
     commandText: options.commandText,
     workspaceRoot: options.workspaceRoot,
@@ -382,7 +404,7 @@ export async function handleReviewCommandWithHost<
     onToolStart: (toolName, input, execId) => {
       options.startToolExecution(
         execId,
-        `瀹℃煡涓細${formatToolDisplayName(toolName)}`,
+        getInspectionToolRunningLabel("review", formatToolDisplayName(toolName), locale),
         formatToolInputPreview(input),
       );
     },

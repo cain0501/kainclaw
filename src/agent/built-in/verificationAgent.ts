@@ -76,6 +76,12 @@ You found something that looks broken. Before reporting FAIL, check you haven't 
 - **Not actionable**: is this a real limitation but unfixable without breaking an external contract?
 Don't use these as excuses to wave away real issues - but don't FAIL on intentional behavior either.
 
+=== SCOPE GATE ===
+- \`/verify\` is for a concrete implementation/change request, not greeting-only or generic chat turns.
+- Before any PASS/FAIL decision, confirm there is a real implementation target plus recognizable project evidence you can exercise.
+- If the original task is only a greeting / generic chat request, or the workspace has no recognizable code/project/build target and you cannot establish a concrete implementation to verify, stop and return \`VERDICT: PARTIAL\`.
+- "I found no issues" is not enough for PASS when there was no real implementation target to verify in the first place.
+
 === OUTPUT FORMAT (REQUIRED) ===
 Every check MUST follow this structure. A check without a Command run block is not a PASS - it's a skip.
 
@@ -87,17 +93,27 @@ Language policy:
   - \`Command run:\`
   - \`Output observed:\`
   - \`Result: PASS\` / \`Result: FAIL\`
-  - \`VERDICT: PASS\` / \`VERDICT: FAIL\` / \`VERDICT: PARTIAL\`
+- \`VERDICT: PASS\` / \`VERDICT: FAIL\` / \`VERDICT: PARTIAL\`
 - Keep commands, file paths, code identifiers, and literal verdict strings unchanged.
+- Put the command text and observed output inside fenced code blocks so markdown characters stay literal.
+- Always use triple-tilde fences (\`~~~\`) for \`Command run:\` and \`Output observed:\` blocks. Do not use triple-backtick fences for these blocks, because raw Markdown output often contains its own backtick fences.
+- The \`Output observed\` section must contain only the raw command output (or \`[no output]\`). Do not add analysis, summaries, or explanatory prose there.
+- If you truncate long output, truncate inside the fenced block and move any explanation of why it matters into the \`Result:\` line.
+- Keep the \`Result:\` line concise: one short sentence with the verdict and the key reason. Do not turn it into a paragraph, changelog, or mini-essay.
+- Do not escape backticks, asterisks, underscores, or path separators inside those fenced blocks.
 
-\`\`\`
+\`\`\`\`
 ### Check: [what you're verifying]
-**Command run:**
-  [exact command you executed]
-**Output observed:**
-  [actual terminal output - copy-paste, not paraphrased. Truncate if very long but keep the relevant part.]
-**Result: PASS** (or FAIL - with Expected vs Actual)
-\`\`\`
+Command run:
+~~~powershell
+[exact command you executed]
+~~~
+Output observed:
+~~~text
+[actual terminal output - copy-paste, not paraphrased. Truncate if very long but keep the relevant part.]
+~~~
+Result: PASS (or FAIL - with Expected vs Actual)
+\`\`\`\`
 
 End with exactly this line:
 
@@ -107,7 +123,7 @@ VERDICT: FAIL
 or
 VERDICT: PARTIAL
 
-PARTIAL is for environmental limitations only (no test framework, tool unavailable, server can't start) - not for "I'm unsure whether this is a bug." If you can run the check, you must decide PASS or FAIL.
+PARTIAL is for insufficient verification scope or environmental limitations: no concrete implementation target, greeting-only/generic-chat original task, no recognizable project/build target, no test framework, tool unavailable, server can't start. It is not for "I'm unsure whether this is a bug." If you have a concrete target and can run the check, you must decide PASS or FAIL.
 
 Use the literal string \`VERDICT: \` followed by exactly one of \`PASS\`, \`FAIL\`, \`PARTIAL\`.`;
 

@@ -22,6 +22,18 @@ describe("built-in agent definitions", () => {
     expect(REVIEW_AGENT.criticalSystemReminder).toContain("REVIEW-ONLY");
 
     expect(VERIFICATION_AGENT.getSystemPrompt()).toContain("VERDICT: PASS");
+    expect(VERIFICATION_AGENT.getSystemPrompt()).toContain(
+      "/verify` is for a concrete implementation/change request",
+    );
+    expect(VERIFICATION_AGENT.getSystemPrompt()).toContain(
+      "The `Output observed` section must contain only the raw command output",
+    );
+    expect(VERIFICATION_AGENT.getSystemPrompt()).toContain(
+      "Always use triple-tilde fences (`~~~`)",
+    );
+    expect(VERIFICATION_AGENT.getSystemPrompt()).toContain(
+      "Do not use triple-backtick fences",
+    );
     expect(VERIFICATION_AGENT.criticalSystemReminder).toContain("VERIFICATION-ONLY");
   });
 });
