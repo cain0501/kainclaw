@@ -2586,6 +2586,7 @@ const handlers: Record<string, ToolHandler> = {
     const completedTask = await runtime.waitForBackgroundTask(
       taskId,
       timeout,
+      context.abortSignal,
     );
 
     if (!completedTask) {

@@ -1230,6 +1230,31 @@ describe("toolRuntime background task semantics", () => {
     expect(result.content).toContain("<retrieval_status>timeout</retrieval_status>");
   });
 
+  it("TaskOutput block=true propagates abort signals while waiting like Claude TaskOutput", async () => {
+    const context = await createTaskContext();
+    await context.tasks!.registerBackgroundTask({
+      id: "running-abort",
+      taskType: "local_agent",
+      status: "running",
+      description: "abortable task",
+      output: "partial output",
+    });
+
+    const abortController = new AbortController();
+    abortController.abort();
+
+    await expect(
+      executeTool(
+        "TaskOutput",
+        { task_id: "running-abort", timeout: 1000 },
+        {
+          ...context,
+          abortSignal: abortController.signal,
+        },
+      ),
+    ).rejects.toThrow("Background task wait aborted.");
+  });
+
   it("TaskOutput block=true includes follow-up guidance for remote tasks that are still running", async () => {
     const context = await createTaskContext();
     await context.tasks!.registerBackgroundTask({

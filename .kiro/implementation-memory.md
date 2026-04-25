@@ -20,7 +20,7 @@
   - `npm run check:electron`
 - 当前验证基线：
   - `145` 个测试文件
-  - `970` 个测试通过
+  - `982` 个测试通过
 - Electron 路由规则：
   - 必须先识别斜杠命令，再做普通聊天 / 图片意图推断。
   - 否则最近生成图上下文会错误劫持 `/compact` 这类命令，把它们误路由到图片编辑流程。
@@ -215,6 +215,7 @@
 - `TaskStop` 不能在 stop 通道不存在时伪造“已取消”。
 - built-in inspection 任务要保留 `command_text / prompt / plan_file_path / diff_ref` provenance。
 - `TaskGet`、`TaskOutput` 对缺失任务必须返回结构化 `not_found`，不能返回含糊状态。
+- `TaskOutput` 的阻塞等待必须传递当前 `abortSignal`，这和 Claude `TaskOutputTool` 的 wait lifecycle 一致；用户取消后不能继续挂住后台任务输出等待。
 - remote / detached background task parity 仍然是未完成项，不能在文档里写成已闭环。
 
 ### 2. Verification / Review Phase 2

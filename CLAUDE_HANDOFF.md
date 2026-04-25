@@ -2,14 +2,14 @@
 
 ## 当前覆盖说明 / Current Override - 2026-04-25
 
-- `/verify` 报告渲染与 Electron Markdown 对齐修复后的验证基线：
+- `/verify` 报告渲染、Electron Markdown 与 TaskOutput abort parity 修复后的验证基线：
   - `npm test`
   - `npm run check`
   - `npm run build`
   - `npm run build:electron`
   - `npm run check:electron`
   - `145` 个测试文件
-  - `970` 个测试通过
+  - `982` 个测试通过
 - 强实现规则已经生效：
   - 如果本地 Claude Code 源码已经包含目标功能、行为、工作流、prompt contract、renderer 行为、tool/runtime 路径或 session 生命周期，必须先读取该源码，并把源码逻辑作为实现 baseline 复刻。
   - KainClaw 自研标准只用于 Claude 源码没有覆盖的能力，或用于 Claude-compatible baseline 之上的薄适配层。
@@ -23,6 +23,7 @@
   - `Command run` 和 `Output observed` 会作为结构化原始文本解析，并通过转义后的 `<pre><code>` 渲染。
   - README 输出、嵌套代码围栏、四反引号围栏都会保持字面量显示，不再打断报告结构。
 - `marked` 现在是 Electron renderer 的运行时依赖；`npm run build:electron` 会把 `node_modules/marked/lib/marked.umd.js` 复制到 `dist-electron/electron/renderer/vendor/marked.umd.js`。
+- `TaskOutput` 阻塞等待后台任务输出时，已经按 Claude `TaskOutputTool` 生命周期把 `ToolContext.abortSignal` 传入 task wait；用户取消后不会继续挂住后台输出等待。
 - Electron 桌面壳已把这些斜杠命令接回真实的 `src/` host/runtime 路径：
   - `/todo`
   - `/compact`

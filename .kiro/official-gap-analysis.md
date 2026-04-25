@@ -10,7 +10,7 @@
   - `npm run check:electron`
 - 当前自动化基线：
   - `145` 个测试文件
-  - `970` 个测试通过
+  - `982` 个测试通过
 - 强规则已收口：凡是 Claude 源码已有的功能、行为、工作流、prompt contract、renderer 行为、tool/runtime 路径或 session 生命周期，必须先读 Claude 源码并按其逻辑复刻基线；只有 Claude 源码没有的 KainClaw 扩展，才按 KainClaw 自研标准开发。
 - 本轮 Markdown / `/verify` 渲染修复已按 Claude 源码逻辑对齐：
   - 参考 `E:\claudecodejingiang\src\components\Markdown.tsx`
@@ -22,6 +22,7 @@
   - `Command run` 与 `Output observed` 作为原始文本解析并转义渲染到 `<pre><code>`
   - README 输出、嵌套代码围栏、四反引号围栏不再破坏报告显示
 - `marked` 已加入依赖，`build:electron` 会把 `node_modules/marked/lib/marked.umd.js` 复制到 `dist-electron/electron/renderer/vendor/marked.umd.js`。
+- `TaskOutput` 阻塞等待后台任务输出时已对齐 Claude `TaskOutputTool` 的取消语义，会把 `ToolContext.abortSignal` 传给 task wait，避免用户取消后继续等待。
 - Electron 壳当前已重新接回并验证这些斜杠命令：
   - `/todo`
   - `/compact`
@@ -65,7 +66,7 @@
 | 会话持久化 / 导出 / 恢复 | 已实现 | `src/storage/sessionRepository.ts` `src/sessionListHost.ts` `src/savedSessionHost.ts` | 会话管理 UI 仍可继续打磨 |
 | MCP runtime | 已实现 | `src/mcpRuntime.ts` `src/mcpRuntime.helpers.ts` | OAuth / PKCE / prompts / templates parity 未完全收口 |
 | 文件 / 命令 / 浏览器工具 | 已实现 | `src/toolRuntime.ts` `src/browserRuntime.ts` | Browser automation parity 仍未完全对齐 |
-| Tasks / background command | 部分实现 | `src/tasks/taskRuntime.ts` `src/backgroundTaskHost.ts` `src/backgroundCommandWorker.ts` | remote / detached background task parity 未完成 |
+| Tasks / background command | 部分实现 | `src/tasks/taskRuntime.ts` `src/backgroundTaskHost.ts` `src/backgroundCommandWorker.ts` `src/toolRuntime.ts` | `TaskOutput` abort wait 已对齐；remote / detached background task parity 未完成 |
 | built-in Review | 部分实现 | `src/review/runner.ts` `src/agent/built-in/reviewAgent.ts` | ultrareview、远程 review 生命周期仍未完善 |
 | built-in Verification | 部分实现 | `src/verification/runner.ts` `src/agent/built-in/verificationAgent.ts` | hosted / detached verification parity 未完成 |
 | Plan Mode | 部分实现 | `src/planMode/planMode.ts` `src/planModeHost.ts` `src/planMode/planModePrompt.ts` | 更完整的官方 plan workflow 仍缺 |
