@@ -175,4 +175,56 @@ describe("SessionRepository appendMessages", () => {
       ],
     });
   });
+
+  it("round-trips workspaceRoot through runtime state files", async () => {
+    const storageRoot = await fs.mkdtemp(path.join(os.tmpdir(), "cain-session-repo-"));
+    tempDirs.push(storageRoot);
+    const repository = createRepository(storageRoot);
+
+    await repository.saveRuntimeState("session-workspace", {
+      workspaceRoot: "E:\\22",
+    });
+
+    await expect(
+      repository.loadRuntimeState("session-workspace"),
+    ).resolves.toEqual({
+      workspaceRoot: "E:\\22",
+    });
+  });
+
+  it("round-trips compact boundary metadata through runtime state files", async () => {
+    const storageRoot = await fs.mkdtemp(path.join(os.tmpdir(), "cain-session-repo-"));
+    tempDirs.push(storageRoot);
+    const repository = createRepository(storageRoot);
+
+    await repository.saveRuntimeState("session-compact", {
+      modelConversation: [{ role: "user", content: "summary" }],
+      compactBoundary: {
+        trigger: "auto",
+        compactedAt: 1700000000000,
+        preTokens: 48000,
+        postTokens: 9000,
+        messagesSummarized: 18,
+        messagesKept: 6,
+        preservedRecentMessages: true,
+        transcriptPath: "E:\\repo\\sessions\\session-compact.jsonl",
+      },
+    });
+
+    await expect(
+      repository.loadRuntimeState("session-compact"),
+    ).resolves.toEqual({
+      modelConversation: [{ role: "user", content: "summary" }],
+      compactBoundary: {
+        trigger: "auto",
+        compactedAt: 1700000000000,
+        preTokens: 48000,
+        postTokens: 9000,
+        messagesSummarized: 18,
+        messagesKept: 6,
+        preservedRecentMessages: true,
+        transcriptPath: "E:\\repo\\sessions\\session-compact.jsonl",
+      },
+    });
+  });
 });

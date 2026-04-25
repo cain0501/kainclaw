@@ -22,23 +22,29 @@ class FakeProvider implements IProviderAdapter {
 }
 
 describe("compact conversation history", () => {
-  it("does not compact when there are too few messages", async () => {
+  it("compacts short conversations instead of blocking on message count", async () => {
+    const provider = new FakeProvider("<summary>Short summary</summary>");
     const result = await compactConversationHistory({
-      provider: new FakeProvider("<summary>unused</summary>"),
+      provider,
       messages: [
         { role: "user", content: "one" },
         { role: "assistant", content: "two" },
       ],
     });
 
-    expect(result.wasCompacted).toBe(false);
-    expect(result.reason).toContain("Not enough messages");
-    expect(result.messagesCompacted).toBe(0);
+    expect(result.wasCompacted).toBe(true);
+    expect(result.messagesCompacted).toBe(2);
+    expect(result.messagesKept).toBe(0);
+    expect(provider.calls[0]).toEqual([
+      { role: "user", content: "one" },
+      { role: "assistant", content: "two" },
+    ]);
   });
 
-  it("preserves attachment-only user messages when compaction is skipped", async () => {
+  it("uses media markers when compacting short attachment-only conversations", async () => {
+    const provider = new FakeProvider("<summary>Image discussed</summary>");
     const result = await compactConversationHistory({
-      provider: new FakeProvider("<summary>unused</summary>"),
+      provider,
       messages: [
         {
           role: "user",
@@ -49,16 +55,14 @@ describe("compact conversation history", () => {
       ],
     });
 
-    expect(result.wasCompacted).toBe(false);
-    expect(result.compactedHistory).toEqual([
-      {
-        role: "user",
-        content: "",
-        attachments: [{ data: "ZmFrZS1pbWFnZQ==", mimeType: "image/png" }],
-      },
+    expect(result.wasCompacted).toBe(true);
+    expect(provider.calls[0]).toEqual([
+      { role: "user", content: "[image]" },
       { role: "assistant", content: "I can see the image." },
     ]);
-    expect(result.messagesKept).toBe(2);
+    expect(result.compactedHistory[0]?.content).toContain("Image discussed");
+    expect(result.messagesCompacted).toBe(2);
+    expect(result.messagesKept).toBe(0);
   });
 
   it("compacts older messages into a summary and preserves recent messages", async () => {
@@ -134,6 +138,46 @@ describe("compact conversation history", () => {
       attachments: [{ data: "ZmFrZS1pbWFnZQ==", mimeType: "image/png" }],
     });
     expect(result.compactedHistory[2]?.content).toBe("recent assistant");
+  });
+
+  it("strips media payloads from the summary request while preserving markers", async () => {
+    const provider = new FakeProvider("<summary>Summarized work</summary>");
+    const messages: NormalizedMessage[] = [
+      { role: "user", content: "u1" },
+      {
+        role: "user",
+        content: "please inspect this",
+        attachments: [{ data: "a".repeat(80_000), mimeType: "image/png" }],
+      },
+      { role: "assistant", content: "a1" },
+      { role: "user", content: "u2" },
+      { role: "assistant", content: "a2" },
+      { role: "user", content: "u3" },
+      { role: "assistant", content: "a3" },
+      { role: "user", content: "u4" },
+      { role: "assistant", content: "recent user" },
+      { role: "assistant", content: "recent assistant" },
+    ];
+
+    const result = await compactConversationHistory({
+      provider,
+      messages,
+      keepRecentTokenBudget: 1,
+      minRecentMessages: 2,
+      maxRecentMessages: 2,
+      suppressFollowUpQuestions: true,
+    });
+
+    expect(result.wasCompacted).toBe(true);
+    expect(provider.calls[0]).toContainEqual({
+      role: "user",
+      content: "please inspect this\n[image]",
+    });
+    expect(
+      provider.calls[0]?.some(
+        message => message.role === "user" && "attachments" in message,
+      ),
+    ).toBe(false);
   });
 
   it("extends an existing compact summary instead of discarding it on later compaction", async () => {

@@ -20,6 +20,7 @@ export async function switchToSavedSession(options: {
   replaceSessionMessages: (messages: SavedSessionPayload["restoredSession"]["sessionMessages"]) => void;
   restoreModelConversation: (messages: SavedSessionPayload["runtimeState"]["modelConversation"]) => void;
   restorePendingPlanVerification: (state: SavedSessionPayload["runtimeState"]["pendingPlanVerification"]) => void;
+  restoreCompactBoundary: (state: SavedSessionPayload["runtimeState"]["compactBoundary"]) => void;
   markConversationBaseline: (count: number) => void;
   setActiveSessionId: (id: string) => Promise<unknown>;
   finalizeMutation: () => Promise<void>;
@@ -36,6 +37,7 @@ export async function switchToSavedSession(options: {
     replaceSessionMessages: options.replaceSessionMessages,
     restoreModelConversation: options.restoreModelConversation,
     restorePendingPlanVerification: options.restorePendingPlanVerification,
+    restoreCompactBoundary: options.restoreCompactBoundary,
     markConversationBaseline: options.markConversationBaseline,
   });
   await options.setActiveSessionId(options.payload.restoredSession.currentSessionId);

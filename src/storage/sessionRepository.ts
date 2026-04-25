@@ -51,9 +51,22 @@ export type PersistedConversationMessage = {
   }>;
 };
 
+export type CompactBoundarySessionState = {
+  trigger: "manual" | "auto";
+  compactedAt: number;
+  preTokens: number;
+  postTokens: number;
+  messagesSummarized: number;
+  messagesKept: number;
+  preservedRecentMessages: boolean;
+  transcriptPath?: string;
+};
+
 export type SessionRuntimeState = {
   pendingPlanVerification?: PendingPlanVerificationSessionState;
   modelConversation?: PersistedConversationMessage[];
+  compactBoundary?: CompactBoundarySessionState;
+  workspaceRoot?: string;
 };
 
 export type SessionMeta = {
@@ -402,12 +415,40 @@ export class SessionRepository {
                 : {}),
             }))
         : undefined;
+      const compactBoundary =
+        parsed.compactBoundary &&
+        (parsed.compactBoundary.trigger === "manual" ||
+          parsed.compactBoundary.trigger === "auto") &&
+        typeof parsed.compactBoundary.compactedAt === "number" &&
+        typeof parsed.compactBoundary.preTokens === "number" &&
+        typeof parsed.compactBoundary.postTokens === "number" &&
+        typeof parsed.compactBoundary.messagesSummarized === "number" &&
+        typeof parsed.compactBoundary.messagesKept === "number" &&
+        typeof parsed.compactBoundary.preservedRecentMessages === "boolean"
+          ? {
+              trigger: parsed.compactBoundary.trigger,
+              compactedAt: parsed.compactBoundary.compactedAt,
+              preTokens: parsed.compactBoundary.preTokens,
+              postTokens: parsed.compactBoundary.postTokens,
+              messagesSummarized: parsed.compactBoundary.messagesSummarized,
+              messagesKept: parsed.compactBoundary.messagesKept,
+              preservedRecentMessages:
+                parsed.compactBoundary.preservedRecentMessages,
+              ...(typeof parsed.compactBoundary.transcriptPath === "string"
+                ? { transcriptPath: parsed.compactBoundary.transcriptPath }
+                : {}),
+            }
+          : undefined;
 
       return {
         pendingPlanVerification: parsed.pendingPlanVerification,
+        ...(typeof parsed.workspaceRoot === "string"
+          ? { workspaceRoot: parsed.workspaceRoot }
+          : {}),
         ...(modelConversation && modelConversation.length > 0
           ? { modelConversation }
           : {}),
+        ...(compactBoundary ? { compactBoundary } : {}),
       };
     } catch {
       return {};
@@ -423,6 +464,26 @@ export class SessionRepository {
     const normalizedState: SessionRuntimeState = {
       ...(state.pendingPlanVerification
         ? { pendingPlanVerification: state.pendingPlanVerification }
+        : {}),
+      ...(typeof state.workspaceRoot === "string"
+        ? { workspaceRoot: state.workspaceRoot }
+        : {}),
+      ...(state.compactBoundary
+        ? {
+            compactBoundary: {
+              trigger: state.compactBoundary.trigger,
+              compactedAt: state.compactBoundary.compactedAt,
+              preTokens: state.compactBoundary.preTokens,
+              postTokens: state.compactBoundary.postTokens,
+              messagesSummarized: state.compactBoundary.messagesSummarized,
+              messagesKept: state.compactBoundary.messagesKept,
+              preservedRecentMessages:
+                state.compactBoundary.preservedRecentMessages,
+              ...(typeof state.compactBoundary.transcriptPath === "string"
+                ? { transcriptPath: state.compactBoundary.transcriptPath }
+                : {}),
+            },
+          }
         : {}),
       ...(Array.isArray(state.modelConversation) && state.modelConversation.length > 0
         ? {
@@ -443,7 +504,12 @@ export class SessionRepository {
         : {}),
     };
 
-    if (!normalizedState.pendingPlanVerification && !normalizedState.modelConversation) {
+    if (
+      !normalizedState.pendingPlanVerification &&
+      !normalizedState.modelConversation &&
+      !normalizedState.compactBoundary &&
+      typeof normalizedState.workspaceRoot !== "string"
+    ) {
       try {
         await fs.unlink(this.getStateFilePath(sessionId));
       } catch {

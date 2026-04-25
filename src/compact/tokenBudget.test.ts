@@ -5,6 +5,7 @@ import {
   estimateMessageTokens,
   getBudgetContinuationMessage,
   findTokenBudgetPositions,
+  roughTokenCountEstimationForFileType,
 } from "./tokenBudget.js";
 
 describe("parseTokenBudget", () => {
@@ -35,7 +36,7 @@ describe("estimateTextTokens", () => {
   });
 
   it("returns 0 for whitespace-only string", () => {
-    expect(estimateTextTokens("   \n\t  ")).toBe(0);
+    expect(estimateTextTokens("   \n\t  ")).toBe(2);
   });
 
   it("estimates ~1 token per 4 chars", () => {
@@ -49,15 +50,14 @@ describe("estimateMessageTokens", () => {
     expect(estimateMessageTokens([])).toBe(0);
   });
 
-  it("adds overhead per message", () => {
+  it("does not add synthetic per-message overhead without content", () => {
     const result = estimateMessageTokens([
       { role: "user", content: "" },
     ]);
-    // 8 overhead + 0 text tokens, * 4/3 = ceil(10.67) = 11
-    expect(result).toBeGreaterThan(0);
+    expect(result).toBe(0);
   });
 
-  it("counts image attachment payloads toward the estimate", () => {
+  it("estimates image attachments as media blocks instead of base64 text", () => {
     const withoutAttachment = estimateMessageTokens([
       { role: "user", content: "" },
     ]);
@@ -70,6 +70,7 @@ describe("estimateMessageTokens", () => {
     ]);
 
     expect(withAttachment).toBeGreaterThan(withoutAttachment);
+    expect(withAttachment).toBe(2_000);
   });
 
   it("counts assistant tool-call payloads toward the estimate", () => {
@@ -87,6 +88,17 @@ describe("estimateMessageTokens", () => {
     ]);
 
     expect(withToolCalls).toBeGreaterThan(withoutToolCalls);
+  });
+
+  it("uses denser fallback estimation for JSON-like file content", () => {
+    const json = '{"a":1,"b":2}';
+
+    expect(roughTokenCountEstimationForFileType(json, "json")).toBe(
+      Math.round(json.length / 2),
+    );
+    expect(roughTokenCountEstimationForFileType(json, "ts")).toBe(
+      Math.round(json.length / 4),
+    );
   });
 });
 

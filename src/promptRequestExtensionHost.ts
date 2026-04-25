@@ -19,7 +19,11 @@ import type {
 import type { PromptHostAssemblyOptions } from "./promptHostFactory";
 import { runPromptRequestWithAssembly } from "./promptRequestFactory";
 import type { SettingsRepository } from "./storage/settingsRepository";
-import type { ChatMessage, SessionRepository } from "./storage/sessionRepository";
+import type {
+  ChatMessage,
+  CompactBoundarySessionState,
+  SessionRepository,
+} from "./storage/sessionRepository";
 import type { ConversationTaskRuntime } from "./tasks/types";
 import type { ToolDefinition } from "./toolRuntime";
 import type { ProviderRuntimeOptions } from "./thinkingEffort/types";
@@ -107,7 +111,10 @@ export type PromptRequestExtensionSessionBindings = {
 
 export type PromptRequestExtensionConversationBindings = {
   getConversationHistory: () => ConversationMessage[];
-  replaceConversationHistory: (messages: ConversationMessage[]) => void;
+  replaceConversationHistory: (
+    messages: ConversationMessage[],
+    compactBoundary?: CompactBoundarySessionState,
+  ) => void | Promise<void>;
   appendConversationMessage: (message: ConversationMessage) => void;
   persistCurrentSessionRuntimeState: () => void;
   pendingPlanVerification: PendingPlanVerificationState | undefined;
@@ -212,7 +219,10 @@ export function createPromptRequestSessionPart(
 
 export function createPromptRequestConversationPart(options: {
   getConversationHistory: () => ConversationMessage[];
-  replaceConversationHistory: (messages: ConversationMessage[]) => void;
+  replaceConversationHistory: (
+    messages: ConversationMessage[],
+    compactBoundary?: CompactBoundarySessionState,
+  ) => void | Promise<void>;
   conversationMessages: ConversationMessage[];
   getPendingPromptAttachments: () => NormalizedImageAttachment[] | undefined;
   setPendingPromptAttachments: (

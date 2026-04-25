@@ -10,8 +10,6 @@ import {
 } from "./prompt";
 import { estimateMessageTokens } from "./tokenBudget";
 
-const MIN_MESSAGES_TO_COMPACT = 8;
-const MIN_MESSAGES_TO_MICRO_COMPACT = 4;
 const DEFAULT_KEEP_RECENT_TOKENS = 12_000;
 const MIN_RECENT_MESSAGES = 6;
 const MIN_RECENT_MESSAGES_AFTER_EXISTING_SUMMARY = 2;
@@ -59,6 +57,40 @@ function hasCompactionPreservableContent(
   return message.role === "user" && (message.attachments?.length ?? 0) > 0;
 }
 
+function getAttachmentCompactionMarker(mimeType: string): string {
+  const normalizedMimeType = mimeType.trim().toLowerCase();
+
+  if (normalizedMimeType.startsWith("image/")) {
+    return "[image]";
+  }
+
+  if (normalizedMimeType === "application/pdf") {
+    return "[document]";
+  }
+
+  return `[attachment: ${mimeType || "unknown"}]`;
+}
+
+export function stripAttachmentsFromCompactSummaryInput(
+  messages: CompactConversationMessage[],
+): CompactConversationMessage[] {
+  return messages.map(message => {
+    if (message.role !== "user" || !message.attachments?.length) {
+      return message;
+    }
+
+    const attachmentMarkers = message.attachments
+      .map(attachment => getAttachmentCompactionMarker(attachment.mimeType))
+      .join("\n");
+    return {
+      role: "user",
+      content: [message.content.trim(), attachmentMarkers]
+        .filter(Boolean)
+        .join("\n"),
+    };
+  });
+}
+
 export function normalizeConversationMessages(
   messages: NormalizedMessage[],
 ): CompactConversationMessage[] {
@@ -67,12 +99,6 @@ export function normalizeConversationMessages(
       (message.role === "user" || message.role === "assistant") &&
       hasCompactionPreservableContent(message),
   );
-}
-
-function getMinimumMessagesToCompact(hasExistingSummary: boolean): number {
-  return hasExistingSummary
-    ? MIN_MESSAGES_TO_MICRO_COMPACT
-    : MIN_MESSAGES_TO_COMPACT;
 }
 
 function getDefaultMinRecentMessages(hasExistingSummary: boolean): number {
@@ -94,6 +120,13 @@ function selectRecentMessagesToKeep(
 } {
   const keptMessages: CompactConversationMessage[] = [];
   let keptTokens = 0;
+
+  if (messages.length <= options.minRecentMessages) {
+    return {
+      startIndex: messages.length,
+      messagesToKeep: [],
+    };
+  }
 
   for (let index = messages.length - 1; index >= 0; index -= 1) {
     const message = messages[index]!;
@@ -145,11 +178,8 @@ export async function compactConversationHistory(
   const candidateMessages = existingSummaryMessage
     ? normalizedMessages.slice(1)
     : normalizedMessages;
-  const minimumMessagesToCompact = getMinimumMessagesToCompact(
-    !!existingSummaryMessage,
-  );
 
-  if (candidateMessages.length < minimumMessagesToCompact) {
+  if (candidateMessages.length === 0) {
     return {
       wasCompacted: false,
       reason: existingSummaryMessage
@@ -173,7 +203,7 @@ export async function compactConversationHistory(
   });
 
   const messagesToCompact = candidateMessages.slice(0, selection.startIndex);
-  if (messagesToCompact.length < 2) {
+  if (messagesToCompact.length === 0) {
     return {
       wasCompacted: false,
       reason: "Context is already small enough to keep verbatim.",
@@ -187,7 +217,7 @@ export async function compactConversationHistory(
 
   const rawSummary = await generateCompactSummary(
     options.provider,
-    messagesToCompact,
+    stripAttachmentsFromCompactSummaryInput(messagesToCompact),
     options.onToken ?? (() => {}),
   );
   const summaryMessage = existingSummaryMessage

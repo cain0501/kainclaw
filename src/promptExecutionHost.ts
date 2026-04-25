@@ -18,6 +18,7 @@ import {
   runPromptCommandChain,
 } from "./promptCommandHost";
 import type { ChatMessage } from "./storage/sessionRepository";
+import type { CompactBoundarySessionState } from "./storage/sessionRepository";
 import {
   loadWorkspaceTools,
   prepareHydratedWorkspaceRuntime,
@@ -68,7 +69,8 @@ export function createPromptExecutionCommandHandlers<
   getTranscriptPath: () => string | undefined;
   replaceConversationHistory: (
     messages: Array<{ role: "user" | "assistant"; content: string }>,
-  ) => void;
+    compactBoundary?: CompactBoundarySessionState,
+  ) => void | Promise<void>;
   backgroundTaskHost: Pick<
     BackgroundTaskHost,
     "runBuiltInAgentSession" | "buildFollowUpMessage"

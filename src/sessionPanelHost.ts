@@ -63,6 +63,7 @@ export function createSessionPanelActions(options: {
   replaceSessionMessages: (messages: SessionMessage[]) => void;
   restoreModelConversation: (messages: any) => void;
   restorePendingPlanVerification: (state: any) => void;
+  restoreCompactBoundary: (state: any) => void;
   clearPendingPlanVerification: (persist?: boolean) => void;
   setTransientConversationId: (id: ReturnType<typeof randomUUID> | undefined) => void;
   markConversationBaseline: (count: number) => void;
@@ -126,6 +127,8 @@ export function createSessionPanelActions(options: {
           options.restoreModelConversation(messages),
         restorePendingPlanVerification: state =>
           options.restorePendingPlanVerification(state),
+        restoreCompactBoundary: state =>
+          options.restoreCompactBoundary(state),
         markConversationBaseline: count =>
           options.markConversationBaseline(count),
         setActiveSessionId: sessionId => options.settings.setActiveSessionId(sessionId),

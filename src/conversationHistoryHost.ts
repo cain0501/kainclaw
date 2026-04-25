@@ -1,5 +1,6 @@
 import type {
   ChatMessage,
+  CompactBoundarySessionState,
   PersistedConversationMessage,
 } from "./storage/sessionRepository";
 
@@ -19,6 +20,7 @@ export type ConversationHistoryBindings = {
       content: string;
       attachments?: Array<{ data: string; mimeType: string }>;
     }>,
+    compactBoundary?: CompactBoundarySessionState,
   ) => void;
 };
 
@@ -127,6 +129,9 @@ export function createConversationHistoryBindings(options: {
   sessionMessages: ChatMessage[];
   conversationMessages: PersistedConversationMessage[];
   getShowThinkingSummaries: () => boolean;
+  recordCompactBoundary?: (
+    compactBoundary: CompactBoundarySessionState | undefined,
+  ) => void;
   persistCurrentSessionRuntimeState: () => void;
 }): ConversationHistoryBindings {
   return {
@@ -143,7 +148,10 @@ export function createConversationHistoryBindings(options: {
       ),
     getConversationHistory: () =>
       cloneConversationHistory(options.conversationMessages),
-    replaceConversationHistory: messages => {
+    replaceConversationHistory: (messages, compactBoundary) => {
+      if (compactBoundary) {
+        options.recordCompactBoundary?.(compactBoundary);
+      }
       replaceConversationHistory(options.conversationMessages, messages);
       options.persistCurrentSessionRuntimeState();
     },

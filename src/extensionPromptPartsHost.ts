@@ -126,9 +126,10 @@ export function createExtensionPromptRequestParts(options: {
     conversation: createPromptRequestConversationPart({
       getConversationHistory: () =>
         options.bindings.conversationHistoryBindings.getConversationHistory(),
-      replaceConversationHistory: compactedHistory =>
+      replaceConversationHistory: (compactedHistory, compactBoundary) =>
         options.bindings.conversationHistoryBindings.replaceConversationHistory(
           compactedHistory,
+          compactBoundary,
         ),
       conversationMessages: options.state.conversationMessages,
       getPendingPromptAttachments: options.state.getPendingPromptAttachments,

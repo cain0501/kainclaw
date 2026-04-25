@@ -43,6 +43,9 @@ export async function switchSessionCommand(options: {
   restorePendingPlanVerification: (
     state: SavedSessionPayload["runtimeState"]["pendingPlanVerification"],
   ) => void;
+  restoreCompactBoundary: (
+    state: SavedSessionPayload["runtimeState"]["compactBoundary"],
+  ) => void;
   markConversationBaseline: (count: number) => void;
   setActiveSessionId: (id: string) => Promise<unknown>;
   workspaceRoot?: string;
@@ -65,6 +68,7 @@ export async function switchSessionCommand(options: {
     replaceSessionMessages: options.replaceSessionMessages,
     restoreModelConversation: options.restoreModelConversation,
     restorePendingPlanVerification: options.restorePendingPlanVerification,
+    restoreCompactBoundary: options.restoreCompactBoundary,
     markConversationBaseline: options.markConversationBaseline,
     setActiveSessionId: options.setActiveSessionId,
     finalizeMutation: () =>

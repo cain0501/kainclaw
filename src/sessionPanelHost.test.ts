@@ -113,6 +113,7 @@ describe("sessionPanelHost", () => {
       replaceSessionMessages: () => undefined,
       restoreModelConversation: () => undefined,
       restorePendingPlanVerification: () => undefined,
+      restoreCompactBoundary: () => undefined,
       clearPendingPlanVerification: () => undefined,
       setTransientConversationId: () => undefined,
       markConversationBaseline: () => undefined,
@@ -199,6 +200,9 @@ describe("sessionPanelHost", () => {
       restorePendingPlanVerification: state => {
         calls.push(`pending:${state ? "yes" : "no"}`);
       },
+      restoreCompactBoundary: state => {
+        calls.push(`compact:${state ? "yes" : "no"}`);
+      },
       clearPendingPlanVerification: persist => {
         calls.push(`clearPending:${persist === false ? "no-persist" : "persist"}`);
       },
@@ -233,6 +237,7 @@ describe("sessionPanelHost", () => {
     expect(calls).toContain("disposeSwarm");
     expect(calls).toContain("messages:1");
     expect(calls).toContain("model:1");
+    expect(calls).toContain("compact:no");
     expect(calls).toContain("baseline:1");
 
     vi.clearAllMocks();
@@ -290,6 +295,7 @@ describe("sessionPanelHost", () => {
       replaceSessionMessages: () => undefined,
       restoreModelConversation: () => undefined,
       restorePendingPlanVerification: () => undefined,
+      restoreCompactBoundary: () => undefined,
       clearPendingPlanVerification: persist => {
         calls.push(`clearPending:${persist === false ? "no-persist" : "persist"}`);
       },

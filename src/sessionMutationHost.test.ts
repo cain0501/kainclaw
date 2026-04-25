@@ -61,12 +61,14 @@ describe("sessionMutationHost", () => {
           verificationStarted: false,
           verificationCompleted: false,
         });
+        options.restoreCompactBoundary(undefined);
         options.markConversationBaseline(1);
         return {
           currentSessionId: "session-1",
           sessionMessages: [{ role: "user", content: "hello" }],
           modelConversation: [{ role: "assistant", content: "stored" }],
           pendingPlanVerification: undefined,
+          compactBoundary: undefined,
           baselineCount: 1,
         };
       },
@@ -81,6 +83,9 @@ describe("sessionMutationHost", () => {
       },
       restorePendingPlanVerification: state => {
         calls.push(`pending:${state ? "yes" : "no"}`);
+      },
+      restoreCompactBoundary: state => {
+        calls.push(`compact:${state ? "yes" : "no"}`);
       },
       markConversationBaseline: count => {
         calls.push(`baseline:${count}`);
@@ -104,6 +109,7 @@ describe("sessionMutationHost", () => {
       "messages:1",
       "model:1",
       "pending:yes",
+      "compact:no",
       "baseline:1",
       "active:session-1",
       "finalize",

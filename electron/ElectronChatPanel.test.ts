@@ -10,7 +10,10 @@ import {
   resolveProviderConfig,
 } from "../src/providerHost";
 import { handleElectronPromptCommand } from "../src/electronPromptCommandHost";
-import { handleReviewCommandWithHost } from "../src/inspectionHost";
+import {
+  handleReviewCommandWithHost,
+  handleVerificationCommandWithHost,
+} from "../src/inspectionHost";
 import {
   createImageVariant,
   runImageLabRequest,
@@ -391,6 +394,97 @@ describe("ElectronChatPanel session lifecycle", () => {
       "message for B",
       "reply for B",
     ]);
+  });
+
+  it("does not flash old-session messages into the newly selected session while the switch is still loading", async () => {
+    const harness = await createHarness();
+    tempDirs.push(harness.storagePath);
+
+    await harness.settings.setOnboardingDone(true);
+
+    const sessionA = await harness.sessions.createSession("session-a", "electron", "A");
+    await harness.sessions.appendMessages(sessionA.id, [
+      { role: "assistant", content: "old session message" },
+    ]);
+
+    const sessionB = await harness.sessions.createSession("session-b", "electron", "B");
+    await harness.sessions.appendMessages(sessionB.id, [
+      { role: "assistant", content: "new session message" },
+    ]);
+
+    await harness.settings.setActiveSessionId(sessionA.id);
+    await harness.panel.handleMessage({ type: "ready" });
+
+    vi.mocked(resolveProviderConfig).mockResolvedValue({
+      config: {
+        type: "anthropic",
+        apiKey: "test-key",
+        model: "claude-sonnet-4-6",
+      },
+      envMap: {},
+    });
+    vi.mocked(buildProviderAdapter).mockReturnValue({} as never);
+    vi.mocked(handleElectronPromptCommand).mockResolvedValue({ kind: "continue" });
+
+    const agentReply = createDeferred<string>();
+    vi.mocked(runAgent).mockImplementation(async (_history, options) => {
+      options.onToken?.("working");
+      return agentReply.promise;
+    });
+
+    const originalLoadMessages = harness.sessions.loadMessages.bind(harness.sessions);
+    const delayedLoad = createDeferred<void>();
+    const loadMessagesSpy = vi
+      .spyOn(harness.sessions, "loadMessages")
+      .mockImplementation(async sessionId => {
+        if (sessionId === sessionB.id) {
+          await delayedLoad.promise;
+        }
+        return originalLoadMessages(sessionId);
+      });
+
+    const sendPromise = harness.panel.handleMessage({
+      type: "sendPrompt",
+      prompt: "verify this later",
+    });
+
+    await vi.waitFor(() => {
+      expect(runAgent).toHaveBeenCalledTimes(1);
+    });
+
+    const switchPromise = harness.panel.handleMessage({
+      type: "sessions:switch",
+      id: sessionB.id,
+    });
+
+    await vi.waitFor(() => {
+      const activeId = harness.settings.getActiveSessionId();
+      expect(activeId).toBe(sessionB.id);
+    });
+
+    agentReply.resolve("reply stays in session A");
+    await sendPromise;
+
+    const interimStatePayload = [...harness.rendererPayloads]
+      .reverse()
+      .find(payload => (payload as { type?: string }).type === "state") as {
+        messages: Array<{ content: string }>;
+      };
+    expect(interimStatePayload.messages.map(message => message.content)).toEqual([]);
+
+    delayedLoad.resolve();
+    await switchPromise;
+
+    const finalStatePayload = [...harness.rendererPayloads]
+      .reverse()
+      .find(payload => (payload as { type?: string }).type === "state") as {
+        messages: Array<{ content: string }>;
+      };
+    expect(finalStatePayload.messages.map(message => message.content)).toEqual([
+      "new session message",
+    ]);
+
+    loadMessagesSpy.mockRestore();
   });
 
   it("falls back to another existing session after deleting the active session", async () => {
@@ -1531,6 +1625,94 @@ describe("ElectronChatPanel session lifecycle", () => {
     expect(messages.map(message => message.content)).toContain("Context compacted.");
   });
 
+  it("keeps the visible Electron transcript intact when /compact rewrites model history", async () => {
+    const harness = await createHarness();
+    tempDirs.push(harness.storagePath);
+
+    await harness.settings.setOnboardingDone(true);
+    const session = await harness.sessions.createSession(
+      "session-compact-sidecar",
+      "electron",
+      "Compact",
+    );
+    await harness.sessions.appendMessages(
+      session.id,
+      Array.from({ length: 8 }, (_, index) => ({
+        role: index % 2 === 0 ? ("user" as const) : ("assistant" as const),
+        content: `visible-message-${index}-` + "x".repeat(8000),
+      })),
+    );
+    await harness.settings.setActiveSessionId(session.id);
+    await harness.panel.handleMessage({ type: "ready" });
+
+    vi.mocked(resolveProviderConfig).mockResolvedValue({
+      config: {
+        type: "anthropic",
+        apiKey: "test-key",
+        model: "claude-sonnet-4-6",
+      },
+      envMap: {},
+    });
+    vi.mocked(buildProviderAdapter).mockReturnValue({
+      runStep: vi.fn(async () => ({
+        text: "<summary>Compacted sidecar summary</summary>",
+        toolCalls: [],
+        done: true,
+      })),
+    } as never);
+    vi.mocked(handleElectronPromptCommand).mockImplementation(async options => {
+      await options.handleCompactCommand(
+        "/compact",
+        options.workspaceRoot,
+        options.config,
+        options.envMap,
+      );
+      return { kind: "handled" };
+    });
+
+    await harness.panel.handleMessage({
+      type: "sendPrompt",
+      prompt: "/compact",
+    });
+
+    const persistedTranscript = await harness.sessions.loadMessages(session.id);
+    expect(persistedTranscript.map(message => message.content)).toEqual(
+      expect.arrayContaining([
+        expect.stringContaining("visible-message-0"),
+        "/compact",
+        expect.stringContaining("Context compacted."),
+      ]),
+    );
+
+    const latestState = [...harness.rendererPayloads]
+      .reverse()
+      .find(payload => (payload as { type?: string }).type === "state") as {
+        messages: Array<{ content: string }>;
+      };
+    expect(latestState.messages.map(message => message.content)).toEqual(
+      expect.arrayContaining([
+        expect.stringContaining("visible-message-0"),
+        "/compact",
+        expect.stringContaining("Context compacted."),
+      ]),
+    );
+
+    const runtimeState = await harness.sessions.loadRuntimeState(session.id);
+    expect(runtimeState.compactBoundary).toMatchObject({
+      trigger: "manual",
+      messagesSummarized: 2,
+      messagesKept: 6,
+      preservedRecentMessages: true,
+      transcriptPath: harness.sessions.getTranscriptFilePath(session.id),
+    });
+    expect(runtimeState.modelConversation?.[0]?.content).toContain(
+      "Compacted sidecar summary",
+    );
+    expect(runtimeState.modelConversation?.some(message =>
+      message.content === "/compact"
+    )).toBe(false);
+  });
+
   it("auto-descends to a unique nested git repo when the selected Electron workspace is a parent folder", async () => {
     const harness = await createHarness();
     tempDirs.push(harness.storagePath);
@@ -1651,6 +1833,154 @@ describe("ElectronChatPanel session lifecycle", () => {
     );
   });
 
+  it("keeps workspace roots bound to each Electron session instead of sharing one global root", async () => {
+    const harness = await createHarness();
+    tempDirs.push(harness.storagePath);
+
+    await harness.settings.setOnboardingDone(true);
+
+    const workspaceA = "E:\\workspace-a";
+    const workspaceB = "E:\\workspace-b";
+
+    await harness.panel.handleMessage({ type: "ready" });
+    const firstSessionId = harness.settings.getActiveSessionId();
+    expect(firstSessionId).toBeTruthy();
+
+    await harness.panel.handleMessage({
+      type: "workspace:set",
+      root: workspaceA,
+    });
+
+    await harness.panel.handleMessage({ type: "sessions:new" });
+    const secondSessionId = harness.settings.getActiveSessionId();
+    expect(secondSessionId).toBeTruthy();
+    expect(secondSessionId).not.toBe(firstSessionId);
+
+    await harness.panel.handleMessage({
+      type: "workspace:set",
+      root: workspaceB,
+    });
+
+    await harness.panel.handleMessage({
+      type: "sessions:switch",
+      id: firstSessionId!,
+    });
+
+    let statePayload = [...harness.rendererPayloads]
+      .reverse()
+      .find(payload => (payload as { type?: string }).type === "state") as {
+        workspaceRoot: string;
+      };
+    expect(statePayload.workspaceRoot).toBe(workspaceA);
+
+    await harness.panel.handleMessage({
+      type: "sessions:switch",
+      id: secondSessionId!,
+    });
+
+    statePayload = [...harness.rendererPayloads]
+      .reverse()
+      .find(payload => (payload as { type?: string }).type === "state") as {
+        workspaceRoot: string;
+      };
+    expect(statePayload.workspaceRoot).toBe(workspaceB);
+
+    await expect(harness.sessions.loadRuntimeState(firstSessionId!)).resolves.toMatchObject({
+      workspaceRoot: workspaceA,
+    });
+    await expect(harness.sessions.loadRuntimeState(secondSessionId!)).resolves.toMatchObject({
+      workspaceRoot: workspaceB,
+    });
+  });
+
+  it("uses the legacy global workspace only to migrate the initially active session", async () => {
+    const harness = await createHarness();
+    tempDirs.push(harness.storagePath);
+
+    await harness.settings.setOnboardingDone(true);
+    await harness.settings.setWorkspaceRoot("E:\\legacy-root");
+
+    const sessionA = await harness.sessions.createSession("session-a", "electron", "A");
+    const sessionB = await harness.sessions.createSession("session-b", "electron", "B");
+    await harness.settings.setActiveSessionId(sessionA.id);
+
+    await harness.panel.handleMessage({ type: "ready" });
+
+    let statePayload = [...harness.rendererPayloads]
+      .reverse()
+      .find(payload => (payload as { type?: string }).type === "state") as {
+        workspaceRoot: string;
+      };
+    expect(statePayload.workspaceRoot).toBe("E:\\legacy-root");
+
+    await harness.panel.handleMessage({
+      type: "sessions:switch",
+      id: sessionB.id,
+    });
+
+    statePayload = [...harness.rendererPayloads]
+      .reverse()
+      .find(payload => (payload as { type?: string }).type === "state") as {
+        workspaceRoot: string;
+      };
+    expect(statePayload.workspaceRoot).toBe("");
+  });
+
+  it("uses the resolved repo root for /verify without rewriting the selected workspace", async () => {
+    const harness = await createHarness();
+    tempDirs.push(harness.storagePath);
+
+    const workspaceRoot = await mkdtemp(path.join(os.tmpdir(), "electron-parent-workspace-verify-"));
+    const repoRoot = path.join(workspaceRoot, "vscode-extension");
+    tempDirs.push(workspaceRoot);
+
+    await mkdir(repoRoot, { recursive: true });
+    await execFileAsync("git", ["init"], {
+      cwd: repoRoot,
+      windowsHide: true,
+    });
+
+    await harness.settings.setOnboardingDone(true);
+    await harness.settings.setWorkspaceRoot(workspaceRoot);
+
+    vi.mocked(resolveProviderConfig).mockResolvedValue({
+      config: {
+        type: "anthropic",
+        apiKey: "test-key",
+        model: "claude-sonnet-4-6",
+      },
+      envMap: {},
+    });
+    vi.mocked(buildProviderAdapter).mockReturnValue({} as never);
+    vi.mocked(handleVerificationCommandWithHost).mockResolvedValue(true);
+    vi.mocked(handleElectronPromptCommand).mockImplementation(async options => {
+      await options.handleVerificationCommand(
+        "/verify",
+        options.workspaceRoot,
+        options.config,
+        options.envMap,
+        options.runtime,
+        options.tools,
+        options.runtimeOptions,
+        options.currentEffortLevel,
+      );
+      return { kind: "handled" };
+    });
+
+    await harness.panel.handleMessage({
+      type: "sendPrompt",
+      prompt: "/verify",
+    });
+
+    expect(harness.settings.getWorkspaceRoot()).toBe(workspaceRoot);
+    expect(resolveProviderConfig).toHaveBeenCalledWith(harness.settings, repoRoot);
+    expect(handleVerificationCommandWithHost).toHaveBeenCalledWith(
+      expect.objectContaining({
+        workspaceRoot: repoRoot,
+      }),
+    );
+  });
+
   it("allows clearing the Electron workspace back to unset", async () => {
     const harness = await createHarness();
     tempDirs.push(harness.storagePath);
@@ -1662,8 +1992,6 @@ describe("ElectronChatPanel session lifecycle", () => {
       type: "workspace:set",
       root: "",
     });
-
-    expect(harness.settings.getWorkspaceRoot()).toBe("");
 
     const statePayload = [...harness.rendererPayloads]
       .reverse()
@@ -1756,6 +2084,143 @@ describe("ElectronChatPanel session lifecycle", () => {
         workspaceRoot,
       }),
     );
+  });
+
+  it("warns before degraded verification when the selected Electron workspace is not a git repo", async () => {
+    const harness = await createHarness();
+    tempDirs.push(harness.storagePath);
+
+    const workspaceRoot = await mkdtemp(path.join(os.tmpdir(), "electron-non-git-workspace-verify-"));
+    tempDirs.push(workspaceRoot);
+
+    await harness.settings.setOnboardingDone(true);
+    await harness.settings.setWorkspaceRoot(workspaceRoot);
+
+    vi.mocked(resolveProviderConfig).mockResolvedValue({
+      config: {
+        type: "anthropic",
+        apiKey: "test-key",
+        model: "claude-sonnet-4-6",
+      },
+      envMap: {},
+    });
+    vi.mocked(buildProviderAdapter).mockReturnValue({} as never);
+    vi.mocked(handleVerificationCommandWithHost).mockResolvedValue(true);
+    vi.mocked(handleElectronPromptCommand).mockImplementation(async options => {
+      await options.handleVerificationCommand(
+        "/verify",
+        options.workspaceRoot,
+        options.config,
+        options.envMap,
+        options.runtime,
+        options.tools,
+        options.runtimeOptions,
+        options.currentEffortLevel,
+      );
+      return { kind: "handled" };
+    });
+
+    await harness.panel.handleMessage({
+      type: "sendPrompt",
+      prompt: "/verify",
+    });
+
+    const sessionId = harness.settings.getActiveSessionId();
+    expect(sessionId).toBeTruthy();
+
+    const messages = await harness.sessions.loadMessages(sessionId!);
+    expect(messages.some(message =>
+      message.role === "assistant" &&
+      message.content.includes("当前工作区不是 Git 仓库"),
+    )).toBe(true);
+
+    const statePayload = [...harness.rendererPayloads]
+      .reverse()
+      .find(payload => (payload as { type?: string }).type === "state") as {
+        workspaceRoot: string;
+        workspaceInfo: {
+          selectedRoot: string;
+          effectiveRoot: string;
+          gitRoot: string | null;
+          kind: string;
+        };
+      };
+    expect(statePayload.workspaceRoot).toBe(workspaceRoot);
+    expect(statePayload.workspaceInfo).toMatchObject({
+      selectedRoot: workspaceRoot,
+      effectiveRoot: workspaceRoot,
+      gitRoot: null,
+      kind: "non_git_workspace",
+    });
+    expect(handleVerificationCommandWithHost).toHaveBeenCalledWith(
+      expect.objectContaining({
+        workspaceRoot,
+      }),
+    );
+  });
+
+  it("forwards abort to an in-flight /verify request so the desktop shell can cancel it", async () => {
+    const harness = await createHarness();
+    tempDirs.push(harness.storagePath);
+
+    await harness.settings.setOnboardingDone(true);
+
+    vi.mocked(resolveProviderConfig).mockResolvedValue({
+      config: {
+        type: "anthropic",
+        apiKey: "test-key",
+        model: "claude-sonnet-4-6",
+      },
+      envMap: {},
+    });
+    vi.mocked(buildProviderAdapter).mockReturnValue({} as never);
+
+    let capturedSignal: AbortSignal | undefined;
+    vi.mocked(handleVerificationCommandWithHost).mockImplementation(async options => {
+      capturedSignal = options.runtime.getToolContext().abortSignal;
+      return await new Promise<boolean>((_resolve, reject) => {
+        capturedSignal?.addEventListener(
+          "abort",
+          () => reject(new DOMException("The operation was aborted", "AbortError")),
+          { once: true },
+        );
+      });
+    });
+    vi.mocked(handleElectronPromptCommand).mockImplementation(async options => {
+      await options.handleVerificationCommand(
+        "/verify",
+        options.workspaceRoot,
+        options.config,
+        options.envMap,
+        options.runtime,
+        options.tools,
+        options.runtimeOptions,
+        options.currentEffortLevel,
+      );
+      return { kind: "handled" };
+    });
+
+    const runPromise = harness.panel.handleMessage({
+      type: "sendPrompt",
+      prompt: "/verify",
+    });
+
+    await vi.waitFor(() => {
+      expect(vi.mocked(handleVerificationCommandWithHost)).toHaveBeenCalledTimes(1);
+      expect(capturedSignal).toBeDefined();
+    });
+
+    await harness.panel.handleMessage({ type: "abort" });
+    await runPromise;
+
+    expect(capturedSignal?.aborted).toBe(true);
+
+    const statePayload = [...harness.rendererPayloads]
+      .reverse()
+      .find(payload => (payload as { type?: string }).type === "state") as {
+        isBusy: boolean;
+      };
+    expect(statePayload.isBusy).toBe(false);
   });
 
   it("supports stopping an in-flight image generation request", async () => {

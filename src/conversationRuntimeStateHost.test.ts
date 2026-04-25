@@ -14,6 +14,7 @@ import {
   serializeModelConversation,
   serializePendingPlanVerificationState,
 } from "./conversationRuntimeStateHost";
+import type { CompactBoundarySessionState } from "./storage/sessionRepository";
 
 const pendingPlanVerification = {
   planFilePath: ".omx/plans/test.md",
@@ -21,6 +22,17 @@ const pendingPlanVerification = {
   approvedAtUserTurnCount: 2,
   verificationStarted: false,
   verificationCompleted: false,
+};
+
+const compactBoundary = {
+  trigger: "manual" as const,
+  compactedAt: 1700000000000,
+  preTokens: 20000,
+  postTokens: 8000,
+  messagesSummarized: 12,
+  messagesKept: 6,
+  preservedRecentMessages: true,
+  transcriptPath: "E:\\repo\\.transcript.jsonl",
 };
 
 describe("conversationRuntimeStateHost", () => {
@@ -135,9 +147,11 @@ describe("conversationRuntimeStateHost", () => {
       buildSessionRuntimeState({
         pendingPlanVerification,
         conversationMessages,
+        compactBoundary,
       }),
     ).toEqual({
       pendingPlanVerification,
+      compactBoundary,
       modelConversation: [
         {
           role: "user",
@@ -152,11 +166,13 @@ describe("conversationRuntimeStateHost", () => {
       currentSessionId: "session-1",
       pendingPlanVerification,
       conversationMessages,
+      compactBoundary,
       saveRuntimeState,
     });
     expect(persisted).toBe(true);
     expect(saveRuntimeState).toHaveBeenCalledWith("session-1", {
       pendingPlanVerification,
+      compactBoundary,
       modelConversation: [
         {
           role: "user",
@@ -183,11 +199,17 @@ describe("conversationRuntimeStateHost", () => {
     const saveRuntimeState = vi.fn(async () => undefined);
     const conversationMessages = [{ role: "assistant" as const, content: "existing" }];
     const rebuildConversationMessagesFromSession = vi.fn();
+    let currentCompactBoundary: CompactBoundarySessionState | undefined =
+      compactBoundary;
 
     const bindings = createConversationRuntimeStateBindings({
       getPendingPlanVerification: () => currentState,
       setPendingPlanVerification: nextState => {
         currentState = nextState!;
+      },
+      getCompactBoundary: () => currentCompactBoundary,
+      setCompactBoundary: nextBoundary => {
+        currentCompactBoundary = nextBoundary!;
       },
       persist,
       getPersistenceEnabled: () => true,
@@ -224,10 +246,14 @@ describe("conversationRuntimeStateHost", () => {
     expect(bindings.persistCurrentSessionRuntimeState()).toBe(true);
     expect(saveRuntimeState).toHaveBeenCalledWith("session-1", {
       pendingPlanVerification: undefined,
+      compactBoundary,
       modelConversation: [{ role: "assistant", content: "existing" }],
     });
 
     bindings.restoreModelConversationFromRuntime(undefined);
     expect(rebuildConversationMessagesFromSession).toHaveBeenCalledTimes(1);
+
+    bindings.restoreCompactBoundaryFromRuntime(undefined);
+    expect(currentCompactBoundary).toBeUndefined();
   });
 });

@@ -21,7 +21,7 @@ describe("wordSelectionContext", () => {
       hasSelection: true,
       text: "Alpha roadmap",
       charCount: 13,
-      estimatedTokens: 4,
+      estimatedTokens: 3,
     });
   });
 
@@ -37,9 +37,9 @@ describe("wordSelectionContext", () => {
         hasSelection: true,
         text: "Alpha roadmap",
         charCount: 13,
-        estimatedTokens: 4,
+        estimatedTokens: 3,
       }),
-    ).toBe("13 chars · ~4 tokens");
+    ).toBe("13 chars · ~3 tokens");
   });
 
   it("truncates selection preview cleanly", () => {

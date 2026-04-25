@@ -1,5 +1,6 @@
 import type {
   ChatMessage,
+  CompactBoundarySessionState,
   PendingPlanVerificationSessionState,
   PersistedConversationMessage,
   SessionRuntimeState,
@@ -24,6 +25,9 @@ export type ConversationRuntimeStateBindings = {
   persistCurrentSessionRuntimeState: () => boolean;
   restoreModelConversationFromRuntime: (
     modelConversation: PersistedConversationMessage[] | undefined,
+  ) => void;
+  restoreCompactBoundaryFromRuntime: (
+    compactBoundary: CompactBoundarySessionState | undefined,
   ) => void;
 };
 
@@ -184,12 +188,16 @@ export function restoreModelConversation(options: {
 export function buildSessionRuntimeState(options: {
   pendingPlanVerification: PendingPlanVerificationState | undefined;
   conversationMessages: Array<Pick<ChatMessage, "role" | "content" | "attachments">>;
+  compactBoundary?: CompactBoundarySessionState;
 }): SessionRuntimeState {
   return {
     pendingPlanVerification: serializePendingPlanVerificationState(
       options.pendingPlanVerification,
     ),
     modelConversation: serializeModelConversation(options.conversationMessages),
+    ...(options.compactBoundary
+      ? { compactBoundary: options.compactBoundary }
+      : {}),
   };
 }
 
@@ -198,6 +206,7 @@ export function persistSessionRuntimeState(options: {
   currentSessionId?: string;
   pendingPlanVerification: PendingPlanVerificationState | undefined;
   conversationMessages: Array<Pick<ChatMessage, "role" | "content" | "attachments">>;
+  compactBoundary?: CompactBoundarySessionState;
   saveRuntimeState: (
     sessionId: string,
     runtimeState: SessionRuntimeState,
@@ -210,9 +219,10 @@ export function persistSessionRuntimeState(options: {
   void options.saveRuntimeState(
     options.currentSessionId,
     buildSessionRuntimeState({
-      pendingPlanVerification: options.pendingPlanVerification,
-      conversationMessages: options.conversationMessages,
-    }),
+        pendingPlanVerification: options.pendingPlanVerification,
+        conversationMessages: options.conversationMessages,
+        compactBoundary: options.compactBoundary,
+      }),
   );
   return true;
 }
@@ -221,6 +231,10 @@ export function createConversationRuntimeStateBindings(options: {
   getPendingPlanVerification: () => PendingPlanVerificationState | undefined;
   setPendingPlanVerification: (
     nextState: PendingPlanVerificationState | undefined,
+  ) => void;
+  getCompactBoundary: () => CompactBoundarySessionState | undefined;
+  setCompactBoundary: (
+    compactBoundary: CompactBoundarySessionState | undefined,
   ) => void;
   persist: () => void;
   getPersistenceEnabled: () => boolean;
@@ -281,6 +295,7 @@ export function createConversationRuntimeStateBindings(options: {
         currentSessionId: options.getCurrentSessionId(),
         pendingPlanVerification: options.getPendingPlanVerification(),
         conversationMessages: options.getConversationMessages(),
+        compactBoundary: options.getCompactBoundary(),
         saveRuntimeState: options.saveRuntimeState,
       }),
     restoreModelConversationFromRuntime: modelConversation => {
@@ -290,6 +305,9 @@ export function createConversationRuntimeStateBindings(options: {
         rebuildConversationMessagesFromSession:
           options.rebuildConversationMessagesFromSession,
       });
+    },
+    restoreCompactBoundaryFromRuntime: compactBoundary => {
+      options.setCompactBoundary(compactBoundary);
     },
   };
 }

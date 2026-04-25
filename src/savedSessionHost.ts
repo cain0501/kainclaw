@@ -38,6 +38,7 @@ export function buildSavedSessionActivationState(options: {
   sessionMessages: SessionViewMessage[];
   modelConversation?: SessionRuntimeState["modelConversation"];
   pendingPlanVerification?: SessionRuntimeState["pendingPlanVerification"];
+  compactBoundary?: SessionRuntimeState["compactBoundary"];
   baselineCount: number;
 } {
   return {
@@ -45,6 +46,7 @@ export function buildSavedSessionActivationState(options: {
     sessionMessages: options.payload.restoredSession.sessionMessages,
     modelConversation: options.payload.runtimeState.modelConversation,
     pendingPlanVerification: options.payload.runtimeState.pendingPlanVerification,
+    compactBoundary: options.payload.runtimeState.compactBoundary,
     baselineCount: options.payload.restoredSession.baselineCount,
   };
 }
@@ -59,6 +61,9 @@ export type SavedSessionActivationBindings = {
   restorePendingPlanVerification: (
     pendingPlanVerification: SessionRuntimeState["pendingPlanVerification"],
   ) => void;
+  restoreCompactBoundary: (
+    compactBoundary: SessionRuntimeState["compactBoundary"],
+  ) => void;
   markConversationBaseline: (count: number) => void;
 };
 
@@ -72,6 +77,9 @@ export function createSavedSessionActivationBindings(options: {
   restorePendingPlanVerification: (
     pendingPlanVerification: SessionRuntimeState["pendingPlanVerification"],
   ) => void;
+  restoreCompactBoundary: (
+    compactBoundary: SessionRuntimeState["compactBoundary"],
+  ) => void;
   markConversationBaseline: (count: number) => void;
 }): SavedSessionActivationBindings {
   return {
@@ -84,6 +92,7 @@ export function createSavedSessionActivationBindings(options: {
     },
     restoreModelConversation: options.restoreModelConversation,
     restorePendingPlanVerification: options.restorePendingPlanVerification,
+    restoreCompactBoundary: options.restoreCompactBoundary,
     markConversationBaseline: options.markConversationBaseline,
   };
 }
@@ -99,6 +108,9 @@ export function applySavedSessionActivation(options: {
   restorePendingPlanVerification: (
     pendingPlanVerification: SessionRuntimeState["pendingPlanVerification"],
   ) => void;
+  restoreCompactBoundary: (
+    compactBoundary: SessionRuntimeState["compactBoundary"],
+  ) => void;
   markConversationBaseline: (count: number) => void;
 }) {
   const activationState = buildSavedSessionActivationState({
@@ -109,6 +121,7 @@ export function applySavedSessionActivation(options: {
   options.replaceSessionMessages(activationState.sessionMessages);
   options.restoreModelConversation(activationState.modelConversation);
   options.restorePendingPlanVerification(activationState.pendingPlanVerification);
+  options.restoreCompactBoundary(activationState.compactBoundary);
   options.markConversationBaseline(activationState.baselineCount);
   return activationState;
 }
@@ -126,6 +139,9 @@ export async function tryRestoreSavedSessionWithHost(options: {
   ) => void;
   restorePendingPlanVerification: (
     pendingPlanVerification: SessionRuntimeState["pendingPlanVerification"],
+  ) => void;
+  restoreCompactBoundary: (
+    compactBoundary: SessionRuntimeState["compactBoundary"],
   ) => void;
   markConversationBaseline: (count: number) => void;
   logRestoreSkippedEmpty: (details: {
@@ -159,6 +175,7 @@ export async function tryRestoreSavedSessionWithHost(options: {
     replaceSessionMessages: options.replaceSessionMessages,
     restoreModelConversation: options.restoreModelConversation,
     restorePendingPlanVerification: options.restorePendingPlanVerification,
+    restoreCompactBoundary: options.restoreCompactBoundary,
     markConversationBaseline: options.markConversationBaseline,
   });
 

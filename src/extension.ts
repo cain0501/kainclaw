@@ -145,7 +145,11 @@ import {
 import { VsCodeHostAdapter } from "./platform/vsCodeHostAdapter";
 import type { IHostAdapter } from "./platform/IHostAdapter";
 import { SettingsRepository, type ProviderMeta } from "./storage/settingsRepository";
-import { SessionRepository, type ChatMessage } from "./storage/sessionRepository";
+import {
+  SessionRepository,
+  type ChatMessage,
+  type CompactBoundarySessionState,
+} from "./storage/sessionRepository";
 import { SwarmCoordinator } from "./agent/swarm/SwarmCoordinator";
 import { hasExplicitSwarmIntent } from "./agent/swarm/swarmIntent";
 import { verifyLicense, type LicenseFlags } from "./license/licenseManager";
@@ -236,6 +240,7 @@ class ChatSidebarProvider implements vscode.WebviewViewProvider, vscode.Disposab
   private transientConversationId = randomUUID();
   private planModeState: PlanModeState = { active: false };
   private pendingPlanVerification: PendingPlanVerificationState | undefined;
+  private compactBoundary: CompactBoundarySessionState | undefined;
   private readonly autoMemoryBindings: AutoMemoryHostBindings;
   private readonly backgroundTaskHost: BackgroundTaskHost;
   private readonly taskRuntimeStore: PersistentTaskRuntimeStore;
@@ -337,12 +342,17 @@ class ChatSidebarProvider implements vscode.WebviewViewProvider, vscode.Disposab
       setPendingPlanVerification: nextState => {
         this.pendingPlanVerification = nextState;
       },
+      getCompactBoundary: () => this.compactBoundary,
+      setCompactBoundary: compactBoundary => {
+        this.compactBoundary = compactBoundary;
+      },
       persist: () => {
         persistSessionRuntimeState({
           enabled: this.conversationFeatureBindings.isSessionPersistenceEnabled(),
           currentSessionId: this.currentSessionId,
           pendingPlanVerification: this.pendingPlanVerification,
           conversationMessages: this.conversationMessages,
+          compactBoundary: this.compactBoundary,
           saveRuntimeState: (sessionId, runtimeState) =>
             this.sessions.saveRuntimeState(sessionId, runtimeState),
         });
@@ -364,6 +374,9 @@ class ChatSidebarProvider implements vscode.WebviewViewProvider, vscode.Disposab
       sessionMessages: this.sessionMessages,
       conversationMessages: this.conversationMessages,
       getShowThinkingSummaries: () => this.settings.getShowThinkingSummaries(),
+      recordCompactBoundary: compactBoundary => {
+        this.compactBoundary = compactBoundary;
+      },
       persistCurrentSessionRuntimeState: () => {
         this.conversationRuntimeStateBindings.persistCurrentSessionRuntimeState();
       },
@@ -443,6 +456,10 @@ class ChatSidebarProvider implements vscode.WebviewViewProvider, vscode.Disposab
       restorePendingPlanVerification: pendingPlanVerification =>
         this.conversationRuntimeStateBindings.restorePendingPlanVerificationState(
           pendingPlanVerification,
+        ),
+      restoreCompactBoundary: compactBoundary =>
+        this.conversationRuntimeStateBindings.restoreCompactBoundaryFromRuntime(
+          compactBoundary,
         ),
       markConversationBaseline: count =>
         this.autoMemoryBindings.markCurrentConversationBaseline(count),
@@ -962,6 +979,9 @@ class ChatSidebarProvider implements vscode.WebviewViewProvider, vscode.Disposab
       clearPendingPlanVerification: () => {
         this.pendingPlanVerification = undefined;
       },
+      clearCompactBoundary: () => {
+        this.compactBoundary = undefined;
+      },
       clearPendingPromptAttachments: () => {
         this.pendingPromptAttachments = undefined;
       },
@@ -1027,6 +1047,7 @@ class ChatSidebarProvider implements vscode.WebviewViewProvider, vscode.Disposab
   private clearConversationBuffers(): void {
     this.sessionMessages.length = 0;
     this.conversationMessages.length = 0;
+    this.compactBoundary = undefined;
   }
 
   private getVisibleSessionMessages(): ChatMessage[] {

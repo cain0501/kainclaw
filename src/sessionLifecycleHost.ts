@@ -143,6 +143,7 @@ export function clearConversationHostState(options: {
   setTransientConversationId: (id: ReturnType<typeof randomUUID>) => void;
   resetPlanMode: () => void;
   clearPendingPlanVerification: () => void;
+  clearCompactBoundary?: () => void;
   clearPendingPromptAttachments: () => void;
   markConversationBaseline: (count: number) => void;
   clearStreamingState: () => void;
@@ -163,6 +164,7 @@ export function clearConversationHostState(options: {
 
   options.resetPlanMode();
   options.clearPendingPlanVerification();
+  options.clearCompactBoundary?.();
   options.clearPendingPromptAttachments();
   options.markConversationBaseline(0);
   options.clearStreamingState();

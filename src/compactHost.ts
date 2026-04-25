@@ -11,9 +11,11 @@ import {
 import {
   calculateTokenWarningState,
   getEstimatedConversationTokens,
+  MAX_CONSECUTIVE_AUTOCOMPACT_FAILURES,
   shouldAutoCompact,
 } from "./compact/autoCompact";
 import { getPartialCompactPrompt } from "./compact/prompt";
+import type { CompactBoundarySessionState } from "./storage/sessionRepository";
 
 type ActivityStatus = "done" | "error";
 
@@ -26,16 +28,36 @@ export function formatCompactTokenCount(value: number): string {
   return new Intl.NumberFormat("en-US").format(value);
 }
 
+export function buildCompactBoundarySessionState(options: {
+  result: CompactConversationResult;
+  trigger: CompactBoundarySessionState["trigger"];
+  transcriptPath?: string;
+  compactedAt?: number;
+}): CompactBoundarySessionState {
+  return {
+    trigger: options.trigger,
+    compactedAt: options.compactedAt ?? Date.now(),
+    preTokens: options.result.estimatedTokensBefore,
+    postTokens: options.result.estimatedTokensAfter,
+    messagesSummarized: options.result.messagesCompacted,
+    messagesKept: options.result.messagesKept,
+    preservedRecentMessages: options.result.messagesKept > 0,
+    ...(options.transcriptPath ? { transcriptPath: options.transcriptPath } : {}),
+  };
+}
+
 export async function performConversationCompaction(options: {
   workspaceRoot: string;
   config: ProviderConfig;
   envMap: Record<string, string>;
   customInstructions?: string;
+  compactTrigger?: CompactBoundarySessionState["trigger"];
   getConversationHistory: () => NormalizedMessage[];
   getTranscriptPath: () => string | undefined;
   replaceConversationHistory: (
     compactedHistory: CompactConversationMessage[],
-  ) => void;
+    compactBoundary?: CompactBoundarySessionState,
+  ) => void | Promise<void>;
   createProvider: (args: {
     config: ProviderConfig;
     workspaceRoot: string;
@@ -50,14 +72,22 @@ export async function performConversationCompaction(options: {
     envMap: options.envMap,
   });
 
+  const transcriptPath = options.getTranscriptPath();
   const result = await compactConversationHistory({
     provider: compactProvider,
     messages: options.getConversationHistory(),
-    transcriptPath: options.getTranscriptPath(),
+    transcriptPath,
   });
 
   if (result.wasCompacted) {
-    options.replaceConversationHistory(result.compactedHistory);
+    await options.replaceConversationHistory(
+      result.compactedHistory,
+      buildCompactBoundarySessionState({
+        result,
+        trigger: options.compactTrigger ?? "manual",
+        transcriptPath,
+      }),
+    );
   }
 
   return result;
@@ -71,13 +101,19 @@ type SharedCompactionHostOptions = {
   getTranscriptPath: () => string | undefined;
   replaceConversationHistory: (
     compactedHistory: CompactConversationMessage[],
-  ) => void;
+    compactBoundary?: CompactBoundarySessionState,
+  ) => void | Promise<void>;
   createProviderAdapter: (args: {
     config: ProviderConfig;
     workspaceRoot: string;
     systemPrompt: string;
     envMap: Record<string, string>;
   }) => IProviderAdapter;
+};
+
+type AutoCompactFailureTrackingOptions = {
+  getAutoCompactConsecutiveFailures?: () => number;
+  setAutoCompactConsecutiveFailures?: (failureCount: number) => void;
 };
 
 export function createAutoCompactConversationRunner(
@@ -102,18 +138,25 @@ export function createAutoCompactConversationRunner(
   config: ProviderConfig,
   envMap: Record<string, string>,
 ) => Promise<void> {
+  let consecutiveFailures = 0;
+
   return (workspaceRoot, config, envMap) =>
     maybeAutoCompactConversationWithHost({
       ...options,
       workspaceRoot,
       config,
       envMap,
+      getAutoCompactConsecutiveFailures: () => consecutiveFailures,
+      setAutoCompactConsecutiveFailures: failureCount => {
+        consecutiveFailures = failureCount;
+      },
     });
 }
 
 export async function performConversationCompactionWithHost(
   options: SharedCompactionHostOptions & {
     customInstructions?: string;
+    compactTrigger?: CompactBoundarySessionState["trigger"];
   },
 ): Promise<CompactConversationResult> {
   return performConversationCompaction({
@@ -121,6 +164,7 @@ export async function performConversationCompactionWithHost(
     config: options.config,
     envMap: options.envMap,
     customInstructions: options.customInstructions,
+    compactTrigger: options.compactTrigger,
     getConversationHistory: options.getConversationHistory,
     getTranscriptPath: options.getTranscriptPath,
     replaceConversationHistory: options.replaceConversationHistory,
@@ -144,7 +188,14 @@ export async function maybeAutoCompactConversation(options: {
     detail?: string,
   ) => void;
   toErrorMessage: (error: unknown) => string;
-}): Promise<void> {
+} & AutoCompactFailureTrackingOptions): Promise<void> {
+  if (
+    (options.getAutoCompactConsecutiveFailures?.() ?? 0) >=
+    MAX_CONSECUTIVE_AUTOCOMPACT_FAILURES
+  ) {
+    return;
+  }
+
   const conversationHistory = toConversationHistoryMessages(
     options.getConversationHistory(),
   );
@@ -175,12 +226,17 @@ export async function maybeAutoCompactConversation(options: {
       return;
     }
 
+    options.setAutoCompactConsecutiveFailures?.(0);
+
     options.finishPhaseActivity(
       compactActivityId,
       "done",
       `Estimated tokens ${formatCompactTokenCount(result.estimatedTokensBefore)} -> ${formatCompactTokenCount(result.estimatedTokensAfter)}`,
     );
   } catch (error) {
+    options.setAutoCompactConsecutiveFailures?.(
+      (options.getAutoCompactConsecutiveFailures?.() ?? 0) + 1,
+    );
     options.finishPhaseActivity(
       compactActivityId,
       "error",
@@ -202,13 +258,16 @@ export async function maybeAutoCompactConversationWithHost(
       detail?: string,
     ) => void;
     toErrorMessage: (error: unknown) => string;
-  },
+  } & AutoCompactFailureTrackingOptions,
 ): Promise<void> {
   return maybeAutoCompactConversation({
     config: options.config,
     getConversationHistory: options.getConversationHistory,
     performConversationCompaction: () =>
-      performConversationCompactionWithHost(options),
+      performConversationCompactionWithHost({
+        ...options,
+        compactTrigger: "auto",
+      }),
     addPhaseActivity: options.addPhaseActivity,
     finishPhaseActivity: options.finishPhaseActivity,
     toErrorMessage: options.toErrorMessage,
@@ -320,6 +379,7 @@ export async function handleCompactCommandWithHost(
       performConversationCompactionWithHost({
         ...options,
         customInstructions,
+        compactTrigger: "manual",
       }),
     addPhaseActivity: options.addPhaseActivity,
     finishPhaseActivity: options.finishPhaseActivity,

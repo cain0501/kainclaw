@@ -2,7 +2,14 @@ import { randomUUID } from "node:crypto";
 import { promises as fs } from "node:fs";
 import path from "node:path";
 import { ElectronHostAdapter } from "../src/platform/electronHostAdapter";
-import { SessionRepository, type ChatMessage } from "../src/storage/sessionRepository";
+import {
+  SessionRepository,
+  type ChatMessage,
+  type CompactBoundarySessionState,
+  type PersistedConversationMessage,
+  type SessionRuntimeState,
+} from "../src/storage/sessionRepository";
+import { getWorkspaceHash } from "../src/sessionUi";
 import { SettingsRepository, type ProviderMeta } from "../src/storage/settingsRepository";
 import { buildProviderAdapter, resolveProviderConfig } from "../src/providerHost";
 import { verifyLicense } from "../src/license/licenseManager";
@@ -133,6 +140,9 @@ type ActiveRequestKind = "chat" | "image";
 export class ElectronChatPanel {
   private currentSessionId: string | undefined;
   private sessionMessages: ChatMessage[] = [];
+  private modelConversationMessages: PersistedConversationMessage[] = [];
+  private compactBoundary: CompactBoundarySessionState | undefined;
+  private currentSessionWorkspaceRoot = "";
   private streamingText = "";
   private imageBusy = false;
   private imagePromptInferenceBusy = false;
@@ -157,12 +167,7 @@ export class ElectronChatPanel {
   private readonly taskRuntimeStore: PersistentTaskRuntimeStore;
   private readonly worktreeRuntimeStore: PersistentWorktreeRuntimeStore;
   private readonly backgroundTaskHost: BackgroundTaskHost;
-  private cachedWorkspaceResolution:
-    | {
-        selectedRoot: string;
-        resolution: ResolvedWorkspaceRoot;
-      }
-    | undefined;
+  private readonly cachedWorkspaceResolutions = new Map<string, ResolvedWorkspaceRoot>();
 
   constructor(
     private readonly sessions: SessionRepository,
@@ -203,31 +208,165 @@ export class ElectronChatPanel {
     }
   }
 
-  private clearWorkspaceResolutionCache(): void {
-    this.cachedWorkspaceResolution = undefined;
+  private clearWorkspaceResolutionCache(selectedRoot?: string): void {
+    if (selectedRoot === undefined) {
+      this.cachedWorkspaceResolutions.clear();
+      return;
+    }
+
+    this.cachedWorkspaceResolutions.delete(selectedRoot);
   }
 
   private getSelectedWorkspaceRoot(): string {
-    return this.settings.getWorkspaceRoot() ?? "";
+    return this.currentSessionWorkspaceRoot;
+  }
+
+  private async loadSessionRuntimeState(sessionId: string): Promise<SessionRuntimeState> {
+    return this.sessions.loadRuntimeState(sessionId);
+  }
+
+  private async setSessionWorkspaceRoot(
+    sessionId: string,
+    workspaceRoot: string,
+  ): Promise<void> {
+    const runtimeState = await this.loadSessionRuntimeState(sessionId);
+    if ((runtimeState.workspaceRoot ?? "") === workspaceRoot) {
+      this.currentSessionWorkspaceRoot = workspaceRoot;
+      return;
+    }
+
+    await this.sessions.saveRuntimeState(sessionId, {
+      ...runtimeState,
+      workspaceRoot,
+    });
+    this.currentSessionWorkspaceRoot = workspaceRoot;
+  }
+
+  private async loadSessionWorkspaceRoot(
+    sessionId: string,
+    fallbackWorkspaceRoot?: string,
+  ): Promise<void> {
+    const runtimeState = await this.loadSessionRuntimeState(sessionId);
+    const storedWorkspaceRoot =
+      typeof runtimeState.workspaceRoot === "string" ? runtimeState.workspaceRoot : undefined;
+
+    if (storedWorkspaceRoot !== undefined) {
+      this.currentSessionWorkspaceRoot = storedWorkspaceRoot;
+      return;
+    }
+
+    const nextWorkspaceRoot = fallbackWorkspaceRoot ?? "";
+    this.currentSessionWorkspaceRoot = nextWorkspaceRoot;
+
+    if (fallbackWorkspaceRoot !== undefined) {
+      await this.sessions.saveRuntimeState(sessionId, {
+        ...runtimeState,
+        workspaceRoot: nextWorkspaceRoot,
+      });
+    }
+  }
+
+  private toPersistedConversationMessages(
+    messages: ChatMessage[],
+  ): PersistedConversationMessage[] {
+    return this.buildConversationHistory(messages)
+      .filter(
+        (
+          message,
+        ): message is Extract<
+          NormalizedMessage,
+          { role: "user" | "assistant" }
+        > => message.role === "user" || message.role === "assistant",
+      )
+      .map(message => ({
+        role: message.role,
+        content: message.content,
+        ...(message.role === "user" &&
+        message.attachments &&
+        message.attachments.length > 0
+          ? { attachments: message.attachments }
+          : {}),
+      }));
+  }
+
+  private restoreModelConversationFromRuntime(
+    runtimeState: SessionRuntimeState,
+  ): void {
+    this.compactBoundary = runtimeState.compactBoundary;
+    this.modelConversationMessages =
+      runtimeState.modelConversation && runtimeState.modelConversation.length > 0
+        ? runtimeState.modelConversation.map(message => ({
+            role: message.role,
+            content: message.content,
+            ...(message.attachments && message.attachments.length > 0
+              ? { attachments: message.attachments }
+              : {}),
+          }))
+        : this.toPersistedConversationMessages(this.sessionMessages);
+  }
+
+  private async restoreCurrentSessionRuntimeState(
+    sessionId: string,
+  ): Promise<void> {
+    this.restoreModelConversationFromRuntime(
+      await this.loadSessionRuntimeState(sessionId),
+    );
+  }
+
+  private async saveCurrentSessionRuntimeState(sessionId: string): Promise<void> {
+    const runtimeState = await this.loadSessionRuntimeState(sessionId);
+    const nextRuntimeState: SessionRuntimeState = {
+      ...runtimeState,
+      workspaceRoot: this.currentSessionWorkspaceRoot,
+    };
+
+    if (this.modelConversationMessages.length > 0) {
+      nextRuntimeState.modelConversation = this.modelConversationMessages;
+    } else {
+      delete nextRuntimeState.modelConversation;
+    }
+
+    if (this.compactBoundary) {
+      nextRuntimeState.compactBoundary = this.compactBoundary;
+    } else {
+      delete nextRuntimeState.compactBoundary;
+    }
+
+    await this.sessions.saveRuntimeState(sessionId, nextRuntimeState);
+  }
+
+  private buildModelConversationHistory(): NormalizedMessage[] {
+    return this.modelConversationMessages.map(message => {
+      if (message.role === "user") {
+        return {
+          role: "user" as const,
+          content: message.content,
+          ...(message.attachments && message.attachments.length > 0
+            ? { attachments: message.attachments }
+            : {}),
+        };
+      }
+
+      return {
+        role: "assistant" as const,
+        content: message.content,
+      };
+    });
   }
 
   private async getResolvedWorkspaceContext(
     forceRefresh = false,
   ): Promise<ResolvedWorkspaceRoot> {
-    const selectedRoot = this.settings.getWorkspaceRoot() ?? "";
-    if (
-      !forceRefresh &&
-      this.cachedWorkspaceResolution &&
-      this.cachedWorkspaceResolution.selectedRoot === selectedRoot
-    ) {
-      return this.cachedWorkspaceResolution.resolution;
+    const selectedRoot = this.getSelectedWorkspaceRoot();
+    if (!forceRefresh) {
+      const cachedResolution = this.cachedWorkspaceResolutions.get(selectedRoot);
+      if (cachedResolution) {
+        return cachedResolution;
+      }
     }
 
     const resolution = await resolveWorkspaceRoot(selectedRoot);
-    this.cachedWorkspaceResolution = {
-      selectedRoot,
-      resolution,
-    };
+    this.cachedWorkspaceResolutions.set(selectedRoot, resolution);
     return resolution;
   }
 
@@ -391,12 +530,19 @@ export class ElectronChatPanel {
     // Workspace
     if (type === "workspace:set") {
       const root = typeof message.root === "string" ? message.root.trim() : "";
-      await this.settings.setWorkspaceRoot(root);
-      this.clearWorkspaceResolutionCache();
+      await this.ensureSession();
+      if (!this.currentSessionId) {
+        return;
+      }
+      const previousRoot = this.getSelectedWorkspaceRoot();
+      await this.setSessionWorkspaceRoot(this.currentSessionId, root);
+      this.clearWorkspaceResolutionCache(root);
       if (root) {
         await this.getResolvedWorkspaceContext(true);
       }
-      this.mcpRuntime.markConfigDirty();
+      if (previousRoot !== root) {
+        this.mcpRuntime.markConfigDirty();
+      }
       await this.postState();
       return;
     }
@@ -480,8 +626,25 @@ export class ElectronChatPanel {
     }
 
     if (this.currentSessionId !== id) {
+      const shouldUseLegacyWorkspaceRoot = this.currentSessionId === undefined;
+      const legacyWorkspaceRoot = this.settings.getWorkspaceRoot() ?? "";
+      const previousRoot = this.currentSessionWorkspaceRoot;
       this.currentSessionId = id;
+      this.sessionMessages = [];
+      this.streamingText = "";
+      this.currentSessionWorkspaceRoot = "";
       this.sessionMessages = await this.sessions.loadMessages(id);
+      await this.loadSessionWorkspaceRoot(
+        id,
+        shouldUseLegacyWorkspaceRoot ? legacyWorkspaceRoot : undefined,
+      );
+      await this.restoreCurrentSessionRuntimeState(id);
+      if (previousRoot !== this.currentSessionWorkspaceRoot) {
+        this.mcpRuntime.markConfigDirty();
+      }
+    } else if (!this.currentSessionWorkspaceRoot && id) {
+      await this.loadSessionWorkspaceRoot(id);
+      await this.restoreCurrentSessionRuntimeState(id);
     }
   }
 
@@ -496,15 +659,29 @@ export class ElectronChatPanel {
 
   private async switchSession(id: string): Promise<void> {
     if (!id) return;
+    const previousRoot = this.currentSessionWorkspaceRoot;
     this.currentSessionId = id;
+    this.sessionMessages = [];
+    this.streamingText = "";
+    this.currentSessionWorkspaceRoot = "";
     await this.settings.setActiveSessionId(id);
     this.sessionMessages = await this.sessions.loadMessages(id);
+    await this.loadSessionWorkspaceRoot(id);
+    await this.restoreCurrentSessionRuntimeState(id);
+    if (previousRoot !== this.currentSessionWorkspaceRoot) {
+      this.mcpRuntime.markConfigDirty();
+    }
     await this.postState();
     await this.loadSessions();
   }
 
   private async createNewSession(): Promise<void> {
-    const session = await this.sessions.createSession(randomUUID(), "electron");
+    const workspaceRoot = this.getSelectedWorkspaceRoot();
+    const session = await this.sessions.createSession(
+      randomUUID(),
+      getWorkspaceHash(workspaceRoot),
+    );
+    await this.sessions.saveRuntimeState(session.id, { workspaceRoot });
     await this.switchSession(session.id);
   }
 
@@ -556,6 +733,8 @@ export class ElectronChatPanel {
     if (wasActiveSession) {
       this.currentSessionId = undefined;
       this.sessionMessages = [];
+      this.modelConversationMessages = [];
+      this.compactBoundary = undefined;
       await this.ensureSession();
     }
 
@@ -1445,7 +1624,10 @@ export class ElectronChatPanel {
     await this.imageGalleryStore.clear();
     await this.host.deleteSecret("cain.licenseKey");
     this.sessionMessages = [];
+    this.modelConversationMessages = [];
+    this.compactBoundary = undefined;
     this.currentSessionId = undefined;
+    this.currentSessionWorkspaceRoot = "";
     this.imageResults = [];
     this.imageResultsHydrated = true;
     this.sendToRenderer({ type: "settings:resetDone" });
@@ -1474,10 +1656,20 @@ export class ElectronChatPanel {
       return;
     }
     this.sessionMessages = [];
+    this.modelConversationMessages = [];
+    this.compactBoundary = undefined;
     this.streamingText = "";
-    const session = await this.sessions.createSession(randomUUID(), "electron");
+    const workspaceRoot = this.getSelectedWorkspaceRoot();
+    const session = await this.sessions.createSession(
+      randomUUID(),
+      getWorkspaceHash(workspaceRoot),
+    );
+    await this.sessions.saveRuntimeState(session.id, { workspaceRoot });
     this.currentSessionId = session.id;
+    this.modelConversationMessages = [];
+    this.compactBoundary = undefined;
     await this.settings.setActiveSessionId(session.id);
+    this.currentSessionWorkspaceRoot = workspaceRoot;
     await this.postState();
     await this.loadSessions();
   }
@@ -1556,6 +1748,7 @@ export class ElectronChatPanel {
     await this.postState();
 
     let temporaryMcpRuntime: McpRuntime | undefined;
+    let requestModelConversation: PersistedConversationMessage[] | undefined;
 
     try {
       const workspaceContext = await this.getResolvedWorkspaceContext();
@@ -1586,15 +1779,6 @@ export class ElectronChatPanel {
 
       this.streamingText = this.getVisibleStreamingText();
 
-      // Build conversation history for the agent
-      const history: NormalizedMessage[] = requestSessionMessages.slice(0, -1).map(m => {
-        if (m.role === "user") {
-          return { role: "user", content: m.content, attachments: m.attachments };
-        }
-        return { role: "assistant", content: m.content };
-      });
-      history.push({ role: "user", content: prompt, attachments: normalizedAttachments });
-
       // Collect all tools: built-in + MCP
       let mcpTools: typeof builtinToolDefinitions = [];
       try {
@@ -1609,6 +1793,7 @@ export class ElectronChatPanel {
         envMap,
         allTools,
         commandMcpRuntime,
+        abortController.signal,
       );
 
       const commandResult = await handleElectronPromptCommand({
@@ -1656,6 +1841,7 @@ export class ElectronChatPanel {
               commandEnvMap,
               commandTools,
               commandMcpRuntime,
+              abortController.signal,
             ),
             commandTools,
             commandRuntimeOptions,
@@ -1682,6 +1868,7 @@ export class ElectronChatPanel {
               commandEnvMap,
               commandTools,
               commandMcpRuntime,
+              abortController.signal,
             ),
             commandTools,
             commandRuntimeOptions,
@@ -1704,6 +1891,33 @@ export class ElectronChatPanel {
         return;
       }
 
+      const modelUserMessage: PersistedConversationMessage = {
+        role: "user",
+        content: prompt,
+        ...(normalizedAttachments && normalizedAttachments.length > 0
+          ? { attachments: normalizedAttachments }
+          : {}),
+      };
+      requestModelConversation = [
+        ...this.modelConversationMessages,
+        modelUserMessage,
+      ];
+      const history: NormalizedMessage[] = requestModelConversation.map(message => {
+        if (message.role === "user") {
+          return {
+            role: "user" as const,
+            content: message.content,
+            ...(message.attachments && message.attachments.length > 0
+              ? { attachments: message.attachments }
+              : {}),
+          };
+        }
+
+        return {
+          role: "assistant" as const,
+          content: message.content,
+        };
+      });
       const toolContext = promptRuntime.getToolContext("main");
 
       const finalText = await runAgent(history, {
@@ -1741,6 +1955,11 @@ export class ElectronChatPanel {
         timestamp: Date.now(),
       };
       await this.appendAssistantMessageToSession(requestSessionId, assistantMessage);
+      this.modelConversationMessages = [
+        ...requestModelConversation,
+        { role: "assistant", content: finalText },
+      ];
+      await this.saveCurrentSessionRuntimeState(requestSessionId);
     } catch (err) {
       if (abortController.signal.aborted) return;
       const errorMessage: ChatMessage = {
@@ -1750,6 +1969,13 @@ export class ElectronChatPanel {
         timestamp: Date.now(),
       };
       await this.appendAssistantMessageToSession(requestSessionId, errorMessage);
+      if (requestModelConversation) {
+        this.modelConversationMessages = [
+          ...requestModelConversation,
+          { role: "assistant", content: errorMessage.content },
+        ];
+        await this.saveCurrentSessionRuntimeState(requestSessionId);
+      }
     } finally {
       if (temporaryMcpRuntime) {
         const disposableRuntime = temporaryMcpRuntime as unknown as {
@@ -1792,12 +2018,14 @@ export class ElectronChatPanel {
     envMap: Record<string, string>,
     tools: ToolDefinition[],
     mcpRuntime: McpRuntime = this.mcpRuntime,
+    abortSignal?: AbortSignal,
   ): ElectronPromptRuntime {
     const getToolContext = (
       mode: ToolContext["invokerKind"] = "main",
     ): ToolContext => ({
       workspaceRoot,
       invokerKind: mode,
+      ...(abortSignal ? { abortSignal } : {}),
       requestFileApproval: request => this.host.requestFileApproval(request),
       requestToolApproval: request => this.host.requestToolApproval(request),
       onToolLifecycle: event => {
@@ -2001,14 +2229,20 @@ export class ElectronChatPanel {
       workspaceRoot,
       config,
       envMap,
-      getConversationHistory: () => this.buildConversationHistory(this.sessionMessages),
-      getTranscriptPath: () => undefined,
-      replaceConversationHistory: compactedHistory => {
-        this.sessionMessages = compactedHistory.map(message => ({
+      getConversationHistory: () => this.buildModelConversationHistory(),
+      getTranscriptPath: () => this.sessions.getTranscriptFilePath(sessionId),
+      replaceConversationHistory: (compactedHistory, compactBoundary) => {
+        this.modelConversationMessages = compactedHistory.map(message => ({
           role: message.role,
           content: message.content,
-          timestamp: Date.now(),
+          ...(message.role === "user" &&
+          message.attachments &&
+          message.attachments.length > 0
+            ? { attachments: message.attachments }
+            : {}),
         }));
+        this.compactBoundary = compactBoundary;
+        return this.saveCurrentSessionRuntimeState(sessionId);
       },
       createProviderAdapter: options =>
         this.createProviderForSystemPrompt(

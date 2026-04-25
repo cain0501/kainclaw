@@ -44,6 +44,15 @@ describe("savedSessionHost", () => {
           verificationStarted: false,
           verificationCompleted: false,
         },
+        compactBoundary: {
+          trigger: "manual",
+          compactedAt: 1700000000000,
+          preTokens: 20000,
+          postTokens: 8000,
+          messagesSummarized: 12,
+          messagesKept: 6,
+          preservedRecentMessages: true,
+        },
       }),
     });
 
@@ -80,6 +89,15 @@ describe("savedSessionHost", () => {
           verificationStarted: false,
           verificationCompleted: false,
         },
+        compactBoundary: {
+          trigger: "manual",
+          compactedAt: 1700000000000,
+          preTokens: 20000,
+          postTokens: 8000,
+          messagesSummarized: 12,
+          messagesKept: 6,
+          preservedRecentMessages: true,
+        },
       }),
     });
 
@@ -95,6 +113,15 @@ describe("savedSessionHost", () => {
         approvedAtUserTurnCount: 1,
         verificationStarted: false,
         verificationCompleted: false,
+      },
+      compactBoundary: {
+        trigger: "manual",
+        compactedAt: 1700000000000,
+        preTokens: 20000,
+        postTokens: 8000,
+        messagesSummarized: 12,
+        messagesKept: 6,
+        preservedRecentMessages: true,
       },
       baselineCount: 1,
     });
@@ -129,6 +156,9 @@ describe("savedSessionHost", () => {
       restorePendingPlanVerification: pending => {
         calls.push(`pending:${pending ? "yes" : "no"}`);
       },
+      restoreCompactBoundary: compactBoundary => {
+        calls.push(`compact:${compactBoundary ? "yes" : "no"}`);
+      },
       markConversationBaseline: count => {
         calls.push(`baseline:${count}`);
       },
@@ -141,6 +171,7 @@ describe("savedSessionHost", () => {
       "messages:1",
       "model:1",
       "pending:no",
+      "compact:no",
       "baseline:1",
     ]);
   });
@@ -164,6 +195,9 @@ describe("savedSessionHost", () => {
       restorePendingPlanVerification: pendingPlanVerification => {
         calls.push(`pending:${pendingPlanVerification ? "yes" : "no"}`);
       },
+      restoreCompactBoundary: compactBoundary => {
+        calls.push(`compact:${compactBoundary ? "yes" : "no"}`);
+      },
       markConversationBaseline: count => {
         calls.push(`baseline:${count}`);
       },
@@ -174,6 +208,7 @@ describe("savedSessionHost", () => {
     bindings.replaceSessionMessages([{ role: "user", content: "hello" }]);
     bindings.restoreModelConversation([{ role: "assistant", content: "stored" }]);
     bindings.restorePendingPlanVerification(undefined);
+    bindings.restoreCompactBoundary(undefined);
     bindings.markConversationBaseline(2);
 
     expect(sessionMessages).toEqual([{ role: "user", content: "hello" }]);
@@ -182,6 +217,7 @@ describe("savedSessionHost", () => {
       "id:session-1",
       "model:1",
       "pending:no",
+      "compact:no",
       "baseline:2",
     ]);
   });
@@ -217,6 +253,9 @@ describe("savedSessionHost", () => {
       restorePendingPlanVerification: pendingPlanVerification => {
         calls.push(`pending:${pendingPlanVerification ? "yes" : "no"}`);
       },
+      restoreCompactBoundary: compactBoundary => {
+        calls.push(`compact:${compactBoundary ? "yes" : "no"}`);
+      },
       markConversationBaseline: count => {
         calls.push(`baseline:${count}`);
       },
@@ -237,6 +276,7 @@ describe("savedSessionHost", () => {
       "messages:1",
       "model:0",
       "pending:yes",
+      "compact:no",
       "baseline:1",
       "success:active:session-1:1:true",
     ]);
@@ -264,6 +304,9 @@ describe("savedSessionHost", () => {
       },
       restorePendingPlanVerification: pendingPlanVerification => {
         calls.push(`pending:${pendingPlanVerification ? "yes" : "no"}`);
+      },
+      restoreCompactBoundary: compactBoundary => {
+        calls.push(`compact:${compactBoundary ? "yes" : "no"}`);
       },
       markConversationBaseline: count => {
         calls.push(`baseline:${count}`);

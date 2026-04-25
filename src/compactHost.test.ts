@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 
 import {
+  buildCompactBoundarySessionState,
   createAutoCompactConversationRunner,
   formatCompactTokenCount,
   handleCompactCommand,
@@ -13,6 +14,33 @@ import {
 describe("compactHost", () => {
   it("formats token counts with separators", () => {
     expect(formatCompactTokenCount(1234567)).toBe("1,234,567");
+  });
+
+  it("builds compact boundary metadata from compaction results", () => {
+    expect(
+      buildCompactBoundarySessionState({
+        trigger: "manual",
+        compactedAt: 1700000000000,
+        transcriptPath: "E:\\repo\\.transcript.jsonl",
+        result: {
+          wasCompacted: true,
+          compactedHistory: [],
+          messagesCompacted: 10,
+          messagesKept: 4,
+          estimatedTokensBefore: 32000,
+          estimatedTokensAfter: 7000,
+        },
+      }),
+    ).toEqual({
+      trigger: "manual",
+      compactedAt: 1700000000000,
+      preTokens: 32000,
+      postTokens: 7000,
+      messagesSummarized: 10,
+      messagesKept: 4,
+      preservedRecentMessages: true,
+      transcriptPath: "E:\\repo\\.transcript.jsonl",
+    });
   });
 
   it("performs conversation compaction and replaces history when compaction happens", async () => {
@@ -35,14 +63,14 @@ describe("compactHost", () => {
       envMap: {},
       customInstructions: "Keep implementation details",
       getConversationHistory: () => [
-        { role: "user", content: "message 1 " + "x".repeat(6000) },
-        { role: "assistant", content: "message 2 " + "x".repeat(6000) },
-        { role: "user", content: "message 3 " + "x".repeat(6000) },
-        { role: "assistant", content: "message 4 " + "x".repeat(6000) },
-        { role: "user", content: "message 5 " + "x".repeat(6000) },
-        { role: "assistant", content: "message 6 " + "x".repeat(6000) },
-        { role: "user", content: "message 7 " + "x".repeat(6000) },
-        { role: "assistant", content: "message 8 " + "x".repeat(6000) },
+        { role: "user", content: "message 1 " + "x".repeat(8000) },
+        { role: "assistant", content: "message 2 " + "x".repeat(8000) },
+        { role: "user", content: "message 3 " + "x".repeat(8000) },
+        { role: "assistant", content: "message 4 " + "x".repeat(8000) },
+        { role: "user", content: "message 5 " + "x".repeat(8000) },
+        { role: "assistant", content: "message 6 " + "x".repeat(8000) },
+        { role: "user", content: "message 7 " + "x".repeat(8000) },
+        { role: "assistant", content: "message 8 " + "x".repeat(8000) },
       ],
       getTranscriptPath: () => "E:\\claudecodejingiang\\vscode-extension\\.transcript.jsonl",
       replaceConversationHistory,
@@ -56,7 +84,17 @@ describe("compactHost", () => {
       }),
     );
     expect(result.wasCompacted).toBe(true);
-    expect(replaceConversationHistory).toHaveBeenCalledTimes(1);
+    expect(replaceConversationHistory).toHaveBeenCalledWith(
+      result.compactedHistory,
+      expect.objectContaining({
+        trigger: "manual",
+        preTokens: result.estimatedTokensBefore,
+        postTokens: result.estimatedTokensAfter,
+        messagesSummarized: result.messagesCompacted,
+        messagesKept: result.messagesKept,
+        transcriptPath: "E:\\claudecodejingiang\\vscode-extension\\.transcript.jsonl",
+      }),
+    );
   });
 
   it("handles /compact command success and non-compaction paths", async () => {
@@ -257,6 +295,47 @@ describe("compactHost", () => {
       "done",
       "Context is already small enough to keep verbatim.",
     );
+  });
+
+  it("stops retrying auto-compact after repeated failures", async () => {
+    const addPhaseActivity = vi.fn(() => "activity-1");
+    const finishPhaseActivity = vi.fn();
+    const performConversationCompaction = vi.fn(async () => {
+      throw new Error("prompt too long");
+    });
+    let consecutiveFailures = 0;
+    const run = () =>
+      maybeAutoCompactConversation({
+        config: {
+          type: "openai",
+          apiKey: "secret",
+          model: "gpt-4.1",
+        },
+        getConversationHistory: () =>
+          Array.from({ length: 10 }, (_, index) => ({
+            role: index % 2 === 0 ? "user" : "assistant",
+            content: "x".repeat(60000),
+          })),
+        performConversationCompaction,
+        addPhaseActivity,
+        finishPhaseActivity,
+        toErrorMessage: error =>
+          error instanceof Error ? error.message : String(error),
+        getAutoCompactConsecutiveFailures: () => consecutiveFailures,
+        setAutoCompactConsecutiveFailures: failureCount => {
+          consecutiveFailures = failureCount;
+        },
+      });
+
+    await run();
+    await run();
+    await run();
+    await run();
+
+    expect(performConversationCompaction).toHaveBeenCalledTimes(3);
+    expect(addPhaseActivity).toHaveBeenCalledTimes(3);
+    expect(finishPhaseActivity).toHaveBeenCalledTimes(3);
+    expect(consecutiveFailures).toBe(3);
   });
 
   it("routes host-backed compact command wiring through provider creation and transcript access", async () => {

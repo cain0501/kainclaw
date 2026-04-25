@@ -106,6 +106,7 @@ describe("sessionCommandHost", () => {
         options.replaceSessionMessages([{ role: "user", content: "hello" }] as any);
         options.restoreModelConversation([{ role: "assistant", content: "stored" }]);
         options.restorePendingPlanVerification(undefined);
+        options.restoreCompactBoundary(undefined);
         options.markConversationBaseline(1);
         return {} as any;
       },
@@ -120,6 +121,9 @@ describe("sessionCommandHost", () => {
       },
       restorePendingPlanVerification: state => {
         calls.push(`pending:${state ? "yes" : "no"}`);
+      },
+      restoreCompactBoundary: state => {
+        calls.push(`compact:${state ? "yes" : "no"}`);
       },
       markConversationBaseline: count => {
         calls.push(`baseline:${count}`);
