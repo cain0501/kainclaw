@@ -4,6 +4,7 @@ import path from "node:path";
 import { randomUUID } from "node:crypto";
 import { UnauthorizedError } from "@modelcontextprotocol/sdk/client/auth.js";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
+import { SSEClientTransport } from "@modelcontextprotocol/sdk/client/sse.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 import type { McpToolAdapter, ToolContext, ToolDefinition, ToolExecutionResult, ToolInput } from "./toolRuntime";
@@ -11,6 +12,7 @@ import type { McpToolAdapter, ToolContext, ToolDefinition, ToolExecutionResult, 
 type JsonRecord = Record<string, unknown>;
 
 type RawServerConfig = {
+  type?: string;
   transport?: string;
   command?: string;
   args?: string[];
@@ -35,12 +37,19 @@ type ResolvedServerConfig =
       name: string;
       url: string;
       headers?: Record<string, string>;
+    }
+  | {
+      kind: "sse";
+      name: string;
+      url: string;
+      headers?: Record<string, string>;
     };
 
 type ToolMetadata = {
   serverName: string;
   toolName: string;
   annotations?: ToolDefinition["annotations"];
+  kind?: "server-tool" | "auth-placeholder" | "status-placeholder";
 };
 
 type McpResource = {
@@ -58,22 +67,33 @@ type McpResourceContent = {
   blobSavedTo?: string;
 };
 
+type RawMcpToolResult = {
+  content?: unknown;
+  structuredContent?: unknown;
+  toolResult?: unknown;
+  isError?: boolean;
+  error?: unknown;
+  _meta?: unknown;
+};
+
 type ConnectionRecord = {
   client: Client;
-  transport: StdioClientTransport | StreamableHTTPClientTransport;
+  transport: StdioClientTransport | StreamableHTTPClientTransport | SSEClientTransport;
 };
 
 export type McpServerStatusSummary = {
   name: string;
   state: "connected" | "needs-auth" | "error";
   toolCount: number;
-  transport: "stdio" | "streamable-http";
+  transport: "stdio" | "streamable-http" | "sse";
   error?: string;
 };
 
 const CONFIG_CANDIDATES = [".mcp.json", ".cain-mcp.json"];
 const LIST_MCP_RESOURCES_TOOL_NAME = "ListMcpResourcesTool";
 const READ_MCP_RESOURCE_TOOL_NAME = "ReadMcpResourceTool";
+const MCP_AUTHENTICATE_TOOL_NAME = "authenticate";
+const CLAUDEAI_SERVER_PREFIX = "claude.ai ";
 
 const LIST_MCP_RESOURCES_TOOL_DEFINITION: ToolDefinition = {
   name: LIST_MCP_RESOURCES_TOOL_NAME,
@@ -118,8 +138,56 @@ const READ_MCP_RESOURCE_TOOL_DEFINITION: ToolDefinition = {
   },
 };
 
+export function normalizeNameForMCP(name: string): string {
+  let normalized = name.replace(/[^a-zA-Z0-9_-]/g, "_");
+  if (name.startsWith(CLAUDEAI_SERVER_PREFIX)) {
+    normalized = normalized.replace(/_+/g, "_").replace(/^_|_$/g, "");
+  }
+  return normalized;
+}
+
+function buildMcpToolName(serverName: string, toolName: string): string {
+  return `mcp__${normalizeNameForMCP(serverName)}__${normalizeNameForMCP(toolName)}`;
+}
+
+function buildMcpAuthToolDefinition(
+  serverName: string,
+  config: ResolvedServerConfig,
+): ToolDefinition {
+  const location =
+    config.kind === "stdio" ? "stdio" : `${config.kind === "sse" ? "sse" : "http"} at ${config.url}`;
+
+  return {
+    name: buildMcpToolName(serverName, MCP_AUTHENTICATE_TOOL_NAME),
+    description:
+      `The \`${serverName}\` MCP server (${location}) is installed but requires authentication. ` +
+      "Call this tool to start or receive instructions for the MCP authentication flow.",
+    input_schema: {
+      type: "object",
+      properties: {},
+    },
+    annotations: {
+      title: `${serverName} authenticate`,
+    },
+  };
+}
+
 function trimTrailingSlashes(value: string): string {
   return value.replace(/\/+$/, "");
+}
+
+function normalizeRemoteTransport(rawType: string | undefined): "streamable-http" | "sse" | undefined {
+  const normalized = rawType?.trim().toLowerCase();
+
+  if (!normalized || normalized === "http" || normalized === "streamable-http") {
+    return "streamable-http";
+  }
+
+  if (normalized === "sse") {
+    return "sse";
+  }
+
+  return undefined;
 }
 
 export function resolveWorkspacePath(workspaceRoot: string, targetPath: string): string {
@@ -228,6 +296,48 @@ function toErrorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
 }
 
+class McpToolCallError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "McpToolCallError";
+  }
+}
+
+export function formatMcpToolResult(result: RawMcpToolResult): string {
+  if (result.isError) {
+    let errorDetails = "Unknown error";
+    if (Array.isArray(result.content) && result.content.length > 0) {
+      const firstContent = result.content[0];
+      if (
+        firstContent &&
+        typeof firstContent === "object" &&
+        "text" in firstContent &&
+        typeof firstContent.text === "string"
+      ) {
+        errorDetails = firstContent.text;
+      }
+    } else if ("error" in result) {
+      errorDetails = String(result.error);
+    }
+
+    throw new McpToolCallError(errorDetails);
+  }
+
+  if ("toolResult" in result) {
+    return String(result.toolResult);
+  }
+
+  if ("structuredContent" in result && result.structuredContent !== undefined) {
+    return JSON.stringify(result.structuredContent, null, 2);
+  }
+
+  if ("content" in result && Array.isArray(result.content)) {
+    return formatToolResultContent(result.content);
+  }
+
+  throw new McpToolCallError("Unexpected MCP tool response format");
+}
+
 export class McpRuntime implements McpToolAdapter {
   private lastWorkspaceRoot = "";
   private configSignature = "";
@@ -285,7 +395,7 @@ export class McpRuntime implements McpToolAdapter {
         });
 
         for (const tool of tools) {
-          const fullName = `mcp__${serverName}__${tool.name}`;
+          const fullName = buildMcpToolName(serverName, tool.name);
           const annotations = tool.annotations
             ? {
                 title: tool.annotations.title,
@@ -300,6 +410,7 @@ export class McpRuntime implements McpToolAdapter {
             serverName,
             toolName: tool.name,
             annotations,
+            kind: "server-tool",
           });
 
           toolDefinitions.push({
@@ -316,29 +427,42 @@ export class McpRuntime implements McpToolAdapter {
       } catch (error) {
         const status = this.classifyServerFailure(serverName, config, error);
         this.serverStatuses.set(serverName, status);
+
+        if (status.state === "needs-auth") {
+          const authTool = buildMcpAuthToolDefinition(serverName, config);
+          toolDefinitions.push(authTool);
+          this.toolMetadata.set(authTool.name, {
+            serverName,
+            toolName: MCP_AUTHENTICATE_TOOL_NAME,
+            annotations: authTool.annotations,
+            kind: "auth-placeholder",
+          });
+          console.warn(`[KainClaw MCP] Failed to list tools for ${serverName}: ${status.error ?? "unknown error"}`);
+          continue;
+        }
+
         toolDefinitions.push({
-          name: `mcp__${serverName}__status`,
+          name: buildMcpToolName(serverName, "status"),
           description:
-            status.state === "needs-auth"
-              ? `Authentication placeholder for unavailable MCP server ${serverName}`
-              : `Connection status placeholder for unavailable MCP server ${serverName}`,
+            `Connection status placeholder for unavailable MCP server ${serverName}`,
           input_schema: {
             type: "object",
             properties: {},
           },
           annotations: {
             readOnlyHint: true,
-            title: status.state === "needs-auth" ? `${serverName} needs auth` : `${serverName} unavailable`,
+            title: `${serverName} unavailable`,
           },
         });
-        this.toolMetadata.set(`mcp__${serverName}__status`, {
+        this.toolMetadata.set(buildMcpToolName(serverName, "status"), {
           serverName,
-          toolName: "__status",
+          toolName: "status",
           annotations: {
             readOnlyHint: true,
           },
+          kind: "status-placeholder",
         });
-        console.warn(`[Cain MCP] Failed to list tools for ${serverName}: ${status.error ?? "unknown error"}`);
+        console.warn(`[KainClaw MCP] Failed to list tools for ${serverName}: ${status.error ?? "unknown error"}`);
       }
     }
 
@@ -405,6 +529,10 @@ export class McpRuntime implements McpToolAdapter {
       }
     }
 
+    if (metadata.kind === "auth-placeholder") {
+      return this.describeMcpAuthentication(metadata.serverName, config);
+    }
+
     try {
       const connection = await this.ensureConnection(metadata.serverName, config);
       const result = await connection.client.callTool({
@@ -414,9 +542,13 @@ export class McpRuntime implements McpToolAdapter {
 
       return {
         summary: `Ran MCP tool ${metadata.toolName} on ${metadata.serverName}`,
-        content: formatToolResultContent(result.content || []) || "[no MCP output]",
+        content: formatMcpToolResult(result as RawMcpToolResult) || "[no MCP output]",
       };
     } catch (error) {
+      if (error instanceof McpToolCallError) {
+        throw error;
+      }
+
       await this.handleServerOperationFailure(metadata.serverName, config, error);
       throw new Error("MCP tool execution failed.");
     }
@@ -462,7 +594,7 @@ export class McpRuntime implements McpToolAdapter {
   async readResource(serverName: string, uri: string): Promise<ToolExecutionResult> {
     await this.refreshConfig();
 
-    const normalizedServerName = serverName.trim();
+    const normalizedServerName = this.resolveConfiguredServerName(serverName.trim());
     const normalizedUri = uri.trim();
 
     if (!normalizedServerName) {
@@ -478,12 +610,19 @@ export class McpRuntime implements McpToolAdapter {
       throw new Error(this.buildUnknownServerMessage(normalizedServerName));
     }
 
+    let connection: ConnectionRecord;
     try {
-      const connection = await this.ensureConnection(normalizedServerName, config);
-      if (!connection.client.getServerCapabilities()?.resources) {
-        throw new Error(`Server "${normalizedServerName}" does not support resources`);
-      }
+      connection = await this.ensureConnection(normalizedServerName, config);
+    } catch (error) {
+      await this.handleServerOperationFailure(normalizedServerName, config, error);
+      throw new Error("MCP resource read failed.");
+    }
 
+    if (!connection.client.getServerCapabilities()?.resources) {
+      throw new Error(`Server "${normalizedServerName}" does not support resources`);
+    }
+
+    try {
       const result = await connection.client.readResource({ uri: normalizedUri });
       const contents = await Promise.all(
         (result.contents ?? []).map(content => this.formatResourceContent(content, normalizedServerName)),
@@ -497,6 +636,28 @@ export class McpRuntime implements McpToolAdapter {
       await this.handleServerOperationFailure(normalizedServerName, config, error);
       throw new Error("MCP resource read failed.");
     }
+  }
+
+  private describeMcpAuthentication(
+    serverName: string,
+    config: ResolvedServerConfig,
+  ): ToolExecutionResult {
+    if (config.kind !== "sse" && config.kind !== "streamable-http") {
+      return {
+        summary: `MCP server ${serverName} authentication is unsupported`,
+        content:
+          `Server "${serverName}" uses ${config.kind} transport which does not support OAuth from this tool. ` +
+          "Configure authentication manually and reconnect the MCP server.",
+      };
+    }
+
+    return {
+      summary: `MCP server ${serverName} requires authentication`,
+      content:
+        `Server "${serverName}" requires authentication before its tools can be used. ` +
+        "KainClaw has exposed this Claude-compatible authentication placeholder, but the local MCP OAuth browser flow is not wired in this host yet. " +
+        "Configure the server token/headers in .mcp.json or the app settings, then reconnect the MCP server.",
+    };
   }
 
   async dispose(): Promise<void> {
@@ -628,8 +789,13 @@ export class McpRuntime implements McpToolAdapter {
       }
 
       if (rawConfig.url) {
+        const remoteTransport = normalizeRemoteTransport(rawConfig.type ?? rawConfig.transport);
+        if (!remoteTransport) {
+          continue;
+        }
+
         resolved.push({
-          kind: "streamable-http",
+          kind: remoteTransport,
           name,
           url: substituteEnv(trimTrailingSlashes(rawConfig.url), this.envMap),
           headers: substituteRecord(rawConfig.headers, this.envMap),
@@ -676,7 +842,7 @@ export class McpRuntime implements McpToolAdapter {
       },
     );
 
-    let transport: StdioClientTransport | StreamableHTTPClientTransport;
+    let transport: StdioClientTransport | StreamableHTTPClientTransport | SSEClientTransport;
 
     if (config.kind === "stdio") {
       const env = Object.fromEntries(
@@ -693,8 +859,25 @@ export class McpRuntime implements McpToolAdapter {
         env,
         stderr: "pipe",
       });
-    } else {
+    } else if (config.kind === "streamable-http") {
       transport = new StreamableHTTPClientTransport(new URL(config.url), {
+        requestInit: {
+          headers: config.headers,
+        },
+      });
+    } else {
+      transport = new SSEClientTransport(new URL(config.url), {
+        eventSourceInit: {
+          fetch: config.headers
+            ? (input, init) => fetch(input, {
+                ...init,
+                headers: {
+                  ...Object.fromEntries(new Headers(init?.headers)),
+                  ...config.headers,
+                },
+              })
+            : undefined,
+        },
         requestInit: {
           headers: config.headers,
         },
@@ -716,12 +899,28 @@ export class McpRuntime implements McpToolAdapter {
       return Array.from(this.serverConfigs.entries());
     }
 
-    const config = this.serverConfigs.get(targetServer);
+    const resolvedServerName = this.resolveConfiguredServerName(targetServer);
+    const config = this.serverConfigs.get(resolvedServerName);
     if (!config) {
       throw new Error(this.buildUnknownServerMessage(targetServer));
     }
 
-    return [[targetServer, config]];
+    return [[resolvedServerName, config]];
+  }
+
+  private resolveConfiguredServerName(serverName: string): string {
+    if (this.serverConfigs.has(serverName)) {
+      return serverName;
+    }
+
+    const normalizedInput = normalizeNameForMCP(serverName);
+    for (const configuredServerName of this.serverConfigs.keys()) {
+      if (normalizeNameForMCP(configuredServerName) === normalizedInput) {
+        return configuredServerName;
+      }
+    }
+
+    return serverName;
   }
 
   private buildUnknownServerMessage(serverName: string): string {
@@ -738,7 +937,7 @@ export class McpRuntime implements McpToolAdapter {
     toolCount = 0,
   ): McpServerStatusSummary {
     const message = toErrorMessage(error);
-    const needsAuth = config.kind === "streamable-http" && isAuthError(error);
+    const needsAuth = (config.kind === "streamable-http" || config.kind === "sse") && isAuthError(error);
 
     return {
       name: serverName,
@@ -836,7 +1035,7 @@ export class McpRuntime implements McpToolAdapter {
     }
 
     return {
-      serverName: parts[1] || "",
+      serverName: this.resolveConfiguredServerName(parts[1] || ""),
       toolName: parts.slice(2).join("__"),
     };
   }

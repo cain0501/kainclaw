@@ -29,6 +29,10 @@
   - LSP provider response hardening：对 provider 返回缺失 URI、range、location、call target 的 malformed 结果做过滤或 `<unknown location>` 降级，避免 gitignored 过滤和 formatter 直接崩溃。
   - ToolSearchTool：按 Claude `ToolSearchTool` 搜索合同补齐 `select:ToolA,ToolB`、裸工具名精确选择、`mcp__server` 前缀、`+required optional` 必选词搜索，以及 `max_results` 输入别名。
   - Task tool aliases：按 Claude `TaskOutputTool` / `TaskStopTool` 源码补齐 deprecated aliases，`AgentOutputTool` / `BashOutputTool` 归一到 `TaskOutput`，`KillShell` 归一到 `TaskStop`；ToolSearch 也会把这些旧名解析到 canonical 工具。
+  - MCP transport parity：按 Claude MCP 源码补齐 `type: "http"`（Streamable HTTP）与 `type: "sse"`（SSE）配置语义；SSE 不再误走 Streamable HTTP；未知远端 transport（如 `ws`）会被忽略；远端认证失败归类为 `needs-auth`。
+  - MCP auth/resource parity：`needs-auth` 远端 server 会暴露 Claude-style `mcp__<server>__authenticate` placeholder；当前本地 OAuth browser flow 仍未接线，placeholder 返回可执行的 KainClaw 配置指引。`ReadMcpResourceTool` 访问已连接但不支持 resources 的 server 时返回明确“不支持 resources”，不会把 server 标记失败。
+  - MCP result/name parity：`isError: true` 的 MCP tool result 会抛工具错误，不再当作成功输出，也不会把 server connection 标记失败；`toolResult`、`structuredContent`、`content[]` 按 Claude 优先级格式化。MCP 对外工具名已使用 Claude-compatible `normalizeNameForMCP` 安全化，内部调用仍保留原始 server/tool 名，resource read 可用 normalized server name 映射回原配置名。
+  - MCP 本轮定向验证：`npm test -- --run src/mcpRuntime.test.ts src/mcpRuntime.helpers.test.ts`（20 tests passed）、`npm test -- --run src/toolRuntime.test.ts`（90 tests passed）、`npm run check`、`npm run build`、`git diff --check -- src/mcpRuntime.ts src/mcpRuntime.test.ts src/mcpRuntime.helpers.test.ts`。
 - 强实现规则已经生效：
   - 如果本地 Claude Code 源码已经包含目标功能、行为、工作流、prompt contract、renderer 行为、tool/runtime 路径或 session 生命周期，必须先读取该源码，并把源码逻辑作为实现 baseline 复刻。
   - KainClaw 自研标准只用于 Claude 源码没有覆盖的能力，或用于 Claude-compatible baseline 之上的薄适配层。
@@ -74,6 +78,7 @@
 - Electron 只做桌面壳、权限、IPC、UI，不应继续承接新的核心业务逻辑。
 - 项目主线仍然是与官方 Claude Code 能力持续对齐；图片、Office、Local Bridge、User Modeling、Auto Skill Generation 都属于扩展能力。
 - 对 Claude 源码已有能力，必须先按源码逻辑复刻 baseline，再接 KainClaw 的 VS Code / Electron / storage / IPC 适配。
+- MCP runtime 已补齐 transport、auth placeholder、resource no-support、tool result priority、normalized exposed tool names 这些 Claude parity 基线；OAuth browser flow、MCP prompts/templates 仍未完成。
 - Electron Markdown 与 `/verify` report 渲染已按 Claude-style `marked.lexer()` token 基线收口；verification 的 command/output 是结构化 raw text，不再依赖 fence 平衡。
 - 当前 Tasks / toolRuntime parity 已补齐本批 shell task 基线，并补上 adapter-backed remote `TaskStop -> killed`；完整 hosted / detached remote background task parity 仍未闭环。
 - 当前 Compact parity 已补齐可见 transcript 与模型侧 sidecar history 分离，但更深 token / transcript lifecycle 仍可继续收口。
@@ -187,7 +192,7 @@
   - Claude CLI
 - 已稳定存在的主能力：
   - 会话持久化 / 导出 / 恢复
-  - MCP runtime
+  - MCP runtime（transport / resource / result / name normalization parity 已补齐；OAuth browser flow、prompts/templates 仍未完成）
   - 文件工具 / 命令工具 / 浏览器工具
   - Tasks / background command
   - built-in Review / Verification

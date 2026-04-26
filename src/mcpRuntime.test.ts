@@ -1,6 +1,7 @@
 import { promises as fs } from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { UnauthorizedError } from "@modelcontextprotocol/sdk/client/auth.js";
 import { afterEach, describe, expect, it } from "vitest";
 import { McpRuntime } from "./mcpRuntime";
 
@@ -131,5 +132,319 @@ describe("McpRuntime config discovery cache", () => {
     const secondChanged = await (runtime as any).refreshConfig();
     expect(secondChanged).toBe(true);
     expect((runtime as any).serverConfigs.get("demo")?.url).toBe("https://second.example.com/mcp");
+  });
+
+  it("resolves Claude MCP remote transport types without routing SSE as streamable HTTP", async () => {
+    const workspaceRoot = await fs.mkdtemp(path.join(os.tmpdir(), "cain-mcp-runtime-transport-"));
+    tempDirs.push(workspaceRoot);
+    const configPath = path.join(workspaceRoot, ".mcp.json");
+    await fs.writeFile(
+      configPath,
+      JSON.stringify({
+        mcpServers: {
+          legacyUrl: {
+            url: "https://legacy.example.com/mcp",
+          },
+          httpServer: {
+            type: "http",
+            url: "https://${HOST}/mcp",
+            headers: {
+              Authorization: "Bearer ${TOKEN}",
+            },
+          },
+          sseServer: {
+            type: "sse",
+            url: "https://events.example.com/sse/",
+          },
+          unsupportedWs: {
+            type: "ws",
+            url: "wss://events.example.com/mcp",
+          },
+          explicitStdio: {
+            type: "stdio",
+            command: "node",
+            args: ["server.js"],
+          },
+        },
+      }),
+      "utf8",
+    );
+
+    const runtime = new McpRuntime(() => workspaceRoot, {
+      HOST: "api.example.com",
+      TOKEN: "secret",
+    });
+
+    await (runtime as any).refreshConfig();
+
+    const configs = (runtime as any).serverConfigs as Map<
+      string,
+      { kind: string; url?: string; headers?: Record<string, string> }
+    >;
+    expect(configs.get("legacyUrl")?.kind).toBe("streamable-http");
+    expect(configs.get("httpServer")?.kind).toBe("streamable-http");
+    expect(configs.get("httpServer")?.url).toBe("https://api.example.com/mcp");
+    expect(configs.get("httpServer")?.headers?.Authorization).toBe("Bearer secret");
+    expect(configs.get("sseServer")?.kind).toBe("sse");
+    expect(configs.get("sseServer")?.url).toBe("https://events.example.com/sse");
+    expect(configs.get("explicitStdio")?.kind).toBe("stdio");
+    expect(configs.has("unsupportedWs")).toBe(false);
+  });
+
+  it("classifies auth failures on Claude SSE and HTTP MCP servers as needs-auth", async () => {
+    const runtime = new McpRuntime(() => "E:\\claudecodejingiang\\vscode-extension", {});
+    const error = new UnauthorizedError("OAuth required");
+
+    expect(
+      (runtime as any).classifyServerFailure(
+        "sseServer",
+        { kind: "sse", name: "sseServer", url: "https://events.example.com/sse" },
+        error,
+      ).state,
+    ).toBe("needs-auth");
+    expect(
+      (runtime as any).classifyServerFailure(
+        "httpServer",
+        { kind: "streamable-http", name: "httpServer", url: "https://api.example.com/mcp" },
+        error,
+      ).state,
+    ).toBe("needs-auth");
+  });
+
+  it("exposes a Claude-style MCP authenticate placeholder when a remote server needs auth", async () => {
+    const workspaceRoot = await fs.mkdtemp(path.join(os.tmpdir(), "cain-mcp-runtime-auth-"));
+    tempDirs.push(workspaceRoot);
+    await fs.writeFile(
+      path.join(workspaceRoot, ".mcp.json"),
+      JSON.stringify({
+        mcpServers: {
+          secure: {
+            type: "http",
+            url: "https://secure.example.com/mcp",
+          },
+        },
+      }),
+      "utf8",
+    );
+
+    const runtime = new McpRuntime(() => workspaceRoot, {});
+    (runtime as any).ensureConnection = async () => {
+      throw new UnauthorizedError("OAuth required");
+    };
+
+    const tools = await runtime.getToolDefinitions();
+
+    expect(tools.map(tool => tool.name)).toContain("mcp__secure__authenticate");
+    expect(tools.map(tool => tool.name)).not.toContain("mcp__secure__status");
+
+    const result = await runtime.executeTool(
+      "mcp__secure__authenticate",
+      {},
+      { workspaceRoot },
+    );
+
+    expect(result.summary).toContain("requires authentication");
+    expect(result.content).toContain("Configure the server token/headers");
+  });
+
+  it("does not mark a connected server as failed when ReadMcpResourceTool targets a server without resources", async () => {
+    const workspaceRoot = await fs.mkdtemp(path.join(os.tmpdir(), "cain-mcp-runtime-no-resources-"));
+    tempDirs.push(workspaceRoot);
+    await fs.writeFile(
+      path.join(workspaceRoot, ".mcp.json"),
+      JSON.stringify({
+        mcpServers: {
+          demo: {
+            command: "node",
+            args: ["server.js"],
+          },
+        },
+      }),
+      "utf8",
+    );
+
+    const runtime = new McpRuntime(() => workspaceRoot, {});
+    (runtime as any).ensureConnection = async () => ({
+      client: {
+        getServerCapabilities: () => ({}),
+      },
+      transport: {
+        close: async () => undefined,
+      },
+    });
+
+    await expect(runtime.readResource("demo", "memory://demo")).rejects.toThrow(
+      'Server "demo" does not support resources',
+    );
+    expect((runtime as any).serverStatuses.get("demo")).toBeUndefined();
+  });
+
+  it("does not mark a connected server as failed when an MCP tool returns isError", async () => {
+    const workspaceRoot = await fs.mkdtemp(path.join(os.tmpdir(), "cain-mcp-runtime-tool-error-"));
+    tempDirs.push(workspaceRoot);
+    await fs.writeFile(
+      path.join(workspaceRoot, ".mcp.json"),
+      JSON.stringify({
+        mcpServers: {
+          demo: {
+            command: "node",
+            args: ["server.js"],
+          },
+        },
+      }),
+      "utf8",
+    );
+
+    const runtime = new McpRuntime(() => workspaceRoot, {});
+    let closeCount = 0;
+    (runtime as any).ensureConnection = async () => ({
+      client: {
+        callTool: async () => ({
+          isError: true,
+          content: [{ type: "text", text: "tool rejected the request" }],
+        }),
+      },
+      transport: {
+        close: async () => {
+          closeCount++;
+        },
+      },
+    });
+
+    await expect(
+      runtime.executeTool("mcp__demo__reject", {}, { workspaceRoot }),
+    ).rejects.toThrow("tool rejected the request");
+    expect(closeCount).toBe(0);
+    expect((runtime as any).serverStatuses.get("demo")).toBeUndefined();
+  });
+
+  it("passes structuredContent and toolResult MCP responses through using Claude result priority", async () => {
+    const workspaceRoot = await fs.mkdtemp(path.join(os.tmpdir(), "cain-mcp-runtime-tool-result-"));
+    tempDirs.push(workspaceRoot);
+    await fs.writeFile(
+      path.join(workspaceRoot, ".mcp.json"),
+      JSON.stringify({
+        mcpServers: {
+          demo: {
+            command: "node",
+            args: ["server.js"],
+          },
+        },
+      }),
+      "utf8",
+    );
+
+    const runtime = new McpRuntime(() => workspaceRoot, {});
+    const results = [
+      { structuredContent: { title: "Report", count: 3 }, content: [{ type: "text", text: "ignored" }] },
+      { toolResult: "legacy result", content: [{ type: "text", text: "ignored" }] },
+    ];
+    (runtime as any).ensureConnection = async () => ({
+      client: {
+        callTool: async () => results.shift(),
+      },
+      transport: {
+        close: async () => undefined,
+      },
+    });
+
+    const structured = await runtime.executeTool("mcp__demo__structured", {}, { workspaceRoot });
+    const legacy = await runtime.executeTool("mcp__demo__legacy", {}, { workspaceRoot });
+
+    expect(structured.content).toContain('"title": "Report"');
+    expect(structured.content).not.toContain("ignored");
+    expect(legacy.content).toBe("legacy result");
+  });
+
+  it("exposes normalized Claude MCP tool names while calling the original server and tool names", async () => {
+    const workspaceRoot = await fs.mkdtemp(path.join(os.tmpdir(), "cain-mcp-runtime-normalized-tool-"));
+    tempDirs.push(workspaceRoot);
+    await fs.writeFile(
+      path.join(workspaceRoot, ".mcp.json"),
+      JSON.stringify({
+        mcpServers: {
+          "github.com": {
+            command: "node",
+            args: ["server.js"],
+          },
+        },
+      }),
+      "utf8",
+    );
+
+    const runtime = new McpRuntime(() => workspaceRoot, {});
+    const callRecords: Array<{ serverName: string; toolName: string }> = [];
+    (runtime as any).ensureConnection = async (serverName: string) => ({
+      client: {
+        getServerCapabilities: () => ({ tools: {} }),
+        listTools: async () => ({
+          tools: [
+            {
+              name: "create issue",
+              description: "Create an issue",
+              inputSchema: { type: "object", properties: {} },
+            },
+          ],
+        }),
+        callTool: async ({ name }: { name: string }) => {
+          callRecords.push({ serverName, toolName: name });
+          return { content: [{ type: "text", text: "created" }] };
+        },
+      },
+      transport: {
+        close: async () => undefined,
+      },
+    });
+
+    const tools = await runtime.getToolDefinitions();
+    expect(tools.map(tool => tool.name)).toContain("mcp__github_com__create_issue");
+
+    const result = await runtime.executeTool(
+      "mcp__github_com__create_issue",
+      {},
+      { workspaceRoot },
+    );
+
+    expect(result.content).toBe("created");
+    expect(callRecords).toEqual([{ serverName: "github.com", toolName: "create issue" }]);
+  });
+
+  it("accepts normalized server names for MCP resource reads but uses the original server connection", async () => {
+    const workspaceRoot = await fs.mkdtemp(path.join(os.tmpdir(), "cain-mcp-runtime-normalized-resource-"));
+    tempDirs.push(workspaceRoot);
+    await fs.writeFile(
+      path.join(workspaceRoot, ".mcp.json"),
+      JSON.stringify({
+        mcpServers: {
+          "my server": {
+            command: "node",
+            args: ["server.js"],
+          },
+        },
+      }),
+      "utf8",
+    );
+
+    const runtime = new McpRuntime(() => workspaceRoot, {});
+    const connectedServerNames: string[] = [];
+    (runtime as any).ensureConnection = async (serverName: string) => {
+      connectedServerNames.push(serverName);
+      return {
+        client: {
+          getServerCapabilities: () => ({ resources: {} }),
+          readResource: async () => ({
+            contents: [{ uri: "memory://demo", text: "resource text" }],
+          }),
+        },
+        transport: {
+          close: async () => undefined,
+        },
+      };
+    };
+
+    const result = await runtime.readResource("my_server", "memory://demo");
+
+    expect(result.content).toContain("resource text");
+    expect(connectedServerNames).toEqual(["my server"]);
   });
 });

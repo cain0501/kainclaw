@@ -1,6 +1,6 @@
 # 实现记忆
 
-## 当前覆盖说明 / Current Override - 2026-04-25
+## 当前覆盖说明 / Current Override - 2026-04-27
 
 - Electron shell 命令接线规则：
   - 如果某个能力已经在 `src/` 里有成熟的 host/runtime 路径，优先把桌面壳接回那条路径，不要发明 desktop-only 的平行重写。
@@ -34,6 +34,13 @@
   - LSP provider response hardening：provider 返回 malformed location / symbol / call hierarchy 数据时，先过滤缺失 URI/range/location 的结果，或在 call hierarchy 中降级显示 `<unknown location>`，避免一个坏响应打断整个 LSP 工具。
   - ToolSearchTool：搜索合同按 Claude `ToolSearchTool` 源码收口，支持 `select:ToolA,ToolB`、裸工具名精确选择、`mcp__server` 前缀、`+required optional` 必选词搜索，以及 `max_results` 输入别名。
   - Task tool aliases：`KillShell` 归一到 `TaskStop`，`AgentOutputTool` / `BashOutputTool` 归一到 `TaskOutput`；ToolSearch 对这些 deprecated Claude aliases 返回 canonical 工具名。
+  - MCP runtime：按 Claude MCP 源码补齐 `type: "http"` / `type: "sse"` transport 语义、`needs-auth` + `mcp__<server>__authenticate` placeholder、无 resources server 的明确错误、MCP result priority、`isError` 工具错误处理，以及 `normalizeNameForMCP` 对外工具名安全化。
+- MCP 本轮定向验证：
+  - `npm test -- --run src/mcpRuntime.test.ts src/mcpRuntime.helpers.test.ts`（20 tests passed）
+  - `npm test -- --run src/toolRuntime.test.ts`（90 tests passed）
+  - `npm run check`
+  - `npm run build`
+  - `git diff --check -- src/mcpRuntime.ts src/mcpRuntime.test.ts src/mcpRuntime.helpers.test.ts`
 - Electron 路由规则：
   - 必须先识别斜杠命令，再做普通聊天 / 图片意图推断。
   - 否则最近生成图上下文会错误劫持 `/compact` 这类命令，把它们误路由到图片编辑流程。
@@ -71,7 +78,7 @@
   - `Command run` 和 `Output observed` 要按原始捕获文本处理，并渲染为转义后的 `<pre><code>` 块。
   - 不能依赖命令 / 输出里的 Markdown 代码围栏是否平衡；README 输出和嵌套代码围栏都必须按字面量保留。
 
-更新时间：2026-04-26
+更新时间：2026-04-27
 
 ## 使用规则
 
@@ -225,6 +232,17 @@
 - Electron、聊天页、图片页都只是当前验证界面。
 
 ## Phase 2 收尾的主线经验
+
+### 0. `MCP runtime` Phase 2
+
+- MCP 配置解析要以 Claude MCP 源码为 baseline：`type: "http"` 表示 Streamable HTTP，`type: "sse"` 表示 SSE；SSE server 不能被误路由到 Streamable HTTP。
+- 未知远端 transport（例如 `ws`）应被忽略，不要猜测成某个已知 transport。
+- 远端认证失败应进入 `needs-auth` 状态，并暴露 Claude-style `mcp__<server>__authenticate` placeholder；但本地 OAuth browser flow 尚未接线时，placeholder 只能返回清晰的 KainClaw 配置指引，不能伪装成已完成 OAuth。
+- `ReadMcpResourceTool` 对已连接但不支持 resources 的 server 要返回明确“不支持 resources”的错误，不应把该 server 标记为 failed，也不应关闭连接。
+- MCP tool result 的优先级要按 Claude 语义处理：`isError: true` 是工具错误；成功结果优先格式化 `toolResult`，再处理 `structuredContent` 和 `content[]`。
+- MCP tool-level error 不能污染 server connection 状态；只有连接层失败才应影响 server 健康状态。
+- 对外暴露的 MCP tool/server 名要走 Claude-compatible `normalizeNameForMCP` 安全化；内部调用仍使用原始配置里的 server/tool 名。resource read 接收 normalized server name 时，要能映射回原始 server 名。
+- 仍未完成的 MCP parity：OAuth browser flow / PKCE、prompts、templates。
 
 ### 1. `tasks / toolRuntime` Phase 2
 
