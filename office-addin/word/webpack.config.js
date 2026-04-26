@@ -27,7 +27,7 @@ module.exports = {
     rules: [
       {
         test: /\.ts$/,
-        use: "ts-loader",
+        use: { loader: "ts-loader", options: { transpileOnly: true } },
         exclude: /node_modules/,
       },
       {
@@ -46,7 +46,14 @@ module.exports = {
   ],
   devServer: {
     port: 3000,
-    server: "https",
+    server: {
+      type: "https",
+      options: {
+        key: require("path").join(require("os").homedir(), ".office-addin-dev-certs", "localhost.key"),
+        cert: require("path").join(require("os").homedir(), ".office-addin-dev-certs", "localhost.crt"),
+        ca: require("path").join(require("os").homedir(), ".office-addin-dev-certs", "ca.crt"),
+      },
+    },
     hot: true,
     headers: {
       "Access-Control-Allow-Origin": "*",

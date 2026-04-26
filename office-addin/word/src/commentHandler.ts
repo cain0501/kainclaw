@@ -44,19 +44,16 @@ export async function getOpenComments(): Promise<DocumentComment[]> {
     comments.load(["id", "content", "contentRange"]);
     await context.sync();
 
-    const result: DocumentComment[] = [];
     for (const c of comments.items) {
-      c.content.load(["items"]);
       c.contentRange.load("text");
-      await context.sync();
-
-      result.push({
-        id: c.id,
-        content: c.content.items.map(i => i.text).join(""),
-        anchoredText: c.contentRange.text,
-      });
     }
-    return result;
+    await context.sync();
+
+    return comments.items.map(c => ({
+      id: c.id,
+      content: typeof c.content === "string" ? c.content : String(c.content ?? ""),
+      anchoredText: c.contentRange.text,
+    }));
   });
 }
 
