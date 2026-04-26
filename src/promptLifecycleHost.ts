@@ -1,10 +1,8 @@
 import type { ActivityTracker } from "./activityTracker";
 import type { NormalizedImageAttachment } from "./agent/providers/IProviderAdapter";
+import type { ChatMessage } from "./storage/sessionRepository";
 
-type SessionMessage = {
-  role: "user" | "assistant";
-  content: string;
-  kind?: "chat" | "error" | "thinking";
+type SessionMessage = ChatMessage & {
   attachments?: NormalizedImageAttachment[];
 };
 

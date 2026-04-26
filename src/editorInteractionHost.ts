@@ -104,6 +104,12 @@ export type QuickActionBindings = {
   handleQuickAction: (action: string) => Promise<void>;
 };
 
+export type QuickActionBindingFactory = (options: {
+  ensureReadySequence: () => Promise<void>;
+  handlePrompt: (prompt: string) => Promise<void>;
+  postUnavailableMessage: (message: string) => void;
+}) => QuickActionBindings;
+
 export function createQuickActionBindings(options: {
   getWorkspaceRoot: () => string | undefined;
   getActiveDocumentPath: () => string | undefined;
@@ -126,4 +132,22 @@ export function createQuickActionBindings(options: {
         toErrorMessage: options.toErrorMessage,
       }),
   };
+}
+
+export function createQuickActionBindingsFactory(options: {
+  getWorkspaceRoot: () => string | undefined;
+  getActiveDocumentPath: () => string | undefined;
+  postErrorMessage: (message: string) => void;
+  toErrorMessage: (error: unknown) => string;
+}): QuickActionBindingFactory {
+  return state =>
+    createQuickActionBindings({
+      getWorkspaceRoot: options.getWorkspaceRoot,
+      getActiveDocumentPath: options.getActiveDocumentPath,
+      ensureReadySequence: state.ensureReadySequence,
+      handlePrompt: state.handlePrompt,
+      postUnavailableMessage: state.postUnavailableMessage,
+      postErrorMessage: options.postErrorMessage,
+      toErrorMessage: options.toErrorMessage,
+    });
 }

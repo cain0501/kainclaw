@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 
 import {
   createWorkspaceStatusController,
+  createWorkspaceStatusControllerFactory,
   createWorkspaceStatusInvalidationBindings,
   createWorkspaceStatusRefreshBindings,
   invalidateWorkspaceStatusCaches,
@@ -202,6 +203,57 @@ describe("workspaceStatusHost", () => {
       providerLabel: "anthropic · claude-sonnet · 1 tools",
     });
     expect(postState).toHaveBeenCalledTimes(1);
+  });
+
+  it("builds a reusable workspace status controller factory around stable refresh deps", async () => {
+    const applyWorkspaceStatus = vi.fn();
+    const postState = vi.fn();
+    const clearCachedTools = vi.fn();
+    const runtime = { markMcpConfigDirty: vi.fn() };
+
+    const factory = createWorkspaceStatusControllerFactory({
+      resolveProviderConfig: async () => ({
+        config: {
+          type: "anthropic",
+          apiKey: "secret",
+          model: "claude-sonnet",
+        },
+        envMap: { HELLO: "world" },
+      }),
+      getEffortLevel: () => "medium",
+      createProviderRuntimeOptions: () => ({ effortLevel: "medium" }),
+      ensureConversationWorktreeHydrated: async () => undefined,
+      getEffectiveWorkspaceRoot: path => `${path}\\effective`,
+      getWorkspaceRuntime: async () => ({
+        getToolDefinitions: async () => [{ name: "read_file" }] as any,
+        getMcpStatusSummary: async () => [{ name: "github" }] as any,
+      }),
+    });
+
+    const controller = factory({
+      getWorkspaceFolderPath: () => "E:\\repo",
+      getIsBusy: () => false,
+      getHasPendingApproval: () => false,
+      applyWorkspaceStatus,
+      postState,
+      clearCachedTools,
+      runtimes: [runtime],
+    });
+
+    await controller.refresh();
+    expect(applyWorkspaceStatus).toHaveBeenCalledWith({
+      mcpServers: [{ name: "github" }],
+      providerLabel: "anthropic · claude-sonnet · 1 tools",
+    });
+    expect(postState).toHaveBeenCalledTimes(1);
+
+    applyWorkspaceStatus.mockClear();
+    controller.invalidate();
+    await vi.waitFor(() => {
+      expect(applyWorkspaceStatus).toHaveBeenCalledTimes(1);
+    });
+    expect(clearCachedTools).toHaveBeenCalledTimes(1);
+    expect(runtime.markMcpConfigDirty).toHaveBeenCalledTimes(1);
   });
 
   it("creates a controller that invalidates and schedules a refresh", async () => {

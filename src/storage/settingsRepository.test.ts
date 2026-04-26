@@ -30,6 +30,10 @@ class FakeHostAdapter implements IHostAdapter {
 
   showError(): void {}
 
+  async openExternal(): Promise<boolean> {
+    return true;
+  }
+
   async getSecret(key: string): Promise<string | undefined> {
     return this.secrets.get(key);
   }

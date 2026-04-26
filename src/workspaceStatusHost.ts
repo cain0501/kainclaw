@@ -72,6 +72,60 @@ export function createWorkspaceStatusRefreshBindings<
   return options;
 }
 
+export type WorkspaceStatusControllerFactory<
+  TRuntime extends WorkspaceRuntimeLike,
+> = (options: {
+  getWorkspaceFolderPath: () => string | undefined;
+  getIsBusy: () => boolean;
+  getHasPendingApproval: () => boolean;
+  applyWorkspaceStatus: (status: {
+    mcpServers: McpServerStatusSummary[];
+    providerLabel: string;
+  }) => void;
+  postState: () => void;
+  clearCachedTools: () => void;
+  runtimes: Iterable<McpDirtyRuntime>;
+}) => WorkspaceStatusController;
+
+export function createWorkspaceStatusControllerFactory<
+  TRuntime extends WorkspaceRuntimeLike,
+>(options: {
+  resolveProviderConfig: () => Promise<ProviderResolution>;
+  getEffortLevel: () => EffortLevel | undefined;
+  createProviderRuntimeOptions: (
+    config: AdapterProviderConfig,
+  ) => ProviderRuntimeOptions;
+  ensureConversationWorktreeHydrated: (
+    workspaceFolderPath: string,
+  ) => Promise<void>;
+  getEffectiveWorkspaceRoot: (workspaceFolderPath: string) => string;
+  getWorkspaceRuntime: (
+    envMap: Record<string, string>,
+  ) => Promise<TRuntime>;
+}): WorkspaceStatusControllerFactory<TRuntime> {
+  return state =>
+    createWorkspaceStatusController({
+      getWorkspaceFolderPath: state.getWorkspaceFolderPath,
+      getIsBusy: state.getIsBusy,
+      getHasPendingApproval: state.getHasPendingApproval,
+      refreshBindings: createWorkspaceStatusRefreshBindings({
+        resolveProviderConfig: options.resolveProviderConfig,
+        getEffortLevel: options.getEffortLevel,
+        createProviderRuntimeOptions: options.createProviderRuntimeOptions,
+        ensureConversationWorktreeHydrated:
+          options.ensureConversationWorktreeHydrated,
+        getEffectiveWorkspaceRoot: options.getEffectiveWorkspaceRoot,
+        getWorkspaceRuntime: options.getWorkspaceRuntime,
+        applyWorkspaceStatus: state.applyWorkspaceStatus,
+        postState: state.postState,
+      }),
+      invalidationBindings: {
+        clearCachedTools: state.clearCachedTools,
+        runtimes: state.runtimes,
+      },
+    });
+}
+
 export function createWorkspaceStatusController<
   TRuntime extends WorkspaceRuntimeLike,
 >(options: {

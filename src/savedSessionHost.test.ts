@@ -4,6 +4,7 @@ import {
   applySavedSessionActivation,
   buildSavedSessionActivationState,
   createSavedSessionActivationBindings,
+  createSavedSessionActivationBindingsFactory,
   loadSavedSessionPayload,
   tryRestoreSavedSessionWithHost,
 } from "./savedSessionHost";
@@ -201,6 +202,55 @@ describe("savedSessionHost", () => {
       markConversationBaseline: count => {
         calls.push(`baseline:${count}`);
       },
+    });
+
+    bindings.clearConversationBuffers();
+    bindings.setCurrentSessionId("session-1");
+    bindings.replaceSessionMessages([{ role: "user", content: "hello" }]);
+    bindings.restoreModelConversation([{ role: "assistant", content: "stored" }]);
+    bindings.restorePendingPlanVerification(undefined);
+    bindings.restoreCompactBoundary(undefined);
+    bindings.markConversationBaseline(2);
+
+    expect(sessionMessages).toEqual([{ role: "user", content: "hello" }]);
+    expect(calls).toEqual([
+      "clear",
+      "id:session-1",
+      "model:1",
+      "pending:no",
+      "compact:no",
+      "baseline:2",
+    ]);
+  });
+
+  it("builds a saved-session activation bindings factory around stable host callbacks", () => {
+    const sessionMessages: Array<{ role: "user" | "assistant"; content: string }> =
+      [];
+    const calls: string[] = [];
+
+    const factory = createSavedSessionActivationBindingsFactory({
+      clearConversationBuffers: () => {
+        calls.push("clear");
+      },
+      restoreModelConversation: modelConversation => {
+        calls.push(`model:${modelConversation?.length ?? 0}`);
+      },
+      restorePendingPlanVerification: pendingPlanVerification => {
+        calls.push(`pending:${pendingPlanVerification ? "yes" : "no"}`);
+      },
+      restoreCompactBoundary: compactBoundary => {
+        calls.push(`compact:${compactBoundary ? "yes" : "no"}`);
+      },
+      markConversationBaseline: count => {
+        calls.push(`baseline:${count}`);
+      },
+    });
+
+    const bindings = factory({
+      setCurrentSessionId: sessionId => {
+        calls.push(`id:${sessionId}`);
+      },
+      sessionMessages,
     });
 
     bindings.clearConversationBuffers();

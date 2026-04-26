@@ -6,6 +6,7 @@ import type {
 import type { ConversationTaskRuntime } from "./tasks/types";
 import type { ConversationWorktreeRuntime } from "./worktree/types";
 import type { VerificationVerdict } from "./verification/prompt";
+import type { McpOAuthHost } from "./mcpOAuth";
 import {
   WorkspaceRuntime,
   type WorkspacePlanModeController,
@@ -64,6 +65,7 @@ export type WorkspaceRuntimeHostOptions = {
     request: { command: string },
   ) => Promise<BackgroundCommandResult | null>;
   skillStore?: SkillStore;
+  mcpOAuthHost?: McpOAuthHost;
 };
 
 export class WorkspaceRuntimeHost {
@@ -115,6 +117,8 @@ export class WorkspaceRuntimeHost {
           request,
         ),
       this.options.skillStore,
+      undefined,
+      this.options.mcpOAuthHost,
     );
     this.runtimeByWorkspace.set(workspaceFolderPath, runtime);
     return runtime;

@@ -1,5 +1,11 @@
 import { BrowserRuntime } from "./browserRuntime";
-import { McpRuntime, type McpServerStatusSummary } from "./mcpRuntime";
+import {
+  McpRuntime,
+  type McpPromptCommandDefinition,
+  type McpPromptCommandResult,
+  type McpServerStatusSummary,
+} from "./mcpRuntime";
+import type { McpOAuthHost } from "./mcpOAuth";
 import {
   getBuiltInToolDefinitions,
   type ToolActionApprovalRequest,
@@ -75,9 +81,14 @@ export class WorkspaceRuntime {
     }) => Promise<{ taskId: string; command: string; workspaceRoot: string } | null>,
     private readonly skillStore?: SkillStore,
     enableLsp = true,
+    private readonly mcpOAuthHost?: McpOAuthHost,
   ) {
     this.browserRuntime = new BrowserRuntime(this.getWorkspaceRoot);
-    this.mcpRuntime = new McpRuntime(this.getWorkspaceRoot, envMap);
+    this.mcpRuntime = new McpRuntime(
+      this.getWorkspaceRoot,
+      envMap,
+      this.mcpOAuthHost,
+    );
     this.lspRuntime = enableLsp ? new VsCodeLspRuntime(this.getWorkspaceRoot) : undefined;
   }
 
@@ -99,6 +110,17 @@ export class WorkspaceRuntime {
 
   async getMcpStatusSummary(): Promise<McpServerStatusSummary[]> {
     return this.mcpRuntime.getStatusSummary();
+  }
+
+  async getMcpPromptCommands(): Promise<McpPromptCommandDefinition[]> {
+    return this.mcpRuntime.getPromptCommands();
+  }
+
+  async executeMcpPromptCommand(
+    commandName: string,
+    args: string,
+  ): Promise<McpPromptCommandResult> {
+    return this.mcpRuntime.executePromptCommand(commandName, args);
   }
 
   getToolContext(invokerKind: ToolContext["invokerKind"] = "main"): ToolContext {

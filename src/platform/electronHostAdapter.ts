@@ -1,6 +1,6 @@
 import path from "node:path";
 import { readFileSync, promises as fs } from "node:fs";
-import { app, safeStorage } from "electron";
+import { app, safeStorage, shell } from "electron";
 import type { IHostAdapter } from "./IHostAdapter";
 import type { WriteApprovalRequest, ToolActionApprovalRequest } from "../toolRuntime";
 import { resolveElectronStoragePath } from "./electronStoragePaths";
@@ -107,6 +107,15 @@ export class ElectronHostAdapter implements IHostAdapter {
 
   showError(message: string): void {
     this.sendToRenderer("host:error", { message });
+  }
+
+  async openExternal(url: string): Promise<boolean> {
+    try {
+      await shell.openExternal(url);
+      return true;
+    } catch {
+      return false;
+    }
   }
 
   // Secrets — encrypted with Electron safeStorage, stored in a JSON file

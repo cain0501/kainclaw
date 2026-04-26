@@ -21,6 +21,7 @@ describe("promptRequestFactory", () => {
       workspaceRoot: "E:\\repo",
       runtime: {} as PromptRuntimeLike,
       tools: [],
+      effectivePrompt: "fix tests",
     };
     const bindings = {
       entryBindings: {} as any,

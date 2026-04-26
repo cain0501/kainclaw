@@ -207,6 +207,7 @@ describe("promptExecutionHost", () => {
       workspaceRoot: "E:\\repo\\effective",
       runtime,
       tools: [{ name: "read_file" }],
+      effectivePrompt: "write code",
     });
     expect(setFreshWorkspaceTools).toHaveBeenCalledWith({
       tools: [{ name: "read_file" }],
@@ -246,5 +247,55 @@ describe("promptExecutionHost", () => {
     });
 
     expect(result).toEqual({ kind: "handled" });
+  });
+
+  it("rewrites MCP prompt commands into effective prompt content while keeping runtime context", async () => {
+    const runtime = {
+      getToolContext: () =>
+        ({ workspaceRoot: "E:\\repo", invokerKind: "main" }) as any,
+      getToolDefinitions: async () => [{ name: "read_file" }] as any,
+      getMcpStatusSummary: async () => [{ name: "github" }] as any,
+      getMcpPromptCommands: async () => [
+        {
+          name: "/mcp__github__summarize_issue",
+          description: "Summarize issue",
+          argNames: ["issue"],
+          serverName: "github",
+          promptName: "summarize_issue",
+          userFacingName: "github:summarize_issue (MCP)",
+        },
+      ],
+      executeMcpPromptCommand: async () => ({
+        content: "Summarize issue 123 with the latest comments.",
+        attachments: [{ data: "QUJDRA==", mimeType: "image/png" }],
+      }),
+    };
+
+    const result = await preparePromptExecutionStep({
+      prompt: "/mcp__github__summarize_issue 123",
+      workspaceFolderPath: "E:\\repo",
+      resolveProviderConfig: async () => ({
+        config: providerConfig,
+        envMap: {},
+      }),
+      getEffortLevel: () => "high",
+      createProviderRuntimeOptions: () => ({}),
+      ensureConversationWorktreeHydrated: async () => undefined,
+      getEffectiveWorkspaceRoot: path => path,
+      getWorkspaceRuntime: async () => runtime,
+      setFreshWorkspaceTools: () => undefined,
+      tryHandleLocalCommand: async () => null,
+      tryHandlePlanModeCommand: async () => null,
+      handleCompactCommand: async () => false,
+      handleReviewCommand: async () => false,
+      handleVerificationCommand: async () => false,
+    });
+
+    expect(result).toMatchObject({
+      kind: "continue",
+      workspaceRoot: "E:\\repo",
+      effectivePrompt: "Summarize issue 123 with the latest comments.",
+      effectivePromptAttachments: [{ data: "QUJDRA==", mimeType: "image/png" }],
+    });
   });
 });

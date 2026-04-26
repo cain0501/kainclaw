@@ -759,12 +759,12 @@ describe("toolRuntime background task semantics", () => {
       context,
     );
 
-    expect(exact.content).toContain("- TaskStop");
-    expect(exact.content).not.toContain("- KillShell");
-    expect(selected.content).toContain("- TaskOutput");
-    expect(selected.content.match(/- TaskOutput/g)).toHaveLength(1);
-    expect(selected.content).not.toContain("- AgentOutputTool");
-    expect(selected.content).not.toContain("- BashOutputTool");
+    expect(exact.content).toContain("- `TaskStop`");
+    expect(exact.content).not.toContain("- `KillShell`");
+    expect(selected.content).toContain("- `TaskOutput`");
+    expect(selected.content.match(/- `TaskOutput`/g)).toHaveLength(1);
+    expect(selected.content).not.toContain("- `AgentOutputTool`");
+    expect(selected.content).not.toContain("- `BashOutputTool`");
   });
 
   it("ToolSearchTool does not advertise LSP when the runtime is unavailable", async () => {
@@ -778,7 +778,7 @@ describe("toolRuntime background task semantics", () => {
       unavailableContext,
     );
 
-    expect(unavailableResult.content).not.toContain("- LSP");
+    expect(unavailableResult.content).not.toContain("- `LSP`");
 
     const availableContext: ToolContext = {
       workspaceRoot: "E:\\claudecodejingiang\\vscode-extension",
@@ -794,7 +794,7 @@ describe("toolRuntime background task semantics", () => {
       availableContext,
     );
 
-    expect(availableResult.content).toContain("- LSP");
+    expect(availableResult.content).toContain("- `LSP`");
   });
 
   it("LSP accepts Claude documentSymbol and forwards the internal operation", async () => {

@@ -78,6 +78,11 @@ export type CompanionHostBindings = {
   updateCompanionMood: (delta: number, countConversation?: boolean) => Promise<void>;
 };
 
+export type CompanionHostBindingFactory = (options: {
+  getCompanionData: () => CompanionData | undefined;
+  setCompanionData: (companionData: CompanionData | undefined) => void;
+}) => CompanionHostBindings;
+
 export function createCompanionHostBindings(options: {
   getMachineId: () => string;
   hasLicense: () => boolean;
@@ -117,4 +122,32 @@ export function createCompanionHostBindings(options: {
       options.postCompanionMood(delta, companionData);
     },
   };
+}
+
+export function createCompanionHostBindingsFactory(options: {
+  getMachineId: () => string;
+  hasLicense: () => boolean;
+  getStoredCompanion: () => CompanionData | undefined;
+  persistCompanionData: (
+    companionData: CompanionData | undefined,
+  ) => Promise<void>;
+  postCompanionInit: (companionData: CompanionData | undefined) => void;
+  postCompanionState: (state: CompanionState) => void;
+  postCompanionMood: (
+    delta: number,
+    companionData: CompanionData | undefined,
+  ) => void;
+}): CompanionHostBindingFactory {
+  return state =>
+    createCompanionHostBindings({
+      getMachineId: options.getMachineId,
+      hasLicense: options.hasLicense,
+      getStoredCompanion: options.getStoredCompanion,
+      getCompanionData: state.getCompanionData,
+      setCompanionData: state.setCompanionData,
+      persistCompanionData: options.persistCompanionData,
+      postCompanionInit: options.postCompanionInit,
+      postCompanionState: options.postCompanionState,
+      postCompanionMood: options.postCompanionMood,
+    });
 }

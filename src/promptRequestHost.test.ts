@@ -32,6 +32,7 @@ describe("promptRequestHost", () => {
       workspaceRoot: "E:\\repo",
       runtime: {} as PromptRuntimeLike,
       tools: [],
+      effectivePrompt: "fix tests",
     };
 
     vi.mocked(promptEntryHost.preparePromptEntryWithHost).mockResolvedValue({

@@ -2,8 +2,10 @@ import { describe, expect, it, vi } from "vitest";
 
 import {
   buildWebviewStatePayload,
-  createWebviewStateBindings,
   createStreamingStateBindings,
+  createStreamingStateBindingsFactory,
+  createWebviewStateBindings,
+  createWebviewStateBindingsFactory,
   WebviewStateHost,
 } from "./webviewStateHost";
 
@@ -199,11 +201,82 @@ describe("webviewStateHost", () => {
     vi.useRealTimers();
   });
 
+  it("builds a streaming bindings factory around a stable host", async () => {
+    vi.useFakeTimers();
+    const postMessage = vi.fn();
+    const host = new WebviewStateHost(postMessage);
+    let isBusy = true;
+    let streamingText = "hello";
+
+    const factory = createStreamingStateBindingsFactory({ host });
+    const bindings = factory({
+      getIsBusy: () => isBusy,
+      getStreamingText: () => streamingText,
+    });
+
+    bindings.scheduleStreamingStateUpdate();
+    await vi.advanceTimersByTimeAsync(33);
+    expect(postMessage).toHaveBeenCalledWith({
+      type: "stateUpdate",
+      isBusy: true,
+      streamingText: "hello",
+    });
+
+    vi.useRealTimers();
+  });
+
   it("creates state bindings that build and post sidebar state payloads", async () => {
     const postMessage = vi.fn();
     const host = new WebviewStateHost(postMessage);
     const bindings = createWebviewStateBindings({
       host,
+      getIsBusy: () => true,
+      getProviderLabel: () => "anthropic",
+      getMcpServers: () => [{ name: "github" }],
+      getLiveActivities: () => [{ id: "live-1" }],
+      getLastRunActivities: () => [{ id: "done-1" }],
+      getMessages: () => [{ role: "assistant", content: "hello" }],
+      getEffortLevel: () => "high",
+      getFastMode: () => true,
+      getFastModeIndicator: () => ({ label: "enabled", connected: true }),
+      getShowThinkingSummaries: () => false,
+      getPlanMode: () => ({ active: true, planFilePath: "plan.md" }),
+      getPendingApproval: () => ({ kind: "tool" }),
+      getOnboardingDone: () => true,
+    });
+
+    bindings.postState();
+
+    expect(postMessage).not.toHaveBeenCalled();
+    await Promise.resolve();
+
+    expect(postMessage).toHaveBeenCalledWith({
+      type: "state",
+      isBusy: true,
+      providerLabel: "anthropic",
+      mcpServers: [{ name: "github" }],
+      liveActivities: [{ id: "live-1" }],
+      lastRunActivities: [{ id: "done-1" }],
+      messages: [{ role: "assistant", content: "hello" }],
+      effortLevel: "high",
+      fastMode: true,
+      fastModeLabel: "enabled",
+      fastModeConnected: true,
+      showThinkingSummaries: false,
+      planMode: {
+        active: true,
+        planFilePath: "plan.md",
+      },
+      pendingApproval: { kind: "tool" },
+      onboardingDone: true,
+    });
+  });
+
+  it("builds a state bindings factory around a stable host", async () => {
+    const postMessage = vi.fn();
+    const host = new WebviewStateHost(postMessage);
+    const factory = createWebviewStateBindingsFactory({ host });
+    const bindings = factory({
       getIsBusy: () => true,
       getProviderLabel: () => "anthropic",
       getMcpServers: () => [{ name: "github" }],

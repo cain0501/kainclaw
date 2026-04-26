@@ -544,6 +544,8 @@ describe("promptFlowHost", () => {
           properties: {},
         },
       }],
+      effectivePrompt: "Expanded MCP prompt",
+      effectivePromptAttachments: [{ data: "QUJDRA==", mimeType: "image/png" }],
     };
 
     await runPromptFlowWithHost({
@@ -558,7 +560,8 @@ describe("promptFlowHost", () => {
 
     expect(options.createModelActivity).toHaveBeenCalledTimes(1);
     expect(applyPromptTurnUserContextMock).toHaveBeenCalledWith({
-      prompt: "fix @src/extension.ts",
+      prompt: "Expanded MCP prompt",
+      attachments: [{ data: "QUJDRA==", mimeType: "image/png" }],
       workspaceRoot: "E:\\repo",
       config: promptExecution.config,
       envMap: { HELLO: "world" },
@@ -568,7 +571,7 @@ describe("promptFlowHost", () => {
       maybeAutoCompactConversation: options.maybeAutoCompactConversation,
     });
     expect(runPromptTurnWithHostMock).toHaveBeenCalledWith({
-      prompt: "fix @src/extension.ts",
+      prompt: "Expanded MCP prompt",
       workspaceRoot: "E:\\repo",
       config: promptExecution.config,
       envMap: { HELLO: "world" },

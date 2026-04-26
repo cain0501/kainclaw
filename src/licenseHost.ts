@@ -9,6 +9,11 @@ export type LicenseHostBindings = {
   restoreLicenseFlags: () => Promise<void>;
 };
 
+export type LicenseHostBindingFactory = (options: {
+  getCurrentLicenseFlags: () => LicenseFlags | undefined;
+  setLicenseFlags: (flags: LicenseFlags | undefined) => void;
+}) => LicenseHostBindings;
+
 export async function restoreStoredLicenseFlags(options: {
   getCurrentLicenseFlags: () => LicenseFlags | undefined;
   getSecret: (key: string) => Promise<string | undefined>;
@@ -66,4 +71,27 @@ export function createLicenseHostBindings(options: {
         warn: options.warn,
       }),
   };
+}
+
+export function createLicenseHostBindingsFactory(options: {
+  getSecret: (key: string) => Promise<string | undefined>;
+  verifyLicense: (rawKey: string) => LicenseVerificationResult;
+  postLicenseRequired: (feature: keyof LicenseFlags) => void;
+  log: (...args: unknown[]) => void;
+  warn: (...args: unknown[]) => void;
+}): LicenseHostBindingFactory {
+  return state =>
+    createLicenseHostBindings({
+      getCurrentLicenseFlags: state.getCurrentLicenseFlags,
+      getSecret: options.getSecret,
+      verifyLicense: options.verifyLicense,
+      setLicenseFlags: flags => {
+        if (flags) {
+          state.setLicenseFlags(flags);
+        }
+      },
+      postLicenseRequired: options.postLicenseRequired,
+      log: options.log,
+      warn: options.warn,
+    });
 }

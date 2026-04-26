@@ -1,4 +1,5 @@
 import type { IProviderAdapter, ProviderConfig as AdapterProviderConfig } from "./agent/providers/IProviderAdapter";
+import type { NormalizedImageAttachment } from "./agent/providers/IProviderAdapter";
 import type { PromptExecutionResult, PromptRuntimeLike } from "./promptExecutionHost";
 import type { PromptSharedBindings } from "./promptBindingsHost";
 import { applyPromptTurnUserContext } from "./promptSetupHost";
@@ -9,6 +10,7 @@ import type { EffortLevel, ProviderRuntimeOptions } from "./thinkingEffort/types
 type PromptConversationMessage = {
   role: "user" | "assistant";
   content: string;
+  attachments?: NormalizedImageAttachment[];
 };
 
 type PhaseActivityStatus = "running" | "done" | "error";
@@ -490,11 +492,13 @@ export async function runPromptFlowWithHost<
   }
 
   const continuePromptExecution = options.promptExecution;
+  const effectivePrompt = continuePromptExecution.effectivePrompt;
   const modelActivityId = options.createModelActivity();
   const applyPromptTurnUserContextImpl =
     options.applyPromptTurnUserContextImpl ?? applyPromptTurnUserContext;
   await applyPromptTurnUserContextImpl({
-    prompt: options.prompt,
+    prompt: effectivePrompt,
+    attachments: continuePromptExecution.effectivePromptAttachments,
     workspaceRoot: continuePromptExecution.workspaceRoot,
     config: continuePromptExecution.config,
     envMap: continuePromptExecution.envMap,
@@ -507,7 +511,7 @@ export async function runPromptFlowWithHost<
   const runPromptTurnWithHostImpl =
     options.runPromptTurnWithHostImpl ?? runPromptTurnWithHost;
   await runPromptTurnWithHostImpl({
-    prompt: options.prompt,
+    prompt: effectivePrompt,
     workspaceRoot: continuePromptExecution.workspaceRoot,
     config: continuePromptExecution.config,
     envMap: continuePromptExecution.envMap,

@@ -108,6 +108,33 @@ export type WebviewStateBindings = {
   postState: () => void;
 };
 
+export type StreamingStateBindingFactory = (options: {
+  getIsBusy: () => boolean;
+  getStreamingText: () => string;
+}) => StreamingStateBindings;
+
+export type WebviewStateBindingFactory = (options: {
+  getIsBusy: () => boolean;
+  getProviderLabel: () => string;
+  getMcpServers: () => unknown[];
+  getLiveActivities: () => unknown[];
+  getLastRunActivities: () => unknown[];
+  getMessages: () => unknown[];
+  getEffortLevel: () => string | null;
+  getFastMode: () => boolean;
+  getFastModeIndicator: () => {
+    label: string;
+    connected: boolean;
+  };
+  getShowThinkingSummaries: () => boolean;
+  getPlanMode: () => {
+    active: boolean;
+    planFilePath?: string | null;
+  };
+  getPendingApproval: () => unknown;
+  getOnboardingDone: () => boolean;
+}) => WebviewStateBindings;
+
 export function createStreamingStateBindings(options: {
   host: WebviewStateHost;
   getIsBusy: () => boolean;
@@ -125,6 +152,17 @@ export function createStreamingStateBindings(options: {
       }));
     },
   };
+}
+
+export function createStreamingStateBindingsFactory(options: {
+  host: WebviewStateHost;
+}): StreamingStateBindingFactory {
+  return state =>
+    createStreamingStateBindings({
+      host: options.host,
+      getIsBusy: state.getIsBusy,
+      getStreamingText: state.getStreamingText,
+    });
 }
 
 export function createWebviewStateBindings(options: {
@@ -177,4 +215,26 @@ export function createWebviewStateBindings(options: {
       });
     },
   };
+}
+
+export function createWebviewStateBindingsFactory(options: {
+  host: WebviewStateHost;
+}): WebviewStateBindingFactory {
+  return state =>
+    createWebviewStateBindings({
+      host: options.host,
+      getIsBusy: state.getIsBusy,
+      getProviderLabel: state.getProviderLabel,
+      getMcpServers: state.getMcpServers,
+      getLiveActivities: state.getLiveActivities,
+      getLastRunActivities: state.getLastRunActivities,
+      getMessages: state.getMessages,
+      getEffortLevel: state.getEffortLevel,
+      getFastMode: state.getFastMode,
+      getFastModeIndicator: state.getFastModeIndicator,
+      getShowThinkingSummaries: state.getShowThinkingSummaries,
+      getPlanMode: state.getPlanMode,
+      getPendingApproval: state.getPendingApproval,
+      getOnboardingDone: state.getOnboardingDone,
+    });
 }

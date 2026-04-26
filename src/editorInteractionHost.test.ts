@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 import {
   buildEditorSelectionPayload,
   createQuickActionBindings,
+  createQuickActionBindingsFactory,
   getActiveWorkspaceFilePath,
   handleQuickActionRequest,
   postEditorSelectionPayload,
@@ -125,6 +126,37 @@ describe("editorInteractionHost", () => {
       postErrorMessage,
       toErrorMessage: error =>
         error instanceof Error ? error.message : String(error),
+    });
+
+    await bindings.handleQuickAction("readActiveFile");
+    expect(handlePrompt).toHaveBeenCalled();
+
+    handlePrompt.mockClear();
+    workspaceRoot = undefined;
+    activeDocumentPath = undefined;
+
+    await bindings.handleQuickAction("readActiveFile");
+    expect(postUnavailableMessage).toHaveBeenCalled();
+  });
+
+  it("builds a quick-action bindings factory around stable host getters", async () => {
+    let workspaceRoot: string | undefined = "E:\\repo";
+    let activeDocumentPath: string | undefined = "E:\\repo\\src\\extension.ts";
+    const handlePrompt = vi.fn(async () => undefined);
+    const postUnavailableMessage = vi.fn();
+    const postErrorMessage = vi.fn();
+
+    const factory = createQuickActionBindingsFactory({
+      getWorkspaceRoot: () => workspaceRoot,
+      getActiveDocumentPath: () => activeDocumentPath,
+      postErrorMessage,
+      toErrorMessage: error =>
+        error instanceof Error ? error.message : String(error),
+    });
+    const bindings = factory({
+      ensureReadySequence: async () => undefined,
+      handlePrompt,
+      postUnavailableMessage,
     });
 
     await bindings.handleQuickAction("readActiveFile");

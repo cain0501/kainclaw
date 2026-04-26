@@ -644,7 +644,7 @@ export function formatToolSearchResults(
         tool.annotations?.destructiveHint ? "destructive" : "",
       ].filter(Boolean);
       const suffix = flags.length > 0 ? ` [${flags.join(", ")}]` : "";
-      return `- ${tool.name}${suffix}: ${tool.description}`;
+      return `- \`${tool.name}\`${suffix}: ${tool.description}`;
     }),
   ].join("\n");
 }

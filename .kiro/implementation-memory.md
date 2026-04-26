@@ -2,6 +2,10 @@
 
 ## 当前覆盖说明 / Current Override - 2026-04-27
 
+- 硬规则（用户明确设定）：
+  - 只要功能已经在本地 Claude 源码存在，实施和调试都必须先沿着 Claude 的源码链路做端到端复刻，再做 KainClaw 宿主适配。
+  - 不允许先猜测、先规避、先做平行实现，再回头“修成像 Claude”。
+  - 只有 Claude 源码没有覆盖的能力，才允许按 KainClaw 自己的标准独立设计。
 - Electron shell 命令接线规则：
   - 如果某个能力已经在 `src/` 里有成熟的 host/runtime 路径，优先把桌面壳接回那条路径，不要发明 desktop-only 的平行重写。
 - 本轮确认的具体例子：
@@ -35,12 +39,15 @@
   - ToolSearchTool：搜索合同按 Claude `ToolSearchTool` 源码收口，支持 `select:ToolA,ToolB`、裸工具名精确选择、`mcp__server` 前缀、`+required optional` 必选词搜索，以及 `max_results` 输入别名。
   - Task tool aliases：`KillShell` 归一到 `TaskStop`，`AgentOutputTool` / `BashOutputTool` 归一到 `TaskOutput`；ToolSearch 对这些 deprecated Claude aliases 返回 canonical 工具名。
   - MCP runtime：按 Claude MCP 源码补齐 `type: "http"` / `type: "sse"` transport 语义、`needs-auth` + `mcp__<server>__authenticate` placeholder、无 resources server 的明确错误、MCP result priority、`isError` 工具错误处理，以及 `normalizeNameForMCP` 对外工具名安全化。
+  - MCP runtime：远端 `http` / `sse` OAuth 现在也按 Claude `OAuthClientProvider + localhost callback + PKCE` 主链接通；prompt surface 按 Claude `fetchCommandsForClient()` 语义落为 `mcp__<server>__<prompt>` commands；执行层兼容模型产出的单下划线 / 连字符转下划线变体；Electron transcript 已补回 Claude-style `tool_use / tool_result` 可见性。
 - MCP 本轮定向验证：
   - `npm test -- --run src/mcpRuntime.test.ts src/mcpRuntime.helpers.test.ts`（20 tests passed）
   - `npm test -- --run src/toolRuntime.test.ts`（90 tests passed）
   - `npm run check`
   - `npm run build`
   - `git diff --check -- src/mcpRuntime.ts src/mcpRuntime.test.ts src/mcpRuntime.helpers.test.ts`
+  - `npm test`
+  - `npm run build:electron`
 - Electron 路由规则：
   - 必须先识别斜杠命令，再做普通聊天 / 图片意图推断。
   - 否则最近生成图上下文会错误劫持 `/compact` 这类命令，把它们误路由到图片编辑流程。
@@ -109,7 +116,7 @@
 
 ### 3. 验证基线登记
 
-- 当前登记基线：`145` 个测试文件，`1019` 个测试通过。
+- 当前登记基线：`146` 个测试文件，`1053` 个测试通过。
 - 当前登记通过命令：
   - `npm test`
   - `npm run check`
@@ -242,7 +249,10 @@
 - MCP tool result 的优先级要按 Claude 语义处理：`isError: true` 是工具错误；成功结果优先格式化 `toolResult`，再处理 `structuredContent` 和 `content[]`。
 - MCP tool-level error 不能污染 server connection 状态；只有连接层失败才应影响 server 健康状态。
 - 对外暴露的 MCP tool/server 名要走 Claude-compatible `normalizeNameForMCP` 安全化；内部调用仍使用原始配置里的 server/tool 名。resource read 接收 normalized server name 时，要能映射回原始 server 名。
-- 仍未完成的 MCP parity：OAuth browser flow / PKCE、prompts、templates。
+- 远端 `http` / `sse` MCP OAuth 要按 Claude `OAuthClientProvider` 主链接入宿主能力：浏览器打开、localhost callback、token/client/discovery state 持久化、认证成功后的 tool cache 失效。不要再用“配置 token / headers”提示词假装 OAuth 已完成。
+- Claude 源码里的 MCP prompts 不是另一套本地工具，而是动态 commands。KainClaw 也应优先按 `mcp__<server>__<prompt>` command surface 复刻，而不是平行发明 prompt tool。
+- 调 Claude 覆盖的 MCP/工具问题时，首先要把真实 `tool_use / tool_result` 可见性补出来，再分析工具为什么返回空。不要只看 assistant 事后总结去猜结果语义。
+- 仍未完成的 MCP parity：`oauth.xaa`、更深 refresh/discovery/step-up edge cases，以及 Claude 源码里没有明确暴露成工具面的 templates 行为。
 
 ### 1. `tasks / toolRuntime` Phase 2
 
@@ -302,6 +312,19 @@
 
 - `handlePrompt()` 不应继续堆大而全逻辑，要持续往 host / factory / runtime 下沉。
 - 一旦某条逻辑已经有可复用的 host / helper / runtime，就不要再把薄包装重新塞回 `extension.ts`。
+- 当前已经验证过的一组稳定模式是：把固定依赖收进 host factory，再把 `extension.ts` 里会变化的会话状态、宿主字段和 webview 回调作为第二段注入。
+- 最近已经按这个模式继续收口的装配包括：
+  - `extensionPromptRequestParts`
+  - `sessionPanelActions`
+  - `readySequenceRunner`
+  - `settingsPanelActions`
+  - `companionBindings`
+  - `quickActionBindings`
+  - `licenseHostBindings`
+  - `workspaceStatusController`
+  - `webviewStateBindings / streamingStateBindings`
+  - `savedSessionActivationBindings`
+- 这些收口都属于 KainClaw 自己的 VS Code / Electron 宿主 wiring 减债，不属于重写 Claude 覆盖区逻辑；Claude 已覆盖的 runtime / prompt / tool / session 语义仍然保持源码优先、行为不漂移。
 - 当前已经形成可复用的宿主减债路径，代表文件包括：
   - `legacyEnvFallback.ts`
   - `providerHost.ts`

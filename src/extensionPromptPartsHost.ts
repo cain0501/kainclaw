@@ -105,6 +105,12 @@ export type ExtensionPromptRequestBindings = {
   profileStore?: ProfileStore;
 };
 
+export type ExtensionPromptRequestPartsFactory = (options: {
+  workspaceFolderPath: string;
+  onToolError: () => void;
+  state: ExtensionPromptRequestState;
+}) => PromptRequestExtensionParts<WorkspaceRuntime>;
+
 export function createExtensionPromptRequestParts(options: {
   workspaceFolderPath: string;
   onToolError: () => void;
@@ -266,4 +272,16 @@ export function createExtensionPromptRequestParts(options: {
       profileStore: options.bindings.profileStore,
     }),
   };
+}
+
+export function createExtensionPromptRequestPartsFactory(
+  bindings: ExtensionPromptRequestBindings,
+): ExtensionPromptRequestPartsFactory {
+  return options =>
+    createExtensionPromptRequestParts({
+      workspaceFolderPath: options.workspaceFolderPath,
+      onToolError: options.onToolError,
+      state: options.state,
+      bindings,
+    });
 }

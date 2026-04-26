@@ -139,6 +139,14 @@ export class VsCodeHostAdapter implements IHostAdapter {
     void vscode.window.showErrorMessage(`Cain Claude: ${message}`);
   }
 
+  async openExternal(url: string): Promise<boolean> {
+    try {
+      return await vscode.env.openExternal(vscode.Uri.parse(url));
+    } catch {
+      return false;
+    }
+  }
+
   // Secrets
   async getSecret(key: string): Promise<string | undefined> {
     return this.context.secrets.get(key);

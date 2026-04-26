@@ -121,6 +121,10 @@ class FakeHostAdapter implements IHostAdapter {
 
   showError(): void {}
 
+  async openExternal(): Promise<boolean> {
+    return true;
+  }
+
   async getSecret(key: string): Promise<string | undefined> {
     return this.secrets.get(key);
   }
@@ -300,6 +304,66 @@ describe("ElectronChatPanel session lifecycle", () => {
         messages: Array<{ content: string }>;
       };
     expect(lastStatePayload.messages.map(message => message.content)).toEqual(["EDFG"]);
+  });
+
+  it("records tool use and tool result messages in the visible session transcript", async () => {
+    const harness = await createHarness();
+    tempDirs.push(harness.storagePath);
+
+    await harness.settings.setOnboardingDone(true);
+    await harness.panel.handleMessage({ type: "ready" });
+
+    vi.mocked(resolveProviderConfig).mockResolvedValue({
+      config: {
+        type: "anthropic",
+        apiKey: "test-key",
+        model: "claude-sonnet-4-6",
+      },
+      envMap: {},
+    });
+    vi.mocked(buildProviderAdapter).mockReturnValue({} as never);
+    vi.mocked(handleElectronPromptCommand).mockResolvedValue({ kind: "continue" });
+    vi.mocked(runAgent).mockImplementation(async (_history, options) => {
+      options.onToolStart?.(
+        "mcp__notion__notion-get-users",
+        { page_size: 5 },
+        "exec-1",
+      );
+      options.onToolEnd?.(
+        "exec-1",
+        "Fetched users",
+        false,
+        "{\"results\":[{\"name\":\"ii cai n\"}]}",
+      );
+      return "我已经读取到 1 个用户。";
+    });
+
+    await harness.panel.handleMessage({
+      type: "sendPrompt",
+      prompt: "列出 Notion 用户",
+    });
+
+    const sessionId = harness.settings.getActiveSessionId();
+    expect(sessionId).toBeTruthy();
+
+    const messages = await harness.sessions.loadMessages(sessionId!);
+    expect(
+      messages.some(message =>
+        message.kind === "tool_use" &&
+        message.toolName === "mcp__notion__notion-get-users" &&
+        message.toolInputPreview === "{\"page_size\":5}" &&
+        message.excludeFromConversation === true,
+      ),
+    ).toBe(true);
+    expect(
+      messages.some(message =>
+        message.kind === "tool_result" &&
+        message.toolSummary === "Fetched users" &&
+        message.content.includes("\"ii cai n\"") &&
+        message.excludeFromConversation === true,
+      ),
+    ).toBe(true);
+    expect(messages[messages.length - 1]?.content).toBe("我已经读取到 1 个用户。");
   });
 
   it("allows different sessions to run requests concurrently", async () => {

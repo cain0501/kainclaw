@@ -7,6 +7,13 @@ import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { SSEClientTransport } from "@modelcontextprotocol/sdk/client/sse.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
+import type { NormalizedImageAttachment } from "./agent/providers/IProviderAdapter";
+import {
+  createMcpOAuthClientProvider,
+  type McpOAuthConfig,
+  type McpOAuthHost,
+  performMcpOAuthFlow,
+} from "./mcpOAuth";
 import type { McpToolAdapter, ToolContext, ToolDefinition, ToolExecutionResult, ToolInput } from "./toolRuntime";
 
 type JsonRecord = Record<string, unknown>;
@@ -20,6 +27,7 @@ type RawServerConfig = {
   env?: Record<string, string>;
   url?: string;
   headers?: Record<string, string>;
+  oauth?: McpOAuthConfig;
   disabled?: boolean;
 };
 
@@ -37,12 +45,14 @@ type ResolvedServerConfig =
       name: string;
       url: string;
       headers?: Record<string, string>;
+      oauth?: McpOAuthConfig;
     }
   | {
       kind: "sse";
       name: string;
       url: string;
       headers?: Record<string, string>;
+      oauth?: McpOAuthConfig;
     };
 
 type ToolMetadata = {
@@ -50,6 +60,24 @@ type ToolMetadata = {
   toolName: string;
   annotations?: ToolDefinition["annotations"];
   kind?: "server-tool" | "auth-placeholder" | "status-placeholder";
+  config?: ResolvedServerConfig;
+};
+
+export type McpPromptCommandDefinition = {
+  name: string;
+  description: string;
+  argNames: string[];
+  serverName: string;
+  promptName: string;
+  userFacingName: string;
+};
+
+type PromptMetadata = {
+  serverName: string;
+  promptName: string;
+  argNames: string[];
+  description: string;
+  userFacingName: string;
 };
 
 type McpResource = {
@@ -76,6 +104,35 @@ type RawMcpToolResult = {
   _meta?: unknown;
 };
 
+type RawPromptMessageContent =
+  | {
+      type: "text";
+      text: string;
+    }
+  | {
+      type: "image";
+      data: string;
+      mimeType?: string;
+    }
+  | {
+      type: "audio";
+      data: string;
+      mimeType?: string;
+    }
+  | {
+      type: "resource";
+      resource: {
+        uri: string;
+        mimeType?: string;
+        text?: string;
+        blob?: string;
+      };
+    };
+
+type RawPromptMessage = {
+  content: RawPromptMessageContent;
+};
+
 type ConnectionRecord = {
   client: Client;
   transport: StdioClientTransport | StreamableHTTPClientTransport | SSEClientTransport;
@@ -87,6 +144,11 @@ export type McpServerStatusSummary = {
   toolCount: number;
   transport: "stdio" | "streamable-http" | "sse";
   error?: string;
+};
+
+export type McpPromptCommandResult = {
+  content: string;
+  attachments?: NormalizedImageAttachment[];
 };
 
 const CONFIG_CANDIDATES = [".mcp.json", ".cain-mcp.json"];
@@ -144,6 +206,13 @@ export function normalizeNameForMCP(name: string): string {
     normalized = normalized.replace(/_+/g, "_").replace(/^_|_$/g, "");
   }
   return normalized;
+}
+
+function normalizeMcpInvocationName(name: string): string {
+  return name
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "_")
+    .replace(/^_+|_+$/g, "");
 }
 
 function buildMcpToolName(serverName: string, toolName: string): string {
@@ -349,12 +418,15 @@ export class McpRuntime implements McpToolAdapter {
   private readonly serverConfigs = new Map<string, ResolvedServerConfig>();
   private readonly connections = new Map<string, ConnectionRecord>();
   private readonly toolMetadata = new Map<string, ToolMetadata>();
+  private readonly promptMetadata = new Map<string, PromptMetadata>();
   private readonly serverStatuses = new Map<string, McpServerStatusSummary>();
   private cachedToolDefinitions: ToolDefinition[] | undefined;
+  private cachedPromptCommands: McpPromptCommandDefinition[] | undefined;
 
   constructor(
     private readonly getWorkspaceRoot: () => string,
     private envMap: Record<string, string>,
+    private readonly oauthHost?: McpOAuthHost,
   ) {}
 
   setEnvMap(envMap: Record<string, string>): void {
@@ -411,6 +483,7 @@ export class McpRuntime implements McpToolAdapter {
             toolName: tool.name,
             annotations,
             kind: "server-tool",
+            config,
           });
 
           toolDefinitions.push({
@@ -436,6 +509,7 @@ export class McpRuntime implements McpToolAdapter {
             toolName: MCP_AUTHENTICATE_TOOL_NAME,
             annotations: authTool.annotations,
             kind: "auth-placeholder",
+            config,
           });
           console.warn(`[KainClaw MCP] Failed to list tools for ${serverName}: ${status.error ?? "unknown error"}`);
           continue;
@@ -461,6 +535,7 @@ export class McpRuntime implements McpToolAdapter {
             readOnlyHint: true,
           },
           kind: "status-placeholder",
+          config,
         });
         console.warn(`[KainClaw MCP] Failed to list tools for ${serverName}: ${status.error ?? "unknown error"}`);
       }
@@ -472,6 +547,77 @@ export class McpRuntime implements McpToolAdapter {
 
     this.cachedToolDefinitions = toolDefinitions.filter(tool => !tool.name.endsWith("__status"));
     return [...this.cachedToolDefinitions];
+  }
+
+  async getPromptCommands(): Promise<McpPromptCommandDefinition[]> {
+    const configChanged = await this.refreshConfig();
+    if (!configChanged && this.cachedPromptCommands) {
+      return [...this.cachedPromptCommands];
+    }
+
+    const commands: McpPromptCommandDefinition[] = [];
+    this.promptMetadata.clear();
+
+    for (const [serverName, config] of this.serverConfigs) {
+      try {
+        const connection = await this.ensureConnection(serverName, config);
+        const capabilities = connection.client.getServerCapabilities();
+        if (!capabilities?.prompts) {
+          continue;
+        }
+
+        const result = await connection.client.request(
+          { method: "prompts/list" },
+          undefined as any,
+        ) as {
+          prompts?: Array<{
+            name: string;
+            description?: string;
+            arguments?: Array<{ name: string }> | Record<string, { name: string }>;
+          }>;
+        };
+
+        for (const prompt of result.prompts ?? []) {
+          if (!prompt?.name || typeof prompt.name !== "string") {
+            continue;
+          }
+
+          const argNames = Array.isArray(prompt.arguments)
+            ? prompt.arguments
+                .map(argument => argument?.name)
+                .filter((name): name is string => typeof name === "string" && name.trim().length > 0)
+            : Object.values(prompt.arguments ?? {})
+                .map(argument => argument?.name)
+                .filter((name): name is string => typeof name === "string" && name.trim().length > 0);
+
+          const name = `/mcp__${normalizeNameForMCP(serverName)}__${prompt.name}`;
+          const command: McpPromptCommandDefinition = {
+            name,
+            description: prompt.description ?? "",
+            argNames,
+            serverName,
+            promptName: prompt.name,
+            userFacingName: `${serverName}:${prompt.name} (MCP)`,
+          };
+
+          this.promptMetadata.set(name.toLowerCase(), {
+            serverName,
+            promptName: prompt.name,
+            argNames,
+            description: command.description,
+            userFacingName: command.userFacingName,
+          });
+          commands.push(command);
+        }
+      } catch (error) {
+        await this.handleServerOperationFailure(serverName, config, error, {
+          throwError: false,
+        });
+      }
+    }
+
+    this.cachedPromptCommands = commands;
+    return [...commands];
   }
 
   async getStatusSummary(): Promise<McpServerStatusSummary[]> {
@@ -487,8 +633,8 @@ export class McpRuntime implements McpToolAdapter {
   async executeTool(name: string, input: ToolInput, context: ToolContext): Promise<ToolExecutionResult> {
     await this.refreshConfig();
 
-    const metadata = this.toolMetadata.get(name) ?? this.parseToolName(name);
-    const config = this.serverConfigs.get(metadata.serverName);
+    const metadata = this.resolveToolMetadata(name) ?? this.parseToolName(name);
+    const config = this.serverConfigs.get(metadata.serverName) ?? metadata.config;
 
     if (!config) {
       throw new Error(`MCP server "${metadata.serverName}" is not configured`);
@@ -530,7 +676,31 @@ export class McpRuntime implements McpToolAdapter {
     }
 
     if (metadata.kind === "auth-placeholder") {
-      return this.describeMcpAuthentication(metadata.serverName, config);
+      if (!this.oauthHost) {
+        return this.describeMcpAuthentication(metadata.serverName, config);
+      }
+      if (config.kind === "stdio") {
+        return this.describeMcpAuthentication(metadata.serverName, config);
+      }
+
+      await performMcpOAuthFlow({
+        serverName: metadata.serverName,
+        config,
+        host: this.oauthHost,
+        onAuthorizationUrl: () => undefined,
+        abortSignal: context.abortSignal,
+      });
+      await this.closeConnection(metadata.serverName);
+      this.serverStatuses.delete(metadata.serverName);
+      this.cachedToolDefinitions = undefined;
+      this.cachedPromptCommands = undefined;
+
+      return {
+        summary: `Authenticated MCP server ${metadata.serverName}`,
+        content:
+          `Authentication completed for "${metadata.serverName}". ` +
+          "The MCP server can now be reconnected. Ask the user to rerun their request if they need the newly available tools immediately.",
+      };
     }
 
     try {
@@ -638,6 +808,52 @@ export class McpRuntime implements McpToolAdapter {
     }
   }
 
+  async executePromptCommand(
+    commandName: string,
+    args: string,
+  ): Promise<McpPromptCommandResult> {
+    await this.getPromptCommands();
+
+    const metadata = this.promptMetadata.get(commandName.trim().toLowerCase());
+    if (!metadata) {
+      throw new Error(`Unknown MCP prompt command: ${commandName}`);
+    }
+
+    const config = this.serverConfigs.get(metadata.serverName);
+    if (!config) {
+      throw new Error(`MCP server "${metadata.serverName}" is not configured`);
+    }
+
+    const connection = await this.ensureConnection(metadata.serverName, config);
+    const result = await connection.client.getPrompt({
+      name: metadata.promptName,
+      arguments: Object.fromEntries(
+        metadata.argNames.map((name, index) => [name, args.split(" ")[index] ?? ""]),
+      ),
+    }) as { messages?: RawPromptMessage[] };
+
+    const textParts: string[] = [];
+    const attachments: NormalizedImageAttachment[] = [];
+
+    for (const message of result.messages ?? []) {
+      const transformed = await this.transformPromptMessageContent(
+        message.content,
+        metadata.serverName,
+      );
+      if (transformed.content) {
+        textParts.push(transformed.content);
+      }
+      if (transformed.attachments?.length) {
+        attachments.push(...transformed.attachments);
+      }
+    }
+
+    return {
+      content: textParts.join("\n\n"),
+      ...(attachments.length > 0 ? { attachments } : {}),
+    };
+  }
+
   private describeMcpAuthentication(
     serverName: string,
     config: ResolvedServerConfig,
@@ -668,8 +884,10 @@ export class McpRuntime implements McpToolAdapter {
     this.connections.clear();
     this.serverConfigs.clear();
     this.toolMetadata.clear();
+    this.promptMetadata.clear();
     this.serverStatuses.clear();
     this.cachedToolDefinitions = undefined;
+    this.cachedPromptCommands = undefined;
   }
 
   private async refreshConfig(): Promise<boolean> {
@@ -799,6 +1017,7 @@ export class McpRuntime implements McpToolAdapter {
           name,
           url: substituteEnv(trimTrailingSlashes(rawConfig.url), this.envMap),
           headers: substituteRecord(rawConfig.headers, this.envMap),
+          ...(rawConfig.oauth ? { oauth: rawConfig.oauth } : {}),
         });
         continue;
       }
@@ -861,12 +1080,32 @@ export class McpRuntime implements McpToolAdapter {
       });
     } else if (config.kind === "streamable-http") {
       transport = new StreamableHTTPClientTransport(new URL(config.url), {
+        ...(this.oauthHost
+          ? {
+              authProvider: createMcpOAuthClientProvider({
+                serverName,
+                config,
+                host: this.oauthHost,
+                skipBrowserOpen: true,
+              }),
+            }
+          : {}),
         requestInit: {
           headers: config.headers,
         },
       });
     } else {
       transport = new SSEClientTransport(new URL(config.url), {
+        ...(this.oauthHost
+          ? {
+              authProvider: createMcpOAuthClientProvider({
+                serverName,
+                config,
+                host: this.oauthHost,
+                skipBrowserOpen: true,
+              }),
+            }
+          : {}),
         eventSourceInit: {
           fetch: config.headers
             ? (input, init) => fetch(input, {
@@ -1017,13 +1256,82 @@ export class McpRuntime implements McpToolAdapter {
     };
   }
 
+  private async transformPromptMessageContent(
+    content: RawPromptMessageContent,
+    serverName: string,
+  ): Promise<McpPromptCommandResult> {
+    switch (content.type) {
+      case "text":
+        return { content: content.text };
+      case "image":
+        return {
+          content: "",
+          attachments: [
+            {
+              data: content.data,
+              mimeType: content.mimeType || "image/png",
+            },
+          ],
+        };
+      case "audio": {
+        const savedPath = await this.persistBinaryBuffer(
+          Buffer.from(content.data, "base64"),
+          content.mimeType,
+          "mcp-prompt-audio",
+        );
+        const stats = await fs.stat(savedPath);
+        return {
+          content:
+            `Audio content from ${serverName} was saved to ${savedPath}` +
+            ` (${content.mimeType ?? "application/octet-stream"}, ${stats.size} bytes).`,
+        };
+      }
+      case "resource": {
+        const resource = content.resource;
+        if (typeof resource.text === "string") {
+          return { content: resource.text };
+        }
+
+        if (typeof resource.blob === "string") {
+          const savedPath = await this.persistBinaryBuffer(
+            Buffer.from(resource.blob, "base64"),
+            resource.mimeType,
+            "mcp-prompt-resource",
+          );
+          const stats = await fs.stat(savedPath);
+          return {
+            content:
+              `Resource from ${serverName} at ${resource.uri} was saved to ${savedPath}` +
+              ` (${resource.mimeType ?? "application/octet-stream"}, ${stats.size} bytes).`,
+          };
+        }
+
+        return {
+          content: JSON.stringify(resource, null, 2),
+        };
+      }
+      default:
+        return {
+          content: JSON.stringify(content, null, 2),
+        };
+    }
+  }
+
   private async persistBinaryResource(blob: string, mimeType?: string): Promise<string> {
+    return this.persistBinaryBuffer(Buffer.from(blob, "base64"), mimeType, "mcp-resource");
+  }
+
+  private async persistBinaryBuffer(
+    buffer: Buffer,
+    mimeType: string | undefined,
+    prefix: string,
+  ): Promise<string> {
     const outputDir = path.join(os.tmpdir(), "cain-claude-mcp");
     await fs.mkdir(outputDir, { recursive: true });
 
-    const filename = `mcp-resource-${Date.now()}-${randomUUID().slice(0, 8)}.${getBinaryFileExtension(mimeType)}`;
+    const filename = `${prefix}-${Date.now()}-${randomUUID().slice(0, 8)}.${getBinaryFileExtension(mimeType)}`;
     const outputPath = path.join(outputDir, filename);
-    await fs.writeFile(outputPath, Buffer.from(blob, "base64"));
+    await fs.writeFile(outputPath, buffer);
     return outputPath;
   }
 
@@ -1038,5 +1346,25 @@ export class McpRuntime implements McpToolAdapter {
       serverName: this.resolveConfiguredServerName(parts[1] || ""),
       toolName: parts.slice(2).join("__"),
     };
+  }
+
+  private resolveToolMetadata(name: string): ToolMetadata | undefined {
+    const exact = this.toolMetadata.get(name);
+    if (exact) {
+      return exact;
+    }
+
+    if (!/^mcp[_]/i.test(name)) {
+      return undefined;
+    }
+
+    const normalizedRequestedName = normalizeMcpInvocationName(name);
+    for (const [toolName, metadata] of this.toolMetadata.entries()) {
+      if (normalizeMcpInvocationName(toolName) === normalizedRequestedName) {
+        return metadata;
+      }
+    }
+
+    return undefined;
   }
 }

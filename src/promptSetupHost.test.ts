@@ -167,10 +167,15 @@ describe("promptSetupHost", () => {
 
   it("applies prompt turn user context, mention context, and auto-compact in order", async () => {
     const calls: string[] = [];
-    const appended: Array<{ role: "user" | "assistant"; content: string }> = [];
+    const appended: Array<{
+      role: "user" | "assistant";
+      content: string;
+      attachments?: Array<{ data: string; mimeType: string }>;
+    }> = [];
 
     await applyPromptTurnUserContext({
       prompt: "fix @src/extension.ts",
+      attachments: [{ data: "QUJDRA==", mimeType: "image/png" }],
       workspaceRoot: "E:\\repo",
       config: {
         type: "anthropic",
@@ -199,7 +204,11 @@ describe("promptSetupHost", () => {
     });
 
     expect(appended).toEqual([
-      { role: "user", content: "fix @src/extension.ts" },
+      {
+        role: "user",
+        content: "fix @src/extension.ts",
+        attachments: [{ data: "QUJDRA==", mimeType: "image/png" }],
+      },
       { role: "user", content: "file context payload" },
     ]);
     expect(calls).toEqual([

@@ -1,4 +1,5 @@
 import type { ProviderConfig as AdapterProviderConfig } from "./agent/providers/IProviderAdapter";
+import type { NormalizedImageAttachment } from "./agent/providers/IProviderAdapter";
 import { getBuiltInAgents } from "./agent/builtInAgents";
 import {
   getCustomAgent,
@@ -51,6 +52,21 @@ type RuntimeLike = {
       error?: string;
     }>
   >;
+  getMcpPromptCommands?(): Promise<
+    Array<{
+      name: string;
+      description: string;
+      argNames: string[];
+      userFacingName: string;
+    }>
+  >;
+  executeMcpPromptCommand?(
+    commandName: string,
+    args: string,
+  ): Promise<{
+    content: string;
+    attachments?: NormalizedImageAttachment[];
+  }>;
 };
 
 export type RegisteredPromptSlashCommand = {
@@ -62,6 +78,11 @@ export type RegisteredPromptSlashCommand = {
 type PromptCommandChainResult =
   | { kind: "continue" }
   | { kind: "reply"; reply: string }
+  | {
+      kind: "rewrite";
+      prompt: string;
+      attachments?: NormalizedImageAttachment[];
+    }
   | { kind: "handled" };
 
 type ParsedPromptSlashCommand = {
@@ -127,7 +148,7 @@ const REGISTERED_PROMPT_SLASH_COMMANDS: RegisteredPromptSlashCommand[] = [
   },
   {
     name: "/mcp",
-    description: "List MCP server connection status for the current workspace.",
+    description: "List MCP server status, use `/mcp prompts` to inspect MCP prompt commands, or `/mcp auth <server>` to start MCP OAuth.",
     stage: "runtime",
   },
   {
@@ -615,6 +636,150 @@ async function buildMcpCommandReply(runtime: RuntimeLike): Promise<string> {
   ].join("\n");
 }
 
+async function runMcpAuthCommand(
+  runtime: RuntimeLike,
+  tools: ToolDefinition[],
+  serverName: string,
+): Promise<string> {
+  const normalizedServerName = serverName.trim().toLowerCase();
+  if (!normalizedServerName) {
+    return "Usage: `/mcp auth <server>`";
+  }
+
+  const authTool = tools.find(tool =>
+    tool.name.toLowerCase() === `mcp__${normalizedServerName}__authenticate`,
+  );
+
+  if (!authTool) {
+    return `MCP auth tool for "${serverName}" is not available. Run /tools ${serverName} to inspect the current MCP tool list.`;
+  }
+
+  const toolContext = runtime.getToolContext?.("main");
+  if (!toolContext) {
+    return "MCP runtime is not available in the current workspace runtime.";
+  }
+
+  const result = await executeTool(authTool.name, {}, toolContext as any);
+  return result.content;
+}
+
+async function runMcpCallCommand(
+  runtime: RuntimeLike,
+  tools: ToolDefinition[],
+  args: string,
+): Promise<string> {
+  const trimmedArgs = args.trim();
+  if (!trimmedArgs) {
+    return "Usage: `/mcp call <tool_name> [json_input]`";
+  }
+
+  const firstSpaceIndex = trimmedArgs.indexOf(" ");
+  const toolName = firstSpaceIndex === -1
+    ? trimmedArgs
+    : trimmedArgs.slice(0, firstSpaceIndex).trim();
+  const rawInput = firstSpaceIndex === -1
+    ? ""
+    : trimmedArgs.slice(firstSpaceIndex + 1).trim();
+
+  if (!toolName) {
+    return "Usage: `/mcp call <tool_name> [json_input]`";
+  }
+
+  const tool = tools.find(candidate => candidate.name === toolName);
+  if (!tool) {
+    return `Tool "${toolName}" is not available. Run /tools to inspect the current tool list.`;
+  }
+
+  let parsedInput: Record<string, unknown> = {};
+  if (rawInput) {
+    try {
+      const parsed = JSON.parse(rawInput);
+      if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+        return "MCP tool input must be a JSON object. Example: `/mcp call mcp__notion__notion-get-users {\"page_size\":5}`";
+      }
+      parsedInput = parsed as Record<string, unknown>;
+    } catch (error) {
+      return `Failed to parse MCP tool JSON input: ${error instanceof Error ? error.message : String(error)}`;
+    }
+  }
+
+  const toolContext = runtime.getToolContext?.("main");
+  if (!toolContext) {
+    return "MCP runtime is not available in the current workspace runtime.";
+  }
+
+  const result = await executeTool(tool.name, parsedInput, toolContext as any);
+  return result.content;
+}
+
+async function buildMcpPromptCommandReply(
+  runtime: RuntimeLike,
+  args: string,
+): Promise<string> {
+  if (typeof runtime.getMcpPromptCommands !== "function") {
+    return "MCP runtime is not available in the current workspace runtime.";
+  }
+
+  const query = args.trim().toLowerCase();
+  const commands = await runtime.getMcpPromptCommands();
+  const filtered = query
+    ? commands.filter(command =>
+        command.name.toLowerCase().includes(query) ||
+        command.userFacingName.toLowerCase().includes(query) ||
+        command.description.toLowerCase().includes(query),
+      )
+    : commands;
+
+  if (filtered.length === 0) {
+    return query
+      ? `No MCP prompt commands matched "${query}".`
+      : "No MCP prompt commands are currently available.";
+  }
+
+  return [
+    query
+      ? `MCP prompt commands matching "${query}":`
+      : "MCP prompt commands:",
+    ...filtered.map(command =>
+      `- \`${command.name}\`` +
+      (command.argNames.length > 0
+        ? ` ${command.argNames.map(name => `<${name}>`).join(" ")}`
+        : "") +
+      `: ${command.description || command.userFacingName}`,
+    ),
+  ].join("\n");
+}
+
+async function tryRewriteMcpPromptCommand(
+  runtime: RuntimeLike,
+  parsedCommand: ParsedPromptSlashCommand,
+): Promise<Extract<PromptCommandChainResult, { kind: "rewrite" }> | null> {
+  if (
+    typeof runtime.getMcpPromptCommands !== "function" ||
+    typeof runtime.executeMcpPromptCommand !== "function"
+  ) {
+    return null;
+  }
+
+  const commands = await runtime.getMcpPromptCommands();
+  const matched = commands.find(
+    command => command.name.toLowerCase() === parsedCommand.name,
+  );
+  if (!matched) {
+    return null;
+  }
+
+  const result = await runtime.executeMcpPromptCommand(
+    matched.name,
+    parsedCommand.args,
+  );
+  return {
+    kind: "rewrite",
+    prompt: result.content,
+    ...(result.attachments?.length ? { attachments: result.attachments } : {}),
+  };
+}
+
 async function buildTodoCommandReply(
   runtime: RuntimeLike,
   args: string,
@@ -877,7 +1042,51 @@ export async function runPromptCommandChain(options: {
     "/tools": async () => true,
   };
 
+  const rewrittenMcpPromptCommand = await tryRewriteMcpPromptCommand(
+    options.runtime,
+    parsedCommand,
+  );
+  if (rewrittenMcpPromptCommand) {
+    return rewrittenMcpPromptCommand;
+  }
+
   if (parsedCommand.name === "/mcp") {
+    const normalizedArgs = parsedCommand.args.trim();
+    const callMatch = normalizedArgs.match(/^call\s+(.+)$/i);
+    if (callMatch) {
+      return {
+        kind: "reply",
+        reply: await runMcpCallCommand(
+          options.runtime,
+          options.tools,
+          callMatch[1] ?? "",
+        ),
+      };
+    }
+
+    const authMatch = normalizedArgs.match(/^auth\s+(.+)$/i);
+    if (authMatch) {
+      return {
+        kind: "reply",
+        reply: await runMcpAuthCommand(
+          options.runtime,
+          options.tools,
+          authMatch[1] ?? "",
+        ),
+      };
+    }
+
+    const promptsMatch = normalizedArgs.match(/^prompts(?:\s+(.*))?$/i);
+    if (promptsMatch) {
+      return {
+        kind: "reply",
+        reply: await buildMcpPromptCommandReply(
+          options.runtime,
+          promptsMatch[1] ?? "",
+        ),
+      };
+    }
+
     return {
       kind: "reply",
       reply: await buildMcpCommandReply(options.runtime),

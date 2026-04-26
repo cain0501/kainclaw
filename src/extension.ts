@@ -55,17 +55,17 @@ import {
 } from "./promptRequestExtensionHost";
 import {
   createReadySequenceController,
-  createReadySequenceRunner,
+  createReadySequenceRunnerFactory,
 } from "./readySequenceHost";
 import {
-  tryRestoreSavedSessionWithHost,
-  createSavedSessionActivationBindings,
+  createSavedSessionActivationBindingsFactory,
 } from "./savedSessionHost";
 import {
   clearConversationHostState,
 } from "./sessionLifecycleHost";
 import {
   createSessionPanelActions,
+  createSessionPanelActionsFactory,
   type SessionPanelActions,
 } from "./sessionPanelHost";
 import {
@@ -86,7 +86,7 @@ import {
   type ToolDefinition,
 } from "./toolRuntime";
 import {
-  createQuickActionBindings,
+  createQuickActionBindingsFactory,
   postEditorSelectionPayload,
   type QuickActionBindings,
 } from "./editorInteractionHost";
@@ -116,19 +116,18 @@ import {
   type AutoMemoryHostBindings,
 } from "./autoMemoryHost";
 import {
-  createWebviewStateBindings,
-  createStreamingStateBindings,
+  createStreamingStateBindingsFactory,
+  createWebviewStateBindingsFactory,
   type StreamingStateBindings,
   type WebviewStateBindings,
   WebviewStateHost,
 } from "./webviewStateHost";
 import {
-  createWorkspaceStatusController,
-  createWorkspaceStatusRefreshBindings,
+  createWorkspaceStatusControllerFactory,
   type WorkspaceStatusController,
 } from "./workspaceStatusHost";
 import {
-  createSettingsPanelActions,
+  createSettingsPanelActionsFactory,
   type SettingsPanelActions,
 } from "./settingsPanelHost";
 import {
@@ -154,7 +153,7 @@ import { SwarmCoordinator } from "./agent/swarm/SwarmCoordinator";
 import { hasExplicitSwarmIntent } from "./agent/swarm/swarmIntent";
 import { verifyLicense, type LicenseFlags } from "./license/licenseManager";
 import {
-  createLicenseHostBindings,
+  createLicenseHostBindingsFactory,
   type LicenseHostBindings,
 } from "./licenseHost";
 import {
@@ -163,7 +162,7 @@ import {
 } from "./providerHost";
 import type { CompanionData } from "./companion/companionTypes";
 import {
-  createCompanionHostBindings,
+  createCompanionHostBindingsFactory,
   type CompanionHostBindings,
   persistCompanionData as persistCompanionDataHost,
 } from "./companionHost";
@@ -196,7 +195,10 @@ import { PersistentTaskRuntimeStore } from "./tasks/taskRuntime";
 import { PersistentWorktreeRuntimeStore } from "./worktree/runtime";
 import { WorkspaceRuntimeHost } from "./workspaceRuntimeHost";
 import { WorkspaceRuntime } from "./workspaceRuntimeShell";
-import { createExtensionPromptRequestParts } from "./extensionPromptPartsHost";
+import {
+  createExtensionPromptRequestPartsFactory,
+  type ExtensionPromptRequestPartsFactory,
+} from "./extensionPromptPartsHost";
 import { SkillStore } from "./skills/skillStore";
 import { ProfileStore } from "./userModel/profileStore";
 
@@ -225,6 +227,10 @@ class ChatSidebarProvider implements vscode.WebviewViewProvider, vscode.Disposab
   private readonly activityTracker = new ActivityTracker({
     onChange: () => this.postState(),
     onWorktreeToolSuccess: () => {
+      this.cachedTools = undefined;
+      this.cachedToolsWorkspaceRoot = undefined;
+    },
+    onMcpAuthToolSuccess: () => {
       this.cachedTools = undefined;
       this.cachedToolsWorkspaceRoot = undefined;
     },
@@ -264,6 +270,10 @@ class ChatSidebarProvider implements vscode.WebviewViewProvider, vscode.Disposab
   private readonly workspaceRuntimeHost: WorkspaceRuntimeHost;
   private readonly workspaceStatusController: WorkspaceStatusController;
   private readonly disposeFastModeRuntimeListener: () => void;
+  private readonly extensionPromptRequestPartsFactory:
+    ExtensionPromptRequestPartsFactory;
+  private readonly sessionPanelActionsFactory:
+    ReturnType<typeof createSessionPanelActionsFactory>;
   private cachedToolsWorkspaceRoot: string | undefined;
   private sessionsPanelOpen = false;
   private lastSessionsDataSignature = "";
@@ -406,8 +416,10 @@ class ChatSidebarProvider implements vscode.WebviewViewProvider, vscode.Disposab
     this.webviewStateHost = new WebviewStateHost(payload => {
       this.webviewView?.webview.postMessage(payload);
     });
-    this.webviewStateBindings = createWebviewStateBindings({
+    const webviewStateBindingsFactory = createWebviewStateBindingsFactory({
       host: this.webviewStateHost,
+    });
+    this.webviewStateBindings = webviewStateBindingsFactory({
       getIsBusy: () => this.isBusy,
       getProviderLabel: () => this.providerLabel,
       getMcpServers: () => this.mcpServers,
@@ -426,8 +438,10 @@ class ChatSidebarProvider implements vscode.WebviewViewProvider, vscode.Disposab
       getPendingApproval: () => this.approvalHost.getPendingApproval() ?? null,
       getOnboardingDone: () => this.settings.isOnboardingDone(),
     });
-    this.streamingStateBindings = createStreamingStateBindings({
+    const streamingStateBindingsFactory = createStreamingStateBindingsFactory({
       host: this.webviewStateHost,
+    });
+    this.streamingStateBindings = streamingStateBindingsFactory({
       getIsBusy: () => this.isBusy,
       getStreamingText: () => this.streamingText,
     });
@@ -443,26 +457,29 @@ class ChatSidebarProvider implements vscode.WebviewViewProvider, vscode.Disposab
         this.conversationScopeBindings.getEffectiveWorkspaceRoot(workspaceRoot),
       backgroundTaskHost: this.backgroundTaskHost,
     });
-    const savedSessionActivationBindings = createSavedSessionActivationBindings({
-      clearConversationBuffers: () => this.clearConversationBuffers(),
+    const savedSessionActivationBindingsFactory =
+      createSavedSessionActivationBindingsFactory({
+        clearConversationBuffers: () => this.clearConversationBuffers(),
+        restoreModelConversation: modelConversation =>
+          this.conversationRuntimeStateBindings.restoreModelConversationFromRuntime(
+            modelConversation,
+          ),
+        restorePendingPlanVerification: pendingPlanVerification =>
+          this.conversationRuntimeStateBindings.restorePendingPlanVerificationState(
+            pendingPlanVerification,
+          ),
+        restoreCompactBoundary: compactBoundary =>
+          this.conversationRuntimeStateBindings.restoreCompactBoundaryFromRuntime(
+            compactBoundary,
+          ),
+        markConversationBaseline: count =>
+          this.autoMemoryBindings.markCurrentConversationBaseline(count),
+      });
+    const savedSessionActivationBindings = savedSessionActivationBindingsFactory({
       setCurrentSessionId: sessionId => {
         this.currentSessionId = sessionId;
       },
       sessionMessages: this.sessionMessages,
-      restoreModelConversation: modelConversation =>
-        this.conversationRuntimeStateBindings.restoreModelConversationFromRuntime(
-          modelConversation,
-        ),
-      restorePendingPlanVerification: pendingPlanVerification =>
-        this.conversationRuntimeStateBindings.restorePendingPlanVerificationState(
-          pendingPlanVerification,
-        ),
-      restoreCompactBoundary: compactBoundary =>
-        this.conversationRuntimeStateBindings.restoreCompactBoundaryFromRuntime(
-          compactBoundary,
-        ),
-      markConversationBaseline: count =>
-        this.autoMemoryBindings.markCurrentConversationBaseline(count),
     });
     const createProviderRuntimeOptions =
       createProviderRuntimeOptionsFactoryWithHost({
@@ -625,12 +642,10 @@ class ChatSidebarProvider implements vscode.WebviewViewProvider, vscode.Disposab
           request.command,
         ),
       skillStore: this.skillStore,
+      mcpOAuthHost: this.host,
     });
-    this.workspaceStatusController = createWorkspaceStatusController({
-      getWorkspaceFolderPath: getPrimaryWorkspaceFolderPath,
-      getIsBusy: () => this.isBusy,
-      getHasPendingApproval: () => this.approvalHost.hasPendingApproval(),
-      refreshBindings: createWorkspaceStatusRefreshBindings({
+    const workspaceStatusControllerFactory =
+      createWorkspaceStatusControllerFactory({
         resolveProviderConfig: () =>
           resolveProviderConfig(
             this.settings,
@@ -647,72 +662,35 @@ class ChatSidebarProvider implements vscode.WebviewViewProvider, vscode.Disposab
             requirePrimaryWorkspaceFolderPath(),
             envMap,
           ),
-        applyWorkspaceStatus: ({ mcpServers, providerLabel }) => {
-          this.mcpServers = mcpServers;
-          this.providerLabel = providerLabel || this.providerLabel;
-        },
-        postState: () => this.postState(),
-      }),
-      invalidationBindings: {
-        clearCachedTools: () => {
-          this.cachedTools = undefined;
-          this.cachedToolsWorkspaceRoot = undefined;
-        },
-        runtimes: this.workspaceRuntimeHost.getRuntimes(),
+      });
+    this.workspaceStatusController = workspaceStatusControllerFactory({
+      getWorkspaceFolderPath: getPrimaryWorkspaceFolderPath,
+      getIsBusy: () => this.isBusy,
+      getHasPendingApproval: () => this.approvalHost.hasPendingApproval(),
+      applyWorkspaceStatus: ({ mcpServers, providerLabel }) => {
+        this.mcpServers = mcpServers;
+        this.providerLabel = providerLabel || this.providerLabel;
       },
+      postState: () => this.postState(),
+      clearCachedTools: () => {
+        this.cachedTools = undefined;
+        this.cachedToolsWorkspaceRoot = undefined;
+      },
+      runtimes: this.workspaceRuntimeHost.getRuntimes(),
     });
     this.disposeFastModeRuntimeListener = onFastModeRuntimeStateChanged(() => {
       this.postState();
       this.workspaceStatusController.requestRefresh();
     });
-    this.sessionPanelActions = createSessionPanelActions({
+    this.sessionPanelActionsFactory = createSessionPanelActionsFactory({
       settings: this.settings,
       sessions: this.sessions,
-      workspaceRoot: getPrimaryWorkspaceFolderPath(),
       getPersistenceEnabled: () =>
         this.conversationFeatureBindings.isSessionPersistenceEnabled(),
-      getCurrentSessionId: () => this.currentSessionId,
-      getPreviousSignature: () => this.lastSessionsDataSignature,
-      setSignature: signature => {
-        this.lastSessionsDataSignature = signature;
-      },
-      disposeSwarm: clearSwarm,
-      resetActiveRuntimeControllers: () => this.resetActiveRuntimeControllers(),
-      resetPlanMode: () => {
-        setPlanModeState(resetPlanModeState());
-      },
-      clearCachedTools: () => {
-        this.cachedTools = undefined;
-        this.cachedToolsWorkspaceRoot = undefined;
-      },
-      ...savedSessionActivationBindings,
-      clearPendingPlanVerification: persist =>
-        this.conversationRuntimeStateBindings.setPendingPlanVerificationState(
-          undefined,
-          persist === false ? { persist: false } : undefined,
-        ),
-      setTransientConversationId: id => {
-        if (id) {
-          this.transientConversationId = id;
-        }
-      },
-      resetAutoMemoryConversation: sessionId =>
-        this.autoMemoryBindings.resetConversation(sessionId),
-      ensureConversationWorktreeHydrated: workspaceRoot =>
-        this.conversationScopeBindings.ensureConversationWorktreeHydrated(workspaceRoot),
-      shouldRefreshSessionsList: () => this.shouldRefreshSessionsList(),
-      postState: () => this.postState(),
       refreshWorkspaceStatus: this.workspaceStatusController.requestRefresh,
-      publishSessions: payload => {
-        this.webviewView?.webview.postMessage({
-          type: "sessions:data",
-          sessions: payload.sessions,
-          activeId: payload.activeId,
-        });
-      },
-      logSession: (event, details) => {
-        this.logSession(event, details);
-      },
+      savedSessionActivationBindings,
+      markConversationBaseline: count =>
+        this.autoMemoryBindings.markCurrentConversationBaseline(count),
       showSaveDialog: async input => {
         const saveUri = await vscode.window.showSaveDialog({
           defaultUri: input.defaultPath ? vscode.Uri.file(input.defaultPath) : undefined,
@@ -731,14 +709,56 @@ class ChatSidebarProvider implements vscode.WebviewViewProvider, vscode.Disposab
         void vscode.window.showInformationMessage(message);
       },
     });
-    this.companionBindings = createCompanionHostBindings({
+    this.sessionPanelActions = this.sessionPanelActionsFactory({
+      workspaceRoot: getPrimaryWorkspaceFolderPath(),
+      getCurrentSessionId: () => this.currentSessionId,
+      setCurrentSessionId: id => {
+        this.currentSessionId = id;
+      },
+      getPreviousSignature: () => this.lastSessionsDataSignature,
+      setSignature: signature => {
+        this.lastSessionsDataSignature = signature;
+      },
+      disposeSwarm: clearSwarm,
+      resetActiveRuntimeControllers: () => this.resetActiveRuntimeControllers(),
+      resetPlanMode: () => {
+        setPlanModeState(resetPlanModeState());
+      },
+      clearCachedTools: () => {
+        this.cachedTools = undefined;
+        this.cachedToolsWorkspaceRoot = undefined;
+      },
+      clearPendingPlanVerification: persist =>
+        this.conversationRuntimeStateBindings.setPendingPlanVerificationState(
+          undefined,
+          persist === false ? { persist: false } : undefined,
+        ),
+      setTransientConversationId: id => {
+        if (id) {
+          this.transientConversationId = id;
+        }
+      },
+      resetAutoMemoryConversation: sessionId =>
+        this.autoMemoryBindings.resetConversation(sessionId),
+      ensureConversationWorktreeHydrated: workspaceRoot =>
+        this.conversationScopeBindings.ensureConversationWorktreeHydrated(workspaceRoot),
+      shouldRefreshSessionsList: () => this.shouldRefreshSessionsList(),
+      postState: () => this.postState(),
+      publishSessions: payload => {
+        this.webviewView?.webview.postMessage({
+          type: "sessions:data",
+          sessions: payload.sessions,
+          activeId: payload.activeId,
+        });
+      },
+      logSession: (event, details) => {
+        this.logSession(event, details);
+      },
+    });
+    const companionBindingsFactory = createCompanionHostBindingsFactory({
       getMachineId: () => vscode.env.machineId || os.hostname(),
       hasLicense: () => this.settings.isLicenseActivated() || !!this.licenseFlags,
       getStoredCompanion: () => this.host.getState<CompanionData>(COMPANION_STATE_KEY),
-      getCompanionData: () => this.companionData,
-      setCompanionData: companionData => {
-        this.companionData = companionData;
-      },
       persistCompanionData: async companionData => {
         await persistCompanionDataHost({
           companionData,
@@ -756,28 +776,42 @@ class ChatSidebarProvider implements vscode.WebviewViewProvider, vscode.Disposab
         this.webviewStateHost.postCompanionMood(delta, companionData);
       },
     });
-    this.settingsPanelActions = createSettingsPanelActions({
-      settings: this.settings,
-      postWebviewMessage: payload => {
-        this.webviewView?.webview.postMessage(payload);
+    this.companionBindings = companionBindingsFactory({
+      getCompanionData: () => this.companionData,
+      setCompanionData: companionData => {
+        this.companionData = companionData;
       },
-      postState: () => this.postState(),
+    });
+    const settingsPanelActionsFactory = createSettingsPanelActionsFactory({
+      settings: this.settings,
       refreshWorkspaceStatus: this.workspaceStatusController.requestRefresh,
       initializeCompanion: () => this.companionBindings.initializeCompanion(),
       storeLicenseKey: rawKey => this.host.storeSecret("cain.licenseKey", rawKey),
       setLicenseFlags: flags => {
         this.licenseFlags = flags;
       },
+      verifyLicense,
+    });
+    this.settingsPanelActions = settingsPanelActionsFactory({
+      postWebviewMessage: payload => {
+        this.webviewView?.webview.postMessage(payload);
+      },
+      postState: () => this.postState(),
       logSession: (event, details) => {
         this.logSession(event, details);
       },
       shouldRefreshSessionsList: () => this.shouldRefreshSessionsList(),
       handleSessionsLoad: this.sessionPanelActions.loadSessions,
-      verifyLicense,
     });
-    this.quickActionBindings = createQuickActionBindings({
+    const quickActionBindingsFactory = createQuickActionBindingsFactory({
       getWorkspaceRoot: getPrimaryWorkspaceFolderPath,
       getActiveDocumentPath: () => vscode.window.activeTextEditor?.document.uri.fsPath,
+      postErrorMessage: message => {
+        void vscode.window.showErrorMessage(`Cain Claude: ${message}`);
+      },
+      toErrorMessage,
+    });
+    this.quickActionBindings = quickActionBindingsFactory({
       ensureReadySequence: () => this.readySequenceController.ensureReadySequence(),
       handlePrompt: prompt => this.handlePrompt(prompt),
       postUnavailableMessage: message => {
@@ -788,18 +822,10 @@ class ChatSidebarProvider implements vscode.WebviewViewProvider, vscode.Disposab
         });
         this.postState();
       },
-      postErrorMessage: message => {
-        void vscode.window.showErrorMessage(`Cain Claude: ${message}`);
-      },
-      toErrorMessage,
     });
-    this.licenseHostBindings = createLicenseHostBindings({
-      getCurrentLicenseFlags: () => this.licenseFlags,
+    const licenseHostBindingsFactory = createLicenseHostBindingsFactory({
       getSecret: key => this.host.getSecret(key),
       verifyLicense,
-      setLicenseFlags: flags => {
-        this.licenseFlags = flags;
-      },
       postLicenseRequired: feature => {
         this.webviewStateHost.postLicenseRequired(feature);
       },
@@ -810,7 +836,13 @@ class ChatSidebarProvider implements vscode.WebviewViewProvider, vscode.Disposab
         console.warn(...args);
       },
     });
-    const readySequenceRunner = createReadySequenceRunner({
+    this.licenseHostBindings = licenseHostBindingsFactory({
+      getCurrentLicenseFlags: () => this.licenseFlags,
+      setLicenseFlags: flags => {
+        this.licenseFlags = flags;
+      },
+    });
+    const readySequenceRunner = createReadySequenceRunnerFactory({
       restoreLicenseFlags: () => this.licenseHostBindings.restoreLicenseFlags(),
       initializeCompanion: () => this.companionBindings.initializeCompanion(),
       getOnboardingDone: () => this.settings.isOnboardingDone(),
@@ -820,20 +852,9 @@ class ChatSidebarProvider implements vscode.WebviewViewProvider, vscode.Disposab
       getWorkspaceHash,
       getLastSessionId: () => this.settings.getActiveSessionId(),
       readIndex: () => this.sessions.readIndex(),
-      tryRestoreSavedSession: (sessionId, source) =>
-        tryRestoreSavedSessionWithHost({
-          sessionId,
-          source,
-          loadMessages: id => this.sessions.loadMessages(id),
-          loadRuntimeState: id => this.sessions.loadRuntimeState(id),
-          ...savedSessionActivationBindings,
-          logRestoreSkippedEmpty: details => {
-            this.logSession("restore-skipped-empty", details);
-          },
-          logRestoreSuccess: details => {
-            this.logSession("restore-success", details);
-          },
-        }),
+      loadMessages: id => this.sessions.loadMessages(id),
+      loadRuntimeState: id => this.sessions.loadRuntimeState(id),
+      savedSessionActivationBindings,
       setActiveSessionId: id => this.settings.setActiveSessionId(id),
       showOnboarding: () => {
         this.webviewView?.webview.postMessage({ type: "showOnboarding" });
@@ -848,6 +869,12 @@ class ChatSidebarProvider implements vscode.WebviewViewProvider, vscode.Disposab
       logRestoreMissed: details => {
         this.logSession("restore-missed", details);
       },
+      logRestoreSkippedEmpty: details => {
+        this.logSession("restore-skipped-empty", details);
+      },
+      logRestoreSuccess: details => {
+        this.logSession("restore-success", details);
+      },
       ensureConversationWorktreeHydrated: nextWorkspaceRoot =>
         this.conversationScopeBindings.ensureConversationWorktreeHydrated(nextWorkspaceRoot),
       shouldRefreshSessionsList: () => this.shouldRefreshSessionsList(),
@@ -856,6 +883,41 @@ class ChatSidebarProvider implements vscode.WebviewViewProvider, vscode.Disposab
     this.readySequenceController = createReadySequenceController({
       runReadySequence: readySequenceRunner,
     });
+    this.extensionPromptRequestPartsFactory =
+      createExtensionPromptRequestPartsFactory({
+        settings: this.settings,
+        sessions: this.sessions,
+        logSession: (event, details) => this.logSession(event, details),
+        conversationFeatureBindings: this.conversationFeatureBindings,
+        conversationHistoryBindings: this.conversationHistoryBindings,
+        conversationRuntimeStateBindings:
+          this.conversationRuntimeStateBindings,
+        conversationScopeBindings: this.conversationScopeBindings,
+        activityTracker: this.activityTracker,
+        backgroundTaskHost: this.backgroundTaskHost,
+        workspaceStatusController: this.workspaceStatusController,
+        workspaceRuntimeHost: this.workspaceRuntimeHost,
+        companionBindings: this.companionBindings,
+        assistantReplyBindings: this.assistantReplyBindings,
+        scheduleStreamingStateUpdate: () =>
+          this.streamingStateBindings.scheduleStreamingStateUpdate(),
+        postState: () => this.postState(),
+        showWarningMessage: message => {
+          void vscode.window.showWarningMessage(message);
+        },
+        postWebviewMessage: payload => {
+          this.webviewView?.webview.postMessage(payload);
+        },
+        getPlanContentForWorkspace: workspaceRoot =>
+          getPlanContentForWorkspace({
+            workspaceRoot,
+            planModeState: this.planModeState,
+          }),
+        isAbortLikeError: error => this.isAbortLikeError(error),
+        toErrorMessage,
+        skillStore: this.skillStore,
+        profileStore: this.profileStore,
+      });
     for (const candidate of [".mcp.json", ".cain-mcp.json"]) {
       const watcher = vscode.workspace.createFileSystemWatcher(`**/${candidate}`);
       const invalidate = () => {
@@ -1075,89 +1137,6 @@ class ChatSidebarProvider implements vscode.WebviewViewProvider, vscode.Disposab
     await this.readySequenceController.ensureReadySequence();
   }
 
-  private createPromptRequestParts(
-    workspaceFolder: vscode.WorkspaceFolder,
-    onToolError: () => void,
-  ): PromptRequestExtensionParts<WorkspaceRuntime> {
-    return createExtensionPromptRequestParts({
-      workspaceFolderPath: workspaceFolder.uri.fsPath,
-      onToolError,
-      state: {
-        getCurrentSessionId: () => this.currentSessionId,
-        setCurrentSessionId: sessionId => {
-          this.currentSessionId = sessionId;
-        },
-        sessionMessages: this.sessionMessages,
-        conversationMessages: this.conversationMessages,
-        getPendingPromptAttachments: () => this.pendingPromptAttachments,
-        setPendingPromptAttachments: attachments => {
-          this.pendingPromptAttachments = attachments;
-        },
-        pendingPlanVerification: this.pendingPlanVerification,
-        planModeState: this.planModeState,
-        getSwarm: () => this.swarm,
-        setSwarm: swarm => {
-          this.swarm = swarm;
-        },
-        queueAutoMemoryExtraction: options =>
-          this.autoMemoryBindings.queueAutoMemoryExtraction(options),
-        cachedTools: this.cachedTools,
-        cachedToolsWorkspaceRoot: this.cachedToolsWorkspaceRoot,
-        setWorkspaceToolCache: ({
-          tools,
-          workspaceRoot,
-          mcpServers,
-          providerLabel,
-        }) => {
-          this.mcpServers = mcpServers ?? [];
-          this.cachedTools = tools;
-          this.cachedToolsWorkspaceRoot = workspaceRoot;
-          this.providerLabel = providerLabel ?? this.providerLabel;
-        },
-        appendStreamingText: token => {
-          this.streamingText += token;
-        },
-        clearStreamingText: () => {
-          this.streamingText = "";
-        },
-      },
-      bindings: {
-        settings: this.settings,
-        sessions: this.sessions,
-        logSession: (event, details) => this.logSession(event, details),
-        conversationFeatureBindings: this.conversationFeatureBindings,
-        conversationHistoryBindings: this.conversationHistoryBindings,
-        conversationRuntimeStateBindings:
-          this.conversationRuntimeStateBindings,
-        conversationScopeBindings: this.conversationScopeBindings,
-        activityTracker: this.activityTracker,
-        backgroundTaskHost: this.backgroundTaskHost,
-        workspaceStatusController: this.workspaceStatusController,
-        workspaceRuntimeHost: this.workspaceRuntimeHost,
-        companionBindings: this.companionBindings,
-        assistantReplyBindings: this.assistantReplyBindings,
-        scheduleStreamingStateUpdate: () =>
-          this.streamingStateBindings.scheduleStreamingStateUpdate(),
-        postState: () => this.postState(),
-        showWarningMessage: message => {
-          void vscode.window.showWarningMessage(message);
-        },
-        postWebviewMessage: payload => {
-          this.webviewView?.webview.postMessage(payload);
-        },
-        getPlanContentForWorkspace: workspaceRoot =>
-          getPlanContentForWorkspace({
-            workspaceRoot,
-            planModeState: this.planModeState,
-          }),
-        isAbortLikeError: error => this.isAbortLikeError(error),
-        toErrorMessage,
-        skillStore: this.skillStore,
-        profileStore: this.profileStore,
-      },
-    });
-  }
-
   // handlePrompt: main agent runner path plus P01 session persistence.
 
   private async handlePrompt(prompt: string, attachments?: WebviewAttachment[]): Promise<void> {
@@ -1210,13 +1189,52 @@ class ChatSidebarProvider implements vscode.WebviewViewProvider, vscode.Disposab
       runPromptRequest: async () => {
         await runPromptRequestWithExtensionParts<WorkspaceRuntime>({
           prompt: preparedTurn.trimmedPrompt,
-          parts: this.createPromptRequestParts(
-            preparedTurn.workspaceFolder,
-            () => {
+          parts: this.extensionPromptRequestPartsFactory({
+            workspaceFolderPath: preparedTurn.workspaceFolder.uri.fsPath,
+            onToolError: () => {
               moodPenaltyApplied = true;
               void this.companionBindings.updateCompanionMood(-2);
             },
-          ),
+            state: {
+              getCurrentSessionId: () => this.currentSessionId,
+              setCurrentSessionId: sessionId => {
+                this.currentSessionId = sessionId;
+              },
+              sessionMessages: this.sessionMessages,
+              conversationMessages: this.conversationMessages,
+              getPendingPromptAttachments: () => this.pendingPromptAttachments,
+              setPendingPromptAttachments: attachments => {
+                this.pendingPromptAttachments = attachments;
+              },
+              pendingPlanVerification: this.pendingPlanVerification,
+              planModeState: this.planModeState,
+              getSwarm: () => this.swarm,
+              setSwarm: swarm => {
+                this.swarm = swarm;
+              },
+              queueAutoMemoryExtraction: options =>
+                this.autoMemoryBindings.queueAutoMemoryExtraction(options),
+              cachedTools: this.cachedTools,
+              cachedToolsWorkspaceRoot: this.cachedToolsWorkspaceRoot,
+              setWorkspaceToolCache: ({
+                tools,
+                workspaceRoot,
+                mcpServers,
+                providerLabel,
+              }) => {
+                this.mcpServers = mcpServers ?? [];
+                this.cachedTools = tools;
+                this.cachedToolsWorkspaceRoot = workspaceRoot;
+                this.providerLabel = providerLabel ?? this.providerLabel;
+              },
+              appendStreamingText: token => {
+                this.streamingText += token;
+              },
+              clearStreamingText: () => {
+                this.streamingText = "";
+              },
+            },
+          }),
         });
       },
       buildFailureBindings: error =>

@@ -15,9 +15,13 @@ import path from "node:path";
 export type ChatMessage = {
   role: "user" | "assistant";
   content: string;
-  kind?: "chat" | "error" | "thinking";
+  kind?: "chat" | "error" | "thinking" | "tool_use" | "tool_result";
   timestamp?: number;
   excludeFromConversation?: boolean;
+  toolName?: string;
+  toolInputPreview?: string;
+  toolSummary?: string;
+  toolIsError?: boolean;
   /** Optional image attachments (base64 data), used for conversation history sent to provider */
   attachments?: Array<{ data: string; mimeType: string }>;
   /** Optional generated image results rendered in the chat UI */

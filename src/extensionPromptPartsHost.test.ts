@@ -21,9 +21,125 @@ vi.mock("./providerRuntimeOptionsHost", () => ({
 }));
 
 import { buildPromptFileMentionContext } from "./contextMentions";
-import { createExtensionPromptRequestParts } from "./extensionPromptPartsHost";
+import {
+  createExtensionPromptRequestParts,
+  createExtensionPromptRequestPartsFactory,
+} from "./extensionPromptPartsHost";
 
 describe("extensionPromptPartsHost", () => {
+  it("builds a reusable prompt-request parts factory around stable host bindings", async () => {
+    const providerConfig = {
+      type: "anthropic" as const,
+      apiKey: "secret",
+      model: "claude-sonnet",
+    };
+
+    resolveProviderConfigMock.mockResolvedValue({
+      config: providerConfig,
+      envMap: { HELLO: "world" },
+    });
+    createProviderRuntimeOptionsWithHostMock.mockReturnValue({ fastMode: true });
+    buildProviderAdapterMock.mockReturnValue({ runStep: vi.fn() });
+
+    const factory = createExtensionPromptRequestPartsFactory({
+      settings: {
+        getEffortLevel: vi.fn(() => "high"),
+        setEffortLevel: vi.fn(async () => undefined),
+        getFastMode: vi.fn(() => false),
+        setFastMode: vi.fn(async () => undefined),
+        setActiveProviderModel: vi.fn(async () => undefined),
+        getProviderConfigByAlias: vi.fn(async () => undefined),
+        setActiveSessionId: vi.fn(async () => undefined),
+      } as any,
+      sessions: {
+        getTranscriptFilePath: vi.fn(() => "E:\\repo\\.transcript.jsonl"),
+        createSession: vi.fn(async () => undefined),
+        ensureSession: vi.fn(async () => undefined),
+        appendMessages: vi.fn(async () => undefined),
+      } as any,
+      logSession: vi.fn(),
+      conversationFeatureBindings: {
+        isSessionPersistenceEnabled: vi.fn(() => true),
+        shouldEnableSwarmForPrompt: vi.fn(() => false),
+      },
+      conversationHistoryBindings: {
+        getConversationHistory: vi.fn(() => []),
+        replaceConversationHistory: vi.fn(),
+      },
+      conversationRuntimeStateBindings: {
+        persistCurrentSessionRuntimeState: vi.fn(),
+        getPendingPlanVerificationReminderTurnCount: vi.fn(() => null),
+        markPendingPlanVerificationStarted: vi.fn(),
+        markPendingPlanVerificationCompleted: vi.fn(),
+        resetPendingPlanVerificationToAwaitingStart: vi.fn(),
+      },
+      conversationScopeBindings: {
+        getConversationTaskRuntime: vi.fn(() => ({ id: "tasks-1" } as any)),
+        ensureConversationWorktreeHydrated: vi.fn(async () => undefined),
+        getEffectiveWorkspaceRoot: vi.fn(path => path),
+        findActiveBuiltInAgentTask: vi.fn(async () => undefined),
+      },
+      activityTracker: {
+        add: vi.fn(() => "activity-1"),
+        finish: vi.fn(),
+        startToolExecution: vi.fn(),
+        finishToolExecution: vi.fn(),
+      } as any,
+      backgroundTaskHost: {
+        runBuiltInAgentSession: vi.fn(),
+        buildFollowUpMessage: vi.fn(() => "follow-up"),
+      } as any,
+      workspaceStatusController: {
+        requestRefresh: vi.fn(),
+      },
+      workspaceRuntimeHost: {
+        getRuntime: vi.fn(async () => ({ id: "runtime-1" })),
+      } as any,
+      companionBindings: {
+        postCompanionState: vi.fn(),
+        updateCompanionMood: vi.fn(async () => undefined),
+      },
+      assistantReplyBindings: {
+        recordAssistantReply: vi.fn(async () => undefined),
+      },
+      scheduleStreamingStateUpdate: vi.fn(),
+      postState: vi.fn(),
+      showWarningMessage: vi.fn(),
+      postWebviewMessage: vi.fn(),
+      getPlanContentForWorkspace: vi.fn(async () => null),
+      isAbortLikeError: vi.fn(() => false),
+      toErrorMessage: vi.fn(error => String(error)),
+    });
+
+    const parts = factory({
+      workspaceFolderPath: "E:\\repo",
+      onToolError: vi.fn(),
+      state: {
+        getCurrentSessionId: () => "session-1",
+        setCurrentSessionId: vi.fn(),
+        sessionMessages: [],
+        conversationMessages: [],
+        getPendingPromptAttachments: () => undefined,
+        setPendingPromptAttachments: vi.fn(),
+        pendingPlanVerification: undefined,
+        planModeState: { active: false },
+        getSwarm: () => undefined,
+        setSwarm: vi.fn(),
+        queueAutoMemoryExtraction: vi.fn(),
+        cachedTools: [],
+        cachedToolsWorkspaceRoot: "E:\\repo",
+        setWorkspaceToolCache: vi.fn(),
+        appendStreamingText: vi.fn(),
+        clearStreamingText: vi.fn(),
+      },
+    });
+
+    await expect(parts.execution.resolveProviderConfig()).resolves.toEqual({
+      config: providerConfig,
+      envMap: { HELLO: "world" },
+    });
+  });
+
   it("builds prompt request parts that keep extension-owned prompt state live", async () => {
     let currentSessionId = "session-1";
     let currentSwarm: { id: string } | undefined;

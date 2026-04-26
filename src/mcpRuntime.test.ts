@@ -2,7 +2,7 @@ import { promises as fs } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { UnauthorizedError } from "@modelcontextprotocol/sdk/client/auth.js";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { McpRuntime } from "./mcpRuntime";
 
 const tempDirs: string[] = [];
@@ -247,6 +247,82 @@ describe("McpRuntime config discovery cache", () => {
     expect(result.content).toContain("Configure the server token/headers");
   });
 
+  it("accepts single-underscore MCP auth tool names that models may emit by mistake", async () => {
+    const workspaceRoot = await fs.mkdtemp(path.join(os.tmpdir(), "cain-mcp-runtime-auth-alias-"));
+    tempDirs.push(workspaceRoot);
+    await fs.writeFile(
+      path.join(workspaceRoot, ".mcp.json"),
+      JSON.stringify({
+        mcpServers: {
+          notion: {
+            type: "http",
+            url: "https://mcp.notion.com/mcp",
+          },
+        },
+      }),
+      "utf8",
+    );
+
+    const runtime = new McpRuntime(() => workspaceRoot, {});
+    (runtime as any).ensureConnection = async () => {
+      throw new UnauthorizedError("OAuth required");
+    };
+
+    await runtime.getToolDefinitions();
+
+    const result = await runtime.executeTool(
+      "mcp_notion_authenticate",
+      {},
+      { workspaceRoot } as any,
+    );
+
+    expect(result.summary).toContain("requires authentication");
+    expect(result.content).toContain("Configure the server token/headers");
+  });
+
+  it("keeps the auth placeholder executable even if the live server map is refreshed away", async () => {
+    const workspaceRoot = await fs.mkdtemp(path.join(os.tmpdir(), "cain-mcp-runtime-auth-sticky-"));
+    tempDirs.push(workspaceRoot);
+    await fs.writeFile(
+      path.join(workspaceRoot, ".mcp.json"),
+      JSON.stringify({
+        mcpServers: {
+          notion: {
+            type: "http",
+            url: "https://mcp.notion.com/mcp",
+            oauth: {
+              callbackPort: 3118,
+            },
+          },
+        },
+      }),
+      "utf8",
+    );
+
+    const runtime = new McpRuntime(() => workspaceRoot, {});
+
+    (runtime as any).ensureConnection = async () => {
+      throw new UnauthorizedError("OAuth required");
+    };
+
+    const tools = await runtime.getToolDefinitions();
+    expect(tools.map((tool: { name: string }) => tool.name)).toContain(
+      "mcp__notion__authenticate",
+    );
+
+    (runtime as any).serverConfigs.clear();
+
+    const result = await runtime.executeTool(
+      "mcp__notion__authenticate",
+      {},
+      {
+        workspaceRoot,
+      } as any,
+    );
+
+    expect(result.summary).toContain("requires authentication");
+  });
+
   it("does not mark a connected server as failed when ReadMcpResourceTool targets a server without resources", async () => {
     const workspaceRoot = await fs.mkdtemp(path.join(os.tmpdir(), "cain-mcp-runtime-no-resources-"));
     tempDirs.push(workspaceRoot);
@@ -409,6 +485,59 @@ describe("McpRuntime config discovery cache", () => {
     expect(callRecords).toEqual([{ serverName: "github.com", toolName: "create issue" }]);
   });
 
+  it("accepts model-normalized MCP tool names that replace separators with single underscores", async () => {
+    const workspaceRoot = await fs.mkdtemp(path.join(os.tmpdir(), "cain-mcp-runtime-normalized-alias-"));
+    tempDirs.push(workspaceRoot);
+    await fs.writeFile(
+      path.join(workspaceRoot, ".mcp.json"),
+      JSON.stringify({
+        mcpServers: {
+          notion: {
+            command: "node",
+            args: ["server.js"],
+          },
+        },
+      }),
+      "utf8",
+    );
+
+    const runtime = new McpRuntime(() => workspaceRoot, {});
+    const callRecords: Array<{ serverName: string; toolName: string }> = [];
+    (runtime as any).ensureConnection = async (serverName: string) => ({
+      client: {
+        getServerCapabilities: () => ({ tools: {} }),
+        listTools: async () => ({
+          tools: [
+            {
+              name: "notion-get-users",
+              description: "Get users",
+              inputSchema: { type: "object", properties: {} },
+            },
+          ],
+        }),
+        callTool: async ({ name }: { name: string }) => {
+          callRecords.push({ serverName, toolName: name });
+          return { content: [{ type: "text", text: "ok" }] };
+        },
+      },
+      transport: {
+        close: async () => undefined,
+      },
+    });
+
+    await runtime.getToolDefinitions();
+    const result = await runtime.executeTool(
+      "mcp_notion_notion_get_users",
+      { page_size: 5 },
+      { workspaceRoot } as any,
+    );
+
+    expect(result.content).toBe("ok");
+    expect(callRecords).toEqual([
+      { serverName: "notion", toolName: "notion-get-users" },
+    ]);
+  });
+
   it("accepts normalized server names for MCP resource reads but uses the original server connection", async () => {
     const workspaceRoot = await fs.mkdtemp(path.join(os.tmpdir(), "cain-mcp-runtime-normalized-resource-"));
     tempDirs.push(workspaceRoot);
@@ -446,5 +575,117 @@ describe("McpRuntime config discovery cache", () => {
 
     expect(result.content).toContain("resource text");
     expect(connectedServerNames).toEqual(["my server"]);
+  });
+
+  it("exposes Claude-style MCP prompt commands for servers with prompt capability", async () => {
+    const workspaceRoot = await fs.mkdtemp(path.join(os.tmpdir(), "cain-mcp-runtime-prompts-"));
+    tempDirs.push(workspaceRoot);
+    await fs.writeFile(
+      path.join(workspaceRoot, ".mcp.json"),
+      JSON.stringify({
+        mcpServers: {
+          github: {
+            command: "node",
+            args: ["server.js"],
+          },
+        },
+      }),
+      "utf8",
+    );
+
+    const runtime = new McpRuntime(() => workspaceRoot, {});
+    (runtime as any).ensureConnection = async () => ({
+      client: {
+        getServerCapabilities: () => ({ prompts: {} }),
+        request: async () => ({
+          prompts: [
+            {
+              name: "summarize_issue",
+              description: "Summarize an issue with comments.",
+              arguments: [{ name: "issue" }],
+            },
+          ],
+        }),
+      },
+      transport: {
+        close: async () => undefined,
+      },
+    });
+
+    const commands = await runtime.getPromptCommands();
+
+    expect(commands).toEqual([
+      {
+        name: "/mcp__github__summarize_issue",
+        description: "Summarize an issue with comments.",
+        argNames: ["issue"],
+        serverName: "github",
+        promptName: "summarize_issue",
+        userFacingName: "github:summarize_issue (MCP)",
+      },
+    ]);
+  });
+
+  it("executes MCP prompt commands and maps image prompt blocks into attachments", async () => {
+    const workspaceRoot = await fs.mkdtemp(path.join(os.tmpdir(), "cain-mcp-runtime-prompt-run-"));
+    tempDirs.push(workspaceRoot);
+    await fs.writeFile(
+      path.join(workspaceRoot, ".mcp.json"),
+      JSON.stringify({
+        mcpServers: {
+          github: {
+            command: "node",
+            args: ["server.js"],
+          },
+        },
+      }),
+      "utf8",
+    );
+
+    const runtime = new McpRuntime(() => workspaceRoot, {});
+    (runtime as any).ensureConnection = async () => ({
+      client: {
+        getServerCapabilities: () => ({ prompts: {} }),
+        request: async () => ({
+          prompts: [
+            {
+              name: "summarize_issue",
+              description: "Summarize an issue with comments.",
+              arguments: [{ name: "issue" }],
+            },
+          ],
+        }),
+        getPrompt: async ({ name, arguments: args }: { name: string; arguments: Record<string, string> }) => ({
+          messages: [
+            {
+              content: {
+                type: "text",
+                text: `Summarize issue ${args.issue} from prompt ${name}.`,
+              },
+            },
+            {
+              content: {
+                type: "image",
+                data: "QUJDRA==",
+                mimeType: "image/png",
+              },
+            },
+          ],
+        }),
+      },
+      transport: {
+        close: async () => undefined,
+      },
+    });
+
+    const result = await runtime.executePromptCommand(
+      "/mcp__github__summarize_issue",
+      "123",
+    );
+
+    expect(result).toEqual({
+      content: "Summarize issue 123 from prompt summarize_issue.",
+      attachments: [{ data: "QUJDRA==", mimeType: "image/png" }],
+    });
   });
 });

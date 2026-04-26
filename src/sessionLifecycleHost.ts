@@ -3,7 +3,11 @@
 export type SessionViewMessage = {
   role: "user" | "assistant";
   content: string;
-  kind?: "chat" | "error" | "thinking";
+  kind?: "chat" | "error" | "thinking" | "tool_use" | "tool_result";
+  toolName?: string;
+  toolInputPreview?: string;
+  toolSummary?: string;
+  toolIsError?: boolean;
 };
 
 export function buildClearedConversationState(
@@ -65,13 +69,25 @@ export function mapSessionViewMessages(
   messages: Array<{
     role: "user" | "assistant";
     content: string;
-    kind?: "chat" | "error" | "thinking";
+    kind?: "chat" | "error" | "thinking" | "tool_use" | "tool_result";
+    toolName?: string;
+    toolInputPreview?: string;
+    toolSummary?: string;
+    toolIsError?: boolean;
   }>,
 ): SessionViewMessage[] {
   return messages.map(message => ({
     role: message.role,
     content: message.content,
     ...(message.kind ? { kind: message.kind } : {}),
+    ...(message.toolName ? { toolName: message.toolName } : {}),
+    ...(message.toolInputPreview
+      ? { toolInputPreview: message.toolInputPreview }
+      : {}),
+    ...(message.toolSummary ? { toolSummary: message.toolSummary } : {}),
+    ...(typeof message.toolIsError === "boolean"
+      ? { toolIsError: message.toolIsError }
+      : {}),
   }));
 }
 
@@ -80,7 +96,11 @@ export function buildSavedSessionRestoreState(options: {
   messages: Array<{
     role: "user" | "assistant";
     content: string;
-    kind?: "chat" | "error" | "thinking";
+    kind?: "chat" | "error" | "thinking" | "tool_use" | "tool_result";
+    toolName?: string;
+    toolInputPreview?: string;
+    toolSummary?: string;
+    toolIsError?: boolean;
   }>;
 }): {
   currentSessionId: string;

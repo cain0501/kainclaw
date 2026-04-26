@@ -168,6 +168,7 @@ export class ElectronChatPanel {
   private readonly worktreeRuntimeStore: PersistentWorktreeRuntimeStore;
   private readonly backgroundTaskHost: BackgroundTaskHost;
   private readonly cachedWorkspaceResolutions = new Map<string, ResolvedWorkspaceRoot>();
+  private sessionMessageWriteQueue: Promise<void> = Promise.resolve();
 
   constructor(
     private readonly sessions: SessionRepository,
@@ -180,6 +181,7 @@ export class ElectronChatPanel {
     this.mcpRuntime = new McpRuntime(
       () => this.getSelectedWorkspaceRoot(),
       process.env as Record<string, string>,
+      this.host,
     );
     this.imageGalleryStore = new ImageLabGalleryStore(this.host.getStorageUri());
     this.promptLibraryRepository = new PromptLibraryRepository(this.host.getStorageUri());
@@ -709,18 +711,32 @@ export class ElectronChatPanel {
   private async appendAssistantMessageToSession(
     sessionId: string,
     message: ChatMessage,
+    options: {
+      updatePreview?: boolean;
+    } = {},
   ): Promise<void> {
-    await this.sessions.appendMessages(sessionId, [message]);
-    await this.sessions.updateMeta(sessionId, {
-      preview: message.content.slice(0, 100),
-      updatedAt: Date.now(),
-    });
+    const updatePreview = options.updatePreview ?? true;
 
     if (this.isViewingSession(sessionId)) {
       this.sessionMessages = [...this.sessionMessages, message];
+      await this.postState();
     }
 
-    await this.loadSessions();
+    const runWrite = async () => {
+      await this.sessions.appendMessages(sessionId, [message]);
+      await this.sessions.updateMeta(sessionId, {
+        preview: updatePreview
+          ? message.content.slice(0, 100)
+          : (await this.sessions.getSessionMeta(sessionId))?.preview ?? "",
+        updatedAt: Date.now(),
+      });
+      await this.loadSessions();
+    };
+
+    this.sessionMessageWriteQueue = this.sessionMessageWriteQueue
+      .catch(() => undefined)
+      .then(runWrite);
+    await this.sessionMessageWriteQueue;
   }
 
   private async deleteSession(id: string): Promise<void> {
@@ -1763,6 +1779,7 @@ export class ElectronChatPanel {
           ? (temporaryMcpRuntime = new McpRuntime(
               () => workspaceRoot,
               process.env as Record<string, string>,
+              this.host,
             ))
           : this.mcpRuntime;
       const { config, envMap } = await resolveProviderConfig(
@@ -1941,9 +1958,37 @@ export class ElectronChatPanel {
           }
         },
         onToolStart: (toolName, _input, _execId) => {
+          const toolUseMessage: ChatMessage = {
+            role: "assistant",
+            content: "",
+            kind: "tool_use",
+            toolName,
+            toolInputPreview: _input ? JSON.stringify(_input) : undefined,
+            excludeFromConversation: true,
+            timestamp: Date.now(),
+          };
+          void this.appendAssistantMessageToSession(
+            requestSessionId,
+            toolUseMessage,
+            { updatePreview: false },
+          );
           this.sendToRenderer({ type: "tool:start", toolName });
         },
-        onToolEnd: (_execId, summary, isError) => {
+        onToolEnd: (_execId, summary, isError, content) => {
+          const toolResultMessage: ChatMessage = {
+            role: "assistant",
+            content: content || summary,
+            kind: "tool_result",
+            toolSummary: summary,
+            toolIsError: isError,
+            excludeFromConversation: true,
+            timestamp: Date.now(),
+          };
+          void this.appendAssistantMessageToSession(
+            requestSessionId,
+            toolResultMessage,
+            { updatePreview: false },
+          );
           this.sendToRenderer({ type: "tool:end", summary, isError });
         },
         abortSignal: abortController.signal,

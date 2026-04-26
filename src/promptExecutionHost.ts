@@ -1,5 +1,6 @@
 import type {
   IProviderAdapter,
+  NormalizedImageAttachment,
   ProviderConfig as AdapterProviderConfig,
 } from "./agent/providers/IProviderAdapter";
 import type { SkillStore } from "./skills/skillStore";
@@ -45,6 +46,8 @@ export type PromptExecutionResult<TRuntime> =
       workspaceRoot: string;
       runtime: TRuntime;
       tools: ToolDefinition[];
+      effectivePrompt: string;
+      effectivePromptAttachments?: NormalizedImageAttachment[];
     };
 
 type ConversationMessage = {
@@ -433,6 +436,22 @@ export async function preparePromptExecutionStep<TRuntime extends PromptRuntimeL
   });
 
   if (promptCommandResult.kind !== "continue") {
+    if (promptCommandResult.kind === "rewrite") {
+      return {
+        kind: "continue",
+        config: providerContext.config,
+        envMap: providerContext.envMap,
+        effortLevel: providerContext.effortLevel,
+        runtimeOptions: providerContext.runtimeOptions,
+        workspaceRoot: runtimeContext.workspaceRoot,
+        runtime: runtimeContext.runtime,
+        tools: loadedTools.tools,
+        effectivePrompt: promptCommandResult.prompt,
+        ...(promptCommandResult.attachments?.length
+          ? { effectivePromptAttachments: promptCommandResult.attachments }
+          : {}),
+      };
+    }
     return promptCommandResult;
   }
 
@@ -445,5 +464,6 @@ export async function preparePromptExecutionStep<TRuntime extends PromptRuntimeL
     workspaceRoot: runtimeContext.workspaceRoot,
     runtime: runtimeContext.runtime,
     tools: loadedTools.tools,
+    effectivePrompt: options.prompt,
   };
 }

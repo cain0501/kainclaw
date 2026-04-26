@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import {
   createLicenseHostBindings,
+  createLicenseHostBindingsFactory,
   restoreStoredLicenseFlags,
 } from "./licenseHost";
 
@@ -121,5 +122,49 @@ describe("licenseHost", () => {
 
     expect(postLicenseRequired).toHaveBeenCalledWith("swarm");
     expect(restore).toHaveBeenCalled();
+  });
+
+  it("builds a license bindings factory around stable host hooks", async () => {
+    let currentFlags:
+      | {
+          sessionPersistence: boolean;
+          multiSession: boolean;
+          swarm: boolean;
+        }
+      | undefined;
+    const postLicenseRequired = vi.fn();
+
+    const factory = createLicenseHostBindingsFactory({
+      getSecret: async () => "valid-key",
+      verifyLicense: () => ({
+        valid: true,
+        flags: {
+          sessionPersistence: true,
+          multiSession: true,
+          swarm: false,
+        },
+        expiresAt: new Date("2026-04-14T00:00:00.000Z"),
+      }),
+      postLicenseRequired,
+      log: vi.fn(),
+      warn: vi.fn(),
+    });
+
+    const bindings = factory({
+      getCurrentLicenseFlags: () => currentFlags,
+      setLicenseFlags: flags => {
+        currentFlags = flags as typeof currentFlags;
+      },
+    });
+
+    bindings.postLicenseRequired("multiSession");
+    await bindings.restoreLicenseFlags();
+
+    expect(postLicenseRequired).toHaveBeenCalledWith("multiSession");
+    expect(currentFlags).toEqual({
+      sessionPersistence: true,
+      multiSession: true,
+      swarm: false,
+    });
   });
 });

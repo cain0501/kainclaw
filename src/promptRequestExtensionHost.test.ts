@@ -202,6 +202,7 @@ describe("promptRequestExtensionHost", () => {
       workspaceRoot: "E:\\repo",
       runtime: {} as PromptRuntimeLike,
       tools: [],
+      effectivePrompt: "fix tests",
     };
     runPromptRequestWithAssemblyMock.mockResolvedValue(promptExecution);
 
@@ -361,6 +362,7 @@ describe("promptRequestExtensionHost", () => {
       workspaceRoot: "E:\\repo",
       runtime: {} as PromptRuntimeLike,
       tools: [],
+      effectivePrompt: "fix tests",
     };
     runPromptRequestWithAssemblyMock.mockResolvedValue(promptExecution);
 

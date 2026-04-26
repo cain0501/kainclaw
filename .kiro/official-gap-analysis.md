@@ -9,14 +9,26 @@
   - `npm run build:electron`
   - `npm run check:electron`
 - 当前自动化基线：
-  - `145` 个测试文件
-  - `1019` 个测试通过
+  - `146` 个测试文件
+  - `1053` 个测试通过
+- 最近几组 `extension.ts` 宿主减债也已同步收口：
+  - `extensionPromptRequestParts`
+  - `sessionPanelActions`
+  - `readySequenceRunner`
+  - `settingsPanelActions`
+  - `companionBindings`
+  - `quickActionBindings`
+  - `licenseHostBindings`
+  - `workspaceStatusController`
+  - `webviewStateBindings / streamingStateBindings`
+  - `savedSessionActivationBindings`
+  - 这些都属于宿主装配层继续下沉，不改 Claude 覆盖的业务语义
 - 强规则已收口：凡是 Claude 源码已有的功能、行为、工作流、prompt contract、renderer 行为、tool/runtime 路径或 session 生命周期，必须先读 Claude 源码并按其逻辑复刻基线；只有 Claude 源码没有的 KainClaw 扩展，才按 KainClaw 自研标准开发。
 - 本批已同步的 Claude parity 收口项覆盖 `890510a..00076dc`：
   - 文档/规则：Claude 源码优先、handoff、gap analysis、source-reference、UTF-8 without BOM。
   - Renderer：Electron Markdown 与 `/verify` report 渲染改为 Claude-style `marked.lexer()` token baseline，命令和输出按结构化 raw text 渲染。
   - Verification：concrete target gate、问候/空范围 `PARTIAL`、项目证据兜底、语言跟随、diff/provenance/report fence 处理。
-  - MCP runtime：按 Claude MCP 源码补齐 `type: "http"` / `type: "sse"` transport 语义、SSE transport、远端认证失败 `needs-auth`、`mcp__<server>__authenticate` placeholder、无 resources server 的明确错误、MCP result priority、`isError` 工具错误处理，以及 `normalizeNameForMCP` 对外工具名安全化。
+  - MCP runtime：按 Claude MCP 源码补齐 `type: "http"` / `type: "sse"` transport 语义、SSE transport、远端认证失败 `needs-auth`、`mcp__<server>__authenticate` placeholder、无 resources server 的明确错误、MCP result priority、`isError` 工具错误处理、`normalizeNameForMCP` 对外工具名安全化、remote browser OAuth、MCP prompt commands、工具名变形归一化，以及 Electron transcript 的 `tool_use / tool_result` 可见性。
   - Tasks/toolRuntime：`local_bash` shell task 语义、Claude-style task id、`TaskGet` / `TaskOutput` / `TaskStop` 合同、非交互 UTF-8 PowerShell 输出、`TaskOutput` abort wait。
   - Compact/session lifecycle：可见 transcript 与模型侧 compact history 分离，workspace root 与 compact metadata 随 runtime state 持久化。
   - TaskStop remote：adapter-backed `remote_agent` 停止后记录 Claude-style `killed`；无 remote stop pathway 时仍明确拒绝。
@@ -41,7 +53,7 @@
 - LSP runtime 已补齐 Claude-style file preflight、`workspaceSymbols` empty-query 转发、provider unavailable 返回、无 runtime 工具过滤、`documentSymbol` / `workspaceSymbol` 官方单数操作名入口，以及 malformed provider response 防御；更深 server lifecycle / plugin-backed provider discovery parity 仍未完成。
 - ToolSearchTool 已按 Claude `ToolSearchTool` 搜索合同收口；当前差异只剩 KainClaw 侧以现有 `ToolDefinition` 聚合 built-in 与 MCP 动态工具，而不是官方 deferred-tool schema 返回格式。
 - Task deprecated aliases 已按 Claude 源码收口：旧名进入 canonical handler，ToolSearch 也返回 canonical 工具名；这只补兼容入口，不改变 `TaskOutput` 的 `task_id` 输入合同。
-- MCP runtime 已按 Claude 源码补齐 transport / auth placeholder / resources / result / normalized name 基线；当前剩余缺口是 OAuth browser flow / PKCE、prompts、templates。
+- MCP runtime 已按 Claude 源码补齐 transport / auth placeholder / resources / result / normalized name / remote browser OAuth / prompt command / transcript visibility 基线；当前剩余缺口主要是 `oauth.xaa`、更深 refresh/discovery/step-up edge cases，以及 Claude 源码未明确暴露为工具面的 templates 行为。
 - Electron 壳当前已重新接回并验证这些斜杠命令：
   - `/todo`
   - `/compact`
@@ -83,7 +95,7 @@
 | --- | --- | --- | --- |
 | Provider 主链 | 已实现 | `src/agent/providers/anthropicAdapter.ts` `src/agent/providers/openAIAdapter.ts` `src/agent/providers/claudeCliAdapter.ts` | 更广的 provider 生态与更深协议兼容仍可继续补齐 |
 | 会话持久化 / 导出 / 恢复 | 已实现 | `src/storage/sessionRepository.ts` `src/sessionListHost.ts` `src/savedSessionHost.ts` | 会话管理 UI 仍可继续打磨 |
-| MCP runtime | 部分实现 | `src/mcpRuntime.ts` `src/mcpRuntime.helpers.ts` | `type: "http"` / `type: "sse"` transport、SSE、`needs-auth`、auth placeholder、无 resources server 错误、MCP result priority、`isError` 工具错误、normalized exposed tool/server names 已按 Claude baseline 补齐；OAuth browser flow / PKCE、prompts、templates parity 未完成 |
+| MCP runtime | 部分实现 | `src/mcpRuntime.ts` `src/mcpOAuth.ts` `src/mcpRuntime.helpers.ts` `src/promptCommandHost.ts` | `type: "http"` / `type: "sse"` transport、SSE、`needs-auth`、auth placeholder、无 resources server 错误、MCP result priority、`isError` 工具错误、normalized exposed tool/server names、remote browser OAuth、`mcp__<server>__<prompt>` commands、模型工具名变形归一化、Electron transcript `tool_use / tool_result` 可见性 已按 Claude baseline 补齐；`oauth.xaa`、更深 refresh/discovery/step-up edge cases 与 templates 相关行为仍未完成 |
 | 文件 / 命令 / 浏览器工具 | 已实现 | `src/toolRuntime.ts` `src/browserRuntime.ts` | Browser automation parity 仍未完全对齐 |
 | Tasks / background command | 部分实现 | `src/tasks/taskRuntime.ts` `src/backgroundTaskHost.ts` `src/backgroundCommandWorker.ts` `src/toolRuntime.ts` | `local_bash`、Claude-style id、Task 工具合同、UTF-8 shell 输出、`TaskOutput` abort wait 和 adapter-backed remote `TaskStop -> killed` 已对齐；完整 hosted / detached background task parity 未完成 |
 | built-in Review | 部分实现 | `src/review/runner.ts` `src/agent/built-in/reviewAgent.ts` | ultrareview、远程 review 生命周期仍未完善 |
@@ -130,8 +142,9 @@
 ### 已经比较稳定的主线
 
 - 核心 AI/runtime 能力已经稳定存在：Provider、会话持久化、MCP runtime、文件/命令/浏览器工具、Tasks/background command、Review/Verification、Thinking/Effort/Fast、Compact/Auto-Memory、LSP、Worktree、Hooks、Custom Agents、Skills registry。
-- MCP runtime 已补齐 Claude-style transport、auth placeholder、resource no-support、tool result priority、normalized name 基线；但 OAuth browser flow / PKCE、prompts、templates 仍不能写成已完成。
+- MCP runtime 已补齐 Claude-style transport、auth placeholder、resource no-support、tool result priority、normalized name、remote browser OAuth、prompt command 和 transcript visibility 基线；但 `oauth.xaa`、更深 refresh/discovery/step-up edge cases、templates 相关行为仍不能写成已完成。
 - Electron 现在应被准确描述为“可打包、可验证的桌面内测壳”，而不是完整正式客户端。
+- `extension.ts` 宿主减债这几轮已持续下沉到多组 host factory，但总控入口依然偏厚，因此它仍然是当前最高风险的宿主文件之一。
 - Electron Markdown 与 `/verify` report 渲染已从自研 regex/line parser 收口到 Claude-style `marked.lexer()` token 基线，并对 verification 的 command/output 使用结构化 raw text 渲染。
 - LSP runtime 已按 Claude `LSPTool.validateInput` 补齐文件预检，允许 `workspaceSymbols` 省略/空查询，并区分 provider 不可用与空结果。
 - 图片主链已经从旧 `Image Lab` 页面迁到聊天流；旧 `Image Lab` 更接近底层承载壳和历史 UI，而不是产品主入口。

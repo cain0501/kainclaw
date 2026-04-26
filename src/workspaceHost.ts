@@ -1,11 +1,20 @@
 import type { ProviderConfig as AdapterProviderConfig } from "./agent/providers/IProviderAdapter";
-import type { McpServerStatusSummary } from "./mcpRuntime";
+import type {
+  McpPromptCommandDefinition,
+  McpPromptCommandResult,
+  McpServerStatusSummary,
+} from "./mcpRuntime";
 import type { ToolDefinition } from "./toolRuntime";
 import type { EffortLevel, ProviderRuntimeOptions } from "./thinkingEffort/types";
 
 export type WorkspaceRuntimeLike = {
   getToolDefinitions(): Promise<ToolDefinition[]>;
   getMcpStatusSummary(): Promise<McpServerStatusSummary[]>;
+  getMcpPromptCommands?(): Promise<McpPromptCommandDefinition[]>;
+  executeMcpPromptCommand?(
+    commandName: string,
+    args: string,
+  ): Promise<McpPromptCommandResult>;
 };
 
 export type ProviderResolution = {

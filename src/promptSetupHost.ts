@@ -1,5 +1,8 @@
 import { SYSTEM_PROMPT } from "./agent/agentRunner";
-import type { ProviderConfig as AdapterProviderConfig } from "./agent/providers/IProviderAdapter";
+import type {
+  NormalizedImageAttachment,
+  ProviderConfig as AdapterProviderConfig,
+} from "./agent/providers/IProviderAdapter";
 import { getAutoMemoryDir, readAutoMemoryEntrypoint } from "./autoMemory/paths";
 import { buildAutoMemorySystemPrompt } from "./autoMemory/prompt";
 import type { PendingPlanVerificationState } from "./conversationRuntimeStateHost";
@@ -13,10 +16,12 @@ import type { ProfileStore } from "./userModel/profileStore";
 type PromptTurnConversationMessage = {
   role: "user" | "assistant";
   content: string;
+  attachments?: NormalizedImageAttachment[];
 };
 
 export async function applyPromptTurnUserContext(options: {
   prompt: string;
+  attachments?: NormalizedImageAttachment[];
   workspaceRoot: string;
   config: AdapterProviderConfig;
   envMap: Record<string, string>;
@@ -32,7 +37,11 @@ export async function applyPromptTurnUserContext(options: {
     envMap: Record<string, string>,
   ) => Promise<void>;
 }): Promise<void> {
-  options.appendConversationMessage({ role: "user", content: options.prompt });
+  options.appendConversationMessage({
+    role: "user",
+    content: options.prompt,
+    ...(options.attachments?.length ? { attachments: options.attachments } : {}),
+  });
 
   const mentionContext = await options.buildPromptFileMentionContext({
     prompt: options.prompt,

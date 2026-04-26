@@ -154,6 +154,16 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-seri
 .verify-label{font-size:12px;font-weight:600;color:#3f3f46;margin-top:2px}
 .verify-result{font-size:12px;color:#27272a}
 .verify-verdict{font-size:12px;font-weight:700;color:#18181b;margin-top:4px}
+.mcp-report{display:flex;flex-direction:column;gap:8px}
+.mcp-report-row{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.mcp-report-name{font-size:13px;font-weight:600;color:#18181b}
+.mcp-report-meta{font-size:12px;color:#71717a}
+.mcp-report-error{font-size:12px;color:#b91c1c;margin-left:4px}
+.tool-report{display:flex;flex-direction:column;gap:8px}
+.tool-report-head{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.tool-report-title{font-size:12px;font-weight:700;color:#18181b;letter-spacing:.02em;text-transform:uppercase}
+.tool-report-name{font-size:12px;color:#18181b}
+.tool-report-meta{font-size:11px;color:#71717a}
 .msg-meta{font-size:11px;color:#a1a1aa;margin-top:4px;padding:0 2px}
 .msg-streaming{opacity:.7}
 .typing-dots span{display:inline-block;width:5px;height:5px;border-radius:50%;background:#a1a1aa;margin:0 1px;animation:blink 1.2s infinite}
@@ -1790,6 +1800,12 @@ function renderMessage(m, messageIndex) {
   const rawContent = m.content || '';
   let content = renderMessageContent(rawContent, isUser);
 
+  if (!isUser && m.kind === 'tool_use') {
+    content = renderToolUseMessage(m);
+  } else if (!isUser && m.kind === 'tool_result') {
+    content = renderToolResultMessage(m);
+  }
+
   let attHtml = '';
   if (m.attachments && m.attachments.length > 0) {
     attHtml = '<div class="att-wrap" style="margin-bottom:6px">';
@@ -1833,7 +1849,37 @@ function renderMessageContent(text, isUser = false) {
   if (!isUser && isVerificationReport(text)) {
     return renderVerificationReport(text);
   }
+  if (!isUser && isMcpStatusReport(text)) {
+    return renderMcpStatusReport(text);
+  }
   return renderMarkdown(text);
+}
+
+function renderToolUseMessage(message) {
+  const toolName = String(message.toolName || '').trim();
+  const inputPreview = String(message.toolInputPreview || '').trim();
+  return `<div class="tool-report">
+    <div class="tool-report-head">
+      <span class="tool-report-title">Tool Use</span>
+      ${toolName ? `<code class="tool-report-name">${escapeHtml(toolName)}</code>` : ''}
+    </div>
+    ${inputPreview ? `<div class="tool-report-meta">Input</div><pre><code>${escapeHtml(inputPreview)}</code></pre>` : ''}
+  </div>`;
+}
+
+function renderToolResultMessage(message) {
+  const summary = String(message.toolSummary || '').trim();
+  const content = String(message.content || '').trim();
+  const badgeClass = message.toolIsError ? 'badge-orange' : 'badge-green';
+  const badgeLabel = message.toolIsError ? 'error' : 'done';
+  return `<div class="tool-report">
+    <div class="tool-report-head">
+      <span class="tool-report-title">Tool Result</span>
+      <span class="${badgeClass}">${escapeHtml(badgeLabel)}</span>
+    </div>
+    ${summary ? `<div class="tool-report-meta">${renderInlineMarkdown(summary)}</div>` : ''}
+    ${content ? `<pre><code>${escapeHtml(content)}</code></pre>` : ''}
+  </div>`;
 }
 
 function isVerificationReport(text) {
@@ -1843,6 +1889,12 @@ function isVerificationReport(text) {
     && /^Output observed:\s*$/m.test(content)
     && /^Result:\s*(PASS|FAIL)/m.test(content)
     && /^VERDICT:\s*(PASS|FAIL|PARTIAL)\s*$/m.test(content);
+}
+
+function isMcpStatusReport(text) {
+  const content = String(text || '');
+  return /^MCP servers:\s*$/m.test(content)
+    && /^\s*-\s+[^:]+:\s+(connected|needs-auth|error)\s+\|/m.test(content);
 }
 
 function renderVerificationReport(text) {
@@ -1871,6 +1923,47 @@ function renderVerificationReport(text) {
   }
   parts.push('</div>');
   return parts.join('');
+}
+
+function renderMcpStatusReport(text) {
+  const lines = String(text || '').split(/\r?\n/);
+  const rows = [];
+
+  for (const line of lines) {
+    const match = line.match(/^\s*-\s+([^:]+):\s+(connected|needs-auth|error)\s+\|\s+([^|]+)\|\s+(.+)$/i);
+    if (!match) continue;
+
+    const [, name, state, transport, remainder] = match;
+    const badgeClass = state === 'connected'
+      ? 'badge-green'
+      : state === 'needs-auth'
+        ? 'badge-yellow'
+        : 'badge-orange';
+    const badgeLabel = state === 'connected'
+      ? 'connected'
+      : state === 'needs-auth'
+        ? 'needs-auth'
+        : 'error';
+
+    const toolCountMatch = remainder.match(/^(\d+\s+tool\(s\))(?:\s+\|\s+(.+))?$/i);
+    const toolCount = toolCountMatch ? toolCountMatch[1] : remainder;
+    const errorText = toolCountMatch?.[2] || '';
+
+    rows.push(
+      `<div class="mcp-report-row">` +
+        `<span class="mcp-report-name">${escapeHtml(name.trim())}</span>` +
+        `<span class="${badgeClass}">${escapeHtml(badgeLabel)}</span>` +
+        `<span class="mcp-report-meta">${escapeHtml(transport.trim())} | ${escapeHtml(toolCount.trim())}</span>` +
+        `${errorText ? `<span class="mcp-report-error">${escapeHtml(errorText.trim())}</span>` : ''}` +
+      `</div>`
+    );
+  }
+
+  if (!rows.length) {
+    return renderMarkdown(text);
+  }
+
+  return `<div class="mcp-report">${rows.join('')}</div>`;
 }
 
 function parseVerificationReport(text) {

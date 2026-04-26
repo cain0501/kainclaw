@@ -1,6 +1,9 @@
 import { describe, expect, it, vi } from "vitest";
 
-import { createSettingsPanelActions } from "./settingsPanelHost";
+import {
+  createSettingsPanelActions,
+  createSettingsPanelActionsFactory,
+} from "./settingsPanelHost";
 
 class FakeSettingsStore {
   providers: any[] = [];
@@ -130,6 +133,63 @@ class FakeSettingsStore {
 }
 
 describe("settingsPanelHost", () => {
+  it("builds a reusable settings panel actions factory around stable host bindings", async () => {
+    const settings = new FakeSettingsStore();
+    const initializeCompanion = vi.fn(async () => undefined);
+    const storeLicenseKey = vi.fn(async () => undefined);
+    const setLicenseFlags = vi.fn();
+    const postWebviewMessage = vi.fn();
+    const logSession = vi.fn();
+    const handleSessionsLoad = vi.fn(async () => undefined);
+
+    const factory = createSettingsPanelActionsFactory({
+      settings,
+      refreshWorkspaceStatus: () => undefined,
+      initializeCompanion,
+      storeLicenseKey,
+      setLicenseFlags,
+      verifyLicense: rawKey =>
+        rawKey === "good"
+          ? {
+              valid: true,
+              flags: {
+                sessionPersistence: true,
+                multiSession: true,
+                swarm: false,
+              },
+              expiresAt: new Date("2026-12-31T00:00:00.000Z"),
+            }
+          : { valid: false, reason: "bad" },
+    });
+
+    const actions = factory({
+      postWebviewMessage,
+      postState: () => undefined,
+      logSession,
+      shouldRefreshSessionsList: () => true,
+      handleSessionsLoad,
+    });
+
+    await actions.activateLicense("good");
+
+    expect(settings.isLicenseActivated()).toBe(true);
+    expect(storeLicenseKey).toHaveBeenCalledWith("good");
+    expect(setLicenseFlags).toHaveBeenCalledWith({
+      sessionPersistence: true,
+      multiSession: true,
+      swarm: false,
+    });
+    expect(initializeCompanion).toHaveBeenCalled();
+    expect(logSession).toHaveBeenCalledWith("license-activated", {
+      flags: {
+        sessionPersistence: true,
+        multiSession: true,
+        swarm: false,
+      },
+    });
+    expect(handleSessionsLoad).toHaveBeenCalled();
+  });
+
   it("validates onboarding keys and completes onboarding with UI updates", async () => {
     const settings = new FakeSettingsStore();
     const postWebviewMessage = vi.fn();

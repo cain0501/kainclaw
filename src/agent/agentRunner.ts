@@ -89,7 +89,12 @@ export interface AgentRunnerOptions {
   onThinkingSummary?: (summary: string) => void;
   /** Called when tool execution starts and ends. */
   onToolStart?: (toolName: string, input: Record<string, unknown>, executionId: string) => void;
-  onToolEnd?: (executionId: string, summary: string, isError: boolean) => void;
+  onToolEnd?: (
+    executionId: string,
+    summary: string,
+    isError: boolean,
+    content?: string,
+  ) => void;
   abortSignal?: AbortSignal;
   /** Maximum turn count to prevent infinite loops. */
   maxTurns?: number;
@@ -178,7 +183,7 @@ export async function runAgent(
           result = await executeTool(toolCall.name, toolCall.input, toolContext);
         }
 
-        onToolEnd?.(execId, result.summary, false);
+        onToolEnd?.(execId, result.summary, false, result.content);
         lastToolResultContent = `${result.summary}\n\n${result.content}`;
         messages.push({
           role: "tool_result",
@@ -187,7 +192,7 @@ export async function runAgent(
         });
       } catch (error) {
         const msg = error instanceof Error ? error.message : String(error);
-        onToolEnd?.(execId, msg, true);
+        onToolEnd?.(execId, msg, true, `Tool error: ${msg}`);
         lastToolResultContent = `Tool error: ${msg}`;
         messages.push({
           role: "tool_result",

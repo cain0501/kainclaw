@@ -1,6 +1,9 @@
 import { describe, expect, it, vi } from "vitest";
 
-import { createSessionPanelActions } from "./sessionPanelHost";
+import {
+  createSessionPanelActions,
+  createSessionPanelActionsFactory,
+} from "./sessionPanelHost";
 
 class FakeSessionStore {
   index = {
@@ -81,6 +84,62 @@ class FakeSessionStore {
 }
 
 describe("sessionPanelHost", () => {
+  it("builds a reusable session panel actions factory around stable host bindings", async () => {
+    const sessions = new FakeSessionStore();
+    let currentSessionId: string | undefined = "session-1";
+    let signature = "";
+    const factory = createSessionPanelActionsFactory({
+      settings: {
+        setActiveSessionId: async () => undefined,
+      },
+      sessions,
+      getPersistenceEnabled: () => true,
+      refreshWorkspaceStatus: () => undefined,
+      savedSessionActivationBindings: {
+        clearConversationBuffers: () => undefined,
+        setCurrentSessionId: () => undefined,
+        replaceSessionMessages: () => undefined,
+        restoreModelConversation: () => undefined,
+        restorePendingPlanVerification: () => undefined,
+        restoreCompactBoundary: () => undefined,
+        markConversationBaseline: () => undefined,
+      },
+      markConversationBaseline: () => undefined,
+      showSaveDialog: async () => undefined,
+      writeFile: async () => undefined,
+      showInformationMessage: () => undefined,
+    });
+
+    const actions = factory({
+      workspaceRoot: "E:\\repo",
+      getCurrentSessionId: () => currentSessionId,
+      setCurrentSessionId: id => {
+        currentSessionId = id;
+      },
+      getPreviousSignature: () => signature,
+      setSignature: next => {
+        signature = next;
+      },
+      disposeSwarm: () => undefined,
+      resetActiveRuntimeControllers: () => undefined,
+      resetPlanMode: () => undefined,
+      clearCachedTools: () => undefined,
+      clearPendingPlanVerification: () => undefined,
+      setTransientConversationId: () => undefined,
+      resetAutoMemoryConversation: () => undefined,
+      ensureConversationWorktreeHydrated: async () => undefined,
+      shouldRefreshSessionsList: () => false,
+      postState: () => undefined,
+      publishSessions: () => undefined,
+      logSession: () => undefined,
+    });
+
+    await actions.renameSession("session-1", "Factory Rename");
+    expect(sessions.updated).toEqual([
+      { id: "session-1", patch: { title: "Factory Rename" } },
+    ]);
+  });
+
   it("loads, renames, and exports sessions through panel actions", async () => {
     const sessions = new FakeSessionStore();
     let currentSessionId: string | undefined = "session-1";

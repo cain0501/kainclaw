@@ -13,6 +13,19 @@ const {
     markConfigDirty: vi.fn(),
     getToolDefinitions: vi.fn(async () => [{ name: "mcp_tool" }]),
     getStatusSummary: vi.fn(async () => [{ name: "github" }]),
+    getPromptCommands: vi.fn(async () => [
+      {
+        name: "/mcp__github__summarize_issue",
+        description: "Summarize a GitHub issue prompt",
+        argNames: ["issue"],
+        serverName: "github",
+        promptName: "summarize_issue",
+        userFacingName: "github:summarize_issue (MCP)",
+      },
+    ]),
+    executePromptCommand: vi.fn(async () => ({
+      content: "Summarize issue #123",
+    })),
     dispose: vi.fn(async () => undefined),
   },
   lspRuntimeMock: {},
@@ -157,10 +170,29 @@ describe("workspaceRuntimeShell", () => {
     await expect(runtime.getMcpStatusSummary()).resolves.toEqual([
       { name: "github" },
     ]);
+    await expect(runtime.getMcpPromptCommands()).resolves.toEqual([
+      {
+        name: "/mcp__github__summarize_issue",
+        description: "Summarize a GitHub issue prompt",
+        argNames: ["issue"],
+        serverName: "github",
+        promptName: "summarize_issue",
+        userFacingName: "github:summarize_issue (MCP)",
+      },
+    ]);
+    await expect(
+      runtime.executeMcpPromptCommand("/mcp__github__summarize_issue", "123"),
+    ).resolves.toEqual({
+      content: "Summarize issue #123",
+    });
     await runtime.dispose();
 
     expect(mcpRuntimeMock.setEnvMap).toHaveBeenCalledWith({ HELLO: "world" });
     expect(mcpRuntimeMock.markConfigDirty).toHaveBeenCalledTimes(1);
+    expect(mcpRuntimeMock.executePromptCommand).toHaveBeenCalledWith(
+      "/mcp__github__summarize_issue",
+      "123",
+    );
     expect(browserRuntimeMock.dispose).toHaveBeenCalledTimes(1);
     expect(mcpRuntimeMock.dispose).toHaveBeenCalledTimes(1);
   });

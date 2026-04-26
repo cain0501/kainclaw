@@ -246,6 +246,7 @@ export function createPromptTurnAgentCallbacks(options: {
     execId: string,
     summary: string,
     isError: boolean,
+    content?: string,
   ) => void;
 } {
   return {
@@ -264,7 +265,7 @@ export function createPromptTurnAgentCallbacks(options: {
         formatToolInputPreview(input),
       );
     },
-    onToolEnd: (execId, summary, isError) => {
+    onToolEnd: (execId, summary, isError, _content) => {
       options.finishToolExecution(
         execId,
         isError ? "error" : "done",
@@ -330,6 +331,7 @@ export async function runPromptAgentTurn(options: {
     execId: string,
     summary: string,
     isError: boolean,
+    content?: string,
   ) => void;
   runAgentImpl?: typeof runAgent;
 }): Promise<{

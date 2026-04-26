@@ -67,6 +67,11 @@ export type SavedSessionActivationBindings = {
   markConversationBaseline: (count: number) => void;
 };
 
+export type SavedSessionActivationBindingFactory = (options: {
+  setCurrentSessionId: (sessionId: string | undefined) => void;
+  sessionMessages: SessionViewMessage[];
+}) => SavedSessionActivationBindings;
+
 export function createSavedSessionActivationBindings(options: {
   clearConversationBuffers: () => void;
   setCurrentSessionId: (sessionId: string | undefined) => void;
@@ -95,6 +100,32 @@ export function createSavedSessionActivationBindings(options: {
     restoreCompactBoundary: options.restoreCompactBoundary,
     markConversationBaseline: options.markConversationBaseline,
   };
+}
+
+export function createSavedSessionActivationBindingsFactory(options: {
+  clearConversationBuffers: () => void;
+  restoreModelConversation: (
+    modelConversation: SessionRuntimeState["modelConversation"],
+  ) => void;
+  restorePendingPlanVerification: (
+    pendingPlanVerification: SessionRuntimeState["pendingPlanVerification"],
+  ) => void;
+  restoreCompactBoundary: (
+    compactBoundary: SessionRuntimeState["compactBoundary"],
+  ) => void;
+  markConversationBaseline: (count: number) => void;
+}): SavedSessionActivationBindingFactory {
+  return state =>
+    createSavedSessionActivationBindings({
+      clearConversationBuffers: options.clearConversationBuffers,
+      setCurrentSessionId: state.setCurrentSessionId,
+      sessionMessages: state.sessionMessages,
+      restoreModelConversation: options.restoreModelConversation,
+      restorePendingPlanVerification:
+        options.restorePendingPlanVerification,
+      restoreCompactBoundary: options.restoreCompactBoundary,
+      markConversationBaseline: options.markConversationBaseline,
+    });
 }
 
 export function applySavedSessionActivation(options: {

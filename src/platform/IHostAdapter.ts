@@ -23,6 +23,7 @@ export interface IHostAdapter {
 
   // Notifications
   showError(message: string): void;
+  openExternal(url: string): Promise<boolean>;
 
   // Secrets, such as API keys
   getSecret(key: string): Promise<string | undefined>;

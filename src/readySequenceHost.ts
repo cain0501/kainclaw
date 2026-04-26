@@ -1,4 +1,8 @@
 import type { SessionIndex } from "./storage/sessionRepository";
+import {
+  tryRestoreSavedSessionWithHost,
+  type SavedSessionActivationBindings,
+} from "./savedSessionHost";
 
 export type ReadySequenceAction =
   | { kind: "show_onboarding" }
@@ -44,6 +48,8 @@ export type ReadySequenceController = {
   reset: () => void;
   isReady: () => boolean;
 };
+
+export type ReadySequenceRunnerFactory = () => Promise<ReadySequenceAction>;
 
 export function createReadySequenceController(options: {
   runReadySequence: () => Promise<unknown>;
@@ -112,6 +118,76 @@ export function createReadySequenceRunner(
       handleSessionsLoad: options.handleSessionsLoad,
     });
   };
+}
+
+export function createReadySequenceRunnerFactory(options: {
+  restoreLicenseFlags: () => Promise<void>;
+  initializeCompanion: () => Promise<void>;
+  getOnboardingDone: () => boolean;
+  getSessionPersistenceEnabled: () => boolean;
+  getWorkspaceRoot: () => string | undefined;
+  getWorkspaceHash: (workspaceRoot?: string) => string;
+  getLastSessionId: () => string | undefined;
+  readIndex: () => Promise<SessionIndex>;
+  loadMessages: (sessionId: string) => Promise<any[]>;
+  loadRuntimeState: (sessionId: string) => Promise<any>;
+  savedSessionActivationBindings: SavedSessionActivationBindings;
+  setActiveSessionId: (id: string) => Promise<unknown>;
+  showOnboarding: () => void;
+  logReady: (details: {
+    workspaceRoot: string | null;
+    workspaceHash: string;
+    lastSessionId: string | null;
+  }) => void;
+  postLicenseRequired: (feature: "sessionPersistence") => void;
+  postState: () => void;
+  refreshWorkspaceStatus: () => void;
+  logRestoreMissed: (details: { workspaceHash: string }) => void;
+  logRestoreSkippedEmpty: (details: {
+    source: "active" | "workspace-fallback";
+    sessionId: string;
+  }) => void;
+  logRestoreSuccess: (details: {
+    source: "active" | "workspace-fallback";
+    sessionId: string;
+    messageCount: number;
+    hasPendingPlanVerification: boolean;
+  }) => void;
+  ensureConversationWorktreeHydrated: (workspaceRoot: string) => Promise<void>;
+  shouldRefreshSessionsList: () => boolean;
+  handleSessionsLoad: () => Promise<void>;
+}): ReadySequenceRunnerFactory {
+  return createReadySequenceRunner({
+    restoreLicenseFlags: options.restoreLicenseFlags,
+    initializeCompanion: options.initializeCompanion,
+    getOnboardingDone: options.getOnboardingDone,
+    getSessionPersistenceEnabled: options.getSessionPersistenceEnabled,
+    getWorkspaceRoot: options.getWorkspaceRoot,
+    getWorkspaceHash: options.getWorkspaceHash,
+    getLastSessionId: options.getLastSessionId,
+    readIndex: options.readIndex,
+    tryRestoreSavedSession: (sessionId, source) =>
+      tryRestoreSavedSessionWithHost({
+        sessionId,
+        source,
+        loadMessages: id => options.loadMessages(id),
+        loadRuntimeState: id => options.loadRuntimeState(id),
+        ...options.savedSessionActivationBindings,
+        logRestoreSkippedEmpty: options.logRestoreSkippedEmpty,
+        logRestoreSuccess: options.logRestoreSuccess,
+      }),
+    setActiveSessionId: options.setActiveSessionId,
+    showOnboarding: options.showOnboarding,
+    logReady: options.logReady,
+    postLicenseRequired: options.postLicenseRequired,
+    postState: options.postState,
+    refreshWorkspaceStatus: options.refreshWorkspaceStatus,
+    logRestoreMissed: options.logRestoreMissed,
+    ensureConversationWorktreeHydrated:
+      options.ensureConversationWorktreeHydrated,
+    shouldRefreshSessionsList: options.shouldRefreshSessionsList,
+    handleSessionsLoad: options.handleSessionsLoad,
+  });
 }
 
 export async function resolveReadySequenceAction(options: {

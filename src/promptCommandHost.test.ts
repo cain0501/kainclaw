@@ -615,6 +615,135 @@ describe("promptCommandHost", () => {
       expect(mcpResult.reply).toContain("github: connected");
     }
 
+    const mcpPromptsResult = await runPromptCommandChain({
+      prompt: "/mcp prompts",
+      config: providerConfig,
+      workspaceRoot: "E:\\repo",
+      envMap: {},
+      runtime: {
+        async getMcpStatusSummary() {
+          return [];
+        },
+        async getMcpPromptCommands() {
+          return [
+            {
+              name: "/mcp__github__summarize_issue",
+              description: "Summarize an issue with recent comments.",
+              argNames: ["issue"],
+              userFacingName: "github:summarize_issue (MCP)",
+            },
+          ];
+        },
+      },
+      tools: [],
+      runtimeOptions: {},
+      effortLevel: "high",
+      tryHandleLocalCommand: async () => null,
+      tryHandlePlanModeCommand: async () => null,
+      handleCompactCommand: async () => false,
+      handleReviewCommand: async () => false,
+      handleVerificationCommand: async () => false,
+    });
+
+    expect(mcpPromptsResult.kind).toBe("reply");
+    if (mcpPromptsResult.kind === "reply") {
+      expect(mcpPromptsResult.reply).toContain("MCP prompt commands:");
+      expect(mcpPromptsResult.reply).toContain("`/mcp__github__summarize_issue` <issue>");
+    }
+
+    const mcpAuthResult = await runPromptCommandChain({
+      prompt: "/mcp auth notion",
+      config: providerConfig,
+      workspaceRoot: "E:\\repo",
+      envMap: {},
+      runtime: {
+        getToolContext: () => ({
+          workspaceRoot: "E:\\repo",
+          invokerKind: "main",
+          mcp: {
+            executeTool: async (name: string) => ({
+              summary: `Authenticate ${name}`,
+              content: "Authentication completed for notion.",
+            }),
+          },
+        }),
+        async getMcpStatusSummary() {
+          return [];
+        },
+      },
+      tools: [
+        {
+          name: "mcp__notion__authenticate",
+          description: "Authenticate notion",
+          input_schema: {
+            type: "object",
+            properties: {},
+          },
+        },
+      ],
+      runtimeOptions: {},
+      effortLevel: "high",
+      tryHandleLocalCommand: async () => null,
+      tryHandlePlanModeCommand: async () => null,
+      handleCompactCommand: async () => false,
+      handleReviewCommand: async () => false,
+      handleVerificationCommand: async () => false,
+    });
+
+    expect(mcpAuthResult.kind).toBe("reply");
+    if (mcpAuthResult.kind === "reply") {
+      expect(mcpAuthResult.reply).toContain("Authentication completed for notion.");
+    }
+
+    const mcpCallResult = await runPromptCommandChain({
+      prompt: "/mcp call mcp__notion__notion-get-users {\"page_size\":5}",
+      config: providerConfig,
+      workspaceRoot: "E:\\repo",
+      envMap: {},
+      runtime: {
+        getToolContext: () => ({
+          workspaceRoot: "E:\\repo",
+          invokerKind: "main",
+          mcp: {
+            executeTool: async (_name: string, input: Record<string, unknown>) => ({
+              summary: "Fetched users",
+              content: JSON.stringify(input),
+            }),
+          },
+        }),
+        async getMcpStatusSummary() {
+          return [];
+        },
+      },
+      tools: [
+        {
+          name: "mcp__notion__notion-get-users",
+          description: "Get users",
+          input_schema: {
+            type: "object",
+            properties: {
+              page_size: {
+                type: "number",
+                description: "Page size",
+              },
+            },
+          },
+        },
+      ],
+      runtimeOptions: {},
+      effortLevel: "high",
+      tryHandleLocalCommand: async () => null,
+      tryHandlePlanModeCommand: async () => null,
+      handleCompactCommand: async () => false,
+      handleReviewCommand: async () => false,
+      handleVerificationCommand: async () => false,
+    });
+
+    expect(mcpCallResult.kind).toBe("reply");
+    if (mcpCallResult.kind === "reply") {
+      expect(mcpCallResult.reply).toContain('"page_size":5');
+    }
+
     const memoryResult = await runPromptCommandChain({
       prompt: "/memory",
       config: providerConfig,
@@ -787,5 +916,46 @@ describe("promptCommandHost", () => {
       expect(result.reply).toContain("plan release");
       expect(result.reply).not.toContain("verify release");
     }
+  });
+
+  it("rewrites MCP prompt commands into prompt content plus attachments", async () => {
+    const result = await runPromptCommandChain({
+      prompt: "/mcp__github__summarize_issue 123",
+      config: providerConfig,
+      workspaceRoot: "E:\\repo",
+      envMap: {},
+      runtime: {
+        async getMcpPromptCommands() {
+          return [
+            {
+              name: "/mcp__github__summarize_issue",
+              description: "Summarize issue",
+              argNames: ["issue"],
+              userFacingName: "github:summarize_issue (MCP)",
+            },
+          ];
+        },
+        async executeMcpPromptCommand() {
+          return {
+            content: "Summarize GitHub issue 123 and include the latest comments.",
+            attachments: [{ data: "QUJDRA==", mimeType: "image/png" }],
+          };
+        },
+      },
+      tools: [],
+      runtimeOptions: {},
+      effortLevel: "high",
+      tryHandleLocalCommand: async () => null,
+      tryHandlePlanModeCommand: async () => null,
+      handleCompactCommand: async () => false,
+      handleReviewCommand: async () => false,
+      handleVerificationCommand: async () => false,
+    });
+
+    expect(result).toEqual({
+      kind: "rewrite",
+      prompt: "Summarize GitHub issue 123 and include the latest comments.",
+      attachments: [{ data: "QUJDRA==", mimeType: "image/png" }],
+    });
   });
 });

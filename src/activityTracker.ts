@@ -19,6 +19,7 @@ type ActivityTrackerOptions = {
   createId?: () => string;
   onChange?: () => void;
   onWorktreeToolSuccess?: () => void;
+  onMcpAuthToolSuccess?: () => void;
 };
 
 export class ActivityTracker {
@@ -109,6 +110,9 @@ export class ActivityTracker {
     if (event.outcome === "success" && isWorktreeLifecycleTool(event.toolName)) {
       this.options.onWorktreeToolSuccess?.();
     }
+    if (event.outcome === "success" && isMcpAuthLifecycleTool(event.toolName)) {
+      this.options.onMcpAuthToolSuccess?.();
+    }
 
     this.finishToolExecution(
       event.executionId,
@@ -124,4 +128,8 @@ export class ActivityTracker {
 
 function isWorktreeLifecycleTool(toolName: string): boolean {
   return toolName === "EnterWorktree" || toolName === "ExitWorktree";
+}
+
+function isMcpAuthLifecycleTool(toolName: string): boolean {
+  return /^mcp__.+__authenticate$/i.test(toolName);
 }

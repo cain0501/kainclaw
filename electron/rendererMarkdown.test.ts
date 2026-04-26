@@ -168,6 +168,22 @@ describe("Electron renderer markdown", () => {
     expect(rendered).toContain("<code>two</code>");
   });
 
+  it("renders MCP status replies as structured badges", async () => {
+    const rendered = await renderRendererContent(
+      [
+        "MCP servers:",
+        "- notion: connected | streamable-http | 14 tool(s)",
+        "- supabase: error | stdio | 0 tool(s) | MCP error -32000: Connection closed",
+      ].join("\n"),
+    );
+
+    expect(rendered).toContain('class="mcp-report"');
+    expect(rendered).toContain('class="badge-green">connected</span>');
+    expect(rendered).toContain('class="badge-orange">error</span>');
+    expect(rendered).toContain("streamable-http | 14 tool(s)");
+    expect(rendered).toContain("MCP error -32000: Connection closed");
+  });
+
   it("keeps unclosed fences as one code block like marked lexer", async () => {
     const rendered = await renderRendererContent(
       ["```text", "line 1", "### not a heading"].join("\n"),

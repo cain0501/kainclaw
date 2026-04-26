@@ -4,6 +4,7 @@ import {
   applyReadySequenceAction,
   createReadySequenceController,
   createReadySequenceRunner,
+  createReadySequenceRunnerFactory,
   resolveReadySequenceAction,
   runReadySequenceWithHost,
 } from "./readySequenceHost";
@@ -113,6 +114,176 @@ describe("readySequenceHost", () => {
       "initializeCompanion",
       "ready:E:\\repo:hash:E:\\repo:session-1",
       "restoreMissed:hash:E:\\repo",
+      "hydrate:E:\\repo",
+      "postState",
+      "refresh",
+    ]);
+  });
+
+  it("builds a ready sequence runner factory around saved-session host bindings", async () => {
+    const calls: string[] = [];
+    let currentSessionId: string | undefined;
+    let baselineCount = 0;
+    let restoredModelConversation: Array<{ role: string; content: string }> | undefined;
+    let restoredPendingPlanVerification: { planFilePath: string } | undefined;
+    let restoredCompactBoundary:
+      | {
+          trigger: "manual" | "auto";
+          compactedAt: number;
+          preTokens: number;
+          postTokens: number;
+          messagesSummarized: number;
+          messagesKept: number;
+          preservedRecentMessages: boolean;
+        }
+      | undefined;
+    const restoredSessionMessages: Array<{ role: string; content: string }> = [];
+
+    const runner = createReadySequenceRunnerFactory({
+      restoreLicenseFlags: async () => {
+        calls.push("restoreLicense");
+      },
+      initializeCompanion: async () => {
+        calls.push("initializeCompanion");
+      },
+      getOnboardingDone: () => true,
+      getSessionPersistenceEnabled: () => true,
+      getWorkspaceRoot: () => "E:\\repo",
+      getWorkspaceHash: workspaceRoot => `hash:${workspaceRoot ?? "none"}`,
+      getLastSessionId: () => "session-1",
+      readIndex: async () => ({ sessions: [] }),
+      loadMessages: async () => [{ role: "assistant", content: "restored" }],
+      loadRuntimeState: async () => ({
+        modelConversation: [{ role: "assistant", content: "model-restored" }],
+        pendingPlanVerification: {
+          planFilePath: "E:\\repo\\.omx\\plans\\test-spec.md",
+        },
+        compactBoundary: {
+          trigger: "manual",
+          compactedAt: 1,
+          preTokens: 200,
+          postTokens: 120,
+          messagesSummarized: 4,
+          messagesKept: 2,
+          preservedRecentMessages: true,
+        },
+      }),
+      savedSessionActivationBindings: {
+        clearConversationBuffers: () => {
+          calls.push("clearBuffers");
+        },
+        setCurrentSessionId: sessionId => {
+          currentSessionId = sessionId;
+          calls.push(`current:${sessionId ?? "undefined"}`);
+        },
+        replaceSessionMessages: messages => {
+          restoredSessionMessages.push(...messages);
+          calls.push(`messages:${messages.length}`);
+        },
+        restoreModelConversation: modelConversation => {
+          restoredModelConversation = modelConversation as Array<{
+            role: string;
+            content: string;
+          }>;
+          calls.push(`model:${modelConversation?.length ?? 0}`);
+        },
+        restorePendingPlanVerification: pendingPlanVerification => {
+          restoredPendingPlanVerification = pendingPlanVerification as {
+            planFilePath: string;
+          };
+          calls.push(`pending:${pendingPlanVerification ? "yes" : "no"}`);
+        },
+        restoreCompactBoundary: compactBoundary => {
+          restoredCompactBoundary = compactBoundary as {
+            trigger: "manual" | "auto";
+            compactedAt: number;
+            preTokens: number;
+            postTokens: number;
+            messagesSummarized: number;
+            messagesKept: number;
+            preservedRecentMessages: boolean;
+          };
+          calls.push(`compact:${compactBoundary ? "yes" : "no"}`);
+        },
+        markConversationBaseline: count => {
+          baselineCount = count;
+          calls.push(`baseline:${count}`);
+        },
+      },
+      setActiveSessionId: async () => undefined,
+      showOnboarding: () => {
+        calls.push("onboarding");
+      },
+      logReady: details => {
+        calls.push(`ready:${details.workspaceRoot}:${details.workspaceHash}:${details.lastSessionId}`);
+      },
+      postLicenseRequired: feature => {
+        calls.push(`license:${feature}`);
+      },
+      postState: () => {
+        calls.push("postState");
+      },
+      refreshWorkspaceStatus: () => {
+        calls.push("refresh");
+      },
+      logRestoreMissed: details => {
+        calls.push(`restoreMissed:${details.workspaceHash}`);
+      },
+      logRestoreSkippedEmpty: details => {
+        calls.push(`restoreSkipped:${details.source}:${details.sessionId}`);
+      },
+      logRestoreSuccess: details => {
+        calls.push(`restoreSuccess:${details.source}:${details.sessionId}:${details.messageCount}`);
+      },
+      ensureConversationWorktreeHydrated: async workspaceRoot => {
+        calls.push(`hydrate:${workspaceRoot}`);
+      },
+      shouldRefreshSessionsList: () => false,
+      handleSessionsLoad: async () => {
+        calls.push("sessionsLoad");
+      },
+    });
+
+    const result = await runner();
+
+    expect(result).toEqual({
+      kind: "continue",
+      restored: true,
+      restoredSessionId: "session-1",
+      restoredSource: "active",
+    });
+    expect(currentSessionId).toBe("session-1");
+    expect(restoredSessionMessages).toEqual([
+      { role: "assistant", content: "restored" },
+    ]);
+    expect(restoredModelConversation).toEqual([
+      { role: "assistant", content: "model-restored" },
+    ]);
+    expect(restoredPendingPlanVerification).toEqual({
+      planFilePath: "E:\\repo\\.omx\\plans\\test-spec.md",
+    });
+    expect(restoredCompactBoundary).toEqual({
+      trigger: "manual",
+      compactedAt: 1,
+      preTokens: 200,
+      postTokens: 120,
+      messagesSummarized: 4,
+      messagesKept: 2,
+      preservedRecentMessages: true,
+    });
+    expect(baselineCount).toBe(1);
+    expect(calls).toEqual([
+      "restoreLicense",
+      "initializeCompanion",
+      "clearBuffers",
+      "current:session-1",
+      "messages:1",
+      "model:1",
+      "pending:yes",
+      "compact:yes",
+      "baseline:1",
+      "restoreSuccess:active:session-1:1",
+      "ready:E:\\repo:hash:E:\\repo:session-1",
       "hydrate:E:\\repo",
       "postState",
       "refresh",

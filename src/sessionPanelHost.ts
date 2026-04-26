@@ -8,7 +8,11 @@ import {
   switchSessionCommand,
 } from "./sessionCommandHost";
 import { publishLocalSessionList } from "./sessionListHost";
-import { loadSavedSessionPayload, applySavedSessionActivation } from "./savedSessionHost";
+import {
+  loadSavedSessionPayload,
+  applySavedSessionActivation,
+  type SavedSessionActivationBindings,
+} from "./savedSessionHost";
 import { clearDeletedActiveSession } from "./sessionMutationHost";
 import { finalizeSessionMutation } from "./sessionLifecycleHost";
 import {
@@ -45,6 +49,30 @@ export type SessionPanelActions = {
   deleteSession: (id: string) => Promise<void>;
   exportSession: (id: string) => Promise<void>;
 };
+
+export type SessionPanelActionFactory = (options: {
+  workspaceRoot?: string;
+  getCurrentSessionId: () => string | undefined;
+  setCurrentSessionId: (id: string | undefined) => void;
+  getPreviousSignature: () => string;
+  setSignature: (signature: string) => void;
+  disposeSwarm: () => void;
+  resetActiveRuntimeControllers: () => void;
+  resetPlanMode: () => void;
+  clearCachedTools: () => void;
+  clearPendingPlanVerification: (persist?: boolean) => void;
+  setTransientConversationId: (
+    id: ReturnType<typeof randomUUID> | undefined,
+  ) => void;
+  resetAutoMemoryConversation: (id: string) => void;
+  ensureConversationWorktreeHydrated: (
+    workspaceRoot: string,
+  ) => Promise<void>;
+  shouldRefreshSessionsList: () => boolean;
+  postState: () => void;
+  publishSessions: (payload: { sessions: any[]; activeId: string | null }) => void;
+  logSession: (event: string, details: Record<string, unknown>) => void;
+}) => SessionPanelActions;
 
 export function createSessionPanelActions(options: {
   settings: SettingsStore;
@@ -246,4 +274,59 @@ export function createSessionPanelActions(options: {
       });
     },
   };
+}
+
+export function createSessionPanelActionsFactory(options: {
+  settings: SettingsStore;
+  sessions: SessionStore;
+  getPersistenceEnabled: () => boolean;
+  refreshWorkspaceStatus: () => void;
+  savedSessionActivationBindings: SavedSessionActivationBindings;
+  markConversationBaseline: (count: number) => void;
+  showSaveDialog: (input: {
+    defaultPath?: string;
+    title: string;
+  }) => Promise<string | undefined>;
+  writeFile: (targetPath: string, content: string) => Promise<void>;
+  showInformationMessage: (message: string) => void;
+}): SessionPanelActionFactory {
+  return state =>
+    createSessionPanelActions({
+      settings: options.settings,
+      sessions: options.sessions,
+      workspaceRoot: state.workspaceRoot,
+      getPersistenceEnabled: options.getPersistenceEnabled,
+      getCurrentSessionId: state.getCurrentSessionId,
+      setCurrentSessionId: state.setCurrentSessionId,
+      getPreviousSignature: state.getPreviousSignature,
+      setSignature: state.setSignature,
+      disposeSwarm: state.disposeSwarm,
+      resetActiveRuntimeControllers: state.resetActiveRuntimeControllers,
+      resetPlanMode: state.resetPlanMode,
+      clearCachedTools: state.clearCachedTools,
+      clearConversationBuffers:
+        options.savedSessionActivationBindings.clearConversationBuffers,
+      replaceSessionMessages:
+        options.savedSessionActivationBindings.replaceSessionMessages,
+      restoreModelConversation:
+        options.savedSessionActivationBindings.restoreModelConversation,
+      restorePendingPlanVerification:
+        options.savedSessionActivationBindings.restorePendingPlanVerification,
+      restoreCompactBoundary:
+        options.savedSessionActivationBindings.restoreCompactBoundary,
+      clearPendingPlanVerification: state.clearPendingPlanVerification,
+      setTransientConversationId: state.setTransientConversationId,
+      markConversationBaseline: options.markConversationBaseline,
+      resetAutoMemoryConversation: state.resetAutoMemoryConversation,
+      ensureConversationWorktreeHydrated:
+        state.ensureConversationWorktreeHydrated,
+      shouldRefreshSessionsList: state.shouldRefreshSessionsList,
+      postState: state.postState,
+      refreshWorkspaceStatus: options.refreshWorkspaceStatus,
+      publishSessions: state.publishSessions,
+      logSession: state.logSession,
+      showSaveDialog: options.showSaveDialog,
+      writeFile: options.writeFile,
+      showInformationMessage: options.showInformationMessage,
+    });
 }
