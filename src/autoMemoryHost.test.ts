@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 import {
   buildAutoMemoryHistory,
   createAutoMemoryHostBindings,
+  createAutoMemoryHostBindingsFactory,
 } from "./autoMemoryHost";
 
 describe("autoMemoryHost", () => {
@@ -141,5 +142,64 @@ describe("autoMemoryHost", () => {
       systemPrompt: "system prompt",
       envMap: { OPENAI_API_KEY: "secret" },
     });
+  });
+
+  it("builds auto-memory bindings from a stable factory", () => {
+    const queueExtraction = vi.fn();
+    const provider = { runStep: vi.fn() } as any;
+    const createProviderAdapter = vi.fn(() => provider);
+    let conversationKey = "session-3";
+    let planModeActive = false;
+    const sessionMessages = [
+      { role: "user" as const, content: "hello" },
+      { role: "assistant" as const, content: "done", kind: "thinking" as const },
+    ];
+
+    const factory = createAutoMemoryHostBindingsFactory({
+      createProviderAdapter,
+      autoMemory: {
+        markConversationBaseline: vi.fn(),
+        resetConversation: vi.fn(),
+        queueExtraction,
+      },
+    });
+    const bindings = factory({
+      getConversationKey: () => conversationKey,
+      getPlanModeState: () => ({ active: planModeActive }),
+      getSessionMessages: () => sessionMessages,
+    });
+
+    bindings.queueAutoMemoryExtraction({
+      workspaceRoot: "E:\\claudecodejingiang\\vscode-extension",
+      config: {
+        type: "openai",
+        apiKey: "secret",
+        model: "gpt-4.1",
+      },
+      envMap: { OPENAI_API_KEY: "secret" },
+    });
+
+    expect(queueExtraction).toHaveBeenCalledTimes(1);
+    expect(queueExtraction.mock.calls[0]?.[0]).toMatchObject({
+      conversationKey: "session-3",
+      history: [
+        { role: "user", content: "hello" },
+        { role: "assistant", content: "done" },
+      ],
+    });
+
+    queueExtraction.mockClear();
+    conversationKey = "session-4";
+    planModeActive = true;
+    bindings.queueAutoMemoryExtraction({
+      workspaceRoot: "E:\\claudecodejingiang\\vscode-extension",
+      config: {
+        type: "openai",
+        apiKey: "secret",
+        model: "gpt-4.1",
+      },
+      envMap: { OPENAI_API_KEY: "secret" },
+    });
+    expect(queueExtraction).not.toHaveBeenCalled();
   });
 });

@@ -172,6 +172,11 @@ const REGISTERED_PROMPT_SLASH_COMMANDS: RegisteredPromptSlashCommand[] = [
     stage: "runtime",
   },
   {
+    name: "/ultrareview",
+    description: "Launch a hosted review task via Claude CLI and receive findings through task notification.",
+    stage: "runtime",
+  },
+  {
     name: "/verify",
     description: "Run the built-in verification agent against the current workspace state.",
     stage: "runtime",
@@ -968,6 +973,16 @@ export async function runPromptCommandChain(options: {
     runtimeOptions: ProviderRuntimeOptions,
     effortLevel: EffortLevel | undefined,
   ) => Promise<boolean>;
+  handleUltrareviewCommand: (
+    prompt: string,
+    workspaceRoot: string,
+    config: AdapterProviderConfig,
+    envMap: Record<string, string>,
+    runtime: RuntimeLike,
+    tools: ToolDefinition[],
+    runtimeOptions: ProviderRuntimeOptions,
+    effortLevel: EffortLevel | undefined,
+  ) => Promise<boolean>;
   handleVerificationCommand: (
     prompt: string,
     workspaceRoot: string,
@@ -1016,6 +1031,17 @@ export async function runPromptCommandChain(options: {
       ),
     "/review": () =>
       options.handleReviewCommand(
+        options.prompt,
+        options.workspaceRoot,
+        options.config,
+        options.envMap,
+        options.runtime,
+        options.tools,
+        options.runtimeOptions,
+        options.effortLevel,
+      ),
+    "/ultrareview": () =>
+      options.handleUltrareviewCommand(
         options.prompt,
         options.workspaceRoot,
         options.config,

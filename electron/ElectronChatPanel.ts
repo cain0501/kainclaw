@@ -34,6 +34,7 @@ import { parsePromptSlashCommand } from "../src/promptCommandHost";
 import { handleCompactCommandWithHost } from "../src/compactHost";
 import {
   handleReviewCommandWithHost,
+  handleUltrareviewCommandWithHost,
   handleVerificationCommandWithHost,
 } from "../src/inspectionHost";
 import {
@@ -390,7 +391,7 @@ export class ElectronChatPanel {
   }
 
   private buildInspectionWorkspaceWarning(
-    commandName: "/review" | "/verify",
+    commandName: "/review" | "/ultrareview" | "/verify",
     workspace: ResolvedWorkspaceRoot,
   ): string | undefined {
     switch (workspace.kind) {
@@ -413,11 +414,11 @@ export class ElectronChatPanel {
 
   private async warnOnDegradedInspectionWorkspace(
     sessionId: string,
-    commandName: "/review" | "/verify",
+    commandName: "/review" | "/ultrareview" | "/verify",
     commandText: string,
   ): Promise<void> {
     const diffRef =
-      commandName === "/review"
+      commandName === "/review" || commandName === "/ultrareview"
         ? parseReviewDiffRef(commandText)
         : parseVerificationDiffRef(commandText);
     if (diffRef && /^https?:\/\//i.test(diffRef.trim())) {
@@ -1864,6 +1865,33 @@ export class ElectronChatPanel {
             commandRuntimeOptions,
             effortLevel,
           ),
+        handleUltrareviewCommand: (
+          commandText,
+          _commandWorkspaceRoot,
+          commandConfig,
+          commandEnvMap,
+          _commandRuntime,
+          commandTools,
+          commandRuntimeOptions,
+          effortLevel,
+        ) =>
+          this.handleUltrareviewPromptCommand(
+            requestSessionId,
+            commandText,
+            workspaceContext.effectiveRoot,
+            commandConfig,
+            commandEnvMap,
+            this.createPromptRuntime(
+              workspaceContext.effectiveRoot,
+              commandEnvMap,
+              commandTools,
+              commandMcpRuntime,
+              abortController.signal,
+            ),
+            commandTools,
+            commandRuntimeOptions,
+            effortLevel,
+          ),
         handleVerificationCommand: (
           commandText,
           _commandWorkspaceRoot,
@@ -2239,12 +2267,14 @@ export class ElectronChatPanel {
 
   private getUserFacingInspectionBackgroundTaskHost(): Pick<
     BackgroundTaskHost,
-    "runBuiltInAgentSession" | "buildFollowUpMessage"
+    "runBuiltInAgentSession" | "buildFollowUpMessage" | "runDetachedRemoteReview"
   > {
     return {
       runBuiltInAgentSession: request =>
         this.backgroundTaskHost.runBuiltInAgentSession(request),
       buildFollowUpMessage: () => "",
+      runDetachedRemoteReview: request =>
+        this.backgroundTaskHost.runDetachedRemoteReview(request),
     };
   }
 
@@ -2419,6 +2449,47 @@ export class ElectronChatPanel {
       markPendingPlanVerificationCompleted: () => undefined,
       resetPendingPlanVerificationToAwaitingStart: () => undefined,
       onUnexpectedError: () => undefined,
+    });
+  }
+
+  private async handleUltrareviewPromptCommand(
+    sessionId: string,
+    commandText: string,
+    workspaceRoot: string,
+    config: AdapterProviderConfig,
+    envMap: Record<string, string>,
+    runtime: ElectronPromptRuntime,
+    tools: ToolDefinition[],
+    runtimeOptions: ProviderRuntimeOptions,
+    effortLevel: EffortLevel | undefined,
+  ): Promise<boolean> {
+    await this.warnOnDegradedInspectionWorkspace(sessionId, "/ultrareview", commandText);
+    return handleUltrareviewCommandWithHost({
+      commandText,
+      workspaceRoot,
+      config,
+      envMap,
+      runtime,
+      tools,
+      runtimeOptions,
+      effortLevel: effortLevel as import("../src/thinkingEffort/types").EffortLevel | undefined,
+      sessionMessages: this.sessionMessages.map(message => ({
+        role: message.role,
+        content: message.content,
+      })),
+      blockedByPlanMode: false,
+      getConversationHistory: () =>
+        this.buildInspectionConversationHistory(this.sessionMessages),
+      getPendingPlanVerification: () => undefined,
+      backgroundTaskHost: this.getUserFacingInspectionBackgroundTaskHost(),
+      addPhaseActivity: () => this.createPhaseActivityStub(),
+      finishPhaseActivity: () => this.finishPhaseActivityStub(),
+      recordAssistantReply: (reply, includeInConversation) =>
+        this.recordCommandAssistantReply(sessionId, reply, includeInConversation),
+      setCompanionState: () => this.setCommandCompanionState(),
+      clearStreamingText: () => this.clearStreamingForSession(sessionId),
+      updateMood: () => this.updateCommandMood(),
+      isAbortLikeError: error => this.isAbortLikeError(error),
     });
   }
 

@@ -233,19 +233,10 @@ export async function handleVerificationPromptCommand(
       }),
     onSuccess: async result => {
       const verificationPassed = result.verdict === "PASS";
-      const followUpMessage = options.buildFollowUpMessage("Verification", result.taskId)?.trim();
       return {
         activityStatus: verificationPassed ? ("done" as const) : ("error" as const),
         activityDetail: `VERDICT: ${result.verdict}`,
-        replies: [
-          { text: result.report },
-          ...(followUpMessage
-            ? [{
-                text: followUpMessage,
-                includeInConversation: false,
-              }]
-            : []),
-        ],
+        replies: [{ text: result.report }],
         companionState: verificationPassed ? ("done" as const) : ("idle" as const),
         moodDelta: verificationPassed ? 2 : -1,
         countConversation: verificationPassed,
@@ -355,18 +346,9 @@ export async function handleReviewPromptCommand(
         onToolEnd: hooks.onToolEnd,
       }),
     onSuccess: async result => {
-      const followUpMessage = options.buildFollowUpMessage("Review", result.taskId)?.trim();
       return {
         activityStatus: "done" as const,
-        replies: [
-          { text: result.report },
-          ...(followUpMessage
-            ? [{
-                text: followUpMessage,
-                includeInConversation: false,
-              }]
-            : []),
-        ],
+        replies: [{ text: result.report }],
         companionState: "done" as const,
         moodDelta: 2,
         countConversation: true,

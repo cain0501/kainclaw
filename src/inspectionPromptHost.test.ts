@@ -244,11 +244,7 @@ describe("inspectionPromptHost", () => {
       "verification report",
       undefined,
     );
-    expect(recordAssistantReply).toHaveBeenNthCalledWith(
-      2,
-      "Verification:verify-1",
-      false,
-    );
+    expect(recordAssistantReply).toHaveBeenCalledTimes(1);
     expect(setCompanionState).toHaveBeenCalledWith("thinking");
     expect(setCompanionState).toHaveBeenLastCalledWith("done");
     expect(updateMood).toHaveBeenCalledWith(2, true);
@@ -350,11 +346,7 @@ describe("inspectionPromptHost", () => {
       "verification partial report",
       undefined,
     );
-    expect(recordAssistantReply).toHaveBeenNthCalledWith(
-      2,
-      "Verification:verify-2",
-      false,
-    );
+    expect(recordAssistantReply).toHaveBeenCalledTimes(1);
     expect(setCompanionState).toHaveBeenCalledWith("thinking");
     expect(setCompanionState).toHaveBeenLastCalledWith("idle");
     expect(updateMood).toHaveBeenCalledWith(-1, false);
@@ -449,11 +441,7 @@ describe("inspectionPromptHost", () => {
       "review report",
       undefined,
     );
-    expect(recordAssistantReply).toHaveBeenNthCalledWith(
-      2,
-      "Review:review-1",
-      false,
-    );
+    expect(recordAssistantReply).toHaveBeenCalledTimes(1);
     expect(updateMood).toHaveBeenCalledWith(2, true);
   });
 

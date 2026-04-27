@@ -1,3 +1,7 @@
+import {
+  parseReviewDiffRef,
+  parseReviewPrNumber,
+} from "./agent/built-in/agentUtils";
 import type { IProviderAdapter, ProviderConfig } from "./agent/providers/IProviderAdapter";
 import type { BackgroundTaskHost } from "./backgroundTaskHost";
 import type { PendingPlanVerificationState } from "./conversationRuntimeStateHost";
@@ -10,6 +14,14 @@ import {
   handleReviewPromptCommand,
   handleVerificationPromptCommand,
 } from "./inspectionPromptHost";
+import {
+  findOriginalTaskForInspection,
+  isGreetingOnlyInspectionTask,
+} from "./inspectionTaskHost";
+import { hasWorkspaceProjectEvidence } from "./inspectionWorkspace";
+import {
+  launchHostedReviewWithHost,
+} from "./remoteReviewHost";
 import {
   runReviewInspectionSession,
   runVerificationInspectionSession,
@@ -47,6 +59,101 @@ function getInspectionToolRunningLabel(
   }
 
   return kind === "review" ? `Reviewing: ${toolName}` : `Verifying: ${toolName}`;
+}
+
+type HostedReviewUiText = {
+  noOriginalTask: string;
+  workspaceFallbackTask: string;
+  currentWorkspaceTarget: string;
+  greetingOnlyTask: (originalTask: string) => string;
+  blockedByPlanMode: string;
+  providerUnsupported: string;
+  phaseLabel: string;
+  phaseDetail: string;
+  phaseDoneDetail: (taskId: string) => string;
+  launchFailed: (message: string) => string;
+  launchReply: (options: {
+    taskId: string;
+    targetLabel: string;
+    outputPath: string;
+  }) => string;
+};
+
+function getHostedReviewUiText(
+  locale: "zh-CN" | "en",
+): HostedReviewUiText {
+  if (locale === "zh-CN") {
+    return {
+      noOriginalTask:
+        "当前对话里还没有可审查的原始任务或改动目标。先给我一个真实实现任务、PR/diff 范围，或先在当前项目里完成改动后再运行 `/ultrareview`。",
+      workspaceFallbackTask: "审查当前工作区项目改动。",
+      currentWorkspaceTarget: "当前工作区改动",
+      greetingOnlyTask: originalTask =>
+        `当前原始任务 \`${originalTask}\` 只是问候/泛聊天，不是可审查的实现请求或 PR/diff 目标。本次不进入 hosted review 流程。请先给出真实实现任务、PR 或 diff 范围后再运行 \`/ultrareview\`。`,
+      blockedByPlanMode:
+        "Plan Mode 仍在开启中，先退出 Plan Mode 再运行 `/ultrareview`。",
+      providerUnsupported:
+        "当前 hosted `/ultrareview` 仅支持 Claude CLI provider。请先在设置中切到 Claude CLI，再重试。",
+      phaseLabel: "正在启动 hosted review",
+      phaseDetail: "后台 Claude CLI review 任务正在启动，完成后会通过通知回流结果。",
+      phaseDoneDetail: taskId => `后台任务 ${taskId} 已启动`,
+      launchFailed: message => `Hosted review 启动失败：${message}`,
+      launchReply: ({ taskId, targetLabel, outputPath }) =>
+        [
+          "已启动 hosted review（后台 Claude CLI）：",
+          `- Task ID: \`${taskId}\``,
+          `- 目标: ${targetLabel}`,
+          `- Output file: \`${outputPath}\``,
+          "",
+          "完成后会自动通知你；如果要提前查看中间输出，可直接读取输出文件，或使用 `TaskOutput` 查询该 task。",
+        ].join("\n"),
+    };
+  }
+
+  return {
+    noOriginalTask:
+      "There is no reviewable original task or change target in this conversation yet. Give me a real implementation task, PR/diff range, or finish workspace changes before running `/ultrareview`.",
+    workspaceFallbackTask: "Review the current workspace/project changes.",
+    currentWorkspaceTarget: "current workspace changes",
+    greetingOnlyTask: originalTask =>
+      `The original task \`${originalTask}\` is only a greeting / generic chat request, not a reviewable implementation request or PR/diff target. Hosted review will not run yet. Give me a real implementation task, PR, or diff range before running \`/ultrareview\`.`,
+    blockedByPlanMode:
+      "Plan Mode is still active. Exit Plan Mode before running `/ultrareview`.",
+    providerUnsupported:
+      "Hosted `/ultrareview` currently requires the Claude CLI provider in KainClaw. Switch to Claude CLI in settings and try again.",
+    phaseLabel: "Launching hosted review",
+    phaseDetail:
+      "Starting a detached Claude CLI review task. Findings will arrive through task notification.",
+    phaseDoneDetail: taskId => `Background task ${taskId} launched`,
+    launchFailed: message => `Hosted review failed to launch: ${message}`,
+    launchReply: ({ taskId, targetLabel, outputPath }) =>
+      [
+        "Hosted review launched in the background via Claude CLI:",
+        `- Task ID: \`${taskId}\``,
+        `- Target: ${targetLabel}`,
+        `- Output file: \`${outputPath}\``,
+        "",
+        "You'll be notified when it completes. Read the output file or use `TaskOutput` only if you need partial output before then.",
+      ].join("\n"),
+  };
+}
+
+function describeHostedReviewTarget(
+  commandText: string,
+  currentWorkspaceTarget: string,
+): string {
+  const reviewCommandText = commandText.replace(/^\/ultrareview/i, "/review");
+  const prNumber = parseReviewPrNumber(reviewCommandText);
+  if (prNumber) {
+    return `PR #${prNumber}`;
+  }
+
+  const diffRef = parseReviewDiffRef(reviewCommandText);
+  if (diffRef) {
+    return `\`${diffRef}\``;
+  }
+
+  return currentWorkspaceTarget;
 }
 
 type SharedInspectionSessionHostOptions<TRuntime extends InspectionRuntimeLike> = {
@@ -97,7 +204,7 @@ type SharedInspectionCommandHostOptions<
   getPendingPlanVerification: () => PendingPlanVerificationState | undefined;
   backgroundTaskHost: Pick<
     BackgroundTaskHost,
-    "runBuiltInAgentSession" | "buildFollowUpMessage"
+    "runBuiltInAgentSession" | "buildFollowUpMessage" | "runDetachedRemoteReview"
   >;
   findActiveBuiltInAgentTask: (
     workspaceRoot: string,
@@ -436,4 +543,132 @@ export async function handleReviewCommandWithHost<
     buildFollowUpMessage: (label, taskId) =>
       options.backgroundTaskHost.buildFollowUpMessage(label, taskId),
   });
+}
+
+export async function handleUltrareviewCommandWithHost<
+  TRuntime extends WorkspaceRuntimeLike & InspectionRuntimeLike,
+>(
+  options: Pick<
+    SharedInspectionCommandHostOptions<TRuntime>,
+    | "commandText"
+    | "workspaceRoot"
+    | "config"
+    | "runtimeOptions"
+    | "effortLevel"
+    | "sessionMessages"
+    | "blockedByPlanMode"
+    | "getConversationHistory"
+    | "getPendingPlanVerification"
+    | "backgroundTaskHost"
+    | "recordAssistantReply"
+    | "setCompanionState"
+    | "clearStreamingText"
+    | "updateMood"
+    | "isAbortLikeError"
+    | "addPhaseActivity"
+    | "finishPhaseActivity"
+  > & {
+    envMap: Record<string, string>;
+    runtime: TRuntime;
+    tools: ToolDefinition[];
+  },
+): Promise<boolean> {
+  if (!/^\/ultrareview(?:\s|$)/i.test(options.commandText.trim())) {
+    return false;
+  }
+
+  const locale = inferInspectionLocale(options.commandText, options.sessionMessages);
+  const uiText = getHostedReviewUiText(locale);
+
+  if (options.blockedByPlanMode) {
+    await options.recordAssistantReply(uiText.blockedByPlanMode, false);
+    return true;
+  }
+
+  const originalPrompt = findOriginalTaskForInspection(options.sessionMessages);
+  const promptForTask = originalPrompt
+    ?? (await hasWorkspaceProjectEvidence(options.workspaceRoot)
+      ? uiText.workspaceFallbackTask
+      : null);
+
+  if (!promptForTask) {
+    await options.recordAssistantReply(uiText.noOriginalTask, false);
+    return true;
+  }
+
+  if (originalPrompt && isGreetingOnlyInspectionTask(originalPrompt)) {
+    await options.recordAssistantReply(
+      uiText.greetingOnlyTask(originalPrompt),
+      false,
+    );
+    return true;
+  }
+
+  if (options.config.type !== "claude-cli") {
+    await options.recordAssistantReply(uiText.providerUnsupported, false);
+    return true;
+  }
+
+  const phaseActivityId = options.addPhaseActivity(
+    uiText.phaseLabel,
+    uiText.phaseDetail,
+    "running",
+  );
+  options.setCompanionState("thinking");
+
+  try {
+    const pendingPlanVerification = options.getPendingPlanVerification();
+    const launched = await launchHostedReviewWithHost({
+      commandText: options.commandText,
+      workspaceRoot: options.workspaceRoot,
+      config: options.config,
+      effortLevel: options.effortLevel,
+      conversationHistory: options.getConversationHistory(),
+      originalTask: promptForTask,
+      sessionMessages: options.sessionMessages,
+      planFilePath: pendingPlanVerification?.planFilePath,
+      planContent: pendingPlanVerification?.planContent ?? null,
+      backgroundTaskHost: options.backgroundTaskHost,
+    });
+
+    options.finishPhaseActivity(
+      phaseActivityId,
+      "done",
+      uiText.phaseDoneDetail(launched.taskId),
+    );
+    await options.recordAssistantReply(
+      uiText.launchReply({
+        taskId: launched.taskId,
+        targetLabel: describeHostedReviewTarget(
+          options.commandText,
+          uiText.currentWorkspaceTarget,
+        ),
+        outputPath: launched.outputPath,
+      }),
+      false,
+    );
+    options.clearStreamingText();
+    options.setCompanionState("done");
+    await options.updateMood(1, false);
+    return true;
+  } catch (error) {
+    if (options.isAbortLikeError(error)) {
+      options.finishPhaseActivity(phaseActivityId, "done", "cancelled");
+      await options.recordAssistantReply("Hosted review was cancelled before launch.", false);
+      options.clearStreamingText();
+      options.setCompanionState("idle");
+      return true;
+    }
+
+    const message = error instanceof Error ? error.message : String(error);
+    options.finishPhaseActivity(
+      phaseActivityId,
+      "error",
+      message,
+    );
+    await options.recordAssistantReply(uiText.launchFailed(message), false);
+    options.clearStreamingText();
+    options.setCompanionState("idle");
+    return true;
+  }
 }

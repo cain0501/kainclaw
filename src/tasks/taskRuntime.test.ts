@@ -473,6 +473,42 @@ describe("PersistentTaskRuntimeStore background tasks", () => {
     expect(task && isBackgroundTaskLostAfterRestart(task)).toBe(false);
   });
 
+  it("persists background task notified state and supports marking tasks as notified", async () => {
+    const storageRoot = await fs.mkdtemp(path.join(os.tmpdir(), "cain-task-runtime-notified-"));
+    tempDirs.push(storageRoot);
+    const store = new PersistentTaskRuntimeStore(storageRoot);
+    const runtime = store.getConversationRuntime(
+      "E:\\claudecodejingiang\\vscode-extension",
+      "notified",
+    );
+
+    await runtime.registerBackgroundTask({
+      id: "cmd-notified",
+      taskType: "local_bash",
+      status: "completed",
+      description: "completed command",
+      output: "done",
+      notified: false,
+    });
+
+    const marked = await runtime.markBackgroundTaskNotified?.("cmd-notified");
+    expect(marked).toMatchObject({
+      id: "cmd-notified",
+      notified: true,
+    });
+
+    const reloadedRuntime = new PersistentTaskRuntimeStore(storageRoot).getConversationRuntime(
+      "E:\\claudecodejingiang\\vscode-extension",
+      "notified",
+    );
+    const task = await reloadedRuntime.getBackgroundTask("cmd-notified");
+
+    expect(task).toMatchObject({
+      id: "cmd-notified",
+      notified: true,
+    });
+  });
+
   it("persists structured task timestamps and updates updatedAt on mutation", async () => {
     const runtime = await createRuntime();
 

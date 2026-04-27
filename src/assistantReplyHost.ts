@@ -136,6 +136,13 @@ export type AssistantReplyBindings = {
   ) => Promise<void>;
 };
 
+export type AssistantReplyBindingFactory = (options: {
+  appendSessionMessages: (messages: ChatMessage[]) => void;
+  appendConversationMessage: (
+    message: { role: "assistant"; content: string },
+  ) => void;
+}) => AssistantReplyBindings;
+
 export function createAssistantReplyBindings(options: {
   getShowThinkingSummaries: () => boolean;
   appendSessionMessages: (messages: ChatMessage[]) => void;
@@ -170,4 +177,34 @@ export function createAssistantReplyBindings(options: {
         logPersisted: options.logPersisted,
       }),
   };
+}
+
+export function createAssistantReplyBindingsFactory(options: {
+  getShowThinkingSummaries: () => boolean;
+  persistCurrentSessionRuntimeState: () => void;
+  getPersistenceEnabled: () => boolean;
+  getCurrentSessionId: () => string | undefined;
+  appendMessages: (
+    sessionId: string,
+    messages: ChatMessage[],
+    metaPatch?: { updatedAt?: number; preview?: string },
+  ) => Promise<unknown>;
+  logPersisted?: (details: {
+    sessionId: string;
+    hasThinkingSummary: boolean;
+    replyPreview: string;
+  }) => void;
+}): AssistantReplyBindingFactory {
+  return state =>
+    createAssistantReplyBindings({
+      getShowThinkingSummaries: options.getShowThinkingSummaries,
+      appendSessionMessages: state.appendSessionMessages,
+      appendConversationMessage: state.appendConversationMessage,
+      persistCurrentSessionRuntimeState:
+        options.persistCurrentSessionRuntimeState,
+      getPersistenceEnabled: options.getPersistenceEnabled,
+      getCurrentSessionId: options.getCurrentSessionId,
+      appendMessages: options.appendMessages,
+      logPersisted: options.logPersisted,
+    });
 }

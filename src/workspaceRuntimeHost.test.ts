@@ -1,6 +1,14 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const { runtimeInstances, workspaceRuntimeConstructor } = vi.hoisted(() => {
+const {
+  runtimeInstances,
+  workspaceRuntimeConstructor,
+  enterPlanModeWithHostMock,
+  getPlanContentForWorkspaceMock,
+  exitPlanModeWithHostMock,
+  runVerificationFromToolWithHostMock,
+  runReviewFromToolWithHostMock,
+} = vi.hoisted(() => {
   const instances: Array<{
     updateEnvMap: ReturnType<typeof vi.fn>;
     dispose: ReturnType<typeof vi.fn>;
@@ -13,10 +21,33 @@ const { runtimeInstances, workspaceRuntimeConstructor } = vi.hoisted(() => {
     instances.push(instance);
     return instance;
   });
+  const enterPlanModeWithHost = vi.fn(async () => ({
+    planFilePath: "plan.md",
+    planContent: "plan",
+  }));
+  const getPlanContentForWorkspace = vi.fn(async () => "plan");
+  const exitPlanModeWithHost = vi.fn(async () => ({
+    planFilePath: "plan.md",
+    planContent: "plan",
+  }));
+  const runVerificationFromToolWithHost = vi.fn(async () => ({
+    taskId: "verify-1",
+    verdict: "PASS" as const,
+    report: "ok",
+  }));
+  const runReviewFromToolWithHost = vi.fn(async () => ({
+    taskId: "review-1",
+    report: "ok",
+  }));
 
   return {
     runtimeInstances: instances,
     workspaceRuntimeConstructor: constructor,
+    enterPlanModeWithHostMock: enterPlanModeWithHost,
+    getPlanContentForWorkspaceMock: getPlanContentForWorkspace,
+    exitPlanModeWithHostMock: exitPlanModeWithHost,
+    runVerificationFromToolWithHostMock: runVerificationFromToolWithHost,
+    runReviewFromToolWithHostMock: runReviewFromToolWithHost,
   };
 });
 
@@ -24,7 +55,21 @@ vi.mock("./workspaceRuntimeShell", () => ({
   WorkspaceRuntime: workspaceRuntimeConstructor,
 }));
 
-import { WorkspaceRuntimeHost } from "./workspaceRuntimeHost";
+vi.mock("./planModeHost", () => ({
+  enterPlanModeWithHost: enterPlanModeWithHostMock,
+  getPlanContentForWorkspace: getPlanContentForWorkspaceMock,
+  exitPlanModeWithHost: exitPlanModeWithHostMock,
+}));
+
+vi.mock("./inspectionHost", () => ({
+  runVerificationFromToolWithHost: runVerificationFromToolWithHostMock,
+  runReviewFromToolWithHost: runReviewFromToolWithHostMock,
+}));
+
+import {
+  createWorkspaceRuntimeHostFactory,
+  WorkspaceRuntimeHost,
+} from "./workspaceRuntimeHost";
 
 beforeEach(() => {
   runtimeInstances.length = 0;
@@ -236,5 +281,188 @@ describe("workspaceRuntimeHost", () => {
     expect(runtimeInstances[1]?.dispose).toHaveBeenCalledTimes(1);
     expect(freshRuntime).toBe(runtimeInstances[2]);
     expect(workspaceRuntimeConstructor).toHaveBeenCalledTimes(3);
+  });
+
+  it("builds a workspace-runtime host factory around plan mode and inspection host wiring", async () => {
+    const requestFileApproval = vi.fn(async () => true);
+    const requestToolApproval = vi.fn(async () => true);
+    const onToolLifecycle = vi.fn();
+    const createProviderRuntimeOptions = vi.fn(() => ({
+      effortLevel: "high" as const,
+    }));
+    const getWorkspaceRuntime = vi.fn(async () => ({
+      getToolDefinitions: async () => [],
+      getMcpStatusSummary: async () => [],
+      getToolContext: () => ({}) as any,
+    }));
+    const stopTask = vi.fn(async () => null);
+    const findActiveBuiltInAgentTask = vi.fn(async () => undefined);
+    const createProviderAdapter = vi.fn(() => ({ runStep: vi.fn() } as any));
+    const runCommandInBackground = vi.fn(async () => ({
+      taskId: "cmd-1",
+      command: "npm run build",
+      workspaceRoot: "E:\\repo",
+    }));
+    const findReusableBackgroundCommand = vi.fn(async () => null);
+    const stopSwarmWorker = vi.fn(async taskId => ({
+      taskId,
+      taskType: "worker",
+      command: "stop",
+    }));
+    let planModeState: {
+      active: boolean;
+      planFilePath?: string;
+      conversationKey?: string;
+    } = {
+      active: false,
+      planFilePath: "plan.md",
+      conversationKey: "conversation-1",
+    };
+    const sessionMessages = [{ role: "user" as const, content: "hello" }];
+    const conversationHistory = [
+      { role: "user" as const, content: "hello" },
+      { role: "assistant" as const, content: "world" },
+    ];
+    let pendingPlanVerification: any = {
+      planFilePath: "plan.md",
+      verificationStarted: false,
+      verificationCompleted: false,
+    };
+
+    const factory = createWorkspaceRuntimeHostFactory({
+      requestFileApproval,
+      requestToolApproval,
+      onToolLifecycle,
+      resolveProviderConfig: async workspaceFolderPath => ({
+        config: {
+          type: "anthropic",
+          apiKey: "secret",
+          model: "claude-sonnet",
+        },
+        envMap: { WORKSPACE: workspaceFolderPath },
+      }),
+      getEffortLevel: () => "high",
+      createProviderRuntimeOptions,
+      ensureConversationWorktreeHydrated: async () => undefined,
+      getEffectiveWorkspaceRoot: workspaceFolderPath =>
+        `${workspaceFolderPath}\\.wt`,
+      getWorkspaceRuntime,
+      backgroundTaskHost: {
+        stopTask,
+        runBuiltInAgentSession: vi.fn(),
+      } as any,
+      findActiveBuiltInAgentTask,
+      createProviderAdapter,
+      runCommandInBackground,
+      findReusableBackgroundCommand,
+    });
+
+    const host = factory({
+      getConversationKey: () => "conversation-1",
+      clearSwarm: vi.fn(),
+      getPlanModeState: () => planModeState,
+      setPlanModeState: state => {
+        planModeState = state;
+      },
+      clearPendingPlanVerification: vi.fn(() => {
+        pendingPlanVerification = undefined;
+      }),
+      setPendingPlanVerification: state => {
+        pendingPlanVerification = state;
+      },
+      postState: vi.fn(),
+      getPendingPlanVerification: () => pendingPlanVerification,
+      markPendingPlanVerificationStarted: vi.fn(),
+      markPendingPlanVerificationCompleted: vi.fn(),
+      resetPendingPlanVerificationToAwaitingStart: vi.fn(),
+      getConversationHistory: () => conversationHistory,
+      getSessionMessages: () => sessionMessages,
+      getTasks: vi.fn(() => ({ kind: "tasks" } as any)),
+      getWorktree: vi.fn(() => ({ kind: "worktree" } as any)),
+      stopSwarmWorker,
+    });
+
+    await host.getRuntime("E:\\repo", { TOKEN: "abc" });
+
+    const constructorArgs = workspaceRuntimeConstructor.mock.calls[0] as unknown[];
+    const planModeController = constructorArgs?.[5] as
+      | {
+          enter: () => Promise<unknown>;
+          getPlanContent: () => Promise<unknown>;
+          exit: () => Promise<unknown>;
+        }
+      | undefined;
+    const stopBackgroundTaskCallback = constructorArgs?.[9] as
+      | ((taskId: string) => Promise<Record<string, unknown>>)
+      | undefined;
+    const runVerificationCallback = constructorArgs?.[10] as
+      | ((request: { extraGuidance?: string; diffRef?: string }) => Promise<Record<string, unknown>>)
+      | undefined;
+    const runReviewCallback = constructorArgs?.[11] as
+      | ((request: { extraGuidance?: string; diffRef?: string }) => Promise<Record<string, unknown>>)
+      | undefined;
+    const runCommandInBackgroundCallback = constructorArgs?.[12] as
+      | ((request: { command: string }) => Promise<Record<string, unknown>>)
+      | undefined;
+    const findReusableBackgroundCommandCallback = constructorArgs?.[13] as
+      | ((request: { command: string }) => Promise<Record<string, unknown> | null>)
+      | undefined;
+
+    await planModeController?.enter();
+    await planModeController?.getPlanContent();
+    await planModeController?.exit();
+    await stopBackgroundTaskCallback?.("task-1");
+    await runVerificationCallback?.({
+      extraGuidance: "verify",
+      diffRef: "HEAD~1..HEAD",
+    });
+    await runReviewCallback?.({
+      extraGuidance: "review",
+      diffRef: "main...HEAD",
+    });
+    await runCommandInBackgroundCallback?.({ command: "npm run build" });
+    await findReusableBackgroundCommandCallback?.({ command: "npm run build" });
+
+    expect(enterPlanModeWithHostMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        workspaceRoot: "E:\\repo\\.wt",
+        conversationKey: "conversation-1",
+      }),
+    );
+    expect(getPlanContentForWorkspaceMock).toHaveBeenCalledWith({
+      workspaceRoot: "E:\\repo\\.wt",
+      planModeState,
+    });
+    expect(exitPlanModeWithHostMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        workspaceRoot: "E:\\repo\\.wt",
+        planModeState,
+        sessionMessages,
+      }),
+    );
+    expect(stopTask).toHaveBeenCalledWith("task-1", "E:\\repo\\.wt");
+    expect(stopSwarmWorker).toHaveBeenCalledWith("task-1");
+    expect(runVerificationFromToolWithHostMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        workspaceFolderPath: "E:\\repo",
+        extraGuidance: "verify",
+        diffRef: "HEAD~1..HEAD",
+        sessionMessages,
+      }),
+    );
+    expect(runReviewFromToolWithHostMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        workspaceFolderPath: "E:\\repo",
+        extraGuidance: "review",
+        diffRef: "main...HEAD",
+        sessionMessages,
+      }),
+    );
+    expect(runCommandInBackground).toHaveBeenCalledWith("E:\\repo", {
+      command: "npm run build",
+    });
+    expect(findReusableBackgroundCommand).toHaveBeenCalledWith("E:\\repo", {
+      command: "npm run build",
+    });
   });
 });

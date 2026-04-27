@@ -46,7 +46,7 @@ describe("inspectionTaskHost helpers", () => {
     expect(
       isDuplicateBuiltInAgentRunError(
         new Error(
-          'A verification agent is already running for this conversation (verify-1). Use TaskOutput with task_id "verify-1" to inspect it instead of launching another one.',
+          'A verification agent is already running for this conversation (verify-1). You\'ll be notified when it completes. Use TaskOutput with task_id "verify-1" only if you need to inspect partial output before that.',
         ),
       ),
     ).toBe(true);

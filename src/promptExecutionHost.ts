@@ -10,6 +10,7 @@ import { handleCompactCommandWithHost } from "./compactHost";
 import type { PendingPlanVerificationState } from "./conversationRuntimeStateHost";
 import {
   handleReviewCommandWithHost,
+  handleUltrareviewCommandWithHost,
   handleVerificationCommandWithHost,
 } from "./inspectionHost";
 import type { McpServerStatusSummary } from "./mcpRuntime";
@@ -76,7 +77,7 @@ export function createPromptExecutionCommandHandlers<
   ) => void | Promise<void>;
   backgroundTaskHost: Pick<
     BackgroundTaskHost,
-    "runBuiltInAgentSession" | "buildFollowUpMessage"
+    "runBuiltInAgentSession" | "buildFollowUpMessage" | "runDetachedRemoteReview"
   >;
   findActiveBuiltInAgentTask: (
     workspaceRoot: string,
@@ -212,6 +213,38 @@ export function createPromptExecutionCommandHandlers<
         updateMood: options.updateMood,
         isAbortLikeError: options.isAbortLikeError,
       }),
+    handleUltrareviewCommand: (
+      prompt: string,
+      workspaceRoot: string,
+      config: AdapterProviderConfig,
+      envMap: Record<string, string>,
+      runtime: TRuntime,
+      tools: ToolDefinition[],
+      runtimeOptions: ProviderRuntimeOptions,
+      effortLevel: EffortLevel | undefined,
+    ) =>
+      handleUltrareviewCommandWithHost({
+        commandText: prompt,
+        workspaceRoot,
+        config,
+        envMap,
+        runtime,
+        tools,
+        runtimeOptions,
+        effortLevel,
+        sessionMessages: options.sessionMessages,
+        blockedByPlanMode: options.blockedByPlanMode,
+        getConversationHistory: options.getConversationHistory,
+        getPendingPlanVerification: options.getPendingPlanVerification,
+        backgroundTaskHost: options.backgroundTaskHost,
+        addPhaseActivity: options.addPhaseActivity,
+        finishPhaseActivity: options.finishPhaseActivity,
+        recordAssistantReply: options.recordAssistantReply,
+        setCompanionState: options.setCompanionState,
+        clearStreamingText: options.clearStreamingText,
+        updateMood: options.updateMood,
+        isAbortLikeError: options.isAbortLikeError,
+      }),
     handleVerificationCommand: (
       prompt: string,
       workspaceRoot: string,
@@ -313,6 +346,16 @@ export async function preparePromptExecutionStep<TRuntime extends PromptRuntimeL
       runtimeOptions: ProviderRuntimeOptions,
       effortLevel: EffortLevel | undefined,
     ) => Promise<boolean>;
+    handleUltrareviewCommand: (
+      prompt: string,
+      workspaceRoot: string,
+      config: AdapterProviderConfig,
+      envMap: Record<string, string>,
+      runtime: TRuntime,
+      tools: ToolDefinition[],
+      runtimeOptions: ProviderRuntimeOptions,
+      effortLevel: EffortLevel | undefined,
+    ) => Promise<boolean>;
     handleVerificationCommand: (
       prompt: string,
       workspaceRoot: string,
@@ -404,6 +447,26 @@ export async function preparePromptExecutionStep<TRuntime extends PromptRuntimeL
       effortLevel,
     ) =>
       options.handleReviewCommand(
+        prompt,
+        workspaceRoot,
+        config,
+        envMap,
+        runtime as TRuntime,
+        tools,
+        runtimeOptions,
+        effortLevel,
+      ),
+    handleUltrareviewCommand: (
+      prompt,
+      workspaceRoot,
+      config,
+      envMap,
+      runtime,
+      tools,
+      runtimeOptions,
+      effortLevel,
+    ) =>
+      options.handleUltrareviewCommand(
         prompt,
         workspaceRoot,
         config,

@@ -24,6 +24,11 @@ export type ConversationHistoryBindings = {
   ) => void;
 };
 
+export type ConversationHistoryBindingFactory = (options: {
+  sessionMessages: ChatMessage[];
+  conversationMessages: PersistedConversationMessage[];
+}) => ConversationHistoryBindings;
+
 export function getHistoryCommandBehavior(
   prompt: string,
 ): HistoryCommandBehavior | null {
@@ -156,4 +161,22 @@ export function createConversationHistoryBindings(options: {
       options.persistCurrentSessionRuntimeState();
     },
   };
+}
+
+export function createConversationHistoryBindingsFactory(options: {
+  getShowThinkingSummaries: () => boolean;
+  recordCompactBoundary?: (
+    compactBoundary: CompactBoundarySessionState | undefined,
+  ) => void;
+  persistCurrentSessionRuntimeState: () => void;
+}): ConversationHistoryBindingFactory {
+  return state =>
+    createConversationHistoryBindings({
+      sessionMessages: state.sessionMessages,
+      conversationMessages: state.conversationMessages,
+      getShowThinkingSummaries: options.getShowThinkingSummaries,
+      recordCompactBoundary: options.recordCompactBoundary,
+      persistCurrentSessionRuntimeState:
+        options.persistCurrentSessionRuntimeState,
+    });
 }

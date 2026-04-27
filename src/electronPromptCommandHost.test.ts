@@ -26,6 +26,7 @@ describe("electronPromptCommandHost", () => {
       runtimeOptions: {},
       handleCompactCommand: async () => false,
       handleReviewCommand: async () => false,
+      handleUltrareviewCommand: async () => false,
       handleVerificationCommand: async () => false,
     });
 
@@ -56,6 +57,7 @@ describe("electronPromptCommandHost", () => {
       runtimeOptions: {},
       handleCompactCommand: async () => false,
       handleReviewCommand: async () => false,
+      handleUltrareviewCommand: async () => false,
       handleVerificationCommand: async () => false,
     });
 
@@ -92,6 +94,7 @@ describe("electronPromptCommandHost", () => {
       runtimeOptions: {},
       handleCompactCommand: async () => false,
       handleReviewCommand: async () => false,
+      handleUltrareviewCommand: async () => false,
       handleVerificationCommand: async () => false,
     });
 
@@ -121,6 +124,7 @@ describe("electronPromptCommandHost", () => {
       runtimeOptions: {},
       handleCompactCommand: async () => false,
       handleReviewCommand: async () => false,
+      handleUltrareviewCommand: async () => false,
       handleVerificationCommand: async () => false,
     });
 
@@ -162,6 +166,7 @@ describe("electronPromptCommandHost", () => {
       runtimeOptions: {},
       handleCompactCommand: async () => false,
       handleReviewCommand: async () => false,
+      handleUltrareviewCommand: async () => false,
       handleVerificationCommand: async () => false,
     });
 
@@ -191,6 +196,7 @@ describe("electronPromptCommandHost", () => {
       runtimeOptions: {},
       handleCompactCommand,
       handleReviewCommand: async () => false,
+      handleUltrareviewCommand: async () => false,
       handleVerificationCommand: async () => false,
     });
 

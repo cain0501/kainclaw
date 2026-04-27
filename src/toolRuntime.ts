@@ -255,10 +255,10 @@ export type ToolContext = {
   }) => Promise<{ taskId: string; report: string }>;
   runCommandInBackground?: (request: {
     command: string;
-  }) => Promise<{ taskId: string; command: string; workspaceRoot: string; alreadyRunning?: boolean }>;
+  }) => Promise<{ taskId: string; command: string; workspaceRoot: string; outputPath?: string; alreadyRunning?: boolean }>;
   findReusableBackgroundCommand?: (request: {
     command: string;
-  }) => Promise<{ taskId: string; command: string; workspaceRoot: string } | null>;
+  }) => Promise<{ taskId: string; command: string; workspaceRoot: string; outputPath?: string } | null>;
   requestFileApproval?: (request: WriteApprovalRequest) => Promise<boolean>;
   requestToolApproval?: (request: ToolActionApprovalRequest) => Promise<boolean>;
   onToolLifecycle?: (event: ToolLifecycleEvent) => void;
@@ -2977,10 +2977,14 @@ const handlers: Record<string, ToolHandler> = {
         return formatAlreadyRunningTaskResult(
           "Background command",
           existing.taskId,
-          `Background command is already running for this workspace: ${existing.command}`,
+          `Background command is already running for this workspace: ${existing.command}. You'll be notified when it completes. Use TaskOutput only if you need to inspect partial output before that.`,
           [
             `<command>${existing.command}</command>`,
             `<workspace_root>${existing.workspaceRoot}</workspace_root>`,
+            ...(existing.outputPath
+              ? [`<output_path>${existing.outputPath}</output_path>`]
+              : []),
+            `<notification_hint>You will be notified automatically when this background command completes.</notification_hint>`,
           ],
         );
       }
@@ -3004,6 +3008,10 @@ const handlers: Record<string, ToolHandler> = {
         `<status>${result.alreadyRunning ? "already_running" : "started"}</status>`,
         `<command>${result.command}</command>`,
         `<workspace_root>${result.workspaceRoot}</workspace_root>`,
+        ...(result.outputPath
+          ? [`<output_path>${result.outputPath}</output_path>`]
+          : []),
+        `<notification_hint>You will be notified automatically when this background command completes.</notification_hint>`,
       ].join("\n"),
     };
   },
@@ -3886,7 +3894,7 @@ export const toolDefinitions: ToolDefinition[] = [
   {
     name: "RunCommandInBackground",
     description:
-      "Launch an allowlisted PowerShell command as a background task so you can inspect output later with TaskOutput or stop it with TaskStop.",
+      "Launch an allowlisted PowerShell command as a background task. You will be notified when it completes; use TaskOutput only if you need to inspect progress manually.",
     input_schema: {
       type: "object",
       properties: {

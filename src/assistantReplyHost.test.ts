@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 import {
   buildAssistantReplyPlan,
   createAssistantReplyBindings,
+  createAssistantReplyBindingsFactory,
   persistAssistantReply,
   recordAssistantReplyWithHost,
 } from "./assistantReplyHost";
@@ -157,6 +158,53 @@ describe("assistantReplyHost", () => {
       { role: "assistant", content: "first answer" },
     ]);
     expect(appendMessages).not.toHaveBeenCalled();
+
+    showThinkingSummaries = true;
+    persistenceEnabled = true;
+    currentSessionId = "session-2";
+
+    await bindings.recordAssistantReply("second answer", false, "thinking");
+    expect(appendSessionMessages).toHaveBeenLastCalledWith([
+      { role: "assistant", content: "thinking", kind: "thinking" },
+      { role: "assistant", content: "second answer" },
+    ]);
+    expect(appendMessages).toHaveBeenCalledWith(
+      "session-2",
+      [
+        { role: "assistant", content: "thinking", kind: "thinking" },
+        { role: "assistant", content: "second answer" },
+      ],
+      expect.objectContaining({
+        preview: "second answer",
+      }),
+    );
+  });
+
+  it("builds assistant reply bindings from a stable factory", async () => {
+    let showThinkingSummaries = false;
+    let persistenceEnabled = false;
+    let currentSessionId: string | undefined;
+    const appendMessages = vi.fn(async () => undefined);
+    const appendSessionMessages = vi.fn();
+    const appendConversationMessage = vi.fn();
+    const persistCurrentSessionRuntimeState = vi.fn();
+
+    const factory = createAssistantReplyBindingsFactory({
+      getShowThinkingSummaries: () => showThinkingSummaries,
+      persistCurrentSessionRuntimeState,
+      getPersistenceEnabled: () => persistenceEnabled,
+      getCurrentSessionId: () => currentSessionId,
+      appendMessages,
+    });
+    const bindings = factory({
+      appendSessionMessages,
+      appendConversationMessage,
+    });
+
+    await bindings.recordAssistantReply("first answer", true, "thinking");
+    expect(appendSessionMessages).toHaveBeenLastCalledWith([
+      { role: "assistant", content: "first answer" },
+    ]);
 
     showThinkingSummaries = true;
     persistenceEnabled = true;

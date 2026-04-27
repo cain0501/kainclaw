@@ -23,6 +23,12 @@ export type AutoMemoryHostBindings = {
   }) => void;
 };
 
+export type AutoMemoryHostBindingFactory = (options: {
+  getConversationKey: () => string;
+  getPlanModeState: () => Pick<PlanModeState, "active">;
+  getSessionMessages: () => ChatMessage[];
+}) => AutoMemoryHostBindings;
+
 export function buildAutoMemoryHistory(
   sessionMessages: ChatMessage[],
 ): Array<{ role: ChatMessage["role"]; content: string }> {
@@ -88,4 +94,25 @@ export function createAutoMemoryHostBindings(options: {
       }
     },
   };
+}
+
+export function createAutoMemoryHostBindingsFactory(options: {
+  createProviderAdapter: (options: {
+    config: AdapterProviderConfig;
+    workspaceRoot: string;
+    systemPrompt: string;
+    envMap: Record<string, string>;
+  }) => IProviderAdapter;
+  autoMemory?: AutoMemoryRuntime;
+  profileStore?: ProfileStore;
+}): AutoMemoryHostBindingFactory {
+  return state =>
+    createAutoMemoryHostBindings({
+      getConversationKey: state.getConversationKey,
+      getPlanModeState: state.getPlanModeState,
+      getSessionMessages: state.getSessionMessages,
+      createProviderAdapter: options.createProviderAdapter,
+      autoMemory: options.autoMemory,
+      profileStore: options.profileStore,
+    });
 }

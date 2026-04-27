@@ -16,12 +16,13 @@ export type BackgroundCommandToolLaunchBindings = {
     taskId: string;
     command: string;
     workspaceRoot: string;
+    outputPath?: string;
     alreadyRunning?: boolean;
   }>;
   findReusableBackgroundCommand: (
     workspaceFolderPath: string,
     command: string,
-  ) => Promise<{ taskId: string; command: string; workspaceRoot: string } | null>;
+  ) => Promise<{ taskId: string; command: string; workspaceRoot: string; outputPath?: string } | null>;
 };
 
 export async function runVerificationFromTool<TRuntime extends WorkspaceRuntimeLike, TResult>(
@@ -150,7 +151,7 @@ export async function findReusableBackgroundCommandForWorkspace(options: {
   ensureConversationWorktreeHydrated: (workspaceFolderPath: string) => Promise<void>;
   getEffectiveWorkspaceRoot: (workspaceFolderPath: string) => string;
   backgroundTaskHost: Pick<BackgroundTaskHost, "findReusableBackgroundCommand">;
-}): Promise<{ taskId: string; command: string; workspaceRoot: string } | null> {
+}): Promise<{ taskId: string; command: string; workspaceRoot: string; outputPath?: string } | null> {
   await options.ensureConversationWorktreeHydrated(options.workspaceFolderPath);
   const workspaceRoot = options.getEffectiveWorkspaceRoot(options.workspaceFolderPath);
   return (
@@ -170,7 +171,7 @@ export async function runBackgroundCommandFromTool(options: {
     BackgroundTaskHost,
     "runBackgroundCommand" | "findReusableBackgroundCommand"
   >;
-}): Promise<{ taskId: string; command: string; workspaceRoot: string; alreadyRunning?: boolean }> {
+}): Promise<{ taskId: string; command: string; workspaceRoot: string; outputPath?: string; alreadyRunning?: boolean }> {
   const existingCommandTask = await findReusableBackgroundCommandForWorkspace({
     workspaceFolderPath: options.workspaceFolderPath,
     command: options.command,

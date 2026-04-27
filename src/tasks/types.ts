@@ -51,6 +51,7 @@ export type BackgroundTaskRecord = {
   result?: string;
   output: string;
   error?: string;
+  notified?: boolean;
   createdAt: number;
   updatedAt: number;
 };
@@ -86,6 +87,7 @@ export type ConversationTaskRuntime = {
     updates: Partial<Omit<BackgroundTaskRecord, "id" | "createdAt" | "updatedAt">>,
   ): Promise<BackgroundTaskRecord | null>;
   appendBackgroundOutput(taskId: string, content: string): Promise<BackgroundTaskRecord | null>;
+  markBackgroundTaskNotified?(taskId: string): Promise<BackgroundTaskRecord | null>;
   waitForBackgroundTask(
     taskId: string,
     timeoutMs: number,

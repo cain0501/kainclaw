@@ -146,7 +146,7 @@ export type PromptRequestExtensionExecutionBindings<
   >;
   backgroundTaskHost: Pick<
     BackgroundTaskHost,
-    "runBuiltInAgentSession" | "buildFollowUpMessage"
+    "runBuiltInAgentSession" | "buildFollowUpMessage" | "runDetachedRemoteReview"
   >;
   workspaceStatusController: Pick<WorkspaceStatusController, "requestRefresh">;
   cachedTools?: ToolDefinition[];

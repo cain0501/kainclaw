@@ -271,7 +271,7 @@ function buildDuplicateBuiltInAgentRunMessage(
   agentLabel: string,
   taskId: string,
 ): string {
-  return `A ${agentLabel.toLowerCase()} is already running for this conversation (${taskId}). Use TaskOutput with task_id "${taskId}" to inspect it instead of launching another one.`;
+  return `A ${agentLabel.toLowerCase()} is already running for this conversation (${taskId}). You'll be notified when it completes. Use TaskOutput with task_id "${taskId}" only if you need to inspect partial output before that.`;
 }
 
 function toErrorMessage(error: unknown): string {

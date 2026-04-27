@@ -18,6 +18,7 @@ import type { IProviderAdapter } from "./agent/providers/IProviderAdapter";
 import { distillAndSaveSkill, meetsDistillationThreshold } from "./skills/skillDistiller";
 
 export const BACKGROUND_COMMAND_TIMEOUT_MS = 15 * 60 * 1000;
+export const DETACHED_REVIEW_TIMEOUT_MS = 30 * 60 * 1000;
 
 export type BuiltInAgentSessionOptions<TResult> = {
   workspaceRoot: string;
@@ -59,6 +60,7 @@ export type ReusableBackgroundCommand = {
   taskId: string;
   command: string;
   workspaceRoot: string;
+  outputPath?: string;
 };
 
 export type StoppedActiveBackgroundTask = {
@@ -72,6 +74,14 @@ type DetachedBackgroundCommandLaunchRequest = {
 };
 
 type DetachedBackgroundCommandLaunchResult = {
+  runnerPid?: number;
+};
+
+type DetachedReviewLaunchRequest = {
+  configPath: string;
+};
+
+type DetachedReviewLaunchResult = {
   runnerPid?: number;
 };
 
@@ -89,6 +99,9 @@ type BackgroundTaskHostOptions = {
   launchDetachedBackgroundCommand?: (
     request: DetachedBackgroundCommandLaunchRequest,
   ) => Promise<DetachedBackgroundCommandLaunchResult>;
+  launchDetachedReview?: (
+    request: DetachedReviewLaunchRequest,
+  ) => Promise<DetachedReviewLaunchResult>;
   stopDetachedProcess?: (pid: number) => Promise<void>;
   archiveRemoteSession?: (sessionId: string) => Promise<void>;
 };
@@ -100,7 +113,7 @@ export class BackgroundTaskHost {
   constructor(private readonly options: BackgroundTaskHostOptions) {}
 
   buildFollowUpMessage(label: string, taskId: string): string {
-    return `${label} task saved as \`${taskId}\`. Use \`TaskOutput\` with \`task_id: "${taskId}"\` to read the stored result later.`;
+    return `${label} task is already running in the background as \`${taskId}\`. You'll be notified when it completes. Use \`TaskOutput\` with \`task_id: "${taskId}"\` only if you need to inspect partial output before that.`;
   }
 
   dispose(): void {
@@ -139,6 +152,24 @@ export class BackgroundTaskHost {
     }
 
     if (task.taskType === "remote_agent") {
+      const detached = parseDetachedBackgroundTaskMetadata(task.metadata);
+      if (detached) {
+        await fs.mkdir(path.dirname(detached.cancelPath), { recursive: true });
+        await fs.writeFile(detached.cancelPath, "cancelled", "utf8");
+
+        const statePid = await readDetachedTaskProcessId(detached.statePath);
+        const pid = statePid ?? detached.runnerPid;
+        if (pid !== undefined) {
+          await (this.options.stopDetachedProcess ?? stopDetachedProcessTree)(pid);
+        }
+
+        return {
+          taskId,
+          taskType: "remote_agent",
+          command: task.command ?? task.description,
+        };
+      }
+
       if (task.status !== "running") {
         return undefined;
       }
@@ -206,6 +237,9 @@ export class BackgroundTaskHost {
         taskId: existingCommandTask.id,
         command: existingCommandTask.command ?? trimmedCommand,
         workspaceRoot: existingCommandTask.workspaceRoot ?? workspaceRoot,
+        ...(existingCommandTask.outputPath
+          ? { outputPath: existingCommandTask.outputPath }
+          : {}),
       };
     }
 
@@ -222,6 +256,7 @@ export class BackgroundTaskHost {
     await taskRuntime.registerBackgroundTask({
       id: options.taskId,
       ...options.taskMetadata,
+      notified: false,
       status: "running",
       description: options.taskDescription,
       workspaceRoot: options.workspaceRoot,
@@ -288,6 +323,7 @@ export class BackgroundTaskHost {
 
       await taskRuntime.updateBackgroundTask(options.taskId, {
         ...options.taskMetadata,
+        notified: true,
         description: options.taskDescription,
         workspaceRoot: options.workspaceRoot,
         command: options.commandText.trim() || undefined,
@@ -334,6 +370,7 @@ export class BackgroundTaskHost {
       );
       await taskRuntime.updateBackgroundTask(options.taskId, {
         ...options.taskMetadata,
+        notified: true,
         ...(wasCancelled
           ? {
               status: "cancelled" as const,
@@ -368,7 +405,7 @@ export class BackgroundTaskHost {
   async runBackgroundCommand(options: {
     workspaceRoot: string;
     command: string;
-  }): Promise<{ taskId: string; command: string; workspaceRoot: string }> {
+  }): Promise<{ taskId: string; command: string; workspaceRoot: string; outputPath: string }> {
     const taskRuntime = this.options.getTaskRuntime(options.workspaceRoot);
     const trimmedCommand = options.command.trim();
     const taskDescription = buildBackgroundCommandTaskDescription(trimmedCommand);
@@ -437,7 +474,117 @@ export class BackgroundTaskHost {
       },
     });
 
-    return { taskId, command: trimmedCommand, workspaceRoot: options.workspaceRoot };
+    return {
+      taskId,
+      command: trimmedCommand,
+      workspaceRoot: options.workspaceRoot,
+      outputPath: artifactPaths.outputPath,
+    };
+  }
+
+  async runDetachedRemoteReview(options: {
+    workspaceRoot: string;
+    commandText: string;
+    taskDescription: string;
+    reviewRequest: string;
+    provider: {
+      cliPath?: string;
+      model?: string;
+    };
+    systemPrompt: string;
+    sessionId: string;
+    remoteTaskType: string;
+    metadata?: Record<string, unknown>;
+  }): Promise<{
+    taskId: string;
+    command: string;
+    workspaceRoot: string;
+    outputPath: string;
+    sessionId: string;
+  }> {
+    const taskRuntime = this.options.getTaskRuntime(options.workspaceRoot);
+    const taskId = generateBackgroundTaskId("remote_agent");
+    const timeoutMs = DETACHED_REVIEW_TIMEOUT_MS;
+    const artifactPaths = this.getDetachedRemoteReviewArtifactPaths(taskId);
+    const initialOutput = `Started remote review:\n${options.commandText.trim()}\n`;
+
+    await fs.mkdir(artifactPaths.directory, { recursive: true });
+    await fs.writeFile(artifactPaths.outputPath, initialOutput, "utf8");
+    await fs.writeFile(
+      artifactPaths.configPath,
+      JSON.stringify(
+        {
+          workspaceRoot: options.workspaceRoot,
+          commandText: options.commandText,
+          reviewRequest: options.reviewRequest,
+          outputPath: artifactPaths.outputPath,
+          statePath: artifactPaths.statePath,
+          cancelPath: artifactPaths.cancelPath,
+          timeoutMs,
+          sessionId: options.sessionId,
+          provider: options.provider,
+          systemPrompt: options.systemPrompt,
+        },
+        null,
+        2,
+      ),
+      "utf8",
+    );
+
+    const launched = await (
+      this.options.launchDetachedReview ?? launchDetachedReview
+    )({
+      configPath: artifactPaths.configPath,
+    });
+
+    await fs.writeFile(
+      artifactPaths.statePath,
+      JSON.stringify(
+        {
+          status: "running",
+          updatedAt: Date.now(),
+          ...(launched.runnerPid !== undefined
+            ? { runnerPid: launched.runnerPid }
+            : {}),
+        },
+        null,
+        2,
+      ),
+      "utf8",
+    );
+
+    await taskRuntime.registerBackgroundTask({
+      id: taskId,
+      taskType: "remote_agent",
+      status: "running",
+      description: options.taskDescription,
+      workspaceRoot: options.workspaceRoot,
+      command: options.commandText.trim(),
+      output: initialOutput,
+      metadata: {
+        remoteTaskType: options.remoteTaskType,
+        sessionId: options.sessionId,
+        ...(options.metadata ?? {}),
+        detached: {
+          mode: "detached",
+          statePath: artifactPaths.statePath,
+          outputPath: artifactPaths.outputPath,
+          cancelPath: artifactPaths.cancelPath,
+          configPath: artifactPaths.configPath,
+          ...(launched.runnerPid !== undefined
+            ? { runnerPid: launched.runnerPid }
+            : {}),
+        },
+      },
+    });
+
+    return {
+      taskId,
+      command: options.commandText.trim(),
+      workspaceRoot: options.workspaceRoot,
+      outputPath: artifactPaths.outputPath,
+      sessionId: options.sessionId,
+    };
   }
 
   private getDetachedCommandArtifactPaths(taskId: string): {
@@ -448,6 +595,23 @@ export class BackgroundTaskHost {
     cancelPath: string;
   } {
     const directory = path.join(this.options.storageRoot, "background-commands", taskId);
+    return {
+      directory,
+      configPath: path.join(directory, "config.json"),
+      statePath: path.join(directory, "state.json"),
+      outputPath: path.join(directory, "output.log"),
+      cancelPath: path.join(directory, "cancelled.flag"),
+    };
+  }
+
+  private getDetachedRemoteReviewArtifactPaths(taskId: string): {
+    directory: string;
+    configPath: string;
+    statePath: string;
+    outputPath: string;
+    cancelPath: string;
+  } {
+    const directory = path.join(this.options.storageRoot, "remote-reviews", taskId);
     return {
       directory,
       configPath: path.join(directory, "config.json"),
@@ -495,6 +659,22 @@ async function launchDetachedBackgroundCommand(
   request: DetachedBackgroundCommandLaunchRequest,
 ): Promise<DetachedBackgroundCommandLaunchResult> {
   const workerPath = path.join(__dirname, "backgroundCommandWorker.js");
+  const child = spawn(process.execPath, [workerPath, request.configPath], {
+    detached: true,
+    windowsHide: true,
+    stdio: "ignore",
+  });
+  child.unref();
+
+  return {
+    ...(typeof child.pid === "number" ? { runnerPid: child.pid } : {}),
+  };
+}
+
+async function launchDetachedReview(
+  request: DetachedReviewLaunchRequest,
+): Promise<DetachedReviewLaunchResult> {
+  const workerPath = path.join(__dirname, "backgroundReviewWorker.js");
   const child = spawn(process.execPath, [workerPath, request.configPath], {
     detached: true,
     windowsHide: true,

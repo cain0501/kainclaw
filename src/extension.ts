@@ -21,7 +21,7 @@ import * as vscode from "vscode";
 import { ActivityTracker } from "./activityTracker";
 import { ApprovalHost } from "./approvalHost";
 import {
-  createAssistantReplyBindings,
+  createAssistantReplyBindingsFactory,
   type AssistantReplyBindings,
 } from "./assistantReplyHost";
 import {
@@ -29,11 +29,14 @@ import {
   normalizeWebviewAttachments,
 } from "./attachmentHandler";
 import { BackgroundTaskHost } from "./backgroundTaskHost";
+import {
+  createBackgroundTaskNotificationBindings,
+} from "./backgroundTaskNotificationHost";
 import type { WebviewAttachment } from "./chatCommandHost";
 import {
   buildConversationHistoryFromSession,
   cloneConversationHistory,
-  createConversationHistoryBindings,
+  createConversationHistoryBindingsFactory,
   getHistoryCommandBehavior,
   getVisibleSessionMessages,
   replaceConversationHistory as replaceConversationHistoryBuffer,
@@ -110,9 +113,8 @@ import {
   createConversationFeatureBindings,
   type ConversationFeatureBindings,
 } from "./conversationFeatureHost";
-import { runReviewFromToolWithHost, runVerificationFromToolWithHost } from "./inspectionHost";
 import {
-  createAutoMemoryHostBindings,
+  createAutoMemoryHostBindingsFactory,
   type AutoMemoryHostBindings,
 } from "./autoMemoryHost";
 import {
@@ -171,8 +173,6 @@ import {
 } from "./providerRuntimeOptionsHost";
 import { type PlanModeState } from "./planMode/planMode";
 import {
-  enterPlanModeWithHost,
-  exitPlanModeWithHost,
   getPlanContentForWorkspace,
   resetPlanModeState,
 } from "./planModeHost";
@@ -193,7 +193,10 @@ import {
 } from "./compactHost";
 import { PersistentTaskRuntimeStore } from "./tasks/taskRuntime";
 import { PersistentWorktreeRuntimeStore } from "./worktree/runtime";
-import { WorkspaceRuntimeHost } from "./workspaceRuntimeHost";
+import {
+  createWorkspaceRuntimeHostFactory,
+  WorkspaceRuntimeHost,
+} from "./workspaceRuntimeHost";
 import { WorkspaceRuntime } from "./workspaceRuntimeShell";
 import {
   createExtensionPromptRequestPartsFactory,
@@ -278,6 +281,9 @@ class ChatSidebarProvider implements vscode.WebviewViewProvider, vscode.Disposab
   private sessionsPanelOpen = false;
   private lastSessionsDataSignature = "";
   private readonly mcpConfigWatchers: vscode.Disposable[] = [];
+  private readonly backgroundTaskNotificationTimer: ReturnType<
+    typeof setInterval
+  >;
 
   // Current session ID (P01).
   private currentSessionId: string | undefined;
@@ -335,10 +341,7 @@ class ChatSidebarProvider implements vscode.WebviewViewProvider, vscode.Disposab
       getPlanModeActive: () => this.planModeState.active,
       getSwarmWorkers: () => this.swarm?.getWorkers(),
     });
-    this.autoMemoryBindings = createAutoMemoryHostBindings({
-      getConversationKey: () => this.conversationFeatureBindings.getConversationKey(),
-      getPlanModeState: () => this.planModeState,
-      getSessionMessages: () => this.sessionMessages,
+    const autoMemoryBindingsFactory = createAutoMemoryHostBindingsFactory({
       createProviderAdapter: ({
         config,
         workspaceRoot,
@@ -346,6 +349,11 @@ class ChatSidebarProvider implements vscode.WebviewViewProvider, vscode.Disposab
         envMap,
       }) => buildProviderAdapter(config, workspaceRoot, systemPrompt, envMap),
       profileStore: this.profileStore,
+    });
+    this.autoMemoryBindings = autoMemoryBindingsFactory({
+      getConversationKey: () => this.conversationFeatureBindings.getConversationKey(),
+      getPlanModeState: () => this.planModeState,
+      getSessionMessages: () => this.sessionMessages,
     });
     this.conversationRuntimeStateBindings = createConversationRuntimeStateBindings({
       getPendingPlanVerification: () => this.pendingPlanVerification,
@@ -380,19 +388,36 @@ class ChatSidebarProvider implements vscode.WebviewViewProvider, vscode.Disposab
         VERIFY_PLAN_REMINDER_CONFIG.TURNS_BETWEEN_REMINDERS,
       getHistoryCommandBehavior,
     });
-    this.conversationHistoryBindings = createConversationHistoryBindings({
+    const conversationHistoryBindingsFactory =
+      createConversationHistoryBindingsFactory({
+        getShowThinkingSummaries: () => this.settings.getShowThinkingSummaries(),
+        recordCompactBoundary: compactBoundary => {
+          this.compactBoundary = compactBoundary;
+        },
+        persistCurrentSessionRuntimeState: () => {
+          this.conversationRuntimeStateBindings.persistCurrentSessionRuntimeState();
+        },
+      });
+    this.conversationHistoryBindings = conversationHistoryBindingsFactory({
       sessionMessages: this.sessionMessages,
       conversationMessages: this.conversationMessages,
-      getShowThinkingSummaries: () => this.settings.getShowThinkingSummaries(),
-      recordCompactBoundary: compactBoundary => {
-        this.compactBoundary = compactBoundary;
-      },
-      persistCurrentSessionRuntimeState: () => {
-        this.conversationRuntimeStateBindings.persistCurrentSessionRuntimeState();
-      },
     });
-    this.assistantReplyBindings = createAssistantReplyBindings({
-      getShowThinkingSummaries: () => this.settings.getShowThinkingSummaries(),
+    const assistantReplyBindingsFactory =
+      createAssistantReplyBindingsFactory({
+        getShowThinkingSummaries: () => this.settings.getShowThinkingSummaries(),
+        persistCurrentSessionRuntimeState: () => {
+          this.conversationRuntimeStateBindings.persistCurrentSessionRuntimeState();
+        },
+        getPersistenceEnabled: () =>
+          this.conversationFeatureBindings.isSessionPersistenceEnabled(),
+        getCurrentSessionId: () => this.currentSessionId,
+        appendMessages: (sessionId, messages, metaPatch) =>
+          this.sessions.appendMessages(sessionId, messages, metaPatch),
+        logPersisted: details => {
+          this.logSession("assistant-message-persisted", details);
+        },
+      });
+    this.assistantReplyBindings = assistantReplyBindingsFactory({
       appendSessionMessages: messages => {
         for (const message of messages) {
           this.sessionMessages.push(message);
@@ -401,18 +426,29 @@ class ChatSidebarProvider implements vscode.WebviewViewProvider, vscode.Disposab
       appendConversationMessage: message => {
         this.conversationMessages.push(message);
       },
-      persistCurrentSessionRuntimeState: () => {
-        this.conversationRuntimeStateBindings.persistCurrentSessionRuntimeState();
-      },
-      getPersistenceEnabled: () =>
-        this.conversationFeatureBindings.isSessionPersistenceEnabled(),
-      getCurrentSessionId: () => this.currentSessionId,
-      appendMessages: (sessionId, messages, metaPatch) =>
-        this.sessions.appendMessages(sessionId, messages, metaPatch),
-      logPersisted: details => {
-        this.logSession("assistant-message-persisted", details);
-      },
     });
+    const backgroundTaskNotificationBindings =
+      createBackgroundTaskNotificationBindings({
+        getTaskRuntime: () => {
+          const workspaceRoot = getPrimaryWorkspaceFolderPath();
+          if (!workspaceRoot) {
+            return undefined;
+          }
+          return this.conversationScopeBindings.getConversationTaskRuntime(
+            workspaceRoot,
+          );
+        },
+        recordAssistantReply: (reply, includeInConversation, thinkingSummary) =>
+          this.assistantReplyBindings.recordAssistantReply(
+            reply,
+            includeInConversation,
+            thinkingSummary,
+          ),
+      });
+    this.backgroundTaskNotificationTimer = setInterval(() => {
+      void backgroundTaskNotificationBindings.pollBackgroundTaskNotifications();
+    }, 1500);
+    this.backgroundTaskNotificationTimer.unref?.();
     this.webviewStateHost = new WebviewStateHost(payload => {
       this.webviewView?.webview.postMessage(payload);
     });
@@ -496,153 +532,87 @@ class ChatSidebarProvider implements vscode.WebviewViewProvider, vscode.Disposab
           void vscode.window.showWarningMessage(message);
         },
       });
-    this.workspaceRuntimeHost = new WorkspaceRuntimeHost({
-      getWorkspaceRoot: workspaceFolderPath =>
-        this.conversationScopeBindings.getEffectiveWorkspaceRoot(workspaceFolderPath),
-      requestFileApproval: (workspaceFolderPath, request) =>
-        this.approvalHost.requestFileApproval(workspaceFolderPath, request),
-      requestToolApproval: request => this.approvalHost.requestToolApproval(request),
-      onToolLifecycle: event => this.activityTracker.handleToolLifecycle(event),
-      getPlanModeController: workspaceFolderPath => {
-        const getWorkspaceRoot = () =>
-          this.conversationScopeBindings.getEffectiveWorkspaceRoot(workspaceFolderPath);
-        return {
-          getState: () => this.planModeState,
-          enter: () =>
-            enterPlanModeWithHost({
-              workspaceRoot: getWorkspaceRoot(),
-              conversationKey: this.conversationFeatureBindings.getConversationKey(),
-              clearSwarm,
-              clearPendingPlanVerification: () =>
-                this.conversationRuntimeStateBindings.setPendingPlanVerificationState(
-                  undefined,
-                ),
-              setPlanModeState,
-              postState: () => this.postState(),
-            }),
-          getPlanContent: () =>
-            getPlanContentForWorkspace({
-              workspaceRoot: getWorkspaceRoot(),
-              planModeState: this.planModeState,
-            }),
-          exit: () =>
-            exitPlanModeWithHost({
-              workspaceRoot: getWorkspaceRoot(),
-              planModeState: this.planModeState,
-              sessionMessages: this.sessionMessages,
-              setPlanModeState,
-              setPendingPlanVerification: nextState =>
-                this.conversationRuntimeStateBindings.setPendingPlanVerificationState(
-                  nextState,
-                ),
-              postState: () => this.postState(),
-            }),
-        };
-      },
-      getPlanVerificationState: () => this.pendingPlanVerification,
+    const workspaceRuntimeHostFactory =
+      createWorkspaceRuntimeHostFactory({
+        requestFileApproval: (workspaceFolderPath, request) =>
+          this.approvalHost.requestFileApproval(workspaceFolderPath, request),
+        requestToolApproval: request =>
+          this.approvalHost.requestToolApproval(request),
+        onToolLifecycle: event =>
+          this.activityTracker.handleToolLifecycle(event),
+        resolveProviderConfig: workspaceFolderPath =>
+          resolveProviderConfig(this.settings, workspaceFolderPath),
+        getEffortLevel: () => this.settings.getEffortLevel(),
+        createProviderRuntimeOptions,
+        ensureConversationWorktreeHydrated: path =>
+          this.conversationScopeBindings.ensureConversationWorktreeHydrated(path),
+        getEffectiveWorkspaceRoot: path =>
+          this.conversationScopeBindings.getEffectiveWorkspaceRoot(path),
+        getWorkspaceRuntime: (workspaceFolderPath, envMap) =>
+          this.workspaceRuntimeHost.getRuntime(workspaceFolderPath, envMap),
+        backgroundTaskHost: this.backgroundTaskHost,
+        findActiveBuiltInAgentTask: (workspaceRoot, agentType, diffRef) =>
+          this.conversationScopeBindings.findActiveBuiltInAgentTask(
+            workspaceRoot,
+            agentType,
+            diffRef,
+          ),
+        createProviderAdapter: options =>
+          buildProviderAdapter(
+            options.config,
+            options.workspaceRoot,
+            options.systemPrompt,
+            options.envMap,
+            options.runtimeOptions,
+          ),
+        runCommandInBackground: (workspaceFolderPath, request) =>
+          this.backgroundCommandToolLaunchBindings.runBackgroundCommandFromTool(
+            workspaceFolderPath,
+            request.command,
+          ),
+        findReusableBackgroundCommand: (workspaceFolderPath, request) =>
+          this.backgroundCommandToolLaunchBindings.findReusableBackgroundCommand(
+            workspaceFolderPath,
+            request.command,
+          ),
+        skillStore: this.skillStore,
+        mcpOAuthHost: this.host,
+      });
+    this.workspaceRuntimeHost = workspaceRuntimeHostFactory({
+      getConversationKey: () =>
+        this.conversationFeatureBindings.getConversationKey(),
+      clearSwarm,
+      getPlanModeState: () => this.planModeState,
+      setPlanModeState,
+      clearPendingPlanVerification: () =>
+        this.conversationRuntimeStateBindings.setPendingPlanVerificationState(
+          undefined,
+        ),
+      setPendingPlanVerification: nextState =>
+        this.conversationRuntimeStateBindings.setPendingPlanVerificationState(
+          nextState,
+        ),
+      postState: () => this.postState(),
+      getPendingPlanVerification: () => this.pendingPlanVerification,
+      markPendingPlanVerificationStarted: () =>
+        this.conversationRuntimeStateBindings.markPendingPlanVerificationStarted(),
+      markPendingPlanVerificationCompleted: () =>
+        this.conversationRuntimeStateBindings.markPendingPlanVerificationCompleted(),
+      resetPendingPlanVerificationToAwaitingStart: () =>
+        this.conversationRuntimeStateBindings.resetPendingPlanVerificationToAwaitingStart(),
+      getConversationHistory: () =>
+        this.conversationHistoryBindings.getConversationHistory(),
+      getSessionMessages: () => this.sessionMessages,
       getTasks: workspaceFolderPath =>
         this.conversationScopeBindings.getConversationTaskRuntime(workspaceFolderPath),
       getWorktree: workspaceFolderPath =>
         this.conversationScopeBindings.getConversationWorktreeRuntime(workspaceFolderPath),
-      stopBackgroundTask: async (taskId, workspaceFolderPath) =>
-        (await this.backgroundTaskHost.stopTask(
-          taskId,
-          this.conversationScopeBindings.getEffectiveWorkspaceRoot(workspaceFolderPath),
-        )) ?? null,
       stopSwarmWorker: async taskId => {
         if (!this.swarm) {
           throw new Error("No background task controller is available.");
         }
         return this.swarm.stopWorker(taskId);
       },
-      runVerification: (workspaceFolderPath, request) =>
-        runVerificationFromToolWithHost({
-          workspaceFolderPath,
-          extraGuidance: request.extraGuidance,
-          diffRef: request.diffRef,
-          resolveProviderConfig: () =>
-            resolveProviderConfig(this.settings, workspaceFolderPath),
-          getEffortLevel: () => this.settings.getEffortLevel(),
-          createProviderRuntimeOptions,
-          ensureConversationWorktreeHydrated: path =>
-            this.conversationScopeBindings.ensureConversationWorktreeHydrated(path),
-          getEffectiveWorkspaceRoot: path =>
-            this.conversationScopeBindings.getEffectiveWorkspaceRoot(path),
-          getWorkspaceRuntime: envMap =>
-            this.workspaceRuntimeHost.getRuntime(workspaceFolderPath, envMap),
-          getConversationHistory: () =>
-            this.conversationHistoryBindings.getConversationHistory(),
-          sessionMessages: this.sessionMessages,
-          getPendingPlanVerification: () => this.pendingPlanVerification,
-          backgroundTaskHost: this.backgroundTaskHost,
-          findActiveBuiltInAgentTask: (workspaceRoot, agentType, diffRef) =>
-            this.conversationScopeBindings.findActiveBuiltInAgentTask(
-              workspaceRoot,
-              agentType,
-              diffRef,
-            ),
-          createProviderAdapter: options =>
-            buildProviderAdapter(
-              options.config,
-              options.workspaceRoot,
-              options.systemPrompt,
-              options.envMap,
-              options.runtimeOptions,
-            ),
-          markPendingPlanVerificationStarted: () =>
-            this.conversationRuntimeStateBindings.markPendingPlanVerificationStarted(),
-          markPendingPlanVerificationCompleted: () =>
-            this.conversationRuntimeStateBindings.markPendingPlanVerificationCompleted(),
-          resetPendingPlanVerificationToAwaitingStart: () =>
-            this.conversationRuntimeStateBindings.resetPendingPlanVerificationToAwaitingStart(),
-        }),
-      runReview: (workspaceFolderPath, request) =>
-        runReviewFromToolWithHost({
-          workspaceFolderPath,
-          extraGuidance: request.extraGuidance,
-          diffRef: request.diffRef,
-          resolveProviderConfig: () =>
-            resolveProviderConfig(this.settings, workspaceFolderPath),
-          getEffortLevel: () => this.settings.getEffortLevel(),
-          createProviderRuntimeOptions,
-          ensureConversationWorktreeHydrated: path =>
-            this.conversationScopeBindings.ensureConversationWorktreeHydrated(path),
-          getEffectiveWorkspaceRoot: path =>
-            this.conversationScopeBindings.getEffectiveWorkspaceRoot(path),
-          getWorkspaceRuntime: envMap =>
-            this.workspaceRuntimeHost.getRuntime(workspaceFolderPath, envMap),
-          getConversationHistory: () =>
-            this.conversationHistoryBindings.getConversationHistory(),
-          sessionMessages: this.sessionMessages,
-          getPendingPlanVerification: () => this.pendingPlanVerification,
-          backgroundTaskHost: this.backgroundTaskHost,
-          findActiveBuiltInAgentTask: (workspaceRoot, agentType, diffRef) =>
-            this.conversationScopeBindings.findActiveBuiltInAgentTask(
-              workspaceRoot,
-              agentType,
-              diffRef,
-            ),
-          createProviderAdapter: options =>
-            buildProviderAdapter(
-              options.config,
-              options.workspaceRoot,
-              options.systemPrompt,
-              options.envMap,
-              options.runtimeOptions,
-            ),
-        }),
-      runCommandInBackground: (workspaceFolderPath, request) =>
-        this.backgroundCommandToolLaunchBindings.runBackgroundCommandFromTool(
-          workspaceFolderPath,
-          request.command,
-        ),
-      findReusableBackgroundCommand: (workspaceFolderPath, request) =>
-        this.backgroundCommandToolLaunchBindings.findReusableBackgroundCommand(
-          workspaceFolderPath,
-          request.command,
-        ),
-      skillStore: this.skillStore,
-      mcpOAuthHost: this.host,
     });
     const workspaceStatusControllerFactory =
       createWorkspaceStatusControllerFactory({
@@ -1071,6 +1041,7 @@ class ChatSidebarProvider implements vscode.WebviewViewProvider, vscode.Disposab
 
   async dispose(): Promise<void> {
     this.disposeFastModeRuntimeListener();
+    clearInterval(this.backgroundTaskNotificationTimer);
     for (const watcher of this.mcpConfigWatchers) {
       watcher.dispose();
     }

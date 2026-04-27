@@ -57,7 +57,7 @@ describe("backgroundTaskHost helpers", () => {
       ).endsWith("..."),
     ).toBe(true);
     expect(host.buildFollowUpMessage("Verification", "verify-1")).toContain(
-      "TaskOutput",
+      "You'll be notified when it completes",
     );
   });
 
@@ -106,6 +106,7 @@ describe("backgroundTaskHost helpers", () => {
       id: "review-1",
       status: "completed",
       result: "Final review report",
+      notified: true,
       metadata: {
         originalTask: "Review current diff",
       },
@@ -168,6 +169,7 @@ describe("backgroundTaskHost helpers", () => {
       status: "cancelled",
       result: "Cancelled by TaskStop.",
       error: "Cancelled by TaskStop.",
+      notified: true,
     });
   });
 
@@ -217,6 +219,7 @@ describe("backgroundTaskHost helpers", () => {
       status: "failed",
       result: "verification failed report",
       error: "Verification finished with VERDICT: FAIL",
+      notified: true,
       metadata: {
         originalTask: "Implement detached task recovery",
         verificationVerdict: "FAIL",
@@ -250,18 +253,19 @@ describe("backgroundTaskHost helpers", () => {
       "npm run build",
     );
 
-    expect(started).toEqual({
-      taskId: "cmd-1",
-      command: "npm run build",
-      workspaceRoot: "E:\\claudecodejingiang\\vscode-extension",
-    });
-    expect(reusable).toEqual(started);
-
     const initialTask = await runtime.getBackgroundTask("cmd-1");
     expect(initialTask?.taskType).toBe("local_bash");
     const detached = initialTask?.metadata?.detached as
       | { statePath?: string; outputPath?: string }
       | undefined;
+
+    expect(started).toEqual({
+      taskId: "cmd-1",
+      command: "npm run build",
+      workspaceRoot: "E:\\claudecodejingiang\\vscode-extension",
+      outputPath: detached!.outputPath,
+    });
+    expect(reusable).toEqual(started);
 
     expect(detached?.statePath).toBeTruthy();
     expect(detached?.outputPath).toBeTruthy();
@@ -344,6 +348,130 @@ describe("backgroundTaskHost helpers", () => {
       command: "npm run build",
     });
     expect(stopDetachedProcess).toHaveBeenCalledWith(12345);
+    await expect(fs.readFile(detached!.cancelPath!, "utf8")).resolves.toBe("cancelled");
+  });
+
+  it("launches detached hosted reviews and refreshes the final report from worker state", async () => {
+    const storageRoot = await createStorageRoot("cain-background-host-");
+    const runtime = await createTaskRuntime(storageRoot);
+    const host = new BackgroundTaskHost({
+      storageRoot,
+      getTaskRuntime: () => runtime,
+      launchDetachedReview: async () => ({ runnerPid: 2024 }),
+    });
+
+    const started = await host.runDetachedRemoteReview({
+      workspaceRoot: "E:\\claudecodejingiang\\vscode-extension",
+      commandText: "/ultrareview HEAD~2..HEAD",
+      taskDescription: "Hosted review: HEAD~2..HEAD",
+      reviewRequest: "Review the diff.",
+      provider: {
+        model: "claude-3-7-sonnet",
+      },
+      systemPrompt: "review prompt",
+      sessionId: "session-hosted-review",
+      remoteTaskType: "claude_cli_review",
+      metadata: {
+        diffRef: "HEAD~2..HEAD",
+      },
+    });
+
+    const initialTask = await runtime.getBackgroundTask(started.taskId);
+    const detached = initialTask?.metadata?.detached as
+      | { statePath?: string; outputPath?: string }
+      | undefined;
+
+    expect(initialTask).toMatchObject({
+      taskType: "remote_agent",
+      status: "running",
+    });
+    expect(started.outputPath).toBe(detached?.outputPath);
+
+    await fs.writeFile(
+      detached!.outputPath!,
+      "Started remote review:\n/ultrareview HEAD~2..HEAD\n### Findings\n- race condition\n",
+      "utf8",
+    );
+    await fs.writeFile(
+      detached!.statePath!,
+      JSON.stringify(
+        {
+          status: "completed",
+          updatedAt: Date.now(),
+          childPid: 3030,
+          result: "### Findings\n- race condition",
+        },
+        null,
+        2,
+      ),
+      "utf8",
+    );
+
+    const refreshedTask = await runtime.getBackgroundTask(started.taskId);
+
+    expect(refreshedTask).toMatchObject({
+      status: "completed",
+      result: "### Findings\n- race condition",
+      metadata: {
+        remoteTaskType: "claude_cli_review",
+        diffRef: "HEAD~2..HEAD",
+      },
+    });
+    expect(refreshedTask?.output).toContain("### Findings");
+  });
+
+  it("stops detached hosted reviews through the detached process controller", async () => {
+    const storageRoot = await createStorageRoot("cain-background-host-");
+    const runtime = await createTaskRuntime(storageRoot);
+    const stopDetachedProcess = vi.fn(async () => undefined);
+    const host = new BackgroundTaskHost({
+      storageRoot,
+      getTaskRuntime: () => runtime,
+      launchDetachedReview: async () => ({ runnerPid: 4040 }),
+      stopDetachedProcess,
+    });
+
+    const started = await host.runDetachedRemoteReview({
+      workspaceRoot: "E:\\claudecodejingiang\\vscode-extension",
+      commandText: "/ultrareview HEAD~2..HEAD",
+      taskDescription: "Hosted review: HEAD~2..HEAD",
+      reviewRequest: "Review the diff.",
+      provider: {},
+      systemPrompt: "review prompt",
+      sessionId: "session-hosted-review-stop",
+      remoteTaskType: "claude_cli_review",
+    });
+
+    const storedTask = await runtime.getBackgroundTask(started.taskId);
+    const detached = storedTask?.metadata?.detached as
+      | { statePath?: string; cancelPath?: string }
+      | undefined;
+    await fs.writeFile(
+      detached!.statePath!,
+      JSON.stringify(
+        {
+          status: "running",
+          updatedAt: Date.now(),
+          childPid: 5050,
+          runnerPid: 4040,
+        },
+        null,
+        2,
+      ),
+      "utf8",
+    );
+
+    const stopped = await host.stopTask(
+      started.taskId,
+      "E:\\claudecodejingiang\\vscode-extension",
+    );
+
+    expect(stopped).toEqual({
+      taskId: started.taskId,
+      taskType: "remote_agent",
+      command: "/ultrareview HEAD~2..HEAD",
+    });
+    expect(stopDetachedProcess).toHaveBeenCalledWith(5050);
     await expect(fs.readFile(detached!.cancelPath!, "utf8")).resolves.toBe("cancelled");
   });
 

@@ -64,6 +64,7 @@ function cloneBackgroundTask(task: BackgroundTaskRecord): BackgroundTaskRecord {
   return {
     ...task,
     ...(task.metadata ? { metadata: { ...task.metadata } } : {}),
+    ...(typeof task.notified === "boolean" ? { notified: task.notified } : {}),
   };
 }
 
@@ -460,6 +461,12 @@ function normalizeState(
                 ),
               }
             : {}),
+          notified:
+            typeof task.notified === "boolean"
+              ? task.notified
+              : normalizedTaskType === "built_in_agent" &&
+                  status !== "pending" &&
+                  status !== "running",
           createdAt:
             typeof task.createdAt === "number" && Number.isFinite(task.createdAt)
               ? task.createdAt
@@ -522,6 +529,8 @@ export class PersistentTaskRuntimeStore {
         this.updateBackgroundTask(scope, taskId, updates),
       appendBackgroundOutput: (taskId, content) =>
         this.appendBackgroundOutput(scope, taskId, content),
+      markBackgroundTaskNotified: taskId =>
+        this.markBackgroundTaskNotified(scope, taskId),
       waitForBackgroundTask: (taskId, timeoutMs, abortSignal) =>
         this.waitForBackgroundTask(scope, taskId, timeoutMs, abortSignal),
     };
@@ -737,6 +746,7 @@ export class PersistentTaskRuntimeStore {
       const created: BackgroundTaskRecord = {
         ...task,
         output: normalizeOutput(task.output),
+        notified: task.notified ?? false,
         createdAt: now,
         updatedAt: now,
       };
@@ -831,6 +841,9 @@ export class PersistentTaskRuntimeStore {
       if (updates.error !== undefined) {
         task.error = updates.error;
       }
+      if (updates.notified !== undefined) {
+        task.notified = updates.notified;
+      }
 
       applyDetachedArtifactFields(task);
       task.updatedAt = Date.now();
@@ -850,6 +863,26 @@ export class PersistentTaskRuntimeStore {
       }
 
       task.output = appendOutput(task.output, content);
+      task.updatedAt = Date.now();
+      return cloneBackgroundTask(task);
+    });
+  }
+
+  private async markBackgroundTaskNotified(
+    scope: ConversationScope,
+    taskId: string,
+  ): Promise<BackgroundTaskRecord | null> {
+    return this.withScopedMutation(scope, state => {
+      const task = state.backgroundTasks.find(entry => entry.id === taskId);
+      if (!task) {
+        return null;
+      }
+
+      if (task.notified) {
+        return cloneBackgroundTask(task);
+      }
+
+      task.notified = true;
       task.updatedAt = Date.now();
       return cloneBackgroundTask(task);
     });

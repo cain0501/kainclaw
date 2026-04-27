@@ -4,6 +4,7 @@ import {
   buildConversationHistoryFromSession,
   cloneConversationHistory,
   createConversationHistoryBindings,
+  createConversationHistoryBindingsFactory,
   getHistoryCommandBehavior,
   getVisibleSessionMessages,
   replaceConversationHistory,
@@ -134,5 +135,38 @@ describe("conversationHistoryHost", () => {
       { role: "assistant", content: "new answer" },
     ]);
     expect(persisted).toBe(1);
+  });
+
+  it("builds conversation-history bindings from a stable factory", () => {
+    const sessionMessages = [
+      { role: "user" as const, content: "real question" },
+      { role: "assistant" as const, content: "real answer" },
+    ];
+    const conversationMessages = [{ role: "assistant" as const, content: "old" }];
+    let showThinkingSummaries = false;
+    let persisted = 0;
+
+    const factory = createConversationHistoryBindingsFactory({
+      getShowThinkingSummaries: () => showThinkingSummaries,
+      persistCurrentSessionRuntimeState: () => {
+        persisted += 1;
+      },
+    });
+    const bindings = factory({
+      sessionMessages,
+      conversationMessages,
+    });
+
+    expect(bindings.getVisibleSessionMessages()).toEqual(sessionMessages);
+    bindings.replaceConversationHistory([
+      { role: "assistant", content: "new answer" },
+    ]);
+    expect(conversationMessages).toEqual([
+      { role: "assistant", content: "new answer" },
+    ]);
+    expect(persisted).toBe(1);
+
+    showThinkingSummaries = true;
+    expect(bindings.getVisibleSessionMessages()).toBe(sessionMessages);
   });
 });

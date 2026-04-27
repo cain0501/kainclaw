@@ -8,6 +8,7 @@ const {
   launchReviewFromToolMock,
   handleVerificationPromptCommandMock,
   handleReviewPromptCommandMock,
+  launchHostedReviewWithHostMock,
 } = vi.hoisted(() => ({
   runVerificationInspectionSessionMock: vi.fn(),
   runReviewInspectionSessionMock: vi.fn(),
@@ -15,6 +16,7 @@ const {
   launchReviewFromToolMock: vi.fn(),
   handleVerificationPromptCommandMock: vi.fn(),
   handleReviewPromptCommandMock: vi.fn(),
+  launchHostedReviewWithHostMock: vi.fn(),
 }));
 
 vi.mock("./inspectionSessionHost", () => ({
@@ -32,8 +34,13 @@ vi.mock("./inspectionPromptHost", () => ({
   handleReviewPromptCommand: handleReviewPromptCommandMock,
 }));
 
+vi.mock("./remoteReviewHost", () => ({
+  launchHostedReviewWithHost: launchHostedReviewWithHostMock,
+}));
+
 import {
   handleReviewCommandWithHost,
+  handleUltrareviewCommandWithHost,
   handleVerificationCommandWithHost,
   runReviewFromToolWithHost,
   runReviewSessionWithHost,
@@ -268,6 +275,130 @@ describe("inspectionHost", () => {
       expect.any(String),
     );
     expect(finishToolExecution).toHaveBeenCalledWith("exec-2", "error", "warn");
+  });
+
+  it("rejects /ultrareview when the active provider is not Claude CLI", async () => {
+    const recordAssistantReply = vi.fn(async () => undefined);
+
+    const handled = await handleUltrareviewCommandWithHost({
+      commandText: "/ultrareview HEAD~2..HEAD",
+      workspaceRoot: "E:\\repo",
+      config: { type: "anthropic", apiKey: "secret", model: "claude-sonnet" },
+      envMap: { HELLO: "world" },
+      runtime: {
+        getToolContext: () =>
+          ({ workspaceRoot: "E:\\repo", invokerKind: "main" }) as any,
+      } as any,
+      tools: [],
+      runtimeOptions: { fastMode: true },
+      effortLevel: "medium",
+      sessionMessages: [{ role: "user", content: "请审查这个改动" }],
+      blockedByPlanMode: false,
+      getConversationHistory: () => [{ role: "user", content: "请审查这个改动" }],
+      getPendingPlanVerification: () => undefined,
+      backgroundTaskHost: {
+        runBuiltInAgentSession: vi.fn(),
+        buildFollowUpMessage: vi.fn(),
+        runDetachedRemoteReview: vi.fn(),
+      } as any,
+      addPhaseActivity: vi.fn(() => "activity-ultra-1"),
+      finishPhaseActivity: vi.fn(),
+      recordAssistantReply,
+      setCompanionState: vi.fn(),
+      clearStreamingText: vi.fn(),
+      updateMood: vi.fn(async () => undefined),
+      isAbortLikeError: vi.fn(() => false),
+    });
+
+    expect(handled).toBe(true);
+    expect(launchHostedReviewWithHostMock).not.toHaveBeenCalled();
+    expect(recordAssistantReply).toHaveBeenCalledWith(
+      expect.stringContaining("Claude CLI"),
+      false,
+    );
+  });
+
+  it("launches /ultrareview through the hosted review adapter and returns a notification-first reply", async () => {
+    const recordAssistantReply = vi.fn(async () => undefined);
+    const addPhaseActivity = vi.fn(() => "activity-ultra-2");
+    const finishPhaseActivity = vi.fn();
+    const setCompanionState = vi.fn();
+    const clearStreamingText = vi.fn();
+    const updateMood = vi.fn(async () => undefined);
+
+    launchHostedReviewWithHostMock.mockResolvedValue({
+      taskId: "remote-review-1",
+      sessionId: "session-1",
+      outputPath: "E:\\repo\\.cain\\remote-reviews\\remote-review-1\\output.log",
+    });
+
+    const handled = await handleUltrareviewCommandWithHost({
+      commandText: "/ultrareview HEAD~2..HEAD focus auth regressions",
+      workspaceRoot: "E:\\repo",
+      config: { type: "claude-cli", model: "claude-3-7-sonnet" },
+      envMap: {},
+      runtime: {
+        getToolContext: () =>
+          ({ workspaceRoot: "E:\\repo", invokerKind: "main" }) as any,
+      } as any,
+      tools: [],
+      runtimeOptions: { fastMode: true },
+      effortLevel: "high",
+      sessionMessages: [{ role: "user", content: "请审查这个改动" }],
+      blockedByPlanMode: false,
+      getConversationHistory: () => [{ role: "user", content: "请审查这个改动" }],
+      getPendingPlanVerification: () => ({
+        planFilePath: ".omx/plans/review.md",
+        planContent: "1. Inspect auth flow",
+        approvedAtUserTurnCount: 3,
+        verificationStarted: false,
+        verificationCompleted: false,
+      }),
+      backgroundTaskHost: {
+        runBuiltInAgentSession: vi.fn(),
+        buildFollowUpMessage: vi.fn(),
+        runDetachedRemoteReview: vi.fn(),
+      } as any,
+      addPhaseActivity,
+      finishPhaseActivity,
+      recordAssistantReply,
+      setCompanionState,
+      clearStreamingText,
+      updateMood,
+      isAbortLikeError: vi.fn(() => false),
+    });
+
+    expect(handled).toBe(true);
+    expect(launchHostedReviewWithHostMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        commandText: "/ultrareview HEAD~2..HEAD focus auth regressions",
+        workspaceRoot: "E:\\repo",
+        originalTask: "请审查这个改动",
+        planFilePath: ".omx/plans/review.md",
+        planContent: "1. Inspect auth flow",
+      }),
+    );
+    expect(addPhaseActivity).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.any(String),
+      "running",
+    );
+    expect(finishPhaseActivity).toHaveBeenCalledWith(
+      "activity-ultra-2",
+      "done",
+      expect.stringContaining("remote-review-1"),
+    );
+    expect(recordAssistantReply).toHaveBeenCalledWith(
+      expect.stringContaining("Task ID: `remote-review-1`"),
+      false,
+    );
+    expect(recordAssistantReply).toHaveBeenCalledWith(
+      expect.stringContaining("`HEAD~2..HEAD`"),
+      false,
+    );
+    expect(clearStreamingText).toHaveBeenCalledTimes(1);
+    expect(setCompanionState).toHaveBeenCalledWith("done");
+    expect(updateMood).toHaveBeenCalledWith(1, false);
   });
 
   it("uses Chinese review tool labels when the conversation is Chinese", async () => {

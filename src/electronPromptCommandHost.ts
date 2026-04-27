@@ -30,6 +30,7 @@ const SUPPORTED_ELECTRON_RUNTIME_PROMPT_COMMANDS = new Set([
   "/mcp",
   "/memory",
   "/review",
+  "/ultrareview",
   "/todo",
   "/tools",
   "/verify",
@@ -115,6 +116,16 @@ export async function handleElectronPromptCommand(options: {
     runtimeOptions: ProviderRuntimeOptions,
     effortLevel: EffortLevel | undefined,
   ) => Promise<boolean>;
+  handleUltrareviewCommand: (
+    prompt: string,
+    workspaceRoot: string,
+    config: AdapterProviderConfig,
+    envMap: Record<string, string>,
+    runtime: RuntimeLike,
+    tools: ToolDefinition[],
+    runtimeOptions: ProviderRuntimeOptions,
+    effortLevel: EffortLevel | undefined,
+  ) => Promise<boolean>;
   handleVerificationCommand: (
     prompt: string,
     workspaceRoot: string,
@@ -176,6 +187,7 @@ export async function handleElectronPromptCommand(options: {
     tryHandlePlanModeCommand: async () => null,
     handleCompactCommand: options.handleCompactCommand,
     handleReviewCommand: options.handleReviewCommand,
+    handleUltrareviewCommand: options.handleUltrareviewCommand,
     handleVerificationCommand: options.handleVerificationCommand,
   });
 

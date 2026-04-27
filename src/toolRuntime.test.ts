@@ -921,7 +921,7 @@ describe("toolRuntime background task semantics", () => {
       },
       runVerification: async () => {
         throw new Error(
-          'A verification agent is already running for this conversation (verify-123). Use TaskOutput with task_id "verify-123" to inspect it instead of launching another one.',
+          'A verification agent is already running for this conversation (verify-123). You\'ll be notified when it completes. Use TaskOutput with task_id "verify-123" only if you need to inspect partial output before that.',
         );
       },
     };
@@ -1017,7 +1017,7 @@ describe("toolRuntime background task semantics", () => {
       },
       runVerification: async () => {
         throw new Error(
-          'A verification agent is already running for this conversation (verify-standalone-2). Use TaskOutput with task_id "verify-standalone-2" to inspect it instead of launching another one.',
+          'A verification agent is already running for this conversation (verify-standalone-2). You\'ll be notified when it completes. Use TaskOutput with task_id "verify-standalone-2" only if you need to inspect partial output before that.',
         );
       },
     };
@@ -1064,7 +1064,7 @@ describe("toolRuntime background task semantics", () => {
       },
       runReview: async () => {
         throw new Error(
-          'A review agent is already running for this conversation (review-standalone-2). Use TaskOutput with task_id "review-standalone-2" to inspect it instead of launching another one.',
+          'A review agent is already running for this conversation (review-standalone-2). You\'ll be notified when it completes. Use TaskOutput with task_id "review-standalone-2" only if you need to inspect partial output before that.',
         );
       },
     };
@@ -1080,7 +1080,7 @@ describe("toolRuntime background task semantics", () => {
   it("RunReview forwards diffRef and surfaces it in already-running output", async () => {
     const runReview = vi.fn(async () => {
       throw new Error(
-        'A review agent is already running for this conversation (review-diff-tool). Use TaskOutput with task_id "review-diff-tool" to inspect it instead of launching another one.',
+        'A review agent is already running for this conversation (review-diff-tool). You\'ll be notified when it completes. Use TaskOutput with task_id "review-diff-tool" only if you need to inspect partial output before that.',
       );
     });
     const context: ToolContext = {
