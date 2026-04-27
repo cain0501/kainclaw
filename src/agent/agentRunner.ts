@@ -98,6 +98,18 @@ export interface AgentRunnerOptions {
     content?: string,
   ) => void;
   abortSignal?: AbortSignal;
+  beforeToolCall?: (
+    toolName: string,
+    input: Record<string, unknown>,
+    toolContext: ToolContext,
+  ) => Promise<void>;
+  afterToolCall?: (
+    toolName: string,
+    input: Record<string, unknown>,
+    output: { summary: string; content: string } | string,
+    isError: boolean,
+    toolContext: ToolContext,
+  ) => Promise<void>;
   /** Maximum turn count to prevent infinite loops. */
   maxTurns?: number;
   /**
@@ -126,6 +138,8 @@ export async function runAgent(
     onToolStart,
     onToolEnd,
     abortSignal,
+    beforeToolCall,
+    afterToolCall,
     maxTurns = 40,
     swarm,
   } = options;
@@ -174,9 +188,10 @@ export async function runAgent(
         throw new Error("Agent run aborted.");
       }
       const execId = randomUUID();
-      onToolStart?.(toolCall.name, toolCall.input, execId);
 
       try {
+        await beforeToolCall?.(toolCall.name, toolCall.input, toolContext);
+        onToolStart?.(toolCall.name, toolCall.input, execId);
         let result: { summary: string; content: string };
 
         if (swarm && ["spawn_agent", "send_message", "wait_for_agents"].includes(toolCall.name)) {
@@ -185,6 +200,13 @@ export async function runAgent(
           result = await executeTool(toolCall.name, toolCall.input, toolContext);
         }
 
+        await afterToolCall?.(
+          toolCall.name,
+          toolCall.input,
+          result,
+          false,
+          toolContext,
+        );
         onToolEnd?.(execId, result.summary, false, result.content);
         lastToolResultContent = `${result.summary}\n\n${result.content}`;
         messages.push({
@@ -194,6 +216,13 @@ export async function runAgent(
         });
       } catch (error) {
         const msg = error instanceof Error ? error.message : String(error);
+        await afterToolCall?.(
+          toolCall.name,
+          toolCall.input,
+          msg,
+          true,
+          toolContext,
+        );
         onToolEnd?.(execId, msg, true, `Tool error: ${msg}`);
         lastToolResultContent = `Tool error: ${msg}`;
         messages.push({

@@ -7,6 +7,7 @@ import {
 } from "./promptExecutionHost";
 import type { BackgroundTaskHost } from "./backgroundTaskHost";
 import type { PendingPlanVerificationState } from "./conversationRuntimeStateHost";
+import type { HookDefinition } from "./hooksRegistry";
 import type { McpServerStatusSummary } from "./mcpRuntime";
 import type { PromptSharedBindings } from "./promptBindingsHost";
 import type {
@@ -90,6 +91,10 @@ export type PromptEntryCommandBindings<TRuntime extends PromptRuntimeLike> = {
   markPendingPlanVerificationStarted: () => void;
   markPendingPlanVerificationCompleted: () => void;
   resetPendingPlanVerificationToAwaitingStart: () => void;
+  getSessionInstalledSkillHooks?: () => HookDefinition[];
+  registerSessionInstalledSkillHooks?: (
+    hooks: HookDefinition[],
+  ) => HookDefinition[];
   skillStore?: SkillStore;
   profileStore?: ProfileStore;
 };
@@ -233,6 +238,10 @@ export function createPromptEntryBindingsFromShared<
   markPendingPlanVerificationStarted: () => void;
   markPendingPlanVerificationCompleted: () => void;
   resetPendingPlanVerificationToAwaitingStart: () => void;
+  getSessionInstalledSkillHooks?: () => HookDefinition[];
+  registerSessionInstalledSkillHooks?: (
+    hooks: HookDefinition[],
+  ) => HookDefinition[];
   skillStore?: SkillStore;
   profileStore?: ProfileStore;
 }): PromptEntryHostBindings<TRuntime> {
@@ -289,6 +298,9 @@ export function createPromptEntryBindingsFromShared<
       options.markPendingPlanVerificationCompleted,
     resetPendingPlanVerificationToAwaitingStart:
       options.resetPendingPlanVerificationToAwaitingStart,
+    getSessionInstalledSkillHooks: options.getSessionInstalledSkillHooks,
+    registerSessionInstalledSkillHooks:
+      options.registerSessionInstalledSkillHooks,
     skillStore: options.skillStore,
     profileStore: options.profileStore,
   });

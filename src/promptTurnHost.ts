@@ -10,7 +10,10 @@ import {
   describeToolInput as formatToolInputPreview,
   describeToolName as formatToolDisplayName,
 } from "./hostRuntimeHelpers";
+import { triggerHooks } from "./hooks/hooksTrigger";
 import { preparePromptTurnDependencies } from "./promptSetupHost";
+import type { AgentRunner } from "./hooks/hooksExecutor";
+import type { HookDefinition } from "./hooksRegistry";
 import type { ToolContext, ToolDefinition } from "./toolRuntime";
 import type { EffortLevel, ProviderRuntimeOptions } from "./thinkingEffort/types";
 
@@ -35,6 +38,8 @@ export async function runPromptTurnWithHost<TSwarm>(options: {
   effortLevel: EffortLevel | undefined;
   runtime: { getToolContext(mode?: string): ToolContext };
   tools: ToolDefinition[];
+  installedSkillHooks?: HookDefinition[];
+  installedSkillAgentRunner?: AgentRunner;
   existingSwarm?: TSwarm;
   createSwarm: () => TSwarm;
   assignSwarm: (swarm: TSwarm) => void;
@@ -102,6 +107,8 @@ export async function runPromptTurnWithHost<TSwarm>(options: {
     history,
     provider,
     tools: options.tools,
+    installedSkillHooks: options.installedSkillHooks,
+    installedSkillAgentRunner: options.installedSkillAgentRunner,
     runtime: options.runtime,
     swarmEnabledForTurn,
     existingSwarm: options.existingSwarm,
@@ -129,6 +136,8 @@ export async function executePreparedPromptTurn<TSwarm>(options: {
   history: NormalizedMessage[];
   provider: IProviderAdapter;
   tools: ToolDefinition[];
+  installedSkillHooks?: HookDefinition[];
+  installedSkillAgentRunner?: AgentRunner;
   runtime: { getToolContext(mode?: string): ToolContext };
   swarmEnabledForTurn: boolean;
   existingSwarm?: TSwarm;
@@ -196,6 +205,8 @@ export async function executePreparedPromptTurn<TSwarm>(options: {
       history: options.history,
       provider: options.provider,
       tools: options.tools,
+      installedSkillHooks: options.installedSkillHooks,
+      installedSkillAgentRunner: options.installedSkillAgentRunner,
       toolContext: options.runtime.getToolContext(),
       activeSwarm: activeSwarm as SwarmCoordinator | undefined,
       onToken: promptTurnAgentCallbacks.onToken,
@@ -318,6 +329,8 @@ export async function runPromptAgentTurn(options: {
   history: NormalizedMessage[];
   provider: IProviderAdapter;
   tools: ToolDefinition[];
+  installedSkillHooks?: HookDefinition[];
+  installedSkillAgentRunner?: AgentRunner;
   toolContext: ToolContext;
   activeSwarm?: SwarmCoordinator;
   onToken?: (token: string, meta: { isFirstToken: boolean }) => void;
@@ -347,6 +360,41 @@ export async function runPromptAgentTurn(options: {
     provider: options.provider,
     tools: options.tools,
     toolContext: options.toolContext,
+    beforeToolCall: options.installedSkillHooks?.length
+      ? async (toolName, input, toolContext) => {
+          const result = await triggerHooks(
+            "PreToolCall",
+            options.installedSkillHooks!,
+            {
+            workspaceRoot: toolContext.workspaceRoot,
+            toolName,
+            toolInput: input,
+          },
+          options.installedSkillAgentRunner,
+        );
+          if (result.blocked) {
+            throw new Error(
+              `Installed skill hook blocked tool call: ${toolName}`,
+            );
+          }
+        }
+      : undefined,
+    afterToolCall: options.installedSkillHooks?.length
+      ? async (toolName, input, output, isError, toolContext) => {
+          await triggerHooks(
+            "PostToolCall",
+            options.installedSkillHooks!,
+            {
+              workspaceRoot: toolContext.workspaceRoot,
+              toolName,
+            toolInput: input,
+            toolOutput: output,
+            ...(isError ? { reply: String(output) } : {}),
+          },
+          options.installedSkillAgentRunner,
+        );
+      }
+      : undefined,
     onToken: token => {
       const isFirstToken = !sawStreamingToken;
       if (isFirstToken) {

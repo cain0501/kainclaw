@@ -33,6 +33,7 @@ import {
   type WorkspacePlanModeController,
   type WorkspacePlanVerificationState,
 } from "./workspaceRuntimeShell";
+import { runProviderExtractionStep } from "./providerHost";
 
 type StoppedBackgroundTask = {
   taskId: string;
@@ -47,6 +48,10 @@ type BackgroundCommandResult = {
   outputPath?: string;
   alreadyRunning?: boolean;
 };
+
+type WebContentExtractionRequest = Parameters<
+  NonNullable<ToolContext["extractWebContent"]>
+>[0];
 
 export type WorkspaceRuntimeHostOptions = {
   getWorkspaceRoot: (workspaceFolderPath: string) => string;
@@ -85,6 +90,10 @@ export type WorkspaceRuntimeHostOptions = {
     workspaceFolderPath: string,
     request: { command: string },
   ) => Promise<BackgroundCommandResult | null>;
+  extractWebContent: (
+    workspaceFolderPath: string,
+    request: WebContentExtractionRequest,
+  ) => Promise<string>;
   skillStore?: SkillStore;
   mcpOAuthHost?: McpOAuthHost;
 };
@@ -281,6 +290,23 @@ export function createWorkspaceRuntimeHostFactory<
       runCommandInBackground: options.runCommandInBackground,
       findReusableBackgroundCommand:
         options.findReusableBackgroundCommand,
+      extractWebContent: async (workspaceFolderPath, request) => {
+        const { config, envMap } = await options.resolveProviderConfig(
+          workspaceFolderPath,
+        );
+        const workspaceRoot = options.getEffectiveWorkspaceRoot(
+          workspaceFolderPath,
+        );
+        const runtimeOptions = options.createProviderRuntimeOptions(config);
+        return runProviderExtractionStep({
+          config,
+          workspaceRoot,
+          envMap,
+          runtimeOptions,
+          userPrompt: request.content,
+          abortSignal: request.abortSignal,
+        });
+      },
       skillStore: options.skillStore,
       mcpOAuthHost: options.mcpOAuthHost,
     });
@@ -337,6 +363,8 @@ export class WorkspaceRuntimeHost {
       this.options.skillStore,
       undefined,
       this.options.mcpOAuthHost,
+      request =>
+        this.options.extractWebContent(workspaceFolderPath, request),
     );
     this.runtimeByWorkspace.set(workspaceFolderPath, runtime);
     return runtime;

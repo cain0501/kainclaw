@@ -14,6 +14,7 @@ vi.mock("@modelcontextprotocol/sdk/client/auth.js", () => ({
 
 import {
   createMcpOAuthClientProvider,
+  hasMcpDiscoveryButNoToken,
   performMcpOAuthFlow,
   type McpOAuthHost,
 } from "./mcpOAuth";
@@ -100,6 +101,57 @@ describe("mcpOAuth", () => {
 
     await provider.invalidateCredentials("tokens");
     await expect(provider.tokens()).resolves.toBeUndefined();
+  });
+
+  it("reports when OAuth discovery exists but no access or refresh token remains", async () => {
+    const host = new FakeMcpOAuthHost();
+    const config = {
+      kind: "streamable-http" as const,
+      url: "https://api.example.com/mcp",
+    };
+    const provider = createMcpOAuthClientProvider({
+      serverName: "github",
+      config,
+      host,
+      redirectUrl: "http://localhost:3118/callback",
+    });
+
+    await provider.saveDiscoveryState({
+      authorizationServerUrl: "https://auth.example.com",
+    });
+
+    await expect(
+      hasMcpDiscoveryButNoToken({
+        host,
+        serverName: "github",
+        config,
+      }),
+    ).resolves.toBe(true);
+
+    await provider.saveTokens({
+      access_token: "access-token",
+      refresh_token: "refresh-token",
+      expires_in: 3600,
+      token_type: "Bearer",
+    });
+
+    await expect(
+      hasMcpDiscoveryButNoToken({
+        host,
+        serverName: "github",
+        config,
+      }),
+    ).resolves.toBe(false);
+
+    await provider.invalidateCredentials("tokens");
+
+    await expect(
+      hasMcpDiscoveryButNoToken({
+        host,
+        serverName: "github",
+        config,
+      }),
+    ).resolves.toBe(true);
   });
 
   it("completes the browser-based MCP OAuth flow and stores tokens", async () => {

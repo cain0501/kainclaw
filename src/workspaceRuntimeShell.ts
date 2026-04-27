@@ -83,6 +83,7 @@ export class WorkspaceRuntime {
     private readonly skillStore?: SkillStore,
     enableLsp = true,
     private readonly mcpOAuthHost?: McpOAuthHost,
+    private readonly extractWebContent?: ToolContext["extractWebContent"],
   ) {
     this.browserRuntime = new BrowserRuntime(this.getWorkspaceRoot);
     this.mcpRuntime = new McpRuntime(
@@ -134,6 +135,7 @@ export class WorkspaceRuntime {
         return getWorkspaceRoot();
       },
       invokerKind,
+      extractWebContent: this.extractWebContent,
       requestFileApproval: this.requestFileApproval,
       requestToolApproval: this.requestToolApproval,
       onToolLifecycle: this.onToolLifecycle,

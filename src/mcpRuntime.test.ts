@@ -3,9 +3,35 @@ import os from "node:os";
 import path from "node:path";
 import { UnauthorizedError } from "@modelcontextprotocol/sdk/client/auth.js";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { createMcpOAuthClientProvider, type McpOAuthHost } from "./mcpOAuth";
 import { McpRuntime } from "./mcpRuntime";
 
 const tempDirs: string[] = [];
+
+class FakeMcpOAuthHost implements McpOAuthHost {
+  readonly secrets = new Map<string, string>();
+  readonly state = new Map<string, unknown>();
+
+  async openExternal(): Promise<boolean> {
+    return true;
+  }
+
+  async getSecret(key: string): Promise<string | undefined> {
+    return this.secrets.get(key);
+  }
+
+  async storeSecret(key: string, value: string): Promise<void> {
+    this.secrets.set(key, value);
+  }
+
+  getState<T>(key: string): T | undefined {
+    return this.state.get(key) as T | undefined;
+  }
+
+  async setState<T>(key: string, value: T): Promise<void> {
+    this.state.set(key, value);
+  }
+}
 
 afterEach(async () => {
   await Promise.all(
@@ -244,7 +270,7 @@ describe("McpRuntime config discovery cache", () => {
     );
 
     expect(result.summary).toContain("requires authentication");
-    expect(result.content).toContain("Configure the server token/headers");
+    expect(result.content).toContain("configure the server token/headers manually");
   });
 
   it("accepts single-underscore MCP auth tool names that models may emit by mistake", async () => {
@@ -277,7 +303,7 @@ describe("McpRuntime config discovery cache", () => {
     );
 
     expect(result.summary).toContain("requires authentication");
-    expect(result.content).toContain("Configure the server token/headers");
+    expect(result.content).toContain("configure the server token/headers manually");
   });
 
   it("keeps the auth placeholder executable even if the live server map is refreshed away", async () => {
@@ -321,6 +347,60 @@ describe("McpRuntime config discovery cache", () => {
     );
 
     expect(result.summary).toContain("requires authentication");
+  });
+
+  it("skips reconnect probes when OAuth discovery exists but no token is stored", async () => {
+    const workspaceRoot = await fs.mkdtemp(path.join(os.tmpdir(), "cain-mcp-runtime-needs-auth-cache-"));
+    tempDirs.push(workspaceRoot);
+    await fs.writeFile(
+      path.join(workspaceRoot, ".mcp.json"),
+      JSON.stringify({
+        mcpServers: {
+          notion: {
+            type: "http",
+            url: "https://mcp.notion.com/mcp",
+          },
+        },
+      }),
+      "utf8",
+    );
+
+    const oauthHost = new FakeMcpOAuthHost();
+    const provider = createMcpOAuthClientProvider({
+      serverName: "notion",
+      config: {
+        kind: "streamable-http",
+        url: "https://mcp.notion.com/mcp",
+      },
+      host: oauthHost,
+      redirectUrl: "http://localhost:3118/callback",
+    });
+    await provider.saveDiscoveryState({
+      authorizationServerUrl: "https://auth.example.com",
+    });
+
+    const runtime = new McpRuntime(() => workspaceRoot, {}, oauthHost);
+    const ensureConnectionSpy = vi
+      .spyOn(runtime as any, "ensureConnection")
+      .mockImplementation(async () => {
+        throw new Error("should not reconnect");
+      });
+
+    const tools = await runtime.getToolDefinitions();
+
+    expect(ensureConnectionSpy).not.toHaveBeenCalled();
+    expect(tools.map(tool => tool.name)).toContain("mcp__notion__authenticate");
+    expect(await runtime.getPromptCommands()).toEqual([]);
+    expect(ensureConnectionSpy).not.toHaveBeenCalled();
+    expect(await runtime.getStatusSummary()).toEqual([
+      {
+        name: "notion",
+        state: "needs-auth",
+        toolCount: 0,
+        transport: "streamable-http",
+        error: "Authentication required",
+      },
+    ]);
   });
 
   it("does not mark a connected server as failed when ReadMcpResourceTool targets a server without resources", async () => {

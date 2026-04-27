@@ -5,6 +5,7 @@ import {
   commandStartsWithAllowedPrefix,
   formatToolSearchResults,
   formatRelativePaths,
+  getBuiltInToolDefinitions,
   globToRegex,
   isSafeReadOnlyPipeline,
   normalizeFetchedHtml,
@@ -108,6 +109,16 @@ describe("toolRuntime helpers", () => {
     expect(matches.map(tool => tool.name)).toEqual(["RunReview"]);
     expect(formatToolSearchResults(matches, "review")).toContain('Tools matching "review":');
     expect(formatToolSearchResults(matches, "review")).toContain("RunReview");
+  });
+
+  it("hides legacy fetch_url from the default built-in tool list", () => {
+    const defaultTools = getBuiltInToolDefinitions();
+    const legacyTools = getBuiltInToolDefinitions({ includeLegacyFetchUrl: true });
+
+    expect(defaultTools.some(tool => tool.name === "fetch_url")).toBe(false);
+    expect(legacyTools.some(tool => tool.name === "fetch_url")).toBe(true);
+    expect(defaultTools.some(tool => tool.name === "WebFetch")).toBe(true);
+    expect(defaultTools.some(tool => tool.name === "WebSearch")).toBe(true);
   });
 
   it("blocks destructive shell commands and unsafe pipelines", () => {

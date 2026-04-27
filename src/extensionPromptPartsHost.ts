@@ -1,5 +1,6 @@
 import type { SwarmCoordinator } from "./agent/swarm/SwarmCoordinator";
 import type { AssistantReplyBindings } from "./assistantReplyHost";
+import type { HookDefinition } from "./hooksRegistry";
 import type { SkillStore } from "./skills/skillStore";
 import type { ProfileStore } from "./userModel/profileStore";
 import { buildPromptFileMentionContext } from "./contextMentions";
@@ -49,6 +50,10 @@ export type ExtensionPromptRequestState = {
   getSwarm: () => SwarmCoordinator | undefined;
   setSwarm: (swarm: SwarmCoordinator | undefined) => void;
   queueAutoMemoryExtraction: ConversationPartOptions["queueAutoMemoryExtraction"];
+  getSessionInstalledSkillHooks?: () => HookDefinition[];
+  registerSessionInstalledSkillHooks?: (
+    hooks: HookDefinition[],
+  ) => HookDefinition[];
   cachedTools?: ExecutionBindings["cachedTools"];
   cachedToolsWorkspaceRoot?: ExecutionBindings["cachedToolsWorkspaceRoot"];
   setWorkspaceToolCache: ExecutionBindings["setFreshWorkspaceTools"];
@@ -161,6 +166,10 @@ export function createExtensionPromptRequestParts(options: {
           prompt,
         ),
       queueAutoMemoryExtraction: options.state.queueAutoMemoryExtraction,
+      getSessionInstalledSkillHooks:
+        options.state.getSessionInstalledSkillHooks,
+      registerSessionInstalledSkillHooks:
+        options.state.registerSessionInstalledSkillHooks,
     }),
     execution: createPromptRequestExecutionPart({
       workspaceFolderPath: options.workspaceFolderPath,

@@ -21,6 +21,7 @@ export type HookDefinition = {
   type: HookType;
   description: string;
   events: string[];
+  matcher?: string;
   command?: string;
   url?: string;
   method?: string;
@@ -28,6 +29,9 @@ export type HookDefinition = {
   prompt?: string;
   position?: "prefix" | "suffix";
   agentId?: string;
+  agentPrompt?: string;
+  agentModel?: string;
+  skillRoot?: string;
   timeoutMs?: number;
   blocking?: boolean;
 };

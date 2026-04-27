@@ -164,6 +164,26 @@ function readDiscoveryMap(
   return value && typeof value === "object" ? value : {};
 }
 
+export async function hasMcpDiscoveryButNoToken(options: {
+  host: McpOAuthHost;
+  serverName: string;
+  config: McpOAuthRemoteServerConfig;
+}): Promise<boolean> {
+  const serverKey = getMcpOAuthServerKey(options.serverName, options.config);
+  const credentialMap = await readCredentialMap(options.host);
+  const discoveryMap = readDiscoveryMap(options.host);
+  const storedCredential = credentialMap[serverKey];
+  const storedDiscovery = discoveryMap[serverKey];
+
+  return !!(
+    storedDiscovery &&
+    (
+      !storedCredential ||
+      (!storedCredential.accessToken && !storedCredential.refreshToken)
+    )
+  );
+}
+
 async function writeDiscoveryMap(
   host: McpOAuthHost,
   map: Record<string, StoredOAuthDiscoveryState>,

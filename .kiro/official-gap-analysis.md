@@ -1,6 +1,13 @@
 # KainClaw vs 官方 Claude Code 能力对账
 
-## 当前覆盖说明 / Current Override - 2026-04-27
+## 当前覆盖说明 / Current Override - 2026-04-28
+
+- 2026-04-28 installed-skills parity update:
+  - Installed-skill discovery now prefers `~/.kainclaw/skills` and `.kainclaw/skills`, with `~/.claude/skills` and `.claude/skills` retained as compatibility roots.
+  - Installed-skill execution now covers argument substitution, `allowed-tools`, model/effort overrides, `context=fork`, shell metadata, and explicit session-scoped hook persistence.
+  - Installed-skill hooks now support prompt / command / http / agent definitions and matcher filtering for tool events.
+  - Remaining material parity gaps on this line are now mainly the lack of a true model-side `disable-model-invocation` gate and fuller Claude command-object parity.
+  - Current automated baseline after this slice: `152` test files, `1121` tests passed.
 
 - 本轮已验证：
   - `npm test`

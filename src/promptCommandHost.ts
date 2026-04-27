@@ -32,10 +32,19 @@ import {
   getCustomSkillsConfigPath,
   loadCustomSkills,
 } from "./customSkillsRegistry";
+import {
+  buildInstalledSkillPrompt,
+  getInstalledSkill,
+  getInstalledSkillByEntrypoint,
+  loadInstalledSkills,
+  mapInstalledSkillAllowedToolsToKainClawTools,
+} from "./installedSkillsRegistry";
+import { expandInstalledSkillShellCommands } from "./installedSkillPromptShell";
 import { getBuiltInSkill, listBuiltInSkills } from "./skillsRegistry";
 import type { SkillStore } from "./skills/skillStore";
 import type { ProfileStore } from "./userModel/profileStore";
 import type { ToolDefinition } from "./toolRuntime";
+import type { HookDefinition } from "./hooksRegistry";
 import { executeTool, formatToolSearchResults, searchToolDefinitions } from "./toolRuntime";
 import { executeEffortCommand } from "./thinkingEffort/effort";
 import { executeFastModeCommand } from "./thinkingEffort/fastMode";
@@ -82,6 +91,12 @@ type PromptCommandChainResult =
       kind: "rewrite";
       prompt: string;
       attachments?: NormalizedImageAttachment[];
+      allowedTools?: string[];
+      modelOverride?: string;
+      effortOverride?: EffortLevel;
+      disableModelInvocation?: boolean;
+      executionContext?: "fork";
+      installedSkillHooks?: HookDefinition[];
     }
   | { kind: "handled" };
 
@@ -207,7 +222,61 @@ export function parsePromptSlashCommand(
   };
 }
 
-function buildPromptSlashCommandHelp(): string {
+function normalizeSlashCommandLookup(value: string): string {
+  const trimmed = value.trim().toLowerCase();
+  if (!trimmed) {
+    return "";
+  }
+
+  return trimmed.startsWith("/") ? trimmed : `/${trimmed}`;
+}
+
+async function buildPromptSlashCommandHelp(options: {
+  args: string;
+  workspaceRoot?: string;
+}): Promise<string> {
+  const normalizedArgs = normalizeSlashCommandLookup(options.args);
+  const installedSkills = await loadInstalledSkills(options.workspaceRoot);
+
+  if (normalizedArgs) {
+    const registeredCommand = REGISTERED_PROMPT_SLASH_COMMANDS.find(
+      command => command.name === normalizedArgs,
+    );
+    if (registeredCommand) {
+      return [
+        `Command: ${registeredCommand.name}`,
+        `Stage: ${registeredCommand.stage}`,
+        "Source: built-in",
+        `Description: ${registeredCommand.description}`,
+      ].join("\n");
+    }
+
+    const installedSkill = getInstalledSkillByEntrypoint(
+      installedSkills,
+      normalizedArgs,
+    );
+    if (installedSkill) {
+      return [
+        `Command: ${installedSkill.entrypoint}`,
+        `Source: installed-${installedSkill.source}`,
+        `Skill: ${installedSkill.title}`,
+        `Summary: ${installedSkill.summary}`,
+        `When to use: ${installedSkill.whenToUse ?? "(none)"}`,
+        `Path: ${installedSkill.skillPath}`,
+        `Arguments: ${installedSkill.argumentNames.join(", ") || "(none)"}`,
+        `Disable model invocation: ${installedSkill.disableModelInvocation ? "yes" : "no"}`,
+        `Context: ${installedSkill.executionContext ?? "inline"}`,
+        `Shell: ${installedSkill.shell ?? "(default)"}`,
+        `Hooks: ${installedSkill.hooks.length}`,
+        `Allowed tools: ${installedSkill.allowedTools.join(", ") || "(none)"}`,
+        `Model: ${installedSkill.modelOverride ?? "(inherit)"}`,
+        `Effort: ${installedSkill.effort ?? "(inherit)"}`,
+      ].join("\n");
+    }
+
+    return `Unknown slash command "${normalizedArgs}". Use /commands to list available commands.`;
+  }
+
   const localCommands = REGISTERED_PROMPT_SLASH_COMMANDS.filter(
     command => command.stage === "local",
   );
@@ -215,7 +284,7 @@ function buildPromptSlashCommandHelp(): string {
     command => command.stage === "runtime",
   );
 
-  return [
+  const lines = [
     "Available slash commands:",
     "",
     "Local commands:",
@@ -223,7 +292,20 @@ function buildPromptSlashCommandHelp(): string {
     "",
     "Workspace/runtime commands:",
     ...runtimeCommands.map(command => `- ${command.name}: ${command.description}`),
-  ].join("\n");
+  ];
+
+  if (installedSkills.length > 0) {
+    lines.push("");
+    lines.push("Installed skill commands:");
+    lines.push(
+      ...installedSkills.map(
+        skill =>
+          `- ${skill.entrypoint}: ${skill.summary} [installed-${skill.source}]`,
+      ),
+    );
+  }
+
+  return lines.join("\n");
 }
 
 async function buildBuiltInAgentHelp(
@@ -301,6 +383,7 @@ async function buildSkillsHelp(
   const customSkills = workspaceRoot
     ? await loadCustomSkills(workspaceRoot)
     : [];
+  const installedSkills = await loadInstalledSkills(workspaceRoot);
   const userSkills = skillStore ? await skillStore.list() : [];
 
   if (!normalizedArgs) {
@@ -310,6 +393,17 @@ async function buildSkillsHelp(
         skill => `- ${skill.id}: ${skill.summary} (entrypoint: ${skill.entrypoint})`,
       ),
     ];
+
+    if (installedSkills.length > 0) {
+      lines.push("");
+      lines.push("Installed skills:");
+      lines.push(
+        ...installedSkills.map(skill => {
+          const source = skill.source === "project" ? "project" : "user";
+          return `- ${skill.id} (${skill.title}): ${skill.summary} [${source}] (entrypoint: ${skill.entrypoint})`;
+        }),
+      );
+    }
 
     if (customSkills.length > 0) {
       lines.push("");
@@ -344,6 +438,25 @@ async function buildSkillsHelp(
       `Summary: ${builtInSkill.summary}`,
       `When to use: ${builtInSkill.whenToUse}`,
       `Entrypoint: ${builtInSkill.entrypoint}`,
+    ].join("\n");
+  }
+
+  const installedSkill = getInstalledSkill(installedSkills, normalizedArgs);
+  if (installedSkill) {
+    return [
+      `Skill: ${installedSkill.title}`,
+      `Id: ${installedSkill.id}`,
+      `Source: installed-${installedSkill.source}`,
+      `Summary: ${installedSkill.summary}`,
+      `When to use: ${installedSkill.whenToUse ?? "(none)"}`,
+      `Entrypoint: ${installedSkill.entrypoint}`,
+      `Path: ${installedSkill.skillPath}`,
+      `Arguments: ${installedSkill.argumentNames.join(", ") || "(none)"}`,
+      `Disable model invocation: ${installedSkill.disableModelInvocation ? "yes" : "no"}`,
+      `Context: ${installedSkill.executionContext ?? "inline"}`,
+      `Shell: ${installedSkill.shell ?? "(default)"}`,
+      `Hooks: ${installedSkill.hooks.length}`,
+      `Allowed tools: ${installedSkill.allowedTools.join(", ") || "(none)"}`,
     ].join("\n");
   }
 
@@ -790,6 +903,64 @@ async function tryRewriteMcpPromptCommand(
   };
 }
 
+async function tryRewriteInstalledSkillCommand(options: {
+  workspaceRoot: string;
+  parsedCommand: ParsedPromptSlashCommand;
+  runtime: RuntimeLike;
+}): Promise<Extract<PromptCommandChainResult, { kind: "rewrite" }> | null> {
+  const installedSkills = await loadInstalledSkills(options.workspaceRoot);
+  const installedSkill = getInstalledSkill(
+    installedSkills,
+    options.parsedCommand.name.slice(1),
+  );
+
+  if (!installedSkill) {
+    return null;
+  }
+
+  let prompt = await buildInstalledSkillPrompt({
+    skill: installedSkill,
+    args: options.parsedCommand.args,
+  });
+  const toolContext = options.runtime.getToolContext?.("main");
+  if (toolContext) {
+    prompt = await expandInstalledSkillShellCommands({
+      prompt,
+      slashCommandName: installedSkill.entrypoint,
+      toolContext: toolContext as any,
+      shell: installedSkill.shell,
+    });
+  }
+
+  return {
+    kind: "rewrite",
+    prompt,
+    ...(installedSkill.allowedTools.length > 0
+      ? {
+          allowedTools:
+            mapInstalledSkillAllowedToolsToKainClawTools(
+              installedSkill.allowedTools,
+            ),
+        }
+      : {}),
+    ...(installedSkill.modelOverride
+      ? { modelOverride: installedSkill.modelOverride }
+      : {}),
+    ...(installedSkill.effort
+      ? { effortOverride: installedSkill.effort }
+      : {}),
+    ...(installedSkill.disableModelInvocation
+      ? { disableModelInvocation: true }
+      : {}),
+    ...(installedSkill.executionContext
+      ? { executionContext: installedSkill.executionContext }
+      : {}),
+    ...(installedSkill.hooks.length > 0
+      ? { installedSkillHooks: installedSkill.hooks }
+      : {}),
+  };
+}
+
 async function buildTodoCommandReply(
   runtime: RuntimeLike,
   args: string,
@@ -847,7 +1018,10 @@ export async function handleLocalPromptCommand(options: {
   }
 
   if (parsedCommand.name === "/commands") {
-    return buildPromptSlashCommandHelp();
+    return buildPromptSlashCommandHelp({
+      args: parsedCommand.args,
+      workspaceRoot: options.workspaceRoot,
+    });
   }
 
   if (parsedCommand.name === "/agents") {
@@ -1008,6 +1182,8 @@ export async function runPromptCommandChain(options: {
     runtimeOptions: ProviderRuntimeOptions,
     effortLevel: EffortLevel | undefined,
   ) => Promise<boolean>;
+  getSessionInstalledSkillHooks?: () => HookDefinition[];
+  registerSessionInstalledSkillHooks?: (hooks: HookDefinition[]) => HookDefinition[];
 }): Promise<PromptCommandChainResult> {
   const parsedCommand = parsePromptSlashCommand(options.prompt);
   if (!parsedCommand) {
@@ -1100,6 +1276,26 @@ export async function runPromptCommandChain(options: {
   );
   if (rewrittenMcpPromptCommand) {
     return rewrittenMcpPromptCommand;
+  }
+
+  const rewrittenInstalledSkillCommand = await tryRewriteInstalledSkillCommand({
+    workspaceRoot: options.workspaceRoot,
+    parsedCommand,
+    runtime: options.runtime,
+  });
+  if (rewrittenInstalledSkillCommand) {
+    if (
+      rewrittenInstalledSkillCommand.installedSkillHooks?.length &&
+      options.registerSessionInstalledSkillHooks
+    ) {
+      return {
+        ...rewrittenInstalledSkillCommand,
+        installedSkillHooks: options.registerSessionInstalledSkillHooks(
+          rewrittenInstalledSkillCommand.installedSkillHooks,
+        ),
+      };
+    }
+    return rewrittenInstalledSkillCommand;
   }
 
   if (parsedCommand.name === "/mcp") {

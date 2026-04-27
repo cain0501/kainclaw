@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import type { ProviderConfig } from "../agent/providers/IProviderAdapter";
 import {
   buildProviderRuntimeOptions,
@@ -6,6 +6,16 @@ import {
   modelSupportsThinking,
   resolveThinkingConfig,
 } from "./thinking";
+
+const originalEnv = { ...process.env };
+
+beforeEach(() => {
+  process.env = { ...originalEnv };
+});
+
+afterEach(() => {
+  process.env = { ...originalEnv };
+});
 
 const anthropicAdaptive: ProviderConfig = {
   type: "anthropic",
@@ -67,5 +77,24 @@ describe("thinking runtime helpers", () => {
     expect(result.effortLevel).toBe("medium");
     expect(result.thinkingConfig).toEqual({ type: "adaptive" });
     expect(result.fastMode).toBe(true);
+  });
+
+  it("uses the env-overridden effort level when building provider runtime options", () => {
+    process.env.CLAUDE_CODE_EFFORT_LEVEL = "low";
+
+    const result = buildProviderRuntimeOptions(
+      {
+        ...anthropicAdaptive,
+        model: "claude-sonnet-4-5",
+      },
+      "high",
+      false,
+    );
+
+    expect(result.effortLevel).toBe("low");
+    expect(result.thinkingConfig).toEqual({
+      type: "enabled",
+      budgetTokens: 2_048,
+    });
   });
 });

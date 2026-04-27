@@ -10,6 +10,7 @@ import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/
 import type { NormalizedImageAttachment } from "./agent/providers/IProviderAdapter";
 import {
   createMcpOAuthClientProvider,
+  hasMcpDiscoveryButNoToken,
   type McpOAuthConfig,
   type McpOAuthHost,
   performMcpOAuthFlow,
@@ -458,6 +459,34 @@ export class McpRuntime implements McpToolAdapter {
     this.serverStatuses.clear();
 
     for (const [serverName, config] of this.serverConfigs) {
+      if (
+        this.oauthHost &&
+        (config.kind === "streamable-http" || config.kind === "sse") &&
+        await hasMcpDiscoveryButNoToken({
+          host: this.oauthHost,
+          serverName,
+          config,
+        })
+      ) {
+        const authTool = buildMcpAuthToolDefinition(serverName, config);
+        toolDefinitions.push(authTool);
+        this.toolMetadata.set(authTool.name, {
+          serverName,
+          toolName: MCP_AUTHENTICATE_TOOL_NAME,
+          annotations: authTool.annotations,
+          kind: "auth-placeholder",
+          config,
+        });
+        this.serverStatuses.set(serverName, {
+          name: serverName,
+          state: "needs-auth",
+          toolCount: 0,
+          transport: config.kind,
+          error: "Authentication required",
+        });
+        continue;
+      }
+
       try {
         const connection = await this.ensureConnection(serverName, config);
         const capabilities = connection.client.getServerCapabilities();
@@ -568,6 +597,18 @@ export class McpRuntime implements McpToolAdapter {
     this.promptMetadata.clear();
 
     for (const [serverName, config] of this.serverConfigs) {
+      if (
+        this.oauthHost &&
+        (config.kind === "streamable-http" || config.kind === "sse") &&
+        await hasMcpDiscoveryButNoToken({
+          host: this.oauthHost,
+          serverName,
+          config,
+        })
+      ) {
+        continue;
+      }
+
       try {
         const connection = await this.ensureConnection(serverName, config);
         const capabilities = connection.client.getServerCapabilities();
@@ -880,8 +921,9 @@ export class McpRuntime implements McpToolAdapter {
       summary: `MCP server ${serverName} requires authentication`,
       content:
         `Server "${serverName}" requires authentication before its tools can be used. ` +
-        "KainClaw has exposed this Claude-compatible authentication placeholder, but the local MCP OAuth browser flow is not wired in this host yet. " +
-        "Configure the server token/headers in .mcp.json or the app settings, then reconnect the MCP server.",
+        (this.oauthHost
+          ? "Call the authenticate tool to start the browser-based OAuth flow. Once the browser callback completes, the server's real tools can be reloaded immediately."
+          : "This host cannot launch the OAuth browser flow, so configure the server token/headers manually and reconnect the MCP server."),
     };
   }
 

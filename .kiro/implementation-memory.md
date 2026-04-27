@@ -1,6 +1,13 @@
 # 实现记忆
 
-## 当前覆盖说明 / Current Override - 2026-04-27
+## 当前覆盖说明 / Current Override - 2026-04-28
+
+- 2026-04-28 installed-skills implementation memory:
+  - Primary installed-skill roots are now `~/.kainclaw/skills` and `.kainclaw/skills`, with Claude roots kept as compatibility-only readers.
+  - The installed-skills execution path now covers argument substitution, `allowed-tools`, model/effort overrides, `context=fork`, and explicit shell metadata handling.
+  - Installed-skill hooks now execute in KainClaw for prompt / command / http / agent definitions, support matcher filtering for tool events, and persist as session-scoped hooks for the active conversation.
+  - Remaining meaningful gaps are narrower now: no true model-side `disable-model-invocation` gate exists yet because KainClaw still lacks Claude's model-side `SkillTool` entrypoint, and fuller command-object parity remains outstanding.
+  - Current automated baseline after this slice: `152` test files, `1121` tests passed.
 
 - 硬规则（用户明确设定）：
   - 只要功能已经在本地 Claude 源码存在，实施和调试都必须先沿着 Claude 的源码链路做端到端复刻，再做 KainClaw 宿主适配。

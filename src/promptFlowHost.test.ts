@@ -18,18 +18,25 @@ type ContinuePromptExecution = Extract<
 const {
   applyPromptTurnUserContextMock,
   runPromptTurnWithHostMock,
+  runPromptAgentTurnMock,
 } = vi.hoisted(() => ({
   applyPromptTurnUserContextMock: vi.fn(),
   runPromptTurnWithHostMock: vi.fn(),
+  runPromptAgentTurnMock: vi.fn(),
 }));
 
 vi.mock("./promptSetupHost", () => ({
   applyPromptTurnUserContext: applyPromptTurnUserContextMock,
 }));
 
-vi.mock("./promptTurnHost", () => ({
-  runPromptTurnWithHost: runPromptTurnWithHostMock,
-}));
+vi.mock("./promptTurnHost", async importOriginal => {
+  const original = await importOriginal<typeof import("./promptTurnHost")>();
+  return {
+    ...original,
+    runPromptTurnWithHost: runPromptTurnWithHostMock,
+    runPromptAgentTurn: runPromptAgentTurnMock,
+  };
+});
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -517,6 +524,65 @@ describe("promptFlowHost", () => {
     expect(runPromptTurnWithHostMock).not.toHaveBeenCalled();
   });
 
+  it("runs installed-skill fork executions without mutating the main conversation", async () => {
+    const options = createBaseOptions();
+    runPromptAgentTurnMock.mockResolvedValue({
+      reply: "forked skill reply",
+      sawStreamingToken: false,
+      latestThinkingSummary: "fork summary",
+    });
+
+    await runPromptFlowWithHost({
+      ...options,
+      promptExecution: {
+        kind: "continue",
+        config: {
+          type: "anthropic",
+          apiKey: "secret",
+          model: "claude-sonnet",
+        },
+        envMap: { HELLO: "world" },
+        effortLevel: "high",
+        runtimeOptions: { effortLevel: "high" },
+        workspaceRoot: "E:\\repo",
+        runtime: {
+          getToolContext: () =>
+            ({ workspaceRoot: "E:\\repo", invokerKind: "main" }) as any,
+        } as PromptRuntimeLike,
+        tools: [{ name: "read_file" }] as any,
+        effectivePrompt: "Run the forked installed skill",
+        installedSkillExecutionContext: "fork",
+      },
+    });
+
+    expect(options.createModelActivity).toHaveBeenCalledTimes(1);
+    expect(options.buildWorkspaceSystemPrompt).toHaveBeenCalledWith(
+      "E:\\repo",
+      {
+        type: "anthropic",
+        apiKey: "secret",
+        model: "claude-sonnet",
+      },
+      "high",
+    );
+    expect(options.buildProviderAdapter).toHaveBeenCalledWith(
+      expect.objectContaining({
+        workspaceRoot: "E:\\repo",
+        envMap: { HELLO: "world" },
+        runtimeOptions: { effortLevel: "high" },
+      }),
+    );
+    expect(runPromptAgentTurnMock).toHaveBeenCalledTimes(1);
+    expect(options.recordAssistantReply).toHaveBeenCalledWith(
+      "forked skill reply",
+      false,
+      "fork summary",
+    );
+    expect(options.updateMood).toHaveBeenCalledWith(3, false);
+    expect(applyPromptTurnUserContextMock).not.toHaveBeenCalled();
+    expect(runPromptTurnWithHostMock).not.toHaveBeenCalled();
+  });
+
   it("runs user-context setup and main prompt turn for continue executions", async () => {
     const options = createBaseOptions();
     const runtime: PromptRuntimeLike = {
@@ -579,6 +645,8 @@ describe("promptFlowHost", () => {
       effortLevel: "high",
       runtime: promptExecution.runtime,
       tools: promptExecution.tools,
+      installedSkillHooks: [],
+      installedSkillAgentRunner: expect.any(Function),
       existingSwarm: options.existingSwarm,
       createSwarm: expect.any(Function),
       assignSwarm: options.assignSwarm,

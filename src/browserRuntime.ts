@@ -8,6 +8,8 @@ type SnapshotRef = {
   description: string;
 };
 
+const MAX_HTTP_URL_LENGTH = 2000;
+
 export function resolveWorkspacePath(workspaceRoot: string, targetPath: string): string {
   const absolutePath = path.resolve(workspaceRoot, targetPath);
   const relativePath = path.relative(workspaceRoot, absolutePath);
@@ -35,6 +37,41 @@ export function escapeAttributeValue(value: string): string {
   return value.replace(/\\/g, "\\\\").replace(/"/g, '\\"');
 }
 
+export function normalizeHttpUrl(
+  url: string,
+  options: { upgradeInsecureHttp?: boolean } = {},
+): URL {
+  const trimmedUrl = url.trim();
+  if (!trimmedUrl) {
+    throw new Error("url is required");
+  }
+
+  if (trimmedUrl.length > MAX_HTTP_URL_LENGTH) {
+    throw new Error(`URL exceeds the ${MAX_HTTP_URL_LENGTH} character limit`);
+  }
+
+  let parsedUrl: URL;
+  try {
+    parsedUrl = new URL(trimmedUrl);
+  } catch {
+    throw new Error(`Invalid URL: ${trimmedUrl}`);
+  }
+
+  if (!["http:", "https:"].includes(parsedUrl.protocol)) {
+    throw new Error(`Unsupported URL protocol: ${parsedUrl.protocol}`);
+  }
+
+  if (parsedUrl.username || parsedUrl.password) {
+    throw new Error("URLs with embedded credentials are not supported");
+  }
+
+  if (options.upgradeInsecureHttp && parsedUrl.protocol === "http:") {
+    parsedUrl.protocol = "https:";
+  }
+
+  return parsedUrl;
+}
+
 export class BrowserRuntime implements BrowserToolAdapter {
   private browser: Browser | undefined;
   private browserContext: BrowserContext | undefined;
@@ -44,8 +81,10 @@ export class BrowserRuntime implements BrowserToolAdapter {
   constructor(private readonly getWorkspaceRoot: () => string) {}
 
   async navigate(url: string): Promise<ToolExecutionResult> {
+    const targetUrl = normalizeHttpUrl(url);
     const page = await this.ensurePage();
-    await page.goto(url, { waitUntil: "domcontentloaded", timeout: 30_000 });
+    this.refs.clear();
+    await page.goto(targetUrl.toString(), { waitUntil: "domcontentloaded", timeout: 30_000 });
 
     try {
       await page.waitForLoadState("networkidle", { timeout: 5_000 });
@@ -56,7 +95,7 @@ export class BrowserRuntime implements BrowserToolAdapter {
     const title = (await page.title()) || "[untitled page]";
 
     return {
-      summary: `Opened ${url}`,
+      summary: `Opened ${targetUrl.toString()}`,
       content: `Title: ${title}\nURL: ${page.url()}`,
     };
   }

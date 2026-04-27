@@ -123,6 +123,7 @@ describe("workspaceRuntimeHost", () => {
       workspaceRoot: "E:\\repo",
     }));
     const findReusableBackgroundCommand = vi.fn(async () => null);
+    const extractWebContent = vi.fn(async () => "summary");
 
     const host = new WorkspaceRuntimeHost({
       getWorkspaceRoot: workspaceFolderPath => `${workspaceFolderPath}\\.wt`,
@@ -139,6 +140,7 @@ describe("workspaceRuntimeHost", () => {
       runReview,
       runCommandInBackground,
       findReusableBackgroundCommand,
+      extractWebContent,
     });
 
     return {
@@ -156,6 +158,7 @@ describe("workspaceRuntimeHost", () => {
       runReview,
       runCommandInBackground,
       findReusableBackgroundCommand,
+      extractWebContent,
       tasksRuntime,
       worktreeRuntime,
     };

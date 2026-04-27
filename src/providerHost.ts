@@ -2,12 +2,20 @@ import { SYSTEM_PROMPT } from "./agent/agentRunner";
 import { AnthropicAdapter } from "./agent/providers/anthropicAdapter";
 import { ClaudeCliAdapter } from "./agent/providers/claudeCliAdapter";
 import type {
+  NormalizedMessage,
   ProviderConfig as AdapterProviderConfig,
 } from "./agent/providers/IProviderAdapter";
 import { OpenAIAdapter } from "./agent/providers/openAIAdapter";
 import { loadEnvFallbackConfig } from "./legacyEnvFallback";
 import { SettingsRepository } from "./storage/settingsRepository";
 import type { ProviderRuntimeOptions } from "./thinkingEffort/types";
+
+const WEB_FETCH_EXTRACTION_SYSTEM_PROMPT = `You extract useful information from fetched web content.
+
+Answer only from the supplied content.
+Ignore boilerplate, CSS, scripts, analytics noise, and navigation chrome unless the request explicitly asks for them.
+Do not call tools.
+Keep the response concise and directly useful for the user's extraction request.`;
 
 function appendSystemPromptSection(
   basePrompt: string,
@@ -155,4 +163,40 @@ export function buildProviderAdapter(
   }
 
   return new AnthropicAdapter(config, resolvedSystemPrompt, runtimeOptions);
+}
+
+export async function runProviderExtractionStep(options: {
+  config: AdapterProviderConfig;
+  workspaceRoot: string;
+  envMap?: Record<string, string>;
+  runtimeOptions?: ProviderRuntimeOptions;
+  userPrompt: string;
+  abortSignal?: AbortSignal;
+}): Promise<string> {
+  const provider = buildProviderAdapter(
+    options.config,
+    options.workspaceRoot,
+    WEB_FETCH_EXTRACTION_SYSTEM_PROMPT,
+    options.envMap ?? {},
+    options.runtimeOptions ?? {},
+  );
+
+  const messages: NormalizedMessage[] = [
+    {
+      role: "user",
+      content: options.userPrompt,
+    },
+  ];
+
+  let streamedText = "";
+  const step = await provider.runStep(
+    messages,
+    [],
+    token => {
+      streamedText += token;
+    },
+    options.abortSignal,
+  );
+
+  return (step.text || streamedText || "").trim();
 }

@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { promises as fs } from "node:fs";
 import path from "node:path";
+import { BrowserRuntime } from "../src/browserRuntime";
 import { ElectronHostAdapter } from "../src/platform/electronHostAdapter";
 import {
   SessionRepository,
@@ -11,7 +12,11 @@ import {
 } from "../src/storage/sessionRepository";
 import { getWorkspaceHash } from "../src/sessionUi";
 import { SettingsRepository, type ProviderMeta } from "../src/storage/settingsRepository";
-import { buildProviderAdapter, resolveProviderConfig } from "../src/providerHost";
+import {
+  buildProviderAdapter,
+  resolveProviderConfig,
+  runProviderExtractionStep,
+} from "../src/providerHost";
 import { verifyLicense } from "../src/license/licenseManager";
 import {
   validateOnboardingProviderKey,
@@ -32,6 +37,13 @@ import {
   toolDefinitions as builtinToolDefinitions,
 } from "../src/toolRuntime";
 import type { ToolContext, ToolDefinition } from "../src/toolRuntime";
+import type { HookDefinition } from "../src/hooksRegistry";
+import {
+  clearAllSessionInstalledSkillHooks,
+  clearSessionInstalledSkillHooks,
+  getSessionInstalledSkillHooks,
+  registerSessionInstalledSkillHooks,
+} from "../src/sessionInstalledSkillHooks";
 import { handleElectronPromptCommand } from "../src/electronPromptCommandHost";
 import { parsePromptSlashCommand } from "../src/promptCommandHost";
 import { handleCompactCommandWithHost } from "../src/compactHost";
@@ -103,7 +115,15 @@ const SUPPORTED_ELECTRON_TOOL_NAMES = new Set([
   "run_command",
   "write_file",
   "replace_in_file",
-  "fetch_url",
+  "WebFetch",
+  "WebSearch",
+  "browser_navigate",
+  "browser_snapshot",
+  "browser_click",
+  "browser_type",
+  "browser_wait_for",
+  "browser_screenshot",
+  "browser_close",
   "glob_files",
 ]);
 
@@ -115,7 +135,10 @@ const ELECTRON_SHELL_PROMPT_NOTE = `
 - You can say that you help with programming, document editing, information search, debugging, image generation, and UI/page design tasks.
 - If the user asks what model or provider is currently in use, rely on the runtime identity note already injected by the host. Do not invent extra certainty.
 - Only use the tools that are actually exposed in this shell.
-- Plan mode, worktree switching, browser automation, LSP, advanced memory management, and skill management are not available here.
+- WebFetch, WebSearch, and browser automation tools are available in this shell.
+- When the user asks to open a page, inspect what is visibly on the page, or interact with a website, prefer browser_navigate plus browser_snapshot over WebFetch.
+- Do not expect the legacy fetch_url tool in this shell. For web retrieval, use WebFetch or WebSearch.
+- Plan mode, worktree switching, LSP, advanced memory management, and skill management are not available here.
 - Explicit slash commands for /compact, /todo, /review, and /verify are wired into this shell. Treat them as user-invoked shell commands, not autonomous capabilities to invent on your own.
 - When the user asks about the current workspace or local files, rely on the provided workspace root and tool results. Do not guess.
 - If the user asks for one of those unavailable capabilities, say it is not yet wired in the desktop shell instead of pretending to use it.
@@ -176,7 +199,9 @@ export class ElectronChatPanel {
   private readonly taskRuntimeStore: PersistentTaskRuntimeStore;
   private readonly worktreeRuntimeStore: PersistentWorktreeRuntimeStore;
   private readonly backgroundTaskHost: BackgroundTaskHost;
+  private readonly browserRuntime: BrowserRuntime;
   private readonly cachedWorkspaceResolutions = new Map<string, ResolvedWorkspaceRoot>();
+  private readonly sessionInstalledSkillHooks = new Map<string, HookDefinition[]>();
   private sessionMessageWriteQueue: Promise<void> = Promise.resolve();
   private backgroundTaskNotificationTimer: NodeJS.Timeout | undefined;
   private backgroundTaskNotificationPollInFlight: Promise<number> | undefined;
@@ -202,6 +227,7 @@ export class ElectronChatPanel {
       storageRoot: this.host.getStorageUri(),
       getTaskRuntime: workspaceRoot => this.getConversationTaskRuntime(workspaceRoot),
     });
+    this.browserRuntime = new BrowserRuntime(() => this.getSelectedWorkspaceRoot() || this.host.getStorageUri());
 
     const localBridgeRuntime = this.desktopRuntimeServices?.localBridgeRuntime;
     if (localBridgeRuntime) {
@@ -220,6 +246,7 @@ export class ElectronChatPanel {
 
   dispose(): void {
     this.backgroundTaskHost.dispose();
+    void this.browserRuntime.dispose();
     if (this.backgroundTaskNotificationTimer) {
       clearInterval(this.backgroundTaskNotificationTimer);
       this.backgroundTaskNotificationTimer = undefined;
@@ -849,6 +876,7 @@ export class ElectronChatPanel {
       this.currentSessionId === id || this.settings.getActiveSessionId() === id;
 
     await this.sessions.deleteSession(id);
+    clearSessionInstalledSkillHooks(this.sessionInstalledSkillHooks, id);
 
     if (wasActiveSession) {
       this.currentSessionId = undefined;
@@ -1743,6 +1771,7 @@ export class ElectronChatPanel {
     await this.settings.saveImagePromptHistory([]);
     await this.imageGalleryStore.clear();
     await this.host.deleteSecret("cain.licenseKey");
+    clearAllSessionInstalledSkillHooks(this.sessionInstalledSkillHooks);
     this.sessionMessages = [];
     this.modelConversationMessages = [];
     this.compactBoundary = undefined;
@@ -1775,6 +1804,10 @@ export class ElectronChatPanel {
       activeRequest.abortController.abort();
       return;
     }
+    clearSessionInstalledSkillHooks(
+      this.sessionInstalledSkillHooks,
+      this.getConversationKey(),
+    );
     this.sessionMessages = [];
     this.modelConversationMessages = [];
     this.compactBoundary = undefined;
@@ -1914,7 +1947,9 @@ export class ElectronChatPanel {
       const runtimeOptions = this.buildProviderRuntimeOptions();
       const promptRuntime = this.createPromptRuntime(
         workspaceRoot,
+        config,
         envMap,
+        runtimeOptions,
         allTools,
         commandMcpRuntime,
         abortController.signal,
@@ -1936,6 +1971,10 @@ export class ElectronChatPanel {
         refreshWorkspaceStatus: () => {
           void this.postState();
         },
+        getSessionInstalledSkillHooks: () =>
+          this.getCurrentSessionInstalledSkillHooks(),
+        registerSessionInstalledSkillHooks: hooks =>
+          this.registerCurrentSessionInstalledSkillHooks(hooks),
         handleCompactCommand: (commandText, commandWorkspaceRoot, commandConfig, commandEnvMap) =>
           this.handleCompactPromptCommand(
             requestSessionId,
@@ -1962,7 +2001,9 @@ export class ElectronChatPanel {
             commandEnvMap,
             this.createPromptRuntime(
               workspaceContext.effectiveRoot,
+              commandConfig,
               commandEnvMap,
+              commandRuntimeOptions,
               commandTools,
               commandMcpRuntime,
               abortController.signal,
@@ -1989,7 +2030,9 @@ export class ElectronChatPanel {
             commandEnvMap,
             this.createPromptRuntime(
               workspaceContext.effectiveRoot,
+              commandConfig,
               commandEnvMap,
+              commandRuntimeOptions,
               commandTools,
               commandMcpRuntime,
               abortController.signal,
@@ -2016,7 +2059,9 @@ export class ElectronChatPanel {
             commandEnvMap,
             this.createPromptRuntime(
               workspaceContext.effectiveRoot,
+              commandConfig,
               commandEnvMap,
+              commandRuntimeOptions,
               commandTools,
               commandMcpRuntime,
               abortController.signal,
@@ -2043,7 +2088,9 @@ export class ElectronChatPanel {
             commandEnvMap,
             this.createPromptRuntime(
               workspaceContext.effectiveRoot,
+              commandConfig,
               commandEnvMap,
+              commandRuntimeOptions,
               commandTools,
               commandMcpRuntime,
               abortController.signal,
@@ -2201,6 +2248,23 @@ export class ElectronChatPanel {
     return this.currentSessionId ?? "electron";
   }
 
+  private getCurrentSessionInstalledSkillHooks(): HookDefinition[] {
+    return getSessionInstalledSkillHooks(
+      this.sessionInstalledSkillHooks,
+      this.getConversationKey(),
+    );
+  }
+
+  private registerCurrentSessionInstalledSkillHooks(
+    hooks: HookDefinition[],
+  ): HookDefinition[] {
+    return registerSessionInstalledSkillHooks(
+      this.sessionInstalledSkillHooks,
+      this.getConversationKey(),
+      hooks,
+    );
+  }
+
   private getConversationTaskRuntime(workspaceRoot: string): ConversationTaskRuntime {
     return this.taskRuntimeStore.getConversationRuntime(
       workspaceRoot,
@@ -2221,7 +2285,9 @@ export class ElectronChatPanel {
 
   private createPromptRuntime(
     workspaceRoot: string,
+    config: AdapterProviderConfig,
     envMap: Record<string, string>,
+    runtimeOptions: ProviderRuntimeOptions,
     tools: ToolDefinition[],
     mcpRuntime: McpRuntime = this.mcpRuntime,
     abortSignal?: AbortSignal,
@@ -2232,11 +2298,21 @@ export class ElectronChatPanel {
       workspaceRoot,
       invokerKind: mode,
       ...(abortSignal ? { abortSignal } : {}),
+      extractWebContent: request =>
+        runProviderExtractionStep({
+          config,
+          workspaceRoot,
+          envMap,
+          runtimeOptions,
+          userPrompt: request.content,
+          abortSignal: request.abortSignal,
+        }),
       requestFileApproval: request => this.host.requestFileApproval(request),
       requestToolApproval: request => this.host.requestToolApproval(request),
       onToolLifecycle: event => {
         this.sendToRenderer({ type: "tool:lifecycle", event });
       },
+      browser: this.browserRuntime,
       mcp: mcpRuntime,
       tasks: this.getConversationTaskRuntime(workspaceRoot),
       worktree: this.getConversationWorktreeRuntime(workspaceRoot),

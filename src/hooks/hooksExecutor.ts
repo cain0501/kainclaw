@@ -14,11 +14,12 @@ export interface HookContext {
   reply?: string;
 }
 
-export type AgentRunner = (agentRef: string, context: HookContext) => Promise<void>;
+export type AgentRunner = (hook: HookDefinition, context: HookContext) => Promise<void>;
 
 export interface HookResult {
   blocked: boolean;
   injected?: string;
+  position?: "prefix" | "suffix";
 }
 
 export async function executeHook(
@@ -171,6 +172,7 @@ function _executePromptHook(hook: HookDefinition): HookResult {
   return {
     blocked: false,
     injected: text,
+    position: hook.position ?? "suffix",
   };
 }
 
@@ -179,9 +181,8 @@ async function _executeAgentHook(
   context: HookContext,
   agentRunner?: AgentRunner,
 ): Promise<HookResult> {
-  const agentRef = hook.agentId ?? "";
-  if (!agentRef) {
-    console.warn(`[hooks] Agent hook '${hook.id}' missing agentId, skipping`);
+  if (!hook.agentId && !hook.agentPrompt) {
+    console.warn(`[hooks] Agent hook '${hook.id}' missing agentId/agentPrompt, skipping`);
     return { blocked: false };
   }
 
@@ -194,13 +195,13 @@ async function _executeAgentHook(
 
   if (blocking) {
     try {
-      await agentRunner(agentRef, context);
+      await agentRunner(hook, context);
       return { blocked: false };
     } catch {
       return { blocked: true };
     }
   } else {
-    agentRunner(agentRef, context).catch(err =>
+    agentRunner(hook, context).catch(err =>
       console.warn(`[hooks] Agent hook '${hook.id}' error: ${err instanceof Error ? err.message : String(err)}`),
     );
     return { blocked: false };

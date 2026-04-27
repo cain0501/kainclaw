@@ -27,6 +27,13 @@ import { SessionRepository } from "../src/storage/sessionRepository";
 import { ElectronChatPanel } from "./ElectronChatPanel";
 
 const execFileAsync = promisify(execFile);
+const { mockedBuiltinToolDefinitions } = vi.hoisted(() => ({
+  mockedBuiltinToolDefinitions: [] as Array<{
+    name: string;
+    description?: string;
+    input_schema?: unknown;
+  }>,
+}));
 
 vi.mock("../src/platform/electronHostAdapter", () => ({
   ElectronHostAdapter: class {},
@@ -45,6 +52,7 @@ vi.mock("../src/mcpRuntime", () => ({
 vi.mock("../src/providerHost", () => ({
   buildProviderAdapter: vi.fn(),
   resolveProviderConfig: vi.fn(),
+  runProviderExtractionStep: vi.fn(async () => "extracted"),
 }));
 
 vi.mock("../src/license/licenseManager", () => ({
@@ -85,7 +93,7 @@ vi.mock("../src/toolRuntime", () => ({
     }
     return deduped;
   },
-  toolDefinitions: [],
+  toolDefinitions: mockedBuiltinToolDefinitions,
 }));
 
 vi.mock("../src/electronPromptCommandHost", () => ({
@@ -226,6 +234,7 @@ describe("ElectronChatPanel session lifecycle", () => {
     await Promise.all(
       tempDirs.splice(0).map(dir => rm(dir, { recursive: true, force: true })),
     );
+    mockedBuiltinToolDefinitions.length = 0;
     vi.unstubAllGlobals();
     vi.clearAllMocks();
   });
@@ -1852,6 +1861,73 @@ describe("ElectronChatPanel session lifecycle", () => {
       gitRoot: repoRoot,
       kind: "nested_git_root",
     });
+  });
+
+  it("includes WebFetch and WebSearch in the Electron shell tool list for /tools", async () => {
+    const harness = await createHarness();
+    tempDirs.push(harness.storagePath);
+
+    mockedBuiltinToolDefinitions.push(
+      {
+        name: "WebFetch",
+        description: "Fetch content from a URL for an extraction prompt.",
+        input_schema: { type: "object", properties: {} },
+      },
+      {
+        name: "WebSearch",
+        description: "Search the web for current information.",
+        input_schema: { type: "object", properties: {} },
+      },
+      {
+        name: "fetch_url",
+        description: "Legacy URL fetch tool.",
+        input_schema: { type: "object", properties: {} },
+      },
+      {
+        name: "browser_navigate",
+        description: "Open a webpage in the shared browser session.",
+        input_schema: { type: "object", properties: {} },
+      },
+    );
+
+    await harness.settings.setOnboardingDone(true);
+    await harness.panel.handleMessage({ type: "ready" });
+
+    vi.mocked(resolveProviderConfig).mockResolvedValue({
+      config: {
+        type: "anthropic",
+        apiKey: "test-key",
+        model: "claude-sonnet-4-6",
+      },
+      envMap: {},
+    });
+    vi.mocked(buildProviderAdapter).mockReturnValue({} as never);
+    vi.mocked(handleElectronPromptCommand).mockResolvedValue({
+      kind: "reply",
+      reply: "Tools matching WebFetch.",
+    });
+
+    await harness.panel.handleMessage({
+      type: "sendPrompt",
+      prompt: "/tools WebFetch",
+    });
+
+    expect(handleElectronPromptCommand).toHaveBeenCalledWith(
+      expect.objectContaining({
+        tools: expect.arrayContaining([
+          expect.objectContaining({ name: "WebFetch" }),
+          expect.objectContaining({ name: "WebSearch" }),
+          expect.objectContaining({ name: "browser_navigate" }),
+        ]),
+      }),
+    );
+    expect(handleElectronPromptCommand).toHaveBeenCalledWith(
+      expect.objectContaining({
+        tools: expect.not.arrayContaining([
+          expect.objectContaining({ name: "fetch_url" }),
+        ]),
+      }),
+    );
   });
 
   it("uses the resolved repo root for /review without rewriting the selected workspace", async () => {

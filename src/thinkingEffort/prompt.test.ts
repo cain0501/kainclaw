@@ -1,6 +1,16 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import type { ProviderConfig } from "../agent/providers/IProviderAdapter";
 import { buildThinkingEffortSystemPrompt } from "./prompt";
+
+const originalEnv = { ...process.env };
+
+beforeEach(() => {
+  process.env = { ...originalEnv };
+});
+
+afterEach(() => {
+  process.env = { ...originalEnv };
+});
 
 const anthropicNativeConfig: ProviderConfig = {
   type: "anthropic",
@@ -34,5 +44,14 @@ describe("thinking effort prompt", () => {
     expect(result).toContain("Reasoning mode for this conversation:");
     expect(result).toContain("Use high effort.");
     expect(result).toContain("tool-driven");
+  });
+
+  it("uses the env-overridden applied effort level in the fallback system prompt", () => {
+    process.env.CLAUDE_CODE_EFFORT_LEVEL = "low";
+
+    const result = buildThinkingEffortSystemPrompt("Base prompt", openAIConfig, "high");
+
+    expect(result).toContain("Use low effort.");
+    expect(result).not.toContain("Use high effort.");
   });
 });

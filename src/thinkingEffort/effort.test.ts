@@ -1,12 +1,24 @@
-import { describe, it, expect } from "vitest";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import {
+  getAppliedEffortLevel,
+  getDisplayedEffortLevel,
+  getEffortEnvOverride,
   isEffortLevel,
   getEffortLevelDescription,
   getEffortStatusLabel,
-  getAppliedEffortLevel,
   modelSupportsNativeEffort,
 } from "./effort.js";
 import type { ProviderConfig } from "../agent/providers/IProviderAdapter.js";
+
+const originalEnv = { ...process.env };
+
+beforeEach(() => {
+  process.env = { ...originalEnv };
+});
+
+afterEach(() => {
+  process.env = { ...originalEnv };
+});
 
 // Helper configs
 const anthropicOpus46: ProviderConfig = {
@@ -83,6 +95,21 @@ describe("getAppliedEffortLevel", () => {
   it("passes through low/medium/high unchanged", () => {
     expect(getAppliedEffortLevel(openaiConfig, "low")).toBe("low");
     expect(getAppliedEffortLevel(openaiConfig, "high")).toBe("high");
+  });
+
+  it("lets CLAUDE_CODE_EFFORT_LEVEL override the saved effort", () => {
+    process.env.CLAUDE_CODE_EFFORT_LEVEL = "low";
+
+    expect(getEffortEnvOverride()).toBe("low");
+    expect(getAppliedEffortLevel(anthropicOpus46, "high")).toBe("low");
+  });
+
+  it("treats CLAUDE_CODE_EFFORT_LEVEL=auto as clearing the explicit effort parameter", () => {
+    process.env.CLAUDE_CODE_EFFORT_LEVEL = "auto";
+
+    expect(getEffortEnvOverride()).toBeNull();
+    expect(getAppliedEffortLevel(anthropicOpus46, "high")).toBeUndefined();
+    expect(getDisplayedEffortLevel(anthropicOpus46, "high")).toBe("high");
   });
 });
 

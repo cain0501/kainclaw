@@ -167,7 +167,11 @@ describe("executeHook – prompt", () => {
   it("returns injected text from hook.prompt", async () => {
     const hook = makeHook({ type: "prompt", prompt: "Please be concise." });
     const result = await executeHook(hook, makeContext());
-    expect(result).toEqual({ blocked: false, injected: "Please be concise." });
+    expect(result).toEqual({
+      blocked: false,
+      injected: "Please be concise.",
+      position: "suffix",
+    });
   });
 
   it("returns blocked:false with no injected text when prompt is empty", async () => {
@@ -185,7 +189,10 @@ describe("executeHook – agent", () => {
     const hook = makeHook({ type: "agent", agentId: "code-reviewer", blocking: false });
     const ctx = makeContext();
     await executeHook(hook, ctx, runner);
-    expect(runner).toHaveBeenCalledWith("code-reviewer", ctx);
+    expect(runner).toHaveBeenCalledWith(
+      expect.objectContaining({ agentId: "code-reviewer", type: "agent" }),
+      ctx,
+    );
   });
 
   it("returns blocked:false for non-blocking agent hook", async () => {
@@ -250,7 +257,7 @@ describe("triggerHooks", () => {
       makeHook({ id: "p2", type: "prompt", prompt: "Part two.", events: ["PrePrompt"] }),
     ];
     const result = await triggerHooks("PrePrompt", hooks, { workspaceRoot: "/tmp" });
-    expect(result.promptInjection).toBe("Part one.\n\nPart two.");
+    expect(result.promptSuffixInjection).toBe("Part one.\n\nPart two.");
   });
 
   it("stops processing hooks after a blocking hook returns blocked:true", async () => {
@@ -278,6 +285,81 @@ describe("triggerHooks", () => {
   it("returns empty object when hooks list is empty", async () => {
     const result = await triggerHooks("PreToolCall", [], { workspaceRoot: "/tmp" });
     expect(result).toEqual({});
+  });
+
+  it("reports blocked=true when a blocking hook stops execution", async () => {
+    const failCmd = process.platform === "win32" ? "exit 1" : "false";
+    const hooks: HookDefinition[] = [
+      makeHook({
+        id: "blocker",
+        type: "command",
+        command: failCmd,
+        blocking: true,
+        events: ["PreToolCall"],
+      }),
+    ];
+
+    const result = await triggerHooks("PreToolCall", hooks, { workspaceRoot: "/tmp" });
+    expect(result.blocked).toBe(true);
+  });
+
+  it("filters matching hooks by matcher against toolName", async () => {
+    const mockFetch = vi.fn().mockResolvedValue({ ok: true, status: 200 });
+    vi.stubGlobal("fetch", mockFetch);
+
+    const hooks: HookDefinition[] = [
+      makeHook({
+        id: "match-read",
+        type: "http",
+        url: "https://match.example.com",
+        events: ["PreToolCall"],
+        matcher: "read_file|search_files",
+      }),
+      makeHook({
+        id: "miss-write",
+        type: "http",
+        url: "https://miss.example.com",
+        events: ["PreToolCall"],
+        matcher: "write_file",
+      }),
+    ];
+
+    await triggerHooks("PreToolCall", hooks, {
+      workspaceRoot: "/tmp",
+      toolName: "read_file",
+    });
+
+    expect(mockFetch).toHaveBeenCalledTimes(1);
+    expect((mockFetch.mock.calls[0] as [string])[0]).toBe(
+      "https://match.example.com",
+    );
+    vi.unstubAllGlobals();
+  });
+
+  it("supports regex matchers for toolName filtering", async () => {
+    const mockFetch = vi.fn().mockResolvedValue({ ok: true, status: 200 });
+    vi.stubGlobal("fetch", mockFetch);
+
+    const hooks: HookDefinition[] = [
+      makeHook({
+        id: "regex-match",
+        type: "http",
+        url: "https://regex.example.com",
+        events: ["PreToolCall"],
+        matcher: "^read_.*",
+      }),
+    ];
+
+    await triggerHooks("PreToolCall", hooks, {
+      workspaceRoot: "/tmp",
+      toolName: "read_file",
+    });
+
+    expect(mockFetch).toHaveBeenCalledTimes(1);
+    expect((mockFetch.mock.calls[0] as [string])[0]).toBe(
+      "https://regex.example.com",
+    );
+    vi.unstubAllGlobals();
   });
 });
 

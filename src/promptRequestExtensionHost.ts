@@ -11,6 +11,7 @@ import type {
 import { mergePendingAttachmentsIntoConversationMessage } from "./attachmentHandler";
 import type { BackgroundTaskHost } from "./backgroundTaskHost";
 import type { PendingPlanVerificationState } from "./conversationRuntimeStateHost";
+import type { HookDefinition } from "./hooksRegistry";
 import type { McpServerStatusSummary } from "./mcpRuntime";
 import type {
   PromptExecutionResult,
@@ -134,6 +135,10 @@ export type PromptRequestExtensionConversationBindings = {
     config: AdapterProviderConfig;
     envMap: Record<string, string>;
   }) => void;
+  getSessionInstalledSkillHooks?: () => HookDefinition[];
+  registerSessionInstalledSkillHooks?: (
+    hooks: HookDefinition[],
+  ) => HookDefinition[];
 };
 
 export type PromptRequestExtensionExecutionBindings<
@@ -249,6 +254,10 @@ export function createPromptRequestConversationPart(options: {
     config: AdapterProviderConfig;
     envMap: Record<string, string>;
   }) => void;
+  getSessionInstalledSkillHooks?: () => HookDefinition[];
+  registerSessionInstalledSkillHooks?: (
+    hooks: HookDefinition[],
+  ) => HookDefinition[];
 }): PromptRequestExtensionConversationBindings {
   return {
     getConversationHistory: options.getConversationHistory,
@@ -276,6 +285,10 @@ export function createPromptRequestConversationPart(options: {
     assignSwarm: options.assignSwarm,
     shouldEnableSwarmForPrompt: options.shouldEnableSwarmForPrompt,
     queueAutoMemoryExtraction: options.queueAutoMemoryExtraction,
+    getSessionInstalledSkillHooks:
+      options.getSessionInstalledSkillHooks ?? (() => []),
+    registerSessionInstalledSkillHooks:
+      options.registerSessionInstalledSkillHooks ?? (hooks => hooks),
   };
 }
 
@@ -371,6 +384,10 @@ export function createPromptRequestExtensionBindings<
         blockedByPlanMode: parts.conversation.planModeState.active,
         replaceConversationHistory:
           parts.conversation.replaceConversationHistory,
+        getSessionInstalledSkillHooks:
+          parts.conversation.getSessionInstalledSkillHooks,
+        registerSessionInstalledSkillHooks:
+          parts.conversation.registerSessionInstalledSkillHooks,
         backgroundTaskHost: parts.execution.backgroundTaskHost,
         findActiveBuiltInAgentTask: parts.execution.findActiveBuiltInAgentTask,
         isAbortLikeError: parts.execution.isAbortLikeError,

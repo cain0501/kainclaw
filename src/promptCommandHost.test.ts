@@ -24,6 +24,7 @@ afterEach(async () => {
   await Promise.all(
     tempDirs.splice(0).map(dir => fs.rm(dir, { recursive: true, force: true })),
   );
+  delete process.env.CLAUDE_CONFIG_HOME;
 });
 
 describe("promptCommandHost", () => {
@@ -66,6 +67,33 @@ describe("promptCommandHost", () => {
     expect(setFastMode).toHaveBeenCalledTimes(1);
   });
 
+  it("reports effective effort through /effort status when the env override is active", async () => {
+    const originalEnv = process.env.CLAUDE_CODE_EFFORT_LEVEL;
+    process.env.CLAUDE_CODE_EFFORT_LEVEL = "low";
+
+    try {
+      const result = await handleLocalPromptCommand({
+        prompt: "/effort status",
+        config: providerConfig,
+        currentEffortLevel: "high",
+        setEffortLevel: async () => undefined,
+        currentFastMode: false,
+        setFastMode: async () => undefined,
+        setActiveProviderModel: async () => undefined,
+        refreshWorkspaceStatus: () => undefined,
+      });
+
+      expect(result).toContain("当前实际生效为 low");
+      expect(result).toContain("CLAUDE_CODE_EFFORT_LEVEL=low");
+    } finally {
+      if (originalEnv === undefined) {
+        delete process.env.CLAUDE_CODE_EFFORT_LEVEL;
+      } else {
+        process.env.CLAUDE_CODE_EFFORT_LEVEL = originalEnv;
+      }
+    }
+  });
+
   it("lists registered slash commands through /commands", async () => {
     const result = await handleLocalPromptCommand({
       prompt: "/commands",
@@ -93,6 +121,70 @@ describe("promptCommandHost", () => {
     expect(result).toContain("/verify");
     expect(result).toContain("/ultrareview");
     expect(result).toContain("/ultraverify");
+  });
+
+  it("surfaces installed skill commands through /commands and resolves command detail", async () => {
+    const claudeHome = await fs.mkdtemp(path.join(os.tmpdir(), "cain-claude-home-"));
+    tempDirs.push(claudeHome);
+    process.env.CLAUDE_CONFIG_HOME = claudeHome;
+
+    const browseSkillDir = path.join(claudeHome, "skills", "browse");
+    await fs.mkdir(browseSkillDir, { recursive: true });
+    await fs.writeFile(
+      path.join(browseSkillDir, "SKILL.md"),
+      `---
+name: browse
+description: |
+  Fast headless browser for QA testing and site dogfooding.
+allowed-tools:
+  - Bash
+disable-model-invocation: true
+context: fork
+hooks:
+  UserPromptSubmit:
+    - hooks:
+        - type: prompt
+          prompt: Be concise.
+model: claude-opus-4-6
+effort: high
+---
+`,
+      "utf8",
+    );
+
+    const listResult = await handleLocalPromptCommand({
+      prompt: "/commands",
+      config: providerConfig,
+      currentEffortLevel: "high",
+      setEffortLevel: async () => undefined,
+      currentFastMode: false,
+      setFastMode: async () => undefined,
+      setActiveProviderModel: async () => undefined,
+      refreshWorkspaceStatus: () => undefined,
+    });
+
+    expect(listResult).toContain("Installed skill commands:");
+    expect(listResult).toContain("/browse: Fast headless browser for QA testing and site dogfooding. [installed-user]");
+
+    const detailResult = await handleLocalPromptCommand({
+      prompt: "/commands browse",
+      config: providerConfig,
+      currentEffortLevel: "high",
+      setEffortLevel: async () => undefined,
+      currentFastMode: false,
+      setFastMode: async () => undefined,
+      setActiveProviderModel: async () => undefined,
+      refreshWorkspaceStatus: () => undefined,
+    });
+
+    expect(detailResult).toContain("Command: /browse");
+    expect(detailResult).toContain("Source: installed-user");
+    expect(detailResult).toContain("Allowed tools: Bash");
+    expect(detailResult).toContain("Disable model invocation: yes");
+    expect(detailResult).toContain("Context: fork");
+    expect(detailResult).toContain("Hooks: 1");
+    expect(detailResult).toContain("Model: claude-opus-4-6");
+    expect(detailResult).toContain("Effort: high");
   });
 
   it("lists built-in agents through /agents", async () => {
@@ -196,6 +288,64 @@ describe("promptCommandHost", () => {
 
     expect(detailResult).toContain("Skill: Review");
     expect(detailResult).toContain("Entrypoint: /review");
+  });
+
+  it("lists installed Claude skills and resolves installed skill detail through /skills", async () => {
+    const claudeHome = await fs.mkdtemp(path.join(os.tmpdir(), "cain-claude-home-"));
+    tempDirs.push(claudeHome);
+    process.env.CLAUDE_CONFIG_HOME = claudeHome;
+
+    const browseSkillDir = path.join(claudeHome, "skills", "browse");
+    await fs.mkdir(browseSkillDir, { recursive: true });
+    await fs.writeFile(
+      path.join(browseSkillDir, "SKILL.md"),
+      `---
+name: browse
+description: |
+  Fast headless browser for QA testing and site dogfooding.
+when_to_use: Use when asked to open a page in a browser.
+allowed-tools:
+  - Bash
+  - Read
+disable-model-invocation: true
+context: fork
+---
+
+# browse
+`,
+      "utf8",
+    );
+
+    const listResult = await handleLocalPromptCommand({
+      prompt: "/skills",
+      config: providerConfig,
+      currentEffortLevel: "high",
+      setEffortLevel: async () => undefined,
+      currentFastMode: false,
+      setFastMode: async () => undefined,
+      setActiveProviderModel: async () => undefined,
+      refreshWorkspaceStatus: () => undefined,
+    });
+
+    expect(listResult).toContain("Installed skills:");
+    expect(listResult).toContain("browse (browse)");
+
+    const detailResult = await handleLocalPromptCommand({
+      prompt: "/skills browse",
+      config: providerConfig,
+      currentEffortLevel: "high",
+      setEffortLevel: async () => undefined,
+      currentFastMode: false,
+      setFastMode: async () => undefined,
+      setActiveProviderModel: async () => undefined,
+      refreshWorkspaceStatus: () => undefined,
+    });
+
+    expect(detailResult).toContain("Source: installed-user");
+    expect(detailResult).toContain("Entrypoint: /browse");
+    expect(detailResult).toContain("Allowed tools: Bash, Read");
+    expect(detailResult).toContain("Disable model invocation: yes");
+    expect(detailResult).toContain("Context: fork");
   });
 
   it("lists custom skills from workspace config and shows custom skill detail", async () => {
@@ -1043,5 +1193,173 @@ describe("promptCommandHost", () => {
       prompt: "Summarize GitHub issue 123 and include the latest comments.",
       attachments: [{ data: "QUJDRA==", mimeType: "image/png" }],
     });
+  });
+
+  it("rewrites installed Claude skill commands into prompt content", async () => {
+    const claudeHome = await fs.mkdtemp(path.join(os.tmpdir(), "cain-claude-home-"));
+    tempDirs.push(claudeHome);
+    process.env.CLAUDE_CONFIG_HOME = claudeHome;
+
+    const browseSkillDir = path.join(claudeHome, "skills", "browse");
+    await fs.mkdir(browseSkillDir, { recursive: true });
+    await fs.writeFile(
+      path.join(browseSkillDir, "SKILL.md"),
+      `---
+name: browse
+description: |
+  Fast headless browser for QA testing and site dogfooding.
+allowed-tools:
+  - Bash
+  - Read
+model: claude-opus-4-6
+effort: high
+---
+
+Use browser tooling from \${CLAUDE_SKILL_DIR}
+Requested target: $ARGUMENTS
+`,
+      "utf8",
+    );
+
+    const result = await runPromptCommandChain({
+      prompt: "/browse https://www.baidu.com",
+      config: providerConfig,
+      workspaceRoot: "E:\\repo",
+      envMap: {},
+      runtime: {},
+      tools: [],
+      runtimeOptions: {},
+      effortLevel: "high",
+      tryHandleLocalCommand: async () => null,
+      tryHandlePlanModeCommand: async () => null,
+      handleCompactCommand: async () => false,
+      handleReviewCommand: async () => false,
+      handleUltrareviewCommand: async () => false,
+      handleUltraverifyCommand: async () => false,
+      handleVerificationCommand: async () => false,
+    });
+
+    expect(result.kind).toBe("rewrite");
+    if (result.kind === "rewrite") {
+      expect(result.prompt).toContain("Base directory for this skill:");
+      expect(result.prompt).toContain("Use browser tooling from");
+      expect(result.prompt).toContain("Requested target: https://www.baidu.com");
+      expect(result.prompt).not.toContain("${CLAUDE_SKILL_DIR}");
+      expect(result.prompt).not.toContain("$ARGUMENTS");
+      expect(result.allowedTools).toEqual(["run_command", "read_file"]);
+      expect(result.modelOverride).toBe("claude-opus-4-6");
+      expect(result.effortOverride).toBe("high");
+    }
+  });
+
+  it("expands installed skill shell commands through the existing run_command path", async () => {
+    const claudeHome = await fs.mkdtemp(path.join(os.tmpdir(), "cain-claude-home-"));
+    const workspaceRoot = await fs.mkdtemp(path.join(os.tmpdir(), "cain-skill-workspace-"));
+    tempDirs.push(claudeHome, workspaceRoot);
+    process.env.CLAUDE_CONFIG_HOME = claudeHome;
+
+    await fs.writeFile(path.join(workspaceRoot, "target.txt"), "hello from skill", "utf8");
+
+    const skillDir = path.join(claudeHome, "skills", "show-target");
+    await fs.mkdir(skillDir, { recursive: true });
+    await fs.writeFile(
+      path.join(skillDir, "SKILL.md"),
+      `---
+name: show-target
+description: Read a file through inline shell expansion.
+allowed-tools:
+  - Bash
+---
+
+File contents:
+!` + "`Get-Content target.txt`" + `
+`,
+      "utf8",
+    );
+
+    const requestToolApproval = vi.fn(async () => true);
+
+    const result = await runPromptCommandChain({
+      prompt: "/show-target",
+      config: providerConfig,
+      workspaceRoot,
+      envMap: {},
+      runtime: {
+        getToolContext: () =>
+          ({
+            workspaceRoot,
+            requestToolApproval,
+            invokerKind: "main",
+          }) as any,
+      },
+      tools: [],
+      runtimeOptions: {},
+      effortLevel: "high",
+      tryHandleLocalCommand: async () => null,
+      tryHandlePlanModeCommand: async () => null,
+      handleCompactCommand: async () => false,
+      handleReviewCommand: async () => false,
+      handleUltrareviewCommand: async () => false,
+      handleUltraverifyCommand: async () => false,
+      handleVerificationCommand: async () => false,
+    });
+
+    expect(result.kind).toBe("rewrite");
+    if (result.kind === "rewrite") {
+      expect(result.prompt).toContain("File contents:");
+      expect(result.prompt).toContain("hello from skill");
+      expect(result.prompt).not.toContain("!`Get-Content target.txt`");
+      expect(requestToolApproval).toHaveBeenCalledTimes(1);
+    }
+  });
+
+  it("rejects installed-skill shell expansion when shell:bash is requested", async () => {
+    const claudeHome = await fs.mkdtemp(path.join(os.tmpdir(), "cain-claude-home-"));
+    const workspaceRoot = await fs.mkdtemp(path.join(os.tmpdir(), "cain-skill-workspace-"));
+    tempDirs.push(claudeHome, workspaceRoot);
+    process.env.CLAUDE_CONFIG_HOME = claudeHome;
+
+    const skillDir = path.join(claudeHome, "skills", "bash-skill");
+    await fs.mkdir(skillDir, { recursive: true });
+    await fs.writeFile(
+      path.join(skillDir, "SKILL.md"),
+      `---
+name: bash-skill
+description: Bash shell expansion helper
+shell: bash
+---
+
+Result:
+!` + "`pwd`" + `
+`,
+      "utf8",
+    );
+
+    await expect(
+      runPromptCommandChain({
+        prompt: "/bash-skill",
+        config: providerConfig,
+        workspaceRoot,
+        envMap: {},
+        runtime: {
+          getToolContext: () =>
+            ({
+              workspaceRoot,
+              requestToolApproval: async () => true,
+              invokerKind: "main",
+            }) as any,
+        },
+        tools: [],
+        runtimeOptions: {},
+        effortLevel: "high",
+        tryHandleLocalCommand: async () => null,
+        tryHandlePlanModeCommand: async () => null,
+        handleCompactCommand: async () => false,
+        handleReviewCommand: async () => false,
+        handleUltrareviewCommand: async () => false,
+        handleUltraverifyCommand: async () => false,
+        handleVerificationCommand: async () => false,
+      }),
+    ).rejects.toThrow(/shell:bash/);
   });
 });

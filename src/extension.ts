@@ -88,6 +88,13 @@ import {
   type ToolContext,
   type ToolDefinition,
 } from "./toolRuntime";
+import type { HookDefinition } from "./hooksRegistry";
+import {
+  clearAllSessionInstalledSkillHooks,
+  clearSessionInstalledSkillHooks,
+  getSessionInstalledSkillHooks,
+  registerSessionInstalledSkillHooks,
+} from "./sessionInstalledSkillHooks";
 import {
   createQuickActionBindingsFactory,
   postEditorSelectionPayload,
@@ -278,6 +285,7 @@ class ChatSidebarProvider implements vscode.WebviewViewProvider, vscode.Disposab
   private readonly sessionPanelActionsFactory:
     ReturnType<typeof createSessionPanelActionsFactory>;
   private cachedToolsWorkspaceRoot: string | undefined;
+  private readonly sessionInstalledSkillHooks = new Map<string, HookDefinition[]>();
   private sessionsPanelOpen = false;
   private lastSessionsDataSignature = "";
   private readonly mcpConfigWatchers: vscode.Disposable[] = [];
@@ -1035,6 +1043,12 @@ class ChatSidebarProvider implements vscode.WebviewViewProvider, vscode.Disposab
         this.swarm?.dispose();
         this.swarm = undefined;
       },
+      clearCurrentSessionInstalledSkillHooks: () => {
+        clearSessionInstalledSkillHooks(
+          this.sessionInstalledSkillHooks,
+          this.conversationFeatureBindings.getConversationKey(),
+        );
+      },
       postState: () => this.postState(),
     });
   }
@@ -1046,6 +1060,7 @@ class ChatSidebarProvider implements vscode.WebviewViewProvider, vscode.Disposab
       watcher.dispose();
     }
     this.swarm?.dispose();
+    clearAllSessionInstalledSkillHooks(this.sessionInstalledSkillHooks);
     this.resetActiveRuntimeControllers();
     await this.sessions.flush().catch(error => {
       console.warn(`[Cain Sessions] Failed to flush session index during dispose: ${toErrorMessage(error)}`);
@@ -1183,6 +1198,17 @@ class ChatSidebarProvider implements vscode.WebviewViewProvider, vscode.Disposab
               setSwarm: swarm => {
                 this.swarm = swarm;
               },
+              getSessionInstalledSkillHooks: () =>
+                getSessionInstalledSkillHooks(
+                  this.sessionInstalledSkillHooks,
+                  this.conversationFeatureBindings.getConversationKey(),
+                ),
+              registerSessionInstalledSkillHooks: hooks =>
+                registerSessionInstalledSkillHooks(
+                  this.sessionInstalledSkillHooks,
+                  this.conversationFeatureBindings.getConversationKey(),
+                  hooks,
+                ),
               queueAutoMemoryExtraction: options =>
                 this.autoMemoryBindings.queueAutoMemoryExtraction(options),
               cachedTools: this.cachedTools,

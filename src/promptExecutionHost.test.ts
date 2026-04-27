@@ -1,4 +1,7 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { promises as fs } from "node:fs";
+import os from "node:os";
+import path from "node:path";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const {
   handleLocalPromptCommandMock,
@@ -49,9 +52,18 @@ const providerConfig = {
   model: "claude-sonnet",
 };
 
+const tempDirs: string[] = [];
+
 describe("promptExecutionHost", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+  });
+
+  afterEach(async () => {
+    await Promise.all(
+      tempDirs.splice(0).map(dir => fs.rm(dir, { recursive: true, force: true })),
+    );
+    delete process.env.CLAUDE_CONFIG_HOME;
   });
 
   it("creates prompt execution command adapters that delegate to the underlying hosts", async () => {
@@ -340,6 +352,216 @@ describe("promptExecutionHost", () => {
       workspaceRoot: "E:\\repo",
       effectivePrompt: "Summarize issue 123 with the latest comments.",
       effectivePromptAttachments: [{ data: "QUJDRA==", mimeType: "image/png" }],
+    });
+  });
+
+  it("applies installed skill tool/model/effort overrides to the continue state", async () => {
+    const claudeHome = await fs.mkdtemp(path.join(os.tmpdir(), "cain-claude-home-"));
+    tempDirs.push(claudeHome);
+    process.env.CLAUDE_CONFIG_HOME = claudeHome;
+
+    const browseSkillDir = path.join(claudeHome, "skills", "browse");
+    await fs.mkdir(browseSkillDir, { recursive: true });
+    await fs.writeFile(
+      path.join(browseSkillDir, "SKILL.md"),
+      `---
+name: browse
+description: Browser automation helper
+allowed-tools:
+  - Bash
+  - Read
+disable-model-invocation: true
+context: fork
+hooks:
+  UserPromptSubmit:
+    - hooks:
+        - type: prompt
+          prompt: Be concise.
+model: claude-opus-4-6
+effort: high
+---
+
+Use browser tooling from \${CLAUDE_SKILL_DIR}
+Requested target: $ARGUMENTS
+`,
+      "utf8",
+    );
+
+    const runtime = {
+      getToolContext: () =>
+        ({ workspaceRoot: "E:\\repo", invokerKind: "main" }) as any,
+      getToolDefinitions: async () => [
+        { name: "read_file" },
+        { name: "run_command" },
+        { name: "write_file" },
+      ] as any,
+      getMcpStatusSummary: async () => [],
+    };
+
+    const createProviderRuntimeOptions = vi.fn((config: { model?: string }) => ({
+      effortLevel: "medium",
+      thinkingConfig: config.model === "claude-opus-4-6"
+        ? { type: "enabled", budgetTokens: 8192 }
+        : undefined,
+    }));
+
+    const result = await preparePromptExecutionStep({
+      prompt: "/browse https://www.baidu.com",
+      workspaceFolderPath: "E:\\repo",
+      resolveProviderConfig: async () => ({
+        config: providerConfig,
+        envMap: {},
+      }),
+      getEffortLevel: () => "medium",
+      createProviderRuntimeOptions: createProviderRuntimeOptions as any,
+      ensureConversationWorktreeHydrated: async () => undefined,
+      getEffectiveWorkspaceRoot: path => path,
+      getWorkspaceRuntime: async () => runtime,
+      setFreshWorkspaceTools: () => undefined,
+      tryHandleLocalCommand: async () => null,
+      tryHandlePlanModeCommand: async () => null,
+      handleCompactCommand: async () => false,
+      handleReviewCommand: async () => false,
+      handleUltrareviewCommand: async () => false,
+      handleUltraverifyCommand: async () => false,
+      handleVerificationCommand: async () => false,
+    });
+
+    expect(result).toMatchObject({
+      kind: "continue",
+      effectivePrompt: expect.stringContaining("Requested target: https://www.baidu.com"),
+      config: expect.objectContaining({ model: "claude-opus-4-6" }),
+      effortLevel: "high",
+      tools: [
+        { name: "read_file" },
+        { name: "run_command" },
+      ],
+      installedSkillAllowedTools: ["run_command", "read_file"],
+      installedSkillDisableModelInvocation: true,
+      installedSkillExecutionContext: "fork",
+      installedSkillHooks: [
+        expect.objectContaining({
+          type: "prompt",
+          events: ["PrePrompt"],
+          prompt: "Be concise.",
+        }),
+      ],
+    });
+    expect(createProviderRuntimeOptions).toHaveBeenCalledWith(
+      expect.objectContaining({ model: "claude-opus-4-6" }),
+    );
+  });
+
+  it("registers installed-skill hooks into the session store and reuses them on later prompts", async () => {
+    const claudeHome = await fs.mkdtemp(path.join(os.tmpdir(), "cain-claude-home-"));
+    tempDirs.push(claudeHome);
+    process.env.CLAUDE_CONFIG_HOME = claudeHome;
+
+    const browseSkillDir = path.join(claudeHome, "skills", "browse");
+    await fs.mkdir(browseSkillDir, { recursive: true });
+    await fs.writeFile(
+      path.join(browseSkillDir, "SKILL.md"),
+      `---
+name: browse
+description: Browser automation helper
+hooks:
+  UserPromptSubmit:
+    - hooks:
+        - type: prompt
+          prompt: Be concise.
+---
+
+Requested target: $ARGUMENTS
+`,
+      "utf8",
+    );
+
+    const sessionHooks: Array<{
+      id: string;
+      type: string;
+      events: string[];
+      prompt?: string;
+    }> = [];
+
+    const runtime = {
+      getToolContext: () =>
+        ({ workspaceRoot: "E:\\repo", invokerKind: "main" }) as any,
+      getToolDefinitions: async () => [{ name: "read_file" }] as any,
+      getMcpStatusSummary: async () => [],
+    };
+
+    const first = await preparePromptExecutionStep({
+      prompt: "/browse https://www.baidu.com",
+      workspaceFolderPath: "E:\\repo",
+      resolveProviderConfig: async () => ({
+        config: providerConfig,
+        envMap: {},
+      }),
+      getEffortLevel: () => "medium",
+      createProviderRuntimeOptions: () => ({ effortLevel: "medium" }),
+      ensureConversationWorktreeHydrated: async () => undefined,
+      getEffectiveWorkspaceRoot: path => path,
+      getWorkspaceRuntime: async () => runtime,
+      setFreshWorkspaceTools: () => undefined,
+      tryHandleLocalCommand: async () => null,
+      tryHandlePlanModeCommand: async () => null,
+      handleCompactCommand: async () => false,
+      handleReviewCommand: async () => false,
+      handleUltrareviewCommand: async () => false,
+      handleUltraverifyCommand: async () => false,
+      handleVerificationCommand: async () => false,
+      getSessionInstalledSkillHooks: () => sessionHooks as any,
+      registerSessionInstalledSkillHooks: hooks => {
+        sessionHooks.splice(0, sessionHooks.length, ...(hooks as any));
+        return sessionHooks as any;
+      },
+    });
+
+    expect(first).toMatchObject({
+      kind: "continue",
+      installedSkillHooks: [
+        expect.objectContaining({
+          type: "prompt",
+          events: ["PrePrompt"],
+          prompt: "Be concise.",
+        }),
+      ],
+    });
+    expect(sessionHooks).toHaveLength(1);
+
+    const second = await preparePromptExecutionStep({
+      prompt: "normal prompt",
+      workspaceFolderPath: "E:\\repo",
+      resolveProviderConfig: async () => ({
+        config: providerConfig,
+        envMap: {},
+      }),
+      getEffortLevel: () => "medium",
+      createProviderRuntimeOptions: () => ({ effortLevel: "medium" }),
+      ensureConversationWorktreeHydrated: async () => undefined,
+      getEffectiveWorkspaceRoot: path => path,
+      getWorkspaceRuntime: async () => runtime,
+      setFreshWorkspaceTools: () => undefined,
+      tryHandleLocalCommand: async () => null,
+      tryHandlePlanModeCommand: async () => null,
+      handleCompactCommand: async () => false,
+      handleReviewCommand: async () => false,
+      handleUltrareviewCommand: async () => false,
+      handleUltraverifyCommand: async () => false,
+      handleVerificationCommand: async () => false,
+      getSessionInstalledSkillHooks: () => sessionHooks as any,
+      registerSessionInstalledSkillHooks: hooks => hooks as any,
+    });
+
+    expect(second).toMatchObject({
+      kind: "continue",
+      installedSkillHooks: [
+        expect.objectContaining({
+          type: "prompt",
+          events: ["PrePrompt"],
+          prompt: "Be concise.",
+        }),
+      ],
     });
   });
 });

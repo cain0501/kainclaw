@@ -1,10 +1,21 @@
-import type { IProviderAdapter, ProviderConfig as AdapterProviderConfig } from "./agent/providers/IProviderAdapter";
-import type { NormalizedImageAttachment } from "./agent/providers/IProviderAdapter";
+import type {
+  IProviderAdapter,
+  ProviderConfig as AdapterProviderConfig,
+  NormalizedImageAttachment,
+  NormalizedMessage,
+} from "./agent/providers/IProviderAdapter";
 import type { PromptExecutionResult, PromptRuntimeLike } from "./promptExecutionHost";
 import type { PromptSharedBindings } from "./promptBindingsHost";
+import { buildInjectedPrompt, triggerHooks } from "./hooks/hooksTrigger";
+import type { AgentRunner, HookContext } from "./hooks/hooksExecutor";
 import { applyPromptTurnUserContext } from "./promptSetupHost";
-import { runPromptTurnWithHost } from "./promptTurnHost";
+import {
+  createPromptTurnAgentCallbacks,
+  runPromptAgentTurn,
+  runPromptTurnWithHost,
+} from "./promptTurnHost";
 import type { ToolContext, ToolDefinition } from "./toolRuntime";
+import type { HookDefinition } from "./hooksRegistry";
 import type { EffortLevel, ProviderRuntimeOptions } from "./thinkingEffort/types";
 
 type PromptConversationMessage = {
@@ -19,6 +30,264 @@ type ContinuePromptExecution<TRuntime extends PromptRuntimeLike> = Extract<
   PromptExecutionResult<TRuntime>,
   { kind: "continue" }
 >;
+
+function buildInstalledSkillAgentHookPrompt(
+  hook: HookDefinition,
+  context: HookContext,
+): string {
+  const payload = JSON.stringify({
+    event: context.event,
+    workspaceRoot: context.workspaceRoot,
+    sessionId: context.sessionId,
+    toolName: context.toolName,
+    toolInput: context.toolInput,
+    toolOutput: context.toolOutput,
+    prompt: context.prompt,
+    reply: context.reply,
+  });
+
+  const template = hook.agentPrompt ?? hook.prompt ?? "";
+  if (!template.trim()) {
+    return `Installed skill agent hook context:\n\n${payload}`;
+  }
+
+  const replaced = template.replaceAll("$ARGUMENTS", payload);
+  return replaced === template
+    ? `${template}\n\nARGUMENTS: ${payload}`
+    : replaced;
+}
+
+async function runInstalledSkillAgentHook<TRuntime extends PromptRuntimeLike>(options: {
+  hook: HookDefinition;
+  context: HookContext;
+  promptExecution: ContinuePromptExecution<TRuntime>;
+  buildWorkspaceSystemPrompt: (
+    workspaceRoot: string,
+    config: AdapterProviderConfig,
+    effortLevel: EffortLevel | undefined,
+  ) => Promise<string>;
+  buildProviderAdapter: (options: {
+    config: AdapterProviderConfig;
+    workspaceRoot: string;
+    systemPrompt: string;
+    envMap: Record<string, string>;
+    runtimeOptions: ProviderRuntimeOptions;
+  }) => IProviderAdapter;
+}): Promise<void> {
+  const hookPrompt = buildInstalledSkillAgentHookPrompt(
+    options.hook,
+    options.context,
+  );
+
+  const hookConfig =
+    options.hook.agentModel && "model" in options.promptExecution.config
+      ? { ...options.promptExecution.config, model: options.hook.agentModel }
+      : options.promptExecution.config;
+
+  const systemPrompt = await options.buildWorkspaceSystemPrompt(
+    options.promptExecution.workspaceRoot,
+    hookConfig,
+    options.promptExecution.effortLevel,
+  );
+  const provider = options.buildProviderAdapter({
+    config: hookConfig,
+    workspaceRoot: options.promptExecution.workspaceRoot,
+    systemPrompt,
+    envMap: options.promptExecution.envMap,
+    runtimeOptions: options.promptExecution.runtimeOptions,
+  });
+
+  await runPromptAgentTurn({
+    history: [
+      {
+        role: "user",
+        content: hookPrompt,
+      },
+    ],
+    provider,
+    tools: options.promptExecution.tools,
+    toolContext: options.promptExecution.runtime.getToolContext(),
+  });
+}
+
+function createInstalledSkillAgentRunner<TRuntime extends PromptRuntimeLike>(options: {
+  promptExecution: ContinuePromptExecution<TRuntime>;
+  buildWorkspaceSystemPrompt: (
+    workspaceRoot: string,
+    config: AdapterProviderConfig,
+    effortLevel: EffortLevel | undefined,
+  ) => Promise<string>;
+  buildProviderAdapter: (options: {
+    config: AdapterProviderConfig;
+    workspaceRoot: string;
+    systemPrompt: string;
+    envMap: Record<string, string>;
+    runtimeOptions: ProviderRuntimeOptions;
+  }) => IProviderAdapter;
+}): AgentRunner {
+  return (hook, context) =>
+    runInstalledSkillAgentHook({
+      hook,
+      context,
+      promptExecution: options.promptExecution,
+      buildWorkspaceSystemPrompt: options.buildWorkspaceSystemPrompt,
+      buildProviderAdapter: options.buildProviderAdapter,
+    });
+}
+
+async function runForkedInstalledSkillFlow<TRuntime extends PromptRuntimeLike>(options: {
+  promptExecution: ContinuePromptExecution<TRuntime>;
+  createModelActivity: () => string;
+  buildWorkspaceSystemPrompt: (
+    workspaceRoot: string,
+    config: AdapterProviderConfig,
+    effortLevel: EffortLevel | undefined,
+  ) => Promise<string>;
+  buildProviderAdapter: (options: {
+    config: AdapterProviderConfig;
+    workspaceRoot: string;
+    systemPrompt: string;
+    envMap: Record<string, string>;
+    runtimeOptions: ProviderRuntimeOptions;
+  }) => IProviderAdapter;
+  setCompanionState: (state: "thinking" | "working" | "done") => void;
+  appendStreamingToken: (token: string) => void;
+  logFirstToken: (token: string) => void;
+  postToken: (token: string) => void;
+  startToolExecution: (
+    execId: string,
+    label: string,
+    detail?: string,
+  ) => void;
+  finishToolExecution: (
+    execId: string,
+    status: "done" | "error",
+    summary?: string,
+  ) => void;
+  onToolError?: () => void;
+  finishModelActivity: (
+    activityId: string,
+    status: "done",
+    detail?: string,
+  ) => void;
+  logNoStreamingReply: () => void;
+  recordAssistantReply: (
+    reply: string,
+    includeInConversation: boolean,
+    thinkingSummary?: string,
+  ) => Promise<void>;
+  clearStreamingText: () => void;
+  updateMood: (delta: number, countConversation?: boolean) => Promise<void>;
+  runPromptAgentTurnImpl?: typeof runPromptAgentTurn;
+}): Promise<void> {
+  const modelActivityId = options.createModelActivity();
+  const prePromptHooks = options.promptExecution.installedSkillHooks ?? [];
+  const installedSkillAgentRunner = createInstalledSkillAgentRunner({
+    promptExecution: options.promptExecution,
+    buildWorkspaceSystemPrompt: options.buildWorkspaceSystemPrompt,
+    buildProviderAdapter: options.buildProviderAdapter,
+  });
+  let effectivePrompt = options.promptExecution.effectivePrompt;
+  if (prePromptHooks.length > 0) {
+    const prePromptResult = await triggerHooks(
+      "PrePrompt",
+      prePromptHooks,
+      {
+        workspaceRoot: options.promptExecution.workspaceRoot,
+        prompt: effectivePrompt,
+      },
+      installedSkillAgentRunner,
+    );
+    if (prePromptResult.promptPrefixInjection) {
+      effectivePrompt = buildInjectedPrompt(
+        effectivePrompt,
+        prePromptResult.promptPrefixInjection,
+        "prefix",
+      );
+    }
+    if (prePromptResult.promptSuffixInjection) {
+      effectivePrompt = buildInjectedPrompt(
+        effectivePrompt,
+        prePromptResult.promptSuffixInjection,
+        "suffix",
+      );
+    }
+  }
+  const systemPrompt = await options.buildWorkspaceSystemPrompt(
+    options.promptExecution.workspaceRoot,
+    options.promptExecution.config,
+    options.promptExecution.effortLevel,
+  );
+  const provider = options.buildProviderAdapter({
+    config: options.promptExecution.config,
+    workspaceRoot: options.promptExecution.workspaceRoot,
+    systemPrompt,
+    envMap: options.promptExecution.envMap,
+    runtimeOptions: options.promptExecution.runtimeOptions,
+  });
+
+  const promptTurnAgentCallbacks = createPromptTurnAgentCallbacks({
+    appendStreamingToken: options.appendStreamingToken,
+    logFirstToken: options.logFirstToken,
+    postToken: options.postToken,
+    setCompanionState: state => options.setCompanionState(state),
+    startToolExecution: options.startToolExecution,
+    finishToolExecution: options.finishToolExecution,
+    onToolError: options.onToolError,
+  });
+
+  options.setCompanionState("thinking");
+
+  const history: NormalizedMessage[] = [
+    {
+      role: "user",
+      content: effectivePrompt,
+      ...(options.promptExecution.effectivePromptAttachments?.length
+        ? { attachments: options.promptExecution.effectivePromptAttachments }
+        : {}),
+    },
+  ];
+
+  const runPromptAgentTurnImpl =
+    options.runPromptAgentTurnImpl ?? runPromptAgentTurn;
+  const { reply, sawStreamingToken, latestThinkingSummary } =
+    await runPromptAgentTurnImpl({
+      history,
+      provider,
+      tools: options.promptExecution.tools,
+      toolContext: options.promptExecution.runtime.getToolContext(),
+      installedSkillHooks: options.promptExecution.installedSkillHooks,
+      onToken: promptTurnAgentCallbacks.onToken,
+      onToolStart: promptTurnAgentCallbacks.onToolStart,
+      onToolEnd: promptTurnAgentCallbacks.onToolEnd,
+    });
+
+  if (prePromptHooks.length > 0) {
+    await triggerHooks(
+      "PostPrompt",
+      prePromptHooks,
+      {
+        workspaceRoot: options.promptExecution.workspaceRoot,
+        prompt: effectivePrompt,
+        reply,
+      },
+      installedSkillAgentRunner,
+    );
+  }
+
+  options.finishModelActivity(modelActivityId, "done");
+  if (!sawStreamingToken && reply) {
+    options.logNoStreamingReply();
+  }
+  await options.recordAssistantReply(
+    reply,
+    false,
+    latestThinkingSummary,
+  );
+  options.clearStreamingText();
+  options.setCompanionState("done");
+  await options.updateMood(3, false);
+}
 
 export function createPromptFlowStateBindings<TSwarm>(options: {
   appendConversationMessage: (message: PromptConversationMessage) => void;
@@ -492,7 +761,62 @@ export async function runPromptFlowWithHost<
   }
 
   const continuePromptExecution = options.promptExecution;
-  const effectivePrompt = continuePromptExecution.effectivePrompt;
+  const installedSkillAgentRunner = createInstalledSkillAgentRunner({
+    promptExecution: continuePromptExecution,
+    buildWorkspaceSystemPrompt: options.buildWorkspaceSystemPrompt,
+    buildProviderAdapter: options.buildProviderAdapter,
+  });
+  if (continuePromptExecution.installedSkillExecutionContext === "fork") {
+    await runForkedInstalledSkillFlow({
+      promptExecution: continuePromptExecution,
+      createModelActivity: options.createModelActivity,
+      buildWorkspaceSystemPrompt: options.buildWorkspaceSystemPrompt,
+      buildProviderAdapter: options.buildProviderAdapter,
+      setCompanionState: options.setCompanionState,
+      appendStreamingToken: options.appendStreamingToken,
+      logFirstToken: options.logFirstToken,
+      postToken: options.postToken,
+      startToolExecution: options.startToolExecution,
+      finishToolExecution: options.finishToolExecution,
+      onToolError: options.onToolError,
+      finishModelActivity: options.finishModelActivity,
+      logNoStreamingReply: options.logNoStreamingReply,
+      recordAssistantReply: options.recordAssistantReply,
+      clearStreamingText: options.clearStreamingText,
+      updateMood: options.updateMood,
+      runPromptAgentTurnImpl: runPromptAgentTurn,
+    });
+    return;
+  }
+
+  let effectivePrompt = continuePromptExecution.effectivePrompt;
+  const installedSkillHooks = continuePromptExecution.installedSkillHooks ?? [];
+  if (installedSkillHooks.length > 0) {
+    const prePromptResult = await triggerHooks(
+      "PrePrompt",
+      installedSkillHooks,
+      {
+        workspaceRoot: continuePromptExecution.workspaceRoot,
+        prompt: effectivePrompt,
+      },
+      installedSkillAgentRunner,
+    );
+    if (prePromptResult.promptPrefixInjection) {
+      effectivePrompt = buildInjectedPrompt(
+        effectivePrompt,
+        prePromptResult.promptPrefixInjection,
+        "prefix",
+      );
+    }
+    if (prePromptResult.promptSuffixInjection) {
+      effectivePrompt = buildInjectedPrompt(
+        effectivePrompt,
+        prePromptResult.promptSuffixInjection,
+        "suffix",
+      );
+    }
+  }
+
   const modelActivityId = options.createModelActivity();
   const applyPromptTurnUserContextImpl =
     options.applyPromptTurnUserContextImpl ?? applyPromptTurnUserContext;
@@ -517,11 +841,13 @@ export async function runPromptFlowWithHost<
     envMap: continuePromptExecution.envMap,
     runtimeOptions: continuePromptExecution.runtimeOptions,
     effortLevel: continuePromptExecution.effortLevel,
-    runtime: continuePromptExecution.runtime as {
-      getToolContext(mode?: string): ToolContext;
-    },
-    tools: continuePromptExecution.tools as ToolDefinition[],
-    existingSwarm: options.existingSwarm,
+      runtime: continuePromptExecution.runtime as {
+        getToolContext(mode?: string): ToolContext;
+      },
+      tools: continuePromptExecution.tools as ToolDefinition[],
+      installedSkillHooks,
+      installedSkillAgentRunner,
+      existingSwarm: options.existingSwarm,
     createSwarm: () =>
       options.createSwarm({
         workerToolContext:
@@ -551,6 +877,23 @@ export async function runPromptFlowWithHost<
         config: continuePromptExecution.config,
         envMap: continuePromptExecution.envMap,
       }),
-    updateMood: options.updateMood,
-  });
+      updateMood: options.updateMood,
+    });
+
+  if (installedSkillHooks.length > 0) {
+    const latestReply =
+      options.getConversationHistory().at(-1)?.role === "assistant"
+        ? options.getConversationHistory().at(-1)?.content
+        : undefined;
+    await triggerHooks(
+      "PostPrompt",
+      installedSkillHooks,
+      {
+        workspaceRoot: continuePromptExecution.workspaceRoot,
+        prompt: effectivePrompt,
+        reply: latestReply,
+      },
+      installedSkillAgentRunner,
+    );
+  }
 }

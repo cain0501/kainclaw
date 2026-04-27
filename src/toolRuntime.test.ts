@@ -2120,6 +2120,309 @@ describe("toolRuntime background task semantics", () => {
     }
   });
 
+  it("WebFetch returns a follow-up redirect instruction when the host changes", async () => {
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = (async () =>
+      ({
+        ok: false,
+        status: 302,
+        headers: {
+          get: (name: string) =>
+            name.toLowerCase() === "location" ? "https://docs.example.org/guide" : null,
+        },
+        text: async () => "",
+      }) as any) as typeof fetch;
+
+    try {
+      const result = await executeTool(
+        "WebFetch",
+        { url: "https://example.com/guide", prompt: "Summarize the page." },
+        { workspaceRoot: "E:\\claudecodejingiang\\vscode-extension" },
+      );
+
+      expect(result.summary).toContain("WebFetch redirect");
+      expect(result.content).toContain("REDIRECT DETECTED");
+      expect(result.content).toContain('url: "https://docs.example.org/guide"');
+      expect(result.content).toContain('prompt: "Summarize the page."');
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
+  it("WebFetch follows same-host redirects and upgrades http urls before returning content", async () => {
+    const originalFetch = globalThis.fetch;
+    const calls: string[] = [];
+    const userAgents: string[] = [];
+    globalThis.fetch = (async (input: string | URL | Request) => {
+      const url = typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url;
+      calls.push(url);
+      if (typeof input !== "string" && !(input instanceof URL)) {
+        userAgents.push(input.headers.get("User-Agent") || "");
+      }
+
+      if (calls.length === 1) {
+        return {
+          ok: false,
+          status: 301,
+          headers: {
+            get: (name: string) =>
+              name.toLowerCase() === "location" ? "https://example.com/docs" : null,
+          },
+          text: async () => "",
+        } as any;
+      }
+
+      return {
+        ok: true,
+        status: 200,
+        headers: {
+          get: (name: string) => (name === "content-type" ? "text/html; charset=utf-8" : null),
+        },
+        text: async () => "<html><body><h1>Hello</h1><p>world</p></body></html>",
+      } as any;
+    }) as typeof fetch;
+
+    try {
+      const result = await executeTool(
+        "WebFetch",
+        { url: "http://example.com/docs", prompt: "Summarize the page." },
+        { workspaceRoot: "E:\\claudecodejingiang\\vscode-extension" },
+      );
+
+      expect(calls).toEqual([
+        "https://example.com/docs",
+        "https://example.com/docs",
+      ]);
+      expect(userAgents.every(value => value.includes("Mozilla/5.0"))).toBe(true);
+      expect(result.summary).toContain("Fetched https://example.com/docs");
+      expect(result.content).toContain("Use only the fetched content below to answer this extraction request");
+      expect(result.content).toContain("Headings:");
+      expect(result.content).toContain("- Hello");
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
+  it("WebFetch uses runtime extraction when available for html content", async () => {
+    const originalFetch = globalThis.fetch;
+    const extractWebContent = vi.fn(async () => "Main sections: logo, search box, nav, login.");
+    globalThis.fetch = (async () =>
+      ({
+        ok: true,
+        status: 200,
+        headers: {
+          get: (name: string) => (name === "content-type" ? "text/html; charset=utf-8" : null),
+        },
+        text: async () => "<html><body><h1>Site</h1><style>.a{color:red}</style><p>Search here</p></body></html>",
+      }) as any) as typeof fetch;
+
+    try {
+      const result = await executeTool(
+        "WebFetch",
+        { url: "https://example.com", prompt: "Summarize the main sections." },
+        {
+          workspaceRoot: "E:\\claudecodejingiang\\vscode-extension",
+          extractWebContent,
+        },
+      );
+
+      expect(extractWebContent).toHaveBeenCalledTimes(1);
+      expect(result.content).toContain("Main sections: logo, search box, nav, login.");
+      expect(result.content).not.toContain("Fetched content:");
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
+  it("WebSearch rejects conflicting domain filters", async () => {
+    await expect(
+      executeTool(
+        "WebSearch",
+        {
+          query: "latest react docs",
+          allowed_domains: ["react.dev"],
+          blocked_domains: ["example.com"],
+        },
+        { workspaceRoot: "E:\\claudecodejingiang\\vscode-extension" },
+      ),
+    ).rejects.toThrow(/Cannot specify both allowed_domains and blocked_domains/);
+  });
+
+  it("WebSearch returns parsed links and preserves source reminder semantics", async () => {
+    const originalFetch = globalThis.fetch;
+    const calls: string[] = [];
+    const userAgents: string[] = [];
+    globalThis.fetch = (async (input: string | URL | Request) => {
+      const url = typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url;
+      calls.push(url);
+      if (typeof input !== "string" && !(input instanceof URL)) {
+        userAgents.push(input.headers.get("User-Agent") || "");
+      }
+
+      return {
+        ok: true,
+        status: 200,
+        headers: {
+          get: () => "text/html; charset=utf-8",
+        },
+        text: async () => `
+          <html>
+            <body>
+              <a class="result__a" href="//duckduckgo.com/l/?uddg=https%3A%2F%2Freact.dev%2Flearn">React Learn</a>
+              <a class="result__a" href="https://nextjs.org/docs">Next.js Docs</a>
+            </body>
+          </html>
+        `,
+      } as any;
+    }) as typeof fetch;
+
+    try {
+      const result = await executeTool(
+        "WebSearch",
+        {
+          query: "latest react docs",
+          allowed_domains: ["react.dev"],
+        },
+        { workspaceRoot: "E:\\claudecodejingiang\\vscode-extension" },
+      );
+
+      expect(calls[0]).toContain("duckduckgo.com/html/");
+      expect(calls[0]).toContain(encodeURIComponent("latest react docs site:react.dev"));
+      expect(userAgents.every(value => value.includes("Mozilla/5.0"))).toBe(true);
+      expect(result.summary).toContain('Searched the web for "latest react docs"');
+      expect(result.content).toContain('Web search results for query: "latest react docs"');
+      expect(result.content).toContain('"title":"React Learn"');
+      expect(result.content).toContain('"url":"https://react.dev/learn"');
+      expect(result.content).toContain("Search provider: duckduckgo");
+      expect(result.content).toContain("REMINDER: You MUST include the sources above");
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
+  it("WebSearch falls back to Bing when DuckDuckGo is unavailable", async () => {
+    const originalFetch = globalThis.fetch;
+    const calls: string[] = [];
+    let invocation = 0;
+    globalThis.fetch = (async (input: string | URL | Request) => {
+      const url = typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url;
+      calls.push(url);
+      invocation += 1;
+
+      if (invocation === 1) {
+        throw new TypeError("fetch failed");
+      }
+
+      return {
+        ok: true,
+        status: 200,
+        headers: {
+          get: () => "text/html; charset=utf-8",
+        },
+        text: async () => `
+          <html>
+            <body>
+              <li class="b_algo">
+                <h2><a href="https://react.dev/reference/react">React Reference</a></h2>
+              </li>
+            </body>
+          </html>
+        `,
+      } as any;
+    }) as typeof fetch;
+
+    try {
+      const result = await executeTool(
+        "WebSearch",
+        {
+          query: "latest react docs",
+          allowed_domains: ["react.dev"],
+        },
+        { workspaceRoot: "E:\\claudecodejingiang\\vscode-extension" },
+      );
+
+      expect(calls[0]).toContain("duckduckgo.com/html/");
+      expect(calls[1]).toContain("cn.bing.com/search?");
+      expect(result.content).toContain('"title":"React Reference"');
+      expect(result.content).toContain('"url":"https://react.dev/reference/react"');
+      expect(result.content).toContain("Search provider: bing");
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
+  it("WebSearch falls back to allowed domain homepage links when provider hits are empty", async () => {
+    const originalFetch = globalThis.fetch;
+    const calls: string[] = [];
+    let invocation = 0;
+    globalThis.fetch = (async (input: string | URL | Request) => {
+      const url = typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url;
+      calls.push(url);
+      invocation += 1;
+
+      if (invocation === 1) {
+        throw new TypeError("fetch failed");
+      }
+
+      if (invocation === 2) {
+        return {
+          ok: true,
+          status: 200,
+          headers: {
+            get: () => "text/html; charset=utf-8",
+          },
+          text: async () => `
+            <html>
+              <body>
+                <li class="b_algo">
+                  <h2 class=""><a href="https://example.org/off-topic">Off Topic</a></h2>
+                </li>
+              </body>
+            </html>
+          `,
+        } as any;
+      }
+
+      return {
+        ok: true,
+        status: 200,
+        headers: {
+          get: () => "text/html; charset=utf-8",
+        },
+        text: async () => `
+          <html>
+            <body>
+              <a href="/learn">Learn React</a>
+              <a href="/reference/react">API Reference</a>
+            </body>
+          </html>
+        `,
+      } as any;
+    }) as typeof fetch;
+
+    try {
+      const result = await executeTool(
+        "WebSearch",
+        {
+          query: "latest react docs",
+          allowed_domains: ["react.dev"],
+        },
+        { workspaceRoot: "E:\\claudecodejingiang\\vscode-extension" },
+      );
+
+      expect(calls[0]).toContain("duckduckgo.com/html/");
+      expect(calls[1]).toContain("cn.bing.com/search?");
+      expect(calls[2]).toBe("https://react.dev/");
+      expect(result.content).toContain('"title":"Learn React"');
+      expect(result.content).toContain('"url":"https://react.dev/learn"');
+      expect(result.content).toContain('"title":"API Reference"');
+      expect(result.content).toContain('"url":"https://react.dev/reference/react"');
+      expect(result.content).toContain("Search provider: bing");
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
   it("TaskList surfaces diffRef in review background task summary", async () => {
     const context = await createTaskContext();
     await context.tasks!.registerBackgroundTask({

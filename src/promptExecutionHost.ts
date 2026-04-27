@@ -6,6 +6,7 @@ import type {
 import type { SkillStore } from "./skills/skillStore";
 import type { ProfileStore } from "./userModel/profileStore";
 import type { BackgroundTaskHost } from "./backgroundTaskHost";
+import type { HookDefinition } from "./hooksRegistry";
 import { handleCompactCommandWithHost } from "./compactHost";
 import type { PendingPlanVerificationState } from "./conversationRuntimeStateHost";
 import {
@@ -31,6 +32,7 @@ import {
 } from "./workspaceHost";
 import type { ToolContext, ToolDefinition } from "./toolRuntime";
 import type { EffortLevel, ProviderRuntimeOptions } from "./thinkingEffort/types";
+import { buildUtf8PowerShellEncodedCommand } from "./toolRuntime";
 
 export type PromptRuntimeLike = WorkspaceRuntimeLike & {
   getToolContext(mode?: string): ToolContext;
@@ -50,6 +52,10 @@ export type PromptExecutionResult<TRuntime> =
       tools: ToolDefinition[];
       effectivePrompt: string;
       effectivePromptAttachments?: NormalizedImageAttachment[];
+      installedSkillAllowedTools?: string[];
+      installedSkillDisableModelInvocation?: boolean;
+      installedSkillExecutionContext?: "fork";
+      installedSkillHooks?: HookDefinition[];
     };
 
 type ConversationMessage = {
@@ -127,6 +133,8 @@ export function createPromptExecutionCommandHandlers<
   markPendingPlanVerificationStarted: () => void;
   markPendingPlanVerificationCompleted: () => void;
   resetPendingPlanVerificationToAwaitingStart: () => void;
+  getSessionInstalledSkillHooks?: () => HookDefinition[];
+  registerSessionInstalledSkillHooks?: (hooks: HookDefinition[]) => HookDefinition[];
   skillStore?: SkillStore;
   profileStore?: ProfileStore;
 }) {
@@ -353,6 +361,10 @@ export async function preparePromptExecutionStep<TRuntime extends PromptRuntimeL
       mcpServers?: McpServerStatusSummary[];
       providerLabel?: string;
     }) => void;
+    getSessionInstalledSkillHooks?: () => HookDefinition[];
+    registerSessionInstalledSkillHooks?: (
+      hooks: HookDefinition[],
+    ) => HookDefinition[];
     startActivity?: (label: string, detail?: string) => string | undefined;
     finishActivity?: (
       activityId: string | undefined,
@@ -562,22 +574,59 @@ export async function preparePromptExecutionStep<TRuntime extends PromptRuntimeL
         runtimeOptions,
         effortLevel,
       ),
+    getSessionInstalledSkillHooks: options.getSessionInstalledSkillHooks,
+    registerSessionInstalledSkillHooks:
+      options.registerSessionInstalledSkillHooks,
   });
 
   if (promptCommandResult.kind !== "continue") {
     if (promptCommandResult.kind === "rewrite") {
+      const activeSessionHooks =
+        options.getSessionInstalledSkillHooks?.() ??
+        promptCommandResult.installedSkillHooks;
+      const effectiveConfig = promptCommandResult.modelOverride
+        ? { ...providerContext.config, model: promptCommandResult.modelOverride }
+        : providerContext.config;
+      const effectiveEffortLevel =
+        promptCommandResult.effortOverride ?? providerContext.effortLevel;
+      const effectiveRuntimeOptions =
+        promptCommandResult.modelOverride || promptCommandResult.effortOverride
+          ? options.createProviderRuntimeOptions(effectiveConfig)
+          : providerContext.runtimeOptions;
+      if (promptCommandResult.effortOverride) {
+        effectiveRuntimeOptions.effortLevel = promptCommandResult.effortOverride;
+      }
+      const effectiveTools =
+        promptCommandResult.allowedTools &&
+        promptCommandResult.allowedTools.length > 0
+          ? loadedTools.tools.filter(tool =>
+              promptCommandResult.allowedTools?.includes(tool.name),
+            )
+          : loadedTools.tools;
       return {
         kind: "continue",
-        config: providerContext.config,
+        config: effectiveConfig,
         envMap: providerContext.envMap,
-        effortLevel: providerContext.effortLevel,
-        runtimeOptions: providerContext.runtimeOptions,
+        effortLevel: effectiveEffortLevel,
+        runtimeOptions: effectiveRuntimeOptions,
         workspaceRoot: runtimeContext.workspaceRoot,
         runtime: runtimeContext.runtime,
-        tools: loadedTools.tools,
+        tools: effectiveTools,
         effectivePrompt: promptCommandResult.prompt,
         ...(promptCommandResult.attachments?.length
           ? { effectivePromptAttachments: promptCommandResult.attachments }
+          : {}),
+        ...(promptCommandResult.allowedTools?.length
+          ? { installedSkillAllowedTools: promptCommandResult.allowedTools }
+          : {}),
+        ...(promptCommandResult.disableModelInvocation
+          ? { installedSkillDisableModelInvocation: true }
+          : {}),
+        ...(promptCommandResult.executionContext
+          ? { installedSkillExecutionContext: promptCommandResult.executionContext }
+          : {}),
+        ...(activeSessionHooks?.length
+          ? { installedSkillHooks: activeSessionHooks }
           : {}),
       };
     }
@@ -594,5 +643,8 @@ export async function preparePromptExecutionStep<TRuntime extends PromptRuntimeL
     runtime: runtimeContext.runtime,
     tools: loadedTools.tools,
     effectivePrompt: options.prompt,
+    ...(options.getSessionInstalledSkillHooks?.().length
+      ? { installedSkillHooks: options.getSessionInstalledSkillHooks?.() }
+      : {}),
   };
 }

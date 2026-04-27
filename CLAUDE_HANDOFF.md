@@ -1,6 +1,14 @@
 # Claude Handoff / Claude 交接说明
 
-## 当前覆盖说明 / Current Override - 2026-04-27
+## 当前覆盖说明 / Current Override - 2026-04-28
+
+- 2026-04-28 installed-skills parity increment:
+  - Primary installed-skill roots are now `~/.kainclaw/skills` and `.kainclaw/skills`, with `~/.claude/skills` and `.claude/skills` kept as compatibility roots.
+  - Installed-skill prompt execution now covers argument substitution, `allowed-tools`, model/effort overrides, `context=fork`, and shell metadata.
+  - Installed-skill shell expansion now supports the Claude-style `!` / ` ```! ` patterns through the existing PowerShell-backed execution path; `shell: bash` is rejected explicitly instead of silently falling back.
+  - Installed-skill hooks now support prompt / command / http / agent definitions, tool-event matcher filtering, and session-scoped persistence for the active conversation.
+  - Remaining meaningful gaps on the installed-skills line: no true model-side `SkillTool` gate for `disable-model-invocation` yet, and fuller Claude command-object parity is still missing.
+  - Current automated baseline after this slice: `152` test files, `1121` tests passed.
 
 - 本批 Claude parity 收口后的验证基线：
   - `npm test`

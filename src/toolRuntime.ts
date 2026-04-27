@@ -3,6 +3,7 @@ import { promises as fs } from "node:fs";
 import path from "node:path";
 import { promisify } from "node:util";
 import { createPatch } from "diff";
+import { normalizeHttpUrl } from "./browserRuntime";
 import { isPlanWritablePath } from "./planMode/planMode";
 import type { LspToolAdapter } from "./lsp/lspRuntime";
 import { LSP_TOOL_NAME, normalizeLspOperation } from "./lsp/types";
@@ -38,6 +39,12 @@ const WALK_FILES_LIMIT = 10_000;
 const SEARCH_MATCH_LIMIT = 2_000;
 const SEARCH_MATCH_DISPLAY_LIMIT = 200;
 const TOOL_SEARCH_RESULT_LIMIT = 20;
+const MAX_WEB_TOOL_CONTENT_LENGTH = 100_000;
+const WEB_TOOL_TIMEOUT_MS = 60_000;
+const WEB_TOOL_REDIRECT_LIMIT = 10;
+const WEB_SEARCH_RESULT_LIMIT = 8;
+const WEB_TOOL_USER_AGENT =
+  "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/136.0.0.0 Safari/537.36";
 
 const BASE_READ_ONLY_COMMAND_PREFIXES = [
   "Get-ChildItem",
@@ -262,6 +269,14 @@ export type ToolContext = {
   workspaceRoot: string;
   invokerKind?: "main" | "worker";
   abortSignal?: AbortSignal;
+  extractWebContent?: (request: {
+    url: string;
+    prompt: string;
+    content: string;
+    contentType: string;
+    preapproved: boolean;
+    abortSignal?: AbortSignal;
+  }) => Promise<string>;
   runVerification?: (request: {
     extraGuidance?: string;
     diffRef?: string;
@@ -678,6 +693,839 @@ export function normalizeFetchedHtml(html: string): string {
     .replace(/<[^>]+>/g, " ")
     .replace(/\s+/g, " ")
     .trim();
+}
+
+const WEB_FETCH_PREAPPROVED_HOSTS = new Set([
+  "platform.claude.com",
+  "code.claude.com",
+  "modelcontextprotocol.io",
+  "github.com/anthropics",
+  "agentskills.io",
+  "docs.python.org",
+  "en.cppreference.com",
+  "docs.oracle.com",
+  "learn.microsoft.com",
+  "developer.mozilla.org",
+  "go.dev",
+  "pkg.go.dev",
+  "www.php.net",
+  "docs.swift.org",
+  "kotlinlang.org",
+  "ruby-doc.org",
+  "doc.rust-lang.org",
+  "www.typescriptlang.org",
+  "react.dev",
+  "angular.io",
+  "vuejs.org",
+  "nextjs.org",
+  "expressjs.com",
+  "nodejs.org",
+  "bun.sh",
+  "jquery.com",
+  "getbootstrap.com",
+  "tailwindcss.com",
+  "d3js.org",
+  "threejs.org",
+  "redux.js.org",
+  "webpack.js.org",
+  "jestjs.io",
+  "reactrouter.com",
+  "docs.djangoproject.com",
+  "flask.palletsprojects.com",
+  "fastapi.tiangolo.com",
+  "pandas.pydata.org",
+  "numpy.org",
+  "www.tensorflow.org",
+  "pytorch.org",
+  "scikit-learn.org",
+  "matplotlib.org",
+  "requests.readthedocs.io",
+  "jupyter.org",
+  "laravel.com",
+  "symfony.com",
+  "wordpress.org",
+  "docs.spring.io",
+  "hibernate.org",
+  "tomcat.apache.org",
+  "gradle.org",
+  "maven.apache.org",
+  "asp.net",
+  "dotnet.microsoft.com",
+  "nuget.org",
+  "blazor.net",
+  "reactnative.dev",
+  "docs.flutter.dev",
+  "developer.apple.com",
+  "developer.android.com",
+  "keras.io",
+  "spark.apache.org",
+  "huggingface.co",
+  "www.kaggle.com",
+  "www.mongodb.com",
+  "redis.io",
+  "www.postgresql.org",
+  "dev.mysql.com",
+  "www.sqlite.org",
+  "graphql.org",
+  "prisma.io",
+  "docs.aws.amazon.com",
+  "cloud.google.com",
+  "kubernetes.io",
+  "www.docker.com",
+  "www.terraform.io",
+  "www.ansible.com",
+  "vercel.com/docs",
+  "docs.netlify.com",
+  "devcenter.heroku.com",
+  "cypress.io",
+  "selenium.dev",
+  "docs.unity.com",
+  "docs.unrealengine.com",
+  "git-scm.com",
+  "nginx.org",
+  "httpd.apache.org",
+]);
+
+const WEB_FETCH_PREAPPROVED_HOSTNAME_ONLY = new Set<string>();
+const WEB_FETCH_PREAPPROVED_PATH_PREFIXES = new Map<string, string[]>();
+for (const entry of WEB_FETCH_PREAPPROVED_HOSTS) {
+  const slashIndex = entry.indexOf("/");
+  if (slashIndex === -1) {
+    WEB_FETCH_PREAPPROVED_HOSTNAME_ONLY.add(entry);
+    continue;
+  }
+
+  const hostname = entry.slice(0, slashIndex);
+  const pathPrefix = entry.slice(slashIndex);
+  const existingPrefixes = WEB_FETCH_PREAPPROVED_PATH_PREFIXES.get(hostname) ?? [];
+  existingPrefixes.push(pathPrefix);
+  WEB_FETCH_PREAPPROVED_PATH_PREFIXES.set(hostname, existingPrefixes);
+}
+
+type WebRedirectInfo = {
+  originalUrl: string;
+  redirectUrl: string;
+  statusCode: number;
+};
+
+type WebReadableContent = {
+  url: string;
+  contentType: string;
+  text: string;
+  preapproved: boolean;
+};
+
+type WebSearchHit = {
+  title: string;
+  url: string;
+};
+
+type WebSearchProviderResult = {
+  provider: "duckduckgo" | "bing";
+  hits: WebSearchHit[];
+};
+
+type DomainAnchorHit = WebSearchHit & {
+  score: number;
+};
+
+function isPreapprovedWebFetchHost(hostname: string, pathname: string): boolean {
+  if (WEB_FETCH_PREAPPROVED_HOSTNAME_ONLY.has(hostname)) {
+    return true;
+  }
+
+  const pathPrefixes = WEB_FETCH_PREAPPROVED_PATH_PREFIXES.get(hostname);
+  if (!pathPrefixes) {
+    return false;
+  }
+
+  return pathPrefixes.some(prefix => pathname === prefix || pathname.startsWith(`${prefix}/`));
+}
+
+function isPreapprovedWebFetchUrl(url: URL): boolean {
+  return isPreapprovedWebFetchHost(url.hostname, url.pathname);
+}
+
+function isPermittedWebRedirect(originalUrl: string, redirectUrl: string): boolean {
+  try {
+    const original = new URL(originalUrl);
+    const redirect = new URL(redirectUrl);
+
+    if (original.protocol !== redirect.protocol) {
+      return false;
+    }
+
+    if (original.port !== redirect.port) {
+      return false;
+    }
+
+    if (redirect.username || redirect.password) {
+      return false;
+    }
+
+    const stripWww = (hostname: string) => hostname.replace(/^www\./, "");
+    return stripWww(original.hostname) === stripWww(redirect.hostname);
+  } catch {
+    return false;
+  }
+}
+
+function getRedirectStatusText(statusCode: number): string {
+  switch (statusCode) {
+    case 301:
+      return "Moved Permanently";
+    case 302:
+      return "Found";
+    case 307:
+      return "Temporary Redirect";
+    case 308:
+      return "Permanent Redirect";
+    default:
+      return "Redirect";
+  }
+}
+
+function decodeHtmlEntities(value: string): string {
+  return value
+    .replace(/&amp;/gi, "&")
+    .replace(/&quot;/gi, '"')
+    .replace(/&#39;/gi, "'")
+    .replace(/&lt;/gi, "<")
+    .replace(/&gt;/gi, ">");
+}
+
+function normalizeDomainForComparison(domain: string): string {
+  return domain.trim().toLowerCase().replace(/^www\./, "");
+}
+
+function urlMatchesAllowedDomains(url: string, domains: string[]): boolean {
+  try {
+    const hostname = normalizeDomainForComparison(new URL(url).hostname);
+    return domains.some(domain => {
+      const normalizedDomain = normalizeDomainForComparison(domain);
+      return hostname === normalizedDomain || hostname.endsWith(`.${normalizedDomain}`);
+    });
+  } catch {
+    return false;
+  }
+}
+
+function urlMatchesBlockedDomains(url: string, domains: string[]): boolean {
+  return urlMatchesAllowedDomains(url, domains);
+}
+
+function filterWebSearchHits(
+  hits: WebSearchHit[],
+  options: {
+    allowedDomains?: string[];
+    blockedDomains?: string[];
+  } = {},
+): WebSearchHit[] {
+  const allowedDomains = options.allowedDomains?.filter(Boolean) ?? [];
+  const blockedDomains = options.blockedDomains?.filter(Boolean) ?? [];
+
+  return hits.filter(hit => {
+    if (allowedDomains.length > 0 && !urlMatchesAllowedDomains(hit.url, allowedDomains)) {
+      return false;
+    }
+
+    if (blockedDomains.length > 0 && urlMatchesBlockedDomains(hit.url, blockedDomains)) {
+      return false;
+    }
+
+    return true;
+  });
+}
+
+function truncateStructuredText(value: string, maxLength: number): string {
+  if (value.length <= maxLength) {
+    return value;
+  }
+  return `${value.slice(0, maxLength)}...`;
+}
+
+function cleanStructuredHtmlText(value: string): string {
+  return decodeHtmlEntities(value)
+    .replace(/<[^>]+>/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function isMeaningfulStructuredHtmlText(value: string): boolean {
+  const cleaned = cleanStructuredHtmlText(value);
+  if (!cleaned) {
+    return false;
+  }
+
+  if (/^(utf-8|en|zh|javascript:;?)$/i.test(cleaned)) {
+    return false;
+  }
+
+  if (/^&#x[0-9a-f]+;?$/i.test(value.trim())) {
+    return false;
+  }
+
+  if (/^[\d\s.]+$/.test(cleaned)) {
+    return false;
+  }
+
+  if (/^[\p{P}\p{S}\s]+$/u.test(cleaned)) {
+    return false;
+  }
+
+  return true;
+}
+
+function extractStructuredHtmlText(html: string, baseUrl: string): string {
+  const sections: string[] = [];
+  const title = [...html.matchAll(/<title[^>]*>([\s\S]*?)<\/title>/gi)]
+    .map(match => cleanStructuredHtmlText(match[1] ?? ""))
+    .find(Boolean);
+  if (title) {
+    sections.push(`Title: ${truncateStructuredText(title, 160)}`);
+  }
+
+  const description = [
+    ...html.matchAll(/<meta[^>]+name=["']description["'][^>]+content=["']([^"']+)["']/gi),
+    ...html.matchAll(/<meta[^>]+content=["']([^"']+)["'][^>]+name=["']description["'][^>]*>/gi),
+  ]
+    .map(match => cleanStructuredHtmlText(match[1] ?? ""))
+    .find(Boolean);
+  if (description) {
+    sections.push(`Description: ${truncateStructuredText(description, 280)}`);
+  }
+
+  const headings = [...html.matchAll(/<h[1-3][^>]*>([\s\S]*?)<\/h[1-3]>/gi)]
+    .map(match => cleanStructuredHtmlText(match[1] ?? ""))
+    .filter(isMeaningfulStructuredHtmlText);
+  if (headings.length > 0) {
+    sections.push(
+      "Headings:",
+      ...[...new Set(headings)].slice(0, 8).map(item => `- ${truncateStructuredText(item, 120)}`),
+    );
+  }
+
+  const visibleLinks: string[] = [];
+  const seenLinks = new Set<string>();
+  for (const match of html.matchAll(/<a[^>]*href=["']([^"']+)["'][^>]*>([\s\S]*?)<\/a>/gi)) {
+    const href = match[1]?.trim();
+    const text = cleanStructuredHtmlText(match[2] ?? "");
+    if (!href || !isMeaningfulStructuredHtmlText(text) || text.length > 40) {
+      continue;
+    }
+
+    let resolvedUrl: string;
+    try {
+      resolvedUrl = new URL(href, baseUrl).toString();
+    } catch {
+      continue;
+    }
+
+    const dedupeKey = `${text}@@${resolvedUrl}`;
+    if (seenLinks.has(dedupeKey)) {
+      continue;
+    }
+    seenLinks.add(dedupeKey);
+    visibleLinks.push(text);
+    if (visibleLinks.length >= 18) {
+      break;
+    }
+  }
+  if (visibleLinks.length > 0) {
+    sections.push(
+      "Visible links:",
+      ...visibleLinks.map(item => `- ${truncateStructuredText(item, 80)}`),
+    );
+  }
+
+  const actions = [...html.matchAll(/<(?:input|textarea|button)[^>]+(?:placeholder|value|aria-label)=["']([^"']+)["']/gi)]
+    .map(match => cleanStructuredHtmlText(match[1] ?? ""))
+    .filter(isMeaningfulStructuredHtmlText);
+  if (actions.length > 0) {
+    sections.push(
+      "Inputs or actions:",
+      ...[...new Set(actions)].slice(0, 10).map(item => `- ${truncateStructuredText(item, 80)}`),
+    );
+  }
+
+  const paragraphs = [...html.matchAll(/<p[^>]*>([\s\S]*?)<\/p>/gi)]
+    .map(match => cleanStructuredHtmlText(match[1] ?? ""))
+    .filter(item => isMeaningfulStructuredHtmlText(item) && item.length >= 20);
+  if (paragraphs.length > 0) {
+    sections.push(
+      "Body text:",
+      ...[...new Set(paragraphs)].slice(0, 4).map(item => `- ${truncateStructuredText(item, 220)}`),
+    );
+  }
+
+  const normalized = normalizeFetchedHtml(html);
+  const decodedNormalized = decodeHtmlEntities(normalized)
+    .replace(/<style[\s\S]*?<\/style>/gi, " ")
+    .replace(/<script[\s\S]*?<\/script>/gi, " ")
+    .replace(/[a-zA-Z0-9.#:_-]+\s*\{[^}]+\}/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+  if (sections.length === 0 && decodedNormalized) {
+    sections.push(`Visible text: ${truncateStructuredText(decodedNormalized, 1200)}`);
+  }
+
+  return sections.join("\n");
+}
+
+function normalizeWebContent(
+  rawText: string,
+  contentType: string,
+  sourceUrl?: string,
+): string {
+  if (contentType.includes("text/html")) {
+    return extractStructuredHtmlText(rawText, sourceUrl ?? "https://example.com/");
+  }
+
+  return rawText.trim();
+}
+
+function buildWebFetchExtractionPrompt(
+  content: string,
+  prompt: string,
+  preapproved: boolean,
+): string {
+  const guidelines = preapproved
+    ? "Provide a concise answer grounded in the fetched content above."
+    : [
+        "Provide a concise answer based only on the fetched content above.",
+        "Ignore page boilerplate, CSS, scripts, analytics text, and navigation noise unless the prompt explicitly asks for them.",
+        "Prefer the main visible content, headings, and primary actions or sections.",
+      ].join("\n");
+
+  return [
+    "Fetched web content:",
+    "---",
+    content,
+    "---",
+    "",
+    prompt,
+    "",
+    guidelines,
+  ].join("\n");
+}
+
+function composeSearchQuery(
+  query: string,
+  allowedDomains?: string[],
+  blockedDomains?: string[],
+): string {
+  const parts = [query.trim()];
+
+  for (const domain of allowedDomains ?? []) {
+    const normalizedDomain = domain.trim();
+    if (normalizedDomain) {
+      parts.push(`site:${normalizedDomain}`);
+    }
+  }
+
+  for (const domain of blockedDomains ?? []) {
+    const normalizedDomain = domain.trim();
+    if (normalizedDomain) {
+      parts.push(`-site:${normalizedDomain}`);
+    }
+  }
+
+  return parts.join(" ").trim();
+}
+
+function parseDuckDuckGoSearchResults(html: string): WebSearchHit[] {
+  const hits: WebSearchHit[] = [];
+  const anchorPattern = /<a[^>]*class="[^"]*result__a[^"]*"[^>]*href="([^"]+)"[^>]*>([\s\S]*?)<\/a>/gi;
+
+  for (const match of html.matchAll(anchorPattern)) {
+    const rawHref = match[1]?.trim();
+    const rawTitle = match[2]?.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
+
+    if (!rawHref || !rawTitle) {
+      continue;
+    }
+
+    let resolvedUrl = rawHref;
+    if (rawHref.startsWith("//")) {
+      resolvedUrl = `https:${rawHref}`;
+    } else if (rawHref.startsWith("/")) {
+      resolvedUrl = `https://duckduckgo.com${rawHref}`;
+    }
+
+    try {
+      const parsedUrl = new URL(resolvedUrl);
+      const redirectTarget = parsedUrl.searchParams.get("uddg");
+      if (redirectTarget) {
+        resolvedUrl = decodeURIComponent(redirectTarget);
+      }
+    } catch {
+      continue;
+    }
+
+    hits.push({
+      title: decodeHtmlEntities(rawTitle),
+      url: resolvedUrl,
+    });
+
+    if (hits.length >= WEB_SEARCH_RESULT_LIMIT) {
+      break;
+    }
+  }
+
+  return hits;
+}
+
+function parseBingSearchResults(html: string): WebSearchHit[] {
+  const hits: WebSearchHit[] = [];
+  const resultPattern = /<li[^>]*class="[^"]*\bb_algo\b[^"]*"[\s\S]*?<h2[^>]*>\s*<a[^>]*href="([^"]+)"[^>]*>([\s\S]*?)<\/a>\s*<\/h2>/gi;
+
+  for (const match of html.matchAll(resultPattern)) {
+    const rawHref = match[1]?.trim();
+    const rawTitle = match[2]?.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
+
+    if (!rawHref || !rawTitle) {
+      continue;
+    }
+
+    if (!/^https?:\/\//i.test(rawHref)) {
+      continue;
+    }
+
+    hits.push({
+      title: decodeHtmlEntities(rawTitle),
+      url: rawHref,
+    });
+
+    if (hits.length >= WEB_SEARCH_RESULT_LIMIT) {
+      break;
+    }
+  }
+
+  return hits;
+}
+
+function parseDomainAnchorsFromHtml(
+  html: string,
+  baseUrl: string,
+  allowedDomain: string,
+  query: string,
+): WebSearchHit[] {
+  const seen = new Set<string>();
+  const scoredHits: DomainAnchorHit[] = [];
+  const queryTerms = query
+    .toLowerCase()
+    .split(/[^a-z0-9]+/)
+    .map(term => term.trim())
+    .filter(term => term.length >= 3);
+  const anchorPattern = /<a[^>]*href="([^"]+)"[^>]*>([\s\S]*?)<\/a>/gi;
+
+  for (const match of html.matchAll(anchorPattern)) {
+    const rawHref = match[1]?.trim();
+    const rawText = match[2]?.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
+
+    if (!rawHref || !rawText) {
+      continue;
+    }
+
+    let resolvedUrl: string;
+    try {
+      resolvedUrl = new URL(rawHref, baseUrl).toString();
+    } catch {
+      continue;
+    }
+
+    if (!urlMatchesAllowedDomains(resolvedUrl, [allowedDomain])) {
+      continue;
+    }
+
+    if (seen.has(resolvedUrl)) {
+      continue;
+    }
+    seen.add(resolvedUrl);
+
+    const combinedText = `${rawText} ${resolvedUrl}`.toLowerCase();
+    let score = 0;
+    for (const term of queryTerms) {
+      if (combinedText.includes(term)) {
+        score += 2;
+      }
+      if (resolvedUrl.toLowerCase().includes(term)) {
+        score += 1;
+      }
+    }
+
+    scoredHits.push({
+      title: decodeHtmlEntities(rawText),
+      url: resolvedUrl,
+      score,
+    });
+  }
+
+  scoredHits.sort((left, right) => {
+    if (right.score !== left.score) {
+      return right.score - left.score;
+    }
+    return left.url.localeCompare(right.url);
+  });
+
+  const positiveHits = scoredHits.filter(hit => hit.score > 0);
+  const fallbackHits = positiveHits.length > 0 ? positiveHits : scoredHits.slice(0, WEB_SEARCH_RESULT_LIMIT);
+
+  return fallbackHits.slice(0, WEB_SEARCH_RESULT_LIMIT).map(hit => ({
+    title: hit.title,
+    url: hit.url,
+  }));
+}
+
+async function fetchAllowedDomainFallbackHits(
+  query: string,
+  allowedDomains: string[],
+  signal?: AbortSignal,
+): Promise<WebSearchHit[]> {
+  const hits: WebSearchHit[] = [];
+  const seen = new Set<string>();
+
+  for (const domain of allowedDomains) {
+    const normalizedDomain = domain.trim();
+    if (!normalizedDomain) {
+      continue;
+    }
+
+    try {
+      const response = await fetchWithTimeout(
+        `https://${normalizedDomain}/`,
+        {
+          headers: {
+            Accept: "text/html, text/plain, */*",
+            "User-Agent": WEB_TOOL_USER_AGENT,
+          },
+        },
+        WEB_TOOL_TIMEOUT_MS,
+        signal,
+      );
+
+      if (!response.ok) {
+        continue;
+      }
+
+      const html = await response.text();
+      for (const hit of parseDomainAnchorsFromHtml(
+        html,
+        `https://${normalizedDomain}/`,
+        normalizedDomain,
+        query,
+      )) {
+        if (seen.has(hit.url)) {
+          continue;
+        }
+        seen.add(hit.url);
+        hits.push(hit);
+        if (hits.length >= WEB_SEARCH_RESULT_LIMIT) {
+          return hits;
+        }
+      }
+    } catch {
+      continue;
+    }
+  }
+
+  return hits;
+}
+
+async function fetchWebSearchResults(
+  query: string,
+  options: {
+    signal?: AbortSignal;
+    allowedDomains?: string[];
+    blockedDomains?: string[];
+  } = {},
+): Promise<WebSearchProviderResult> {
+  const effectiveQuery = composeSearchQuery(
+    query,
+    options.allowedDomains,
+    options.blockedDomains,
+  );
+
+  const attemptDuckDuckGo = async (): Promise<WebSearchProviderResult> => {
+    const response = await fetchWithTimeout(
+      `https://duckduckgo.com/html/?q=${encodeURIComponent(effectiveQuery)}`,
+      {
+        headers: {
+          Accept: "text/html, text/plain, */*",
+          "User-Agent": WEB_TOOL_USER_AGENT,
+        },
+      },
+      WEB_TOOL_TIMEOUT_MS,
+      options.signal,
+    );
+
+    if (!response.ok) {
+      throw new Error(`DuckDuckGo search failed with status ${response.status}`);
+    }
+
+    const html = await response.text();
+    return {
+      provider: "duckduckgo",
+      hits: filterWebSearchHits(parseDuckDuckGoSearchResults(html), options),
+    };
+  };
+
+  const attemptBing = async (): Promise<WebSearchProviderResult> => {
+    const response = await fetchWithTimeout(
+      `https://cn.bing.com/search?q=${encodeURIComponent(effectiveQuery)}`,
+      {
+        headers: {
+          Accept: "text/html, text/plain, */*",
+          "User-Agent": WEB_TOOL_USER_AGENT,
+        },
+      },
+      WEB_TOOL_TIMEOUT_MS,
+      options.signal,
+    );
+
+    if (!response.ok) {
+      throw new Error(`Bing search failed with status ${response.status}`);
+    }
+
+    const html = await response.text();
+    return {
+      provider: "bing",
+      hits: filterWebSearchHits(parseBingSearchResults(html), options),
+    };
+  };
+
+  try {
+    return await attemptDuckDuckGo();
+  } catch (duckDuckGoError) {
+    try {
+      return await attemptBing();
+    } catch (bingError) {
+      const primaryMessage = duckDuckGoError instanceof Error
+        ? duckDuckGoError.message
+        : String(duckDuckGoError);
+      const fallbackMessage = bingError instanceof Error
+        ? bingError.message
+        : String(bingError);
+      throw new Error(
+        `Web search failed. DuckDuckGo: ${primaryMessage}. Bing fallback: ${fallbackMessage}.`,
+      );
+    }
+  }
+}
+
+async function fetchWithTimeout(
+  url: string,
+  init: RequestInit,
+  timeoutMs: number,
+  upstreamSignal?: AbortSignal,
+): Promise<Response> {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(new Error("Request timed out")), timeoutMs);
+  const abortListener = () => controller.abort(upstreamSignal?.reason);
+
+  if (upstreamSignal) {
+    if (upstreamSignal.aborted) {
+      controller.abort(upstreamSignal.reason);
+    } else {
+      upstreamSignal.addEventListener("abort", abortListener, { once: true });
+    }
+  }
+
+  try {
+    return await fetch(url, {
+      ...init,
+      signal: controller.signal,
+    });
+  } finally {
+    clearTimeout(timeout);
+    upstreamSignal?.removeEventListener("abort", abortListener);
+  }
+}
+
+async function fetchWithPermittedRedirects(
+  url: string,
+  options: {
+    signal?: AbortSignal;
+    headers?: Record<string, string>;
+    redirectChecker: (originalUrl: string, redirectUrl: string) => boolean;
+    depth?: number;
+  },
+): Promise<Response | WebRedirectInfo> {
+  const depth = options.depth ?? 0;
+  if (depth > WEB_TOOL_REDIRECT_LIMIT) {
+    throw new Error(`Too many redirects (exceeded ${WEB_TOOL_REDIRECT_LIMIT})`);
+  }
+
+  const response = await fetchWithTimeout(
+    url,
+    {
+      headers: options.headers,
+      redirect: "manual",
+    },
+    WEB_TOOL_TIMEOUT_MS,
+    options.signal,
+  );
+
+  if ([301, 302, 307, 308].includes(response.status)) {
+    const location = response.headers.get("location");
+    if (!location) {
+      throw new Error("Redirect missing Location header");
+    }
+
+    const redirectUrl = new URL(location, url).toString();
+    if (options.redirectChecker(url, redirectUrl)) {
+      return fetchWithPermittedRedirects(redirectUrl, {
+        ...options,
+        depth: depth + 1,
+      });
+    }
+
+    return {
+      originalUrl: url,
+      redirectUrl,
+      statusCode: response.status,
+    };
+  }
+
+  return response;
+}
+
+async function fetchReadableWebContent(
+  url: string,
+  options: {
+    signal?: AbortSignal;
+    upgradeInsecureHttp?: boolean;
+  } = {},
+): Promise<WebReadableContent | WebRedirectInfo> {
+  const normalizedUrl = normalizeHttpUrl(url, {
+    upgradeInsecureHttp: options.upgradeInsecureHttp ?? false,
+  });
+  const response = await fetchWithPermittedRedirects(normalizedUrl.toString(), {
+    signal: options.signal,
+    headers: {
+      Accept: "text/markdown, text/html, text/plain, */*",
+      "User-Agent": WEB_TOOL_USER_AGENT,
+    },
+    redirectChecker: isPermittedWebRedirect,
+  });
+
+  if ("redirectUrl" in response) {
+    return response;
+  }
+
+  if (!response.ok) {
+    throw new Error(`Request failed with status ${response.status}`);
+  }
+
+  const contentType = response.headers.get("content-type") || "";
+  const rawText = await response.text();
+
+  return {
+    url: normalizedUrl.toString(),
+    contentType,
+    text: normalizeWebContent(rawText, contentType),
+    preapproved: isPreapprovedWebFetchUrl(normalizedUrl),
+  };
 }
 
 function ensureTrailingNewline(value: string): string {
@@ -2171,6 +3019,148 @@ const handlers: Record<string, ToolHandler> = {
     return {
       summary: `Fetched ${parsedUrl.toString()}`,
       content: toSafeText(normalizedText || "[empty response]"),
+    };
+  },
+
+  async WebFetch(input, context) {
+    const urlValue = typeof input.url === "string" ? input.url.trim() : "";
+    const promptValue = typeof input.prompt === "string" ? input.prompt.trim() : "";
+
+    if (!urlValue) {
+      throw new Error("url is required");
+    }
+
+    if (!promptValue) {
+      throw new Error("prompt is required");
+    }
+
+    const response = await fetchReadableWebContent(urlValue, {
+      signal: context.abortSignal,
+      upgradeInsecureHttp: true,
+    });
+
+    if ("redirectUrl" in response) {
+      const statusText = getRedirectStatusText(response.statusCode);
+      const message = [
+        "REDIRECT DETECTED: The URL redirects to a different host.",
+        "",
+        `Original URL: ${response.originalUrl}`,
+        `Redirect URL: ${response.redirectUrl}`,
+        `Status: ${response.statusCode} ${statusText}`,
+        "",
+        "To complete your request, call WebFetch again with:",
+        `- url: "${response.redirectUrl}"`,
+        `- prompt: "${promptValue}"`,
+      ].join("\n");
+
+      return {
+        summary: `WebFetch redirect for ${response.originalUrl}`,
+        content: message,
+      };
+    }
+
+    const readableContent = toSafeText(
+      response.text || "[empty response]",
+      MAX_WEB_TOOL_CONTENT_LENGTH,
+    );
+    const shouldExtractWithRuntime =
+      !!context.extractWebContent &&
+      (
+        response.contentType.includes("text/html") ||
+        !response.preapproved
+      );
+
+    if (shouldExtractWithRuntime) {
+      const extractedContent = await context.extractWebContent!({
+        url: response.url,
+        prompt: promptValue,
+        content: buildWebFetchExtractionPrompt(
+          readableContent,
+          promptValue,
+          response.preapproved,
+        ),
+        contentType: response.contentType,
+        preapproved: response.preapproved,
+        abortSignal: context.abortSignal,
+      });
+
+      return {
+        summary: `Fetched ${response.url} for WebFetch`,
+        content: [
+          `URL: ${response.url}`,
+          `Content-Type: ${response.contentType || "unknown"}`,
+          "",
+          extractedContent.trim() || "[empty extraction result]",
+        ].join("\n"),
+      };
+    }
+
+    const extractionInstruction = response.preapproved
+      ? `Use the fetched content below to answer this extraction request: ${promptValue}`
+      : `Use only the fetched content below to answer this extraction request: ${promptValue}`;
+
+    return {
+      summary: `Fetched ${response.url} for WebFetch`,
+      content: [
+        `URL: ${response.url}`,
+        `Content-Type: ${response.contentType || "unknown"}`,
+        "",
+        extractionInstruction,
+        "",
+        "Fetched content:",
+        readableContent,
+      ].join("\n"),
+    };
+  },
+
+  async WebSearch(input, context) {
+    const query = typeof input.query === "string" ? input.query.trim() : "";
+    const allowedDomains = Array.isArray(input.allowed_domains)
+      ? input.allowed_domains.filter((value): value is string => typeof value === "string" && value.trim() !== "")
+      : undefined;
+    const blockedDomains = Array.isArray(input.blocked_domains)
+      ? input.blocked_domains.filter((value): value is string => typeof value === "string" && value.trim() !== "")
+      : undefined;
+
+    if (!query) {
+      throw new Error("Error: Missing query");
+    }
+
+    if (allowedDomains?.length && blockedDomains?.length) {
+      throw new Error(
+        "Error: Cannot specify both allowed_domains and blocked_domains in the same request",
+      );
+    }
+
+    const { hits: providerHits, provider } = await fetchWebSearchResults(query, {
+      signal: context.abortSignal,
+      allowedDomains,
+      blockedDomains,
+    });
+    const hits =
+      providerHits.length === 0 && allowedDomains && allowedDomains.length > 0
+        ? await fetchAllowedDomainFallbackHits(query, allowedDomains, context.abortSignal)
+        : providerHits;
+
+    const sections = [
+      `Web search results for query: "${query}"`,
+      "",
+    ];
+
+    if (hits.length > 0) {
+      sections.push(`Links: ${JSON.stringify(hits)}`);
+    } else {
+      sections.push("No links found.");
+    }
+
+    sections.push("");
+    sections.push(`Search provider: ${provider}`);
+    sections.push("");
+    sections.push("REMINDER: You MUST include the sources above in your response to the user using markdown hyperlinks.");
+
+    return {
+      summary: `Searched the web for "${query}"`,
+      content: sections.join("\n"),
     };
   },
 
@@ -3693,6 +4683,60 @@ export const toolDefinitions: ToolDefinition[] = [
     },
   },
   {
+    name: "WebFetch",
+    description:
+      "Fetch content from a URL and return readable content scoped to a specific extraction prompt. Cross-host redirects are not followed automatically.",
+    input_schema: {
+      type: "object",
+      properties: {
+        url: {
+          type: "string",
+          description: "The URL to fetch content from.",
+        },
+        prompt: {
+          type: "string",
+          description: "The extraction request to answer using the fetched content.",
+        },
+      },
+      required: ["url", "prompt"],
+    },
+    annotations: {
+      readOnlyHint: true,
+      openWorldHint: true,
+      title: "Web fetch",
+    },
+  },
+  {
+    name: "WebSearch",
+    description:
+      "Search the web for current information and return link-bearing results. Supports allow/block domain filters.",
+    input_schema: {
+      type: "object",
+      properties: {
+        query: {
+          type: "string",
+          description: "The search query to execute.",
+        },
+        allowed_domains: {
+          type: "array",
+          description: "Optional list of domains to include in the search.",
+          items: { type: "string" },
+        },
+        blocked_domains: {
+          type: "array",
+          description: "Optional list of domains to exclude from the search.",
+          items: { type: "string" },
+        },
+      },
+      required: ["query"],
+    },
+    annotations: {
+      readOnlyHint: true,
+      openWorldHint: true,
+      title: "Web search",
+    },
+  },
+  {
     name: "fetch_url",
     description: "Fetch a webpage or text URL and return the readable text content.",
     input_schema: {
@@ -3970,9 +5014,21 @@ export const toolDefinitions: ToolDefinition[] = [
 
 export function getBuiltInToolDefinitions(options: {
   lspAvailable?: boolean;
+  includeLegacyFetchUrl?: boolean;
 } = {}): ToolDefinition[] {
   const lspAvailable = options.lspAvailable ?? true;
-  return toolDefinitions.filter(tool => lspAvailable || tool.name !== LSP_TOOL_NAME);
+  const includeLegacyFetchUrl = options.includeLegacyFetchUrl ?? false;
+  return toolDefinitions.filter(tool => {
+    if (!lspAvailable && tool.name === LSP_TOOL_NAME) {
+      return false;
+    }
+
+    if (!includeLegacyFetchUrl && tool.name === "fetch_url") {
+      return false;
+    }
+
+    return true;
+  });
 }
 
 export function getOpenAIToolsPayload(tools: ToolDefinition[] = toolDefinitions) {

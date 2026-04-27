@@ -2,7 +2,45 @@ import type { HookDefinition } from "../hooksRegistry";
 import { type AgentRunner, type HookContext, type HookEvent, type HookResult, executeHook } from "./hooksExecutor";
 
 export interface TriggerResult {
-  promptInjection?: string;
+  promptPrefixInjection?: string;
+  promptSuffixInjection?: string;
+  blocked?: boolean;
+}
+
+function matchesPattern(matchQuery: string, matcher: string): boolean {
+  if (!matcher || matcher === "*") {
+    return true;
+  }
+
+  if (/^[a-zA-Z0-9_|-]+$/.test(matcher)) {
+    if (matcher.includes("|")) {
+      return matcher
+        .split("|")
+        .map(part => part.trim())
+        .filter(Boolean)
+        .includes(matchQuery);
+    }
+    return matchQuery === matcher.trim();
+  }
+
+  try {
+    return new RegExp(matcher).test(matchQuery);
+  } catch {
+    return false;
+  }
+}
+
+function resolveMatchQuery(
+  event: HookEvent,
+  context: Omit<HookContext, "event">,
+): string | undefined {
+  switch (event) {
+    case "PreToolCall":
+    case "PostToolCall":
+      return context.toolName;
+    default:
+      return undefined;
+  }
 }
 
 export async function triggerHooks(
@@ -11,13 +49,24 @@ export async function triggerHooks(
   context: Omit<HookContext, "event">,
   agentRunner?: AgentRunner,
 ): Promise<TriggerResult> {
-  const matching = hooks.filter(h => h.events.includes(event));
+  const matchQuery = resolveMatchQuery(event, context);
+  const matching = hooks.filter(h => {
+    if (!h.events.includes(event)) {
+      return false;
+    }
+    if (!matchQuery || !h.matcher?.trim()) {
+      return true;
+    }
+    return matchesPattern(matchQuery, h.matcher.trim());
+  });
   if (matching.length === 0) {
     return {};
   }
 
   const fullContext: HookContext = { event, ...context };
-  const injectedParts: string[] = [];
+  const prefixParts: string[] = [];
+  const suffixParts: string[] = [];
+  let blocked = false;
 
   for (const hook of matching) {
     let result: HookResult;
@@ -28,19 +77,28 @@ export async function triggerHooks(
     }
 
     if (result.injected) {
-      injectedParts.push(result.injected);
+      if (result.position === "prefix") {
+        prefixParts.push(result.injected);
+      } else {
+        suffixParts.push(result.injected);
+      }
     }
 
     if (result.blocked) {
+      blocked = true;
       break;
     }
   }
 
-  if (injectedParts.length === 0) {
-    return {};
-  }
-
-  return { promptInjection: injectedParts.join("\n\n") };
+  return {
+    ...(prefixParts.length > 0
+      ? { promptPrefixInjection: prefixParts.join("\n\n") }
+      : {}),
+    ...(suffixParts.length > 0
+      ? { promptSuffixInjection: suffixParts.join("\n\n") }
+      : {}),
+    ...(blocked ? { blocked: true } : {}),
+  };
 }
 
 export function buildInjectedPrompt(

@@ -2,6 +2,10 @@ import type {
   ProviderConfig as AdapterProviderConfig,
 } from "./agent/providers/IProviderAdapter";
 import {
+  getInstalledSkillByEntrypoint,
+  loadInstalledSkills,
+} from "./installedSkillsRegistry";
+import {
   handleLocalPromptCommand,
   listRegisteredPromptSlashCommands,
   parsePromptSlashCommand,
@@ -11,6 +15,7 @@ import type { ToolDefinition } from "./toolRuntime";
 import type { ProviderRuntimeOptions } from "./thinkingEffort/types";
 import type { EffortLevel } from "./thinkingEffort/types";
 import type { ProfileStore } from "./userModel/profileStore";
+import type { HookDefinition } from "./hooksRegistry";
 
 type RuntimeLike = {
   getToolContext?(mode?: string): unknown;
@@ -54,7 +59,55 @@ const SUPPORTED_ELECTRON_PROMPT_COMMANDS = new Set([
   ...SUPPORTED_ELECTRON_RUNTIME_PROMPT_COMMANDS,
 ]);
 
-function buildElectronPromptCommandHelp(): string {
+async function buildElectronPromptCommandHelp(options: {
+  args: string;
+  workspaceRoot: string;
+}): Promise<string> {
+  const normalizedArgs = (() => {
+    const trimmed = options.args.trim().toLowerCase();
+    if (!trimmed) {
+      return "";
+    }
+    return trimmed.startsWith("/") ? trimmed : `/${trimmed}`;
+  })();
+  const installedSkills = await loadInstalledSkills(options.workspaceRoot);
+
+  if (normalizedArgs) {
+    const registeredCommand = listRegisteredPromptSlashCommands().find(command =>
+      SUPPORTED_ELECTRON_PROMPT_COMMANDS.has(command.name) &&
+      command.name === normalizedArgs,
+    );
+    if (registeredCommand) {
+      return [
+        `Command: ${registeredCommand.name}`,
+        `Stage: ${registeredCommand.stage}`,
+        "Source: built-in",
+        `Description: ${registeredCommand.description}`,
+      ].join("\n");
+    }
+
+    const installedSkill = getInstalledSkillByEntrypoint(
+      installedSkills,
+      normalizedArgs,
+    );
+    if (installedSkill) {
+      return [
+        `Command: ${installedSkill.entrypoint}`,
+        `Source: installed-${installedSkill.source}`,
+        `Skill: ${installedSkill.title}`,
+        `Summary: ${installedSkill.summary}`,
+        `When to use: ${installedSkill.whenToUse ?? "(none)"}`,
+        `Path: ${installedSkill.skillPath}`,
+        `Shell: ${installedSkill.shell ?? "(default)"}`,
+        `Allowed tools: ${installedSkill.allowedTools.join(", ") || "(none)"}`,
+        `Model: ${installedSkill.modelOverride ?? "(inherit)"}`,
+        `Effort: ${installedSkill.effort ?? "(inherit)"}`,
+      ].join("\n");
+    }
+
+    return `Unknown slash command "${normalizedArgs}". Use /commands to list available commands.`;
+  }
+
   const supportedCommands = listRegisteredPromptSlashCommands().filter(command =>
     SUPPORTED_ELECTRON_PROMPT_COMMANDS.has(command.name),
   );
@@ -65,7 +118,7 @@ function buildElectronPromptCommandHelp(): string {
     command => command.stage === "runtime",
   );
 
-  return [
+  const lines = [
     "Available slash commands in the Electron desktop shell:",
     "",
     "Local commands:",
@@ -75,7 +128,20 @@ function buildElectronPromptCommandHelp(): string {
     ...runtimeCommands.map(command => `- ${command.name}: ${command.description}`),
     "",
     "Unavailable in this shell: /plan, /exitplan",
-  ].join("\n");
+  ];
+
+  if (installedSkills.length > 0) {
+    lines.push("");
+    lines.push("Installed skill commands:");
+    lines.push(
+      ...installedSkills.map(
+        skill =>
+          `- ${skill.entrypoint}: ${skill.summary} [installed-${skill.source}]`,
+      ),
+    );
+  }
+
+  return lines.join("\n");
 }
 
 function buildUnsupportedElectronPromptCommandReply(commandName: string): string {
@@ -147,6 +213,8 @@ export async function handleElectronPromptCommand(options: {
     runtimeOptions: ProviderRuntimeOptions,
     effortLevel: EffortLevel | undefined,
   ) => Promise<boolean>;
+  getSessionInstalledSkillHooks?: () => HookDefinition[];
+  registerSessionInstalledSkillHooks?: (hooks: HookDefinition[]) => HookDefinition[];
   profileStore?: ProfileStore;
 }): Promise<ElectronPromptCommandResult> {
   const parsedCommand = parsePromptSlashCommand(options.prompt);
@@ -155,7 +223,13 @@ export async function handleElectronPromptCommand(options: {
   }
 
   if (parsedCommand.name === "/commands") {
-    return { kind: "reply", reply: buildElectronPromptCommandHelp() };
+    return {
+      kind: "reply",
+      reply: await buildElectronPromptCommandHelp({
+        args: parsedCommand.args,
+        workspaceRoot: options.workspaceRoot,
+      }),
+    };
   }
 
   const localReply = await handleLocalPromptCommand({
@@ -201,6 +275,9 @@ export async function handleElectronPromptCommand(options: {
     handleUltrareviewCommand: options.handleUltrareviewCommand,
     handleUltraverifyCommand: options.handleUltraverifyCommand,
     handleVerificationCommand: options.handleVerificationCommand,
+    getSessionInstalledSkillHooks: options.getSessionInstalledSkillHooks,
+    registerSessionInstalledSkillHooks:
+      options.registerSessionInstalledSkillHooks,
   });
 
   if (result.kind === "reply") {

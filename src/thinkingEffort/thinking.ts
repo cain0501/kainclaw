@@ -1,4 +1,5 @@
 import type { ProviderConfig } from "../agent/providers/IProviderAdapter";
+import { getAppliedEffortLevel } from "./effort";
 import { isFastModeActive } from "./fastMode";
 import { hasOfficialAnthropicEndpoint, normalizeProviderModel } from "./providerSupport";
 import type { EffortLevel, ProviderRuntimeOptions, ThinkingConfig } from "./types";
@@ -68,9 +69,11 @@ export function buildProviderRuntimeOptions(
   effortLevel: EffortLevel | undefined,
   fastMode: boolean | undefined,
 ): ProviderRuntimeOptions {
+  const appliedEffortLevel = getAppliedEffortLevel(config, effortLevel);
+
   return {
-    effortLevel,
-    thinkingConfig: resolveThinkingConfig(config, effortLevel),
+    effortLevel: appliedEffortLevel,
+    thinkingConfig: resolveThinkingConfig(config, appliedEffortLevel),
     fastMode: isFastModeActive(config, fastMode),
   };
 }

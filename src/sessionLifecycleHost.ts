@@ -171,6 +171,7 @@ export function clearConversationHostState(options: {
   resetActivities: () => void;
   clearCachedTools: () => void;
   disposeSwarm: () => void;
+  clearCurrentSessionInstalledSkillHooks?: () => void;
   postState: () => void;
   createConversationId?: () => ReturnType<typeof randomUUID>;
 }): void {
@@ -192,5 +193,6 @@ export function clearConversationHostState(options: {
   options.resetActivities();
   options.clearCachedTools();
   options.disposeSwarm();
+  options.clearCurrentSessionInstalledSkillHooks?.();
   options.postState();
 }
