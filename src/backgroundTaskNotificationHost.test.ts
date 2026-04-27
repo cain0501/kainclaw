@@ -135,6 +135,26 @@ describe("backgroundTaskNotificationHost", () => {
     expect(hostedReviewNotification).toContain("Hosted review completed");
     expect(hostedReviewNotification).toContain("### Findings");
     expect(hostedReviewNotification).toContain("- issue 2");
+
+    const hostedVerificationNotification = formatBackgroundTaskNotification({
+      id: "remote-verify-1",
+      taskType: "remote_agent",
+      status: "failed",
+      description: "Hosted verification: HEAD~2..HEAD",
+      command: "/ultraverify HEAD~2..HEAD",
+      metadata: {
+        remoteTaskType: "claude_cli_verification",
+      },
+      outputPath: "E:\\repo\\remote-verifications\\remote-verify-1\\output.log",
+      result: "### Check: build\nResult: FAIL\nVERDICT: FAIL",
+      error: "Remote verification finished with VERDICT: FAIL.",
+      output: "### Check: build\nResult: FAIL\nVERDICT: FAIL",
+      createdAt: 1,
+      updatedAt: 4,
+    });
+
+    expect(hostedVerificationNotification).toContain("Hosted verification finished with issues");
+    expect(hostedVerificationNotification).toContain("VERDICT: FAIL");
   });
 
   it("delivers notifications once and marks tasks as notified", async () => {
@@ -175,6 +195,21 @@ describe("backgroundTaskNotificationHost", () => {
         createdAt: 1,
         updatedAt: 4,
       },
+      {
+        id: "remote-verify-1",
+        taskType: "remote_agent",
+        status: "completed",
+        description: "Hosted verification: HEAD~2..HEAD",
+        command: "/ultraverify HEAD~2..HEAD",
+        metadata: {
+          remoteTaskType: "claude_cli_verification",
+        },
+        outputPath: "E:\\repo\\remote-verifications\\remote-verify-1\\output.log",
+        result: "### Check: build\nVERDICT: PASS",
+        output: "### Check: build\nVERDICT: PASS",
+        createdAt: 1,
+        updatedAt: 5,
+      },
     ]);
     const recordAssistantReply = vi.fn(async () => undefined);
 
@@ -183,8 +218,8 @@ describe("backgroundTaskNotificationHost", () => {
       recordAssistantReply,
     });
 
-    expect(await bindings.pollBackgroundTaskNotifications()).toBe(2);
-    expect(recordAssistantReply).toHaveBeenCalledTimes(2);
+    expect(await bindings.pollBackgroundTaskNotifications()).toBe(3);
+    expect(recordAssistantReply).toHaveBeenCalledTimes(3);
     expect(recordAssistantReply).toHaveBeenNthCalledWith(
       1,
       expect.stringContaining("Background task completed"),
@@ -193,6 +228,11 @@ describe("backgroundTaskNotificationHost", () => {
     expect(recordAssistantReply).toHaveBeenNthCalledWith(
       2,
       expect.stringContaining("### Findings"),
+      false,
+    );
+    expect(recordAssistantReply).toHaveBeenNthCalledWith(
+      3,
+      expect.stringContaining("VERDICT: PASS"),
       false,
     );
 

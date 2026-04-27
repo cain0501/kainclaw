@@ -175,6 +175,23 @@ export type ToolDefinition = {
   aliases?: string[];
 };
 
+export function dedupeToolDefinitionsByName<T extends { name: string }>(
+  tools: readonly T[],
+): T[] {
+  const seen = new Set<string>();
+  const deduped: T[] = [];
+
+  for (const tool of tools) {
+    if (seen.has(tool.name)) {
+      continue;
+    }
+    seen.add(tool.name);
+    deduped.push(tool);
+  }
+
+  return deduped;
+}
+
 export type WriteApprovalRequest = {
   kind: "write_file" | "replace_in_file";
   path: string;
@@ -3033,9 +3050,7 @@ const handlers: Record<string, ToolHandler> = {
       }),
       ...(context.mcp ? await context.mcp.getToolDefinitions() : []),
     ];
-    const dedupedTools = Array.from(
-      new Map(availableTools.map(tool => [tool.name, tool])).values(),
-    );
+    const dedupedTools = dedupeToolDefinitionsByName(availableTools);
     const matches = searchToolDefinitions(dedupedTools, query, maxResults);
 
     return {
@@ -3961,7 +3976,7 @@ export function getBuiltInToolDefinitions(options: {
 }
 
 export function getOpenAIToolsPayload(tools: ToolDefinition[] = toolDefinitions) {
-  return tools.map(tool => ({
+  return dedupeToolDefinitionsByName(tools).map(tool => ({
     type: "function" as const,
     function: {
       name: tool.name,

@@ -9,6 +9,7 @@ const {
   handleVerificationPromptCommandMock,
   handleReviewPromptCommandMock,
   launchHostedReviewWithHostMock,
+  launchHostedVerificationWithHostMock,
 } = vi.hoisted(() => ({
   runVerificationInspectionSessionMock: vi.fn(),
   runReviewInspectionSessionMock: vi.fn(),
@@ -17,6 +18,7 @@ const {
   handleVerificationPromptCommandMock: vi.fn(),
   handleReviewPromptCommandMock: vi.fn(),
   launchHostedReviewWithHostMock: vi.fn(),
+  launchHostedVerificationWithHostMock: vi.fn(),
 }));
 
 vi.mock("./inspectionSessionHost", () => ({
@@ -38,9 +40,14 @@ vi.mock("./remoteReviewHost", () => ({
   launchHostedReviewWithHost: launchHostedReviewWithHostMock,
 }));
 
+vi.mock("./remoteVerificationHost", () => ({
+  launchHostedVerificationWithHost: launchHostedVerificationWithHostMock,
+}));
+
 import {
   handleReviewCommandWithHost,
   handleUltrareviewCommandWithHost,
+  handleUltraverifyCommandWithHost,
   handleVerificationCommandWithHost,
   runReviewFromToolWithHost,
   runReviewSessionWithHost,
@@ -189,6 +196,7 @@ describe("inspectionHost", () => {
       backgroundTaskHost: {
         runBuiltInAgentSession: vi.fn(),
         buildFollowUpMessage: vi.fn(() => "follow-up"),
+        runDetachedRemoteVerification: vi.fn(),
       } as any,
       findActiveBuiltInAgentTask: vi.fn(async () => undefined),
       createProviderAdapter: vi.fn(() => ({}) as any),
@@ -252,6 +260,7 @@ describe("inspectionHost", () => {
       backgroundTaskHost: {
         runBuiltInAgentSession: vi.fn(),
         buildFollowUpMessage: vi.fn(() => "follow-up"),
+        runDetachedRemoteVerification: vi.fn(),
       } as any,
       findActiveBuiltInAgentTask: vi.fn(async () => undefined),
       createProviderAdapter: vi.fn(() => ({}) as any),
@@ -312,6 +321,48 @@ describe("inspectionHost", () => {
 
     expect(handled).toBe(true);
     expect(launchHostedReviewWithHostMock).not.toHaveBeenCalled();
+    expect(recordAssistantReply).toHaveBeenCalledWith(
+      expect.stringContaining("Claude CLI"),
+      false,
+    );
+  });
+
+  it("rejects /ultraverify when the active provider is not Claude CLI", async () => {
+    const recordAssistantReply = vi.fn(async () => undefined);
+
+    const handled = await handleUltraverifyCommandWithHost({
+      commandText: "/ultraverify HEAD~2..HEAD",
+      workspaceRoot: "E:\\repo",
+      config: { type: "anthropic", apiKey: "secret", model: "claude-sonnet" },
+      envMap: { HELLO: "world" },
+      runtime: {
+        getToolContext: () =>
+          ({ workspaceRoot: "E:\\repo", invokerKind: "main" }) as any,
+      } as any,
+      tools: [],
+      runtimeOptions: { fastMode: true },
+      effortLevel: "high",
+      sessionMessages: [{ role: "user", content: "请验证这个改动" }],
+      blockedByPlanMode: false,
+      getConversationHistory: () => [{ role: "user", content: "请验证这个改动" }],
+      getPendingPlanVerification: () => undefined,
+      backgroundTaskHost: {
+        runBuiltInAgentSession: vi.fn(),
+        buildFollowUpMessage: vi.fn(),
+        runDetachedRemoteReview: vi.fn(),
+        runDetachedRemoteVerification: vi.fn(),
+      } as any,
+      addPhaseActivity: vi.fn(() => "activity-ultra-verify-1"),
+      finishPhaseActivity: vi.fn(),
+      recordAssistantReply,
+      setCompanionState: vi.fn(),
+      clearStreamingText: vi.fn(),
+      updateMood: vi.fn(async () => undefined),
+      isAbortLikeError: vi.fn(() => false),
+    });
+
+    expect(handled).toBe(true);
+    expect(launchHostedVerificationWithHostMock).not.toHaveBeenCalled();
     expect(recordAssistantReply).toHaveBeenCalledWith(
       expect.stringContaining("Claude CLI"),
       false,
@@ -401,6 +452,85 @@ describe("inspectionHost", () => {
     expect(updateMood).toHaveBeenCalledWith(1, false);
   });
 
+  it("launches /ultraverify through the hosted verification adapter and returns a notification-first reply", async () => {
+    const recordAssistantReply = vi.fn(async () => undefined);
+    const addPhaseActivity = vi.fn(() => "activity-ultra-verify-2");
+    const finishPhaseActivity = vi.fn();
+    const setCompanionState = vi.fn();
+    const clearStreamingText = vi.fn();
+    const updateMood = vi.fn(async () => undefined);
+
+    launchHostedVerificationWithHostMock.mockResolvedValue({
+      taskId: "remote-verify-1",
+      sessionId: "session-verify-1",
+      outputPath: "E:\\repo\\.cain\\remote-verifications\\remote-verify-1\\output.log",
+    });
+
+    const handled = await handleUltraverifyCommandWithHost({
+      commandText: "/ultraverify HEAD~2..HEAD focus regression coverage",
+      workspaceRoot: "E:\\repo",
+      config: { type: "claude-cli", model: "claude-3-7-sonnet" },
+      envMap: {},
+      runtime: {
+        getToolContext: () =>
+          ({ workspaceRoot: "E:\\repo", invokerKind: "main" }) as any,
+      } as any,
+      tools: [],
+      runtimeOptions: { fastMode: true },
+      effortLevel: "high",
+      sessionMessages: [{ role: "user", content: "请验证这个改动" }],
+      blockedByPlanMode: false,
+      getConversationHistory: () => [{ role: "user", content: "请验证这个改动" }],
+      getPendingPlanVerification: () => ({
+        planFilePath: ".omx/plans/verify.md",
+        planContent: "1. run verification",
+        approvedAtUserTurnCount: 3,
+        verificationStarted: false,
+        verificationCompleted: false,
+      }),
+      backgroundTaskHost: {
+        runBuiltInAgentSession: vi.fn(),
+        buildFollowUpMessage: vi.fn(),
+        runDetachedRemoteReview: vi.fn(),
+        runDetachedRemoteVerification: vi.fn(),
+      } as any,
+      addPhaseActivity,
+      finishPhaseActivity,
+      recordAssistantReply,
+      setCompanionState,
+      clearStreamingText,
+      updateMood,
+      isAbortLikeError: vi.fn(() => false),
+    });
+
+    expect(handled).toBe(true);
+    expect(launchHostedVerificationWithHostMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        commandText: "/ultraverify HEAD~2..HEAD focus regression coverage",
+        workspaceRoot: "E:\\repo",
+        originalTask: "请验证这个改动",
+        planFilePath: ".omx/plans/verify.md",
+        planContent: "1. run verification",
+      }),
+    );
+    expect(finishPhaseActivity).toHaveBeenCalledWith(
+      "activity-ultra-verify-2",
+      "done",
+      expect.stringContaining("remote-verify-1"),
+    );
+    expect(recordAssistantReply).toHaveBeenCalledWith(
+      expect.stringContaining("Task ID: `remote-verify-1`"),
+      false,
+    );
+    expect(recordAssistantReply).toHaveBeenCalledWith(
+      expect.stringContaining("`HEAD~2..HEAD`"),
+      false,
+    );
+    expect(setCompanionState).toHaveBeenCalledWith("done");
+    expect(updateMood).toHaveBeenCalledWith(1, false);
+    expect(clearStreamingText).toHaveBeenCalledTimes(1);
+  });
+
   it("uses Chinese review tool labels when the conversation is Chinese", async () => {
     const startToolExecution = vi.fn();
 
@@ -430,6 +560,7 @@ describe("inspectionHost", () => {
       backgroundTaskHost: {
         runBuiltInAgentSession: vi.fn(),
         buildFollowUpMessage: vi.fn(() => "follow-up"),
+        runDetachedRemoteVerification: vi.fn(),
       } as any,
       findActiveBuiltInAgentTask: vi.fn(async () => undefined),
       createProviderAdapter: vi.fn(() => ({}) as any),

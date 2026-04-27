@@ -1,6 +1,7 @@
 import {
   parseReviewDiffRef,
   parseReviewPrNumber,
+  parseVerificationDiffRef,
 } from "./agent/built-in/agentUtils";
 import type { IProviderAdapter, ProviderConfig } from "./agent/providers/IProviderAdapter";
 import type { BackgroundTaskHost } from "./backgroundTaskHost";
@@ -22,6 +23,9 @@ import { hasWorkspaceProjectEvidence } from "./inspectionWorkspace";
 import {
   launchHostedReviewWithHost,
 } from "./remoteReviewHost";
+import {
+  launchHostedVerificationWithHost,
+} from "./remoteVerificationHost";
 import {
   runReviewInspectionSession,
   runVerificationInspectionSession,
@@ -62,6 +66,24 @@ function getInspectionToolRunningLabel(
 }
 
 type HostedReviewUiText = {
+  noOriginalTask: string;
+  workspaceFallbackTask: string;
+  currentWorkspaceTarget: string;
+  greetingOnlyTask: (originalTask: string) => string;
+  blockedByPlanMode: string;
+  providerUnsupported: string;
+  phaseLabel: string;
+  phaseDetail: string;
+  phaseDoneDetail: (taskId: string) => string;
+  launchFailed: (message: string) => string;
+  launchReply: (options: {
+    taskId: string;
+    targetLabel: string;
+    outputPath: string;
+  }) => string;
+};
+
+type HostedVerificationUiText = {
   noOriginalTask: string;
   workspaceFallbackTask: string;
   currentWorkspaceTarget: string;
@@ -138,6 +160,65 @@ function getHostedReviewUiText(
   };
 }
 
+function getHostedVerificationUiText(
+  locale: "zh-CN" | "en",
+): HostedVerificationUiText {
+  if (locale === "zh-CN") {
+    return {
+      noOriginalTask:
+        "当前对话里还没有可验证的原始任务或改动目标。先给我一个真实实现任务、diff 范围，或先在当前项目里完成改动后再运行 `/ultraverify`。",
+      workspaceFallbackTask: "验证当前工作区项目状态。",
+      currentWorkspaceTarget: "当前工作区状态",
+      greetingOnlyTask: originalTask =>
+        `当前原始任务 \`${originalTask}\` 只是问候/泛聊天，不是可验证的实现请求或 diff 目标。本次不进入 hosted verification 流程。请先给出真实实现任务或 diff 范围后再运行 \`/ultraverify\`。`,
+      blockedByPlanMode:
+        "Plan Mode 仍在开启中，先退出 Plan Mode 再运行 `/ultraverify`。",
+      providerUnsupported:
+        "当前 hosted `/ultraverify` 仅支持 Claude CLI provider。请先在设置中切到 Claude CLI，再重试。",
+      phaseLabel: "正在启动 hosted verification",
+      phaseDetail: "后台 Claude CLI verification 任务正在启动，完成后会通过通知回流结果。",
+      phaseDoneDetail: taskId => `后台任务 ${taskId} 已启动`,
+      launchFailed: message => `Hosted verification 启动失败：${message}`,
+      launchReply: ({ taskId, targetLabel, outputPath }) =>
+        [
+          "已启动 hosted verification（后台 Claude CLI）：",
+          `- Task ID: \`${taskId}\``,
+          `- 目标: ${targetLabel}`,
+          `- Output file: \`${outputPath}\``,
+          "",
+          "完成后会自动通知你；如果要提前查看中间输出，可直接读取输出文件，或使用 `TaskOutput` 查询该 task。",
+        ].join("\n"),
+    };
+  }
+
+  return {
+    noOriginalTask:
+      "There is no verifiable original task or change target in this conversation yet. Give me a real implementation task, diff range, or finish workspace changes before running `/ultraverify`.",
+    workspaceFallbackTask: "Verify the current workspace/project state.",
+    currentWorkspaceTarget: "current workspace state",
+    greetingOnlyTask: originalTask =>
+      `The original task \`${originalTask}\` is only a greeting / generic chat request, not a verifiable implementation request or diff target. Hosted verification will not run yet. Give me a real implementation task or diff range before running \`/ultraverify\`.`,
+    blockedByPlanMode:
+      "Plan Mode is still active. Exit Plan Mode before running `/ultraverify`.",
+    providerUnsupported:
+      "Hosted `/ultraverify` currently requires the Claude CLI provider in KainClaw. Switch to Claude CLI in settings and try again.",
+    phaseLabel: "Launching hosted verification",
+    phaseDetail:
+      "Starting a detached Claude CLI verification task. The verification report will arrive through task notification.",
+    phaseDoneDetail: taskId => `Background task ${taskId} launched`,
+    launchFailed: message => `Hosted verification failed to launch: ${message}`,
+    launchReply: ({ taskId, targetLabel, outputPath }) =>
+      [
+        "Hosted verification launched in the background via Claude CLI:",
+        `- Task ID: \`${taskId}\``,
+        `- Target: ${targetLabel}`,
+        `- Output file: \`${outputPath}\``,
+        "",
+        "You'll be notified when it completes. Read the output file or use `TaskOutput` only if you need partial output before then.",
+      ].join("\n"),
+  };
+}
+
 function describeHostedReviewTarget(
   commandText: string,
   currentWorkspaceTarget: string,
@@ -149,6 +230,22 @@ function describeHostedReviewTarget(
   }
 
   const diffRef = parseReviewDiffRef(reviewCommandText);
+  if (diffRef) {
+    return `\`${diffRef}\``;
+  }
+
+  return currentWorkspaceTarget;
+}
+
+function describeHostedVerificationTarget(
+  commandText: string,
+  currentWorkspaceTarget: string,
+): string {
+  const verificationCommandText = commandText.replace(
+    /^\/ultraverify/i,
+    "/verify",
+  );
+  const diffRef = parseVerificationDiffRef(verificationCommandText);
   if (diffRef) {
     return `\`${diffRef}\``;
   }
@@ -204,7 +301,10 @@ type SharedInspectionCommandHostOptions<
   getPendingPlanVerification: () => PendingPlanVerificationState | undefined;
   backgroundTaskHost: Pick<
     BackgroundTaskHost,
-    "runBuiltInAgentSession" | "buildFollowUpMessage" | "runDetachedRemoteReview"
+    | "runBuiltInAgentSession"
+    | "buildFollowUpMessage"
+    | "runDetachedRemoteReview"
+    | "runDetachedRemoteVerification"
   >;
   findActiveBuiltInAgentTask: (
     workspaceRoot: string,
@@ -655,6 +755,134 @@ export async function handleUltrareviewCommandWithHost<
     if (options.isAbortLikeError(error)) {
       options.finishPhaseActivity(phaseActivityId, "done", "cancelled");
       await options.recordAssistantReply("Hosted review was cancelled before launch.", false);
+      options.clearStreamingText();
+      options.setCompanionState("idle");
+      return true;
+    }
+
+    const message = error instanceof Error ? error.message : String(error);
+    options.finishPhaseActivity(
+      phaseActivityId,
+      "error",
+      message,
+    );
+    await options.recordAssistantReply(uiText.launchFailed(message), false);
+    options.clearStreamingText();
+    options.setCompanionState("idle");
+    return true;
+  }
+}
+
+export async function handleUltraverifyCommandWithHost<
+  TRuntime extends WorkspaceRuntimeLike & InspectionRuntimeLike,
+>(
+  options: Pick<
+    SharedInspectionCommandHostOptions<TRuntime>,
+    | "commandText"
+    | "workspaceRoot"
+    | "config"
+    | "runtimeOptions"
+    | "effortLevel"
+    | "sessionMessages"
+    | "blockedByPlanMode"
+    | "getConversationHistory"
+    | "getPendingPlanVerification"
+    | "backgroundTaskHost"
+    | "recordAssistantReply"
+    | "setCompanionState"
+    | "clearStreamingText"
+    | "updateMood"
+    | "isAbortLikeError"
+    | "addPhaseActivity"
+    | "finishPhaseActivity"
+  > & {
+    envMap: Record<string, string>;
+    runtime: TRuntime;
+    tools: ToolDefinition[];
+  },
+): Promise<boolean> {
+  if (!/^\/ultraverify(?:\s|$)/i.test(options.commandText.trim())) {
+    return false;
+  }
+
+  const locale = inferInspectionLocale(options.commandText, options.sessionMessages);
+  const uiText = getHostedVerificationUiText(locale);
+
+  if (options.blockedByPlanMode) {
+    await options.recordAssistantReply(uiText.blockedByPlanMode, false);
+    return true;
+  }
+
+  const originalPrompt = findOriginalTaskForInspection(options.sessionMessages);
+  const promptForTask = originalPrompt
+    ?? (await hasWorkspaceProjectEvidence(options.workspaceRoot)
+      ? uiText.workspaceFallbackTask
+      : null);
+
+  if (!promptForTask) {
+    await options.recordAssistantReply(uiText.noOriginalTask, false);
+    return true;
+  }
+
+  if (originalPrompt && isGreetingOnlyInspectionTask(originalPrompt)) {
+    await options.recordAssistantReply(
+      uiText.greetingOnlyTask(originalPrompt),
+      false,
+    );
+    return true;
+  }
+
+  if (options.config.type !== "claude-cli") {
+    await options.recordAssistantReply(uiText.providerUnsupported, false);
+    return true;
+  }
+
+  const phaseActivityId = options.addPhaseActivity(
+    uiText.phaseLabel,
+    uiText.phaseDetail,
+    "running",
+  );
+  options.setCompanionState("thinking");
+
+  try {
+    const pendingPlanVerification = options.getPendingPlanVerification();
+    const launched = await launchHostedVerificationWithHost({
+      commandText: options.commandText,
+      workspaceRoot: options.workspaceRoot,
+      config: options.config,
+      effortLevel: options.effortLevel,
+      conversationHistory: options.getConversationHistory(),
+      originalTask: promptForTask,
+      sessionMessages: options.sessionMessages,
+      planFilePath: pendingPlanVerification?.planFilePath,
+      planContent: pendingPlanVerification?.planContent ?? null,
+      backgroundTaskHost: options.backgroundTaskHost,
+    });
+
+    options.finishPhaseActivity(
+      phaseActivityId,
+      "done",
+      uiText.phaseDoneDetail(launched.taskId),
+    );
+    await options.recordAssistantReply(
+      uiText.launchReply({
+        taskId: launched.taskId,
+        targetLabel: describeHostedVerificationTarget(
+          options.commandText,
+          uiText.currentWorkspaceTarget,
+        ),
+        outputPath: launched.outputPath,
+      }),
+      false,
+    );
+    options.clearStreamingText();
+    options.setCompanionState("done");
+    await options.updateMood(1, false);
+    return true;
+  } catch (error) {
+    if (options.isAbortLikeError(error)) {
+      options.finishPhaseActivity(phaseActivityId, "done", "cancelled");
+      await options.recordAssistantReply("Hosted verification was cancelled before launch.", false);
       options.clearStreamingText();
       options.setCompanionState("idle");
       return true;

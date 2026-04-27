@@ -1,8 +1,27 @@
-import { describe, expect, it } from "vitest";
-import { buildClaudeCliPrompt, getClaudeCliCommand } from "./claudeCliAdapter";
+import { EventEmitter } from "node:events";
+import { PassThrough } from "node:stream";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { NormalizedMessage } from "./IProviderAdapter";
 
+const { spawnMock } = vi.hoisted(() => ({
+  spawnMock: vi.fn(),
+}));
+
+vi.mock("node:child_process", () => ({
+  spawn: spawnMock,
+}));
+
+import {
+  buildClaudeCliPrompt,
+  ClaudeCliAdapter,
+  getClaudeCliCommand,
+} from "./claudeCliAdapter";
+
 describe("Claude CLI adapter helpers", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
   it("selects the correct CLI command for each platform", () => {
     expect(getClaudeCliCommand(undefined, "win32")).toBe("claude.cmd");
     expect(getClaudeCliCommand(undefined, "linux")).toBe("claude");
@@ -22,5 +41,78 @@ describe("Claude CLI adapter helpers", () => {
     expect(prompt).toContain("Conversation:\nUser: Hello");
     expect(prompt).toContain("Assistant: Hi there");
     expect(prompt).not.toContain("tool_result");
+  });
+
+  it("sends the full prompt over stdin instead of the Windows command line", async () => {
+    const stdout = new PassThrough();
+    const stderr = new PassThrough();
+    const stdin = new PassThrough();
+    const receivedPrompt: string[] = [];
+
+    stdin.on("data", chunk => {
+      receivedPrompt.push(String(chunk));
+    });
+
+    const child = new EventEmitter() as EventEmitter & {
+      stdout: PassThrough;
+      stderr: PassThrough;
+      stdin: PassThrough;
+      kill: ReturnType<typeof vi.fn>;
+    };
+    child.stdout = stdout;
+    child.stderr = stderr;
+    child.stdin = stdin;
+    child.kill = vi.fn();
+
+    stdin.on("end", () => {
+      stdout.write("OK.\n");
+      stdout.end();
+      stderr.end();
+      child.emit("close", 0);
+    });
+
+    spawnMock.mockReturnValue(child);
+
+    const adapter = new ClaudeCliAdapter(
+      {
+        type: "claude-cli",
+        model: "claude-3-7-sonnet",
+      },
+      "E:\\repo",
+      {},
+      "Be concise.",
+    );
+
+    const messages: NormalizedMessage[] = [
+      { role: "user", content: "Hello" },
+      { role: "assistant", content: "Hi there" },
+    ];
+    const tokens: string[] = [];
+
+    const step = await adapter.runStep(
+      messages,
+      [],
+      token => tokens.push(token),
+    );
+
+    expect(spawnMock).toHaveBeenCalledTimes(1);
+    const [, args] = spawnMock.mock.calls[0] ?? [];
+    expect(args).toContain("--print");
+    expect(args).toContain("--output-format");
+    expect(args).toContain("text");
+    expect(args).not.toContain("Hello");
+    expect(args).not.toContain("Hi there");
+
+    const prompt = receivedPrompt.join("");
+    expect(prompt).toContain("System instructions:\nBe concise.");
+    expect(prompt).toContain("Conversation:\nUser: Hello");
+    expect(prompt).toContain("Assistant: Hi there");
+
+    expect(tokens).toEqual(["OK."]);
+    expect(step).toEqual({
+      text: "OK.",
+      toolCalls: [],
+      done: true,
+    });
   });
 });

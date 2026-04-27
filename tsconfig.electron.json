@@ -13,7 +13,10 @@
     "types": ["node"]
   },
   "include": [
-    "electron/**/*.ts"
+    "electron/**/*.ts",
+    "src/backgroundCommandWorker.ts",
+    "src/backgroundReviewWorker.ts",
+    "src/backgroundVerificationWorker.ts"
   ],
   "exclude": [
     "dist",

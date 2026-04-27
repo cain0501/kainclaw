@@ -8,8 +8,8 @@
   - `npm run build`
   - `npm run build:electron`
   - `npm run check:electron`
-  - `148` 个测试文件
-  - `1068` 个测试通过
+  - `151` 个测试文件
+  - `1085` 个测试通过
 - 最近几组 `extension.ts` 宿主减债也已同步收口：
   - `extensionPromptRequestParts`
   - `sessionPanelActions`
@@ -27,6 +27,14 @@
   - 当前行为仍按 Claude `/ultrareview` + `RemoteAgentTask` 生命周期设计，但由于本仓没有 CCR / cloud backend，传输层适配为 detached `Claude CLI` review worker。
   - hosted review 现在会立即返回 task id / output path，并在完成后通过 background notification 回流完整 findings，不再只给截断预览。
   - detached hosted review 已接入 stop 路径；但真正的 cloud remote session parity 仍未完成。
+- 本轮新增收口项（hosted verification parity）：
+  - `/ultraverify` 已按 Claude hosted verification / `RemoteAgentTask` 用户语义接进 Electron，本地传输层仍是 detached `Claude CLI` verification worker。
+  - 启动后会先回显 task id / output path，聊天区保持 waiting / background 状态，完成后自动回流完整 verification report 与 `VERDICT`。
+  - 用户在运行中手动 stop 时，会进入 stopped / cancelled 路径，而不是把任务误判为自然完成。
+- 本轮新增收口项（provider runtime identity + tool assembly parity）：
+  - 身份层固定为 `我是 KainClaw，一个多功能的AI助手。`，当前 provider / model 信息由宿主注入 runtime identity note，不再让模型自由脑补自己是 Claude / GPT / DeepSeek。
+  - `claude-cli` 按高可信度说明；官方 `Anthropic / OpenAI` 按当前配置的 provider + model 说明；`openai-compatible` / 第三方 gateway 会显式提示“当前配置如此，但真实上游模型可能被代理覆盖”。
+  - 第三方 `Anthropic` / `DeepSeek` 路径的工具池已按 Claude `src/cli/print.ts` 的 `uniqBy(name)` 逻辑去重，避免严格上游因重复工具名直接报 `Tool names must be unique.`。
 - 用户硬规则已收口并写入项目记忆与主文档：
   - 只要本地 Claude 源码已经实现某个功能、行为、工作流、工具链、renderer 路径或 session 生命周期，实施和调试都必须先读取 Claude 源码，并按它的端到端链路复刻 baseline。
   - 不允许先靠本地猜测、规避式 workaround、提示词补丁或平行自研实现去“试错”，再事后回头对齐源码。
@@ -53,7 +61,7 @@
   - MCP transport parity：按 Claude MCP 源码补齐 `type: "http"`（Streamable HTTP）与 `type: "sse"`（SSE）配置语义；SSE 不再误走 Streamable HTTP；未知远端 transport（如 `ws`）会被忽略；远端认证失败归类为 `needs-auth`。
   - MCP auth/resource parity：`needs-auth` 远端 server 会暴露 Claude-style `mcp__<server>__authenticate` placeholder；当前本地 OAuth browser flow 仍未接线，placeholder 返回可执行的 KainClaw 配置指引。`ReadMcpResourceTool` 访问已连接但不支持 resources 的 server 时返回明确“不支持 resources”，不会把 server 标记失败。
   - MCP result/name parity：`isError: true` 的 MCP tool result 会抛工具错误，不再当作成功输出，也不会把 server connection 标记失败；`toolResult`、`structuredContent`、`content[]` 按 Claude 优先级格式化。MCP 对外工具名已使用 Claude-compatible `normalizeNameForMCP` 安全化，内部调用仍保留原始 server/tool 名，resource read 可用 normalized server name 映射回原配置名。
-  - MCP 本轮定向验证：`npm test -- --run src/mcpRuntime.test.ts src/mcpRuntime.helpers.test.ts`（20 tests passed）、`npm test -- --run src/toolRuntime.test.ts`（90 tests passed）、`npm run check`、`npm run build`、`git diff --check -- src/mcpRuntime.ts src/mcpRuntime.test.ts src/mcpRuntime.helpers.test.ts`。
+  - MCP 本轮定向验证：`npm test -- --run src/mcpRuntime.test.ts src/mcpRuntime.helpers.test.ts`（25 tests passed）、`npm test -- --run src/toolRuntime.test.ts`（90 tests passed）、`npm run check`、`npm run build`、`git diff --check -- src/mcpRuntime.ts src/mcpRuntime.test.ts src/mcpRuntime.helpers.test.ts`。
   - MCP remote OAuth parity：按 Claude `OAuthClientProvider + localhost callback + PKCE` 链路补齐远端 `http` / `sse` MCP browser OAuth；VS Code 与 Electron host 都已接入 `openExternal`、token/client/discovery state 持久化，以及 auth 后工具缓存失效。`oauth.xaa` 仍明确未支持。
   - MCP prompt command parity：按 Claude `fetchCommandsForClient()` 语义补齐 `mcp__<server>__<prompt>` prompt command 暴露、`/mcp prompts` 检视，以及 prompt command 展开后继续进入正常模型回合；不再把 Claude prompt surface 误做成另一套本地工具。
   - MCP invocation hardening：执行层已兼容模型常见的 MCP 工具名变形，例如把 `mcp__notion__authenticate` 写成 `mcp_notion_authenticate`，或把 `notion-get-users` 写成 `notion_get_users`，统一归一化回 canonical 工具名执行。

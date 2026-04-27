@@ -136,6 +136,7 @@ describe("promptHostFactory", () => {
         runBuiltInAgentSession: vi.fn(),
         buildFollowUpMessage: vi.fn(),
         runDetachedRemoteReview: vi.fn(),
+        runDetachedRemoteVerification: vi.fn(),
       },
       findActiveBuiltInAgentTask: vi.fn(),
       isAbortLikeError: vi.fn(),

@@ -92,6 +92,47 @@ describe("agentRunner", () => {
     }
   });
 
+  it("deduplicates tool definitions by name before sending the payload to the provider", async () => {
+    let seenTools: unknown[] = [];
+    const provider: IProviderAdapter = {
+      async runStep(_messages, tools) {
+        seenTools = tools;
+        return {
+          text: "done",
+          toolCalls: [],
+          done: true,
+        };
+      },
+    };
+
+    const duplicateTools: ToolDefinition[] = [
+      {
+        name: "mcp__notion__notion-get-users",
+        description: "First copy",
+        input_schema: { type: "object", properties: {} },
+      },
+      {
+        name: "mcp__notion__notion-get-users",
+        description: "Second copy",
+        input_schema: { type: "object", properties: {} },
+      },
+    ];
+
+    await runAgent([], {
+      provider,
+      tools: duplicateTools,
+      toolContext: { workspaceRoot: "E:\\claudecodejingiang\\vscode-extension" },
+    });
+
+    expect(seenTools).toHaveLength(1);
+    expect(seenTools[0]).toMatchObject({
+      type: "function",
+      function: {
+        name: "mcp__notion__notion-get-users",
+      },
+    });
+  });
+
   it("routes swarm tool calls through the swarm coordinator", async () => {
     const provider = new ScriptedProvider([
       {

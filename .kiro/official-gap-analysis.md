@@ -9,8 +9,8 @@
   - `npm run build:electron`
   - `npm run check:electron`
 - 当前自动化基线：
-  - `148` 个测试文件
-  - `1068` 个测试通过
+  - `151` 个测试文件
+  - `1085` 个测试通过
 - 最近几组 `extension.ts` 宿主减债也已同步收口：
   - `extensionPromptRequestParts`
   - `sessionPanelActions`
@@ -27,6 +27,9 @@
   - `/ultrareview` 已按 Claude `/ultrareview` + `RemoteAgentTask` 生命周期接进 VS Code 与 Electron。
   - 由于本仓没有 Claude 云端 CCR backend，当前只对传输层做薄适配：使用 detached `Claude CLI` review worker，而不是另起一套 KainClaw review 语义。
   - hosted review 现已具备 notification-first findings 回流与 stop 路径，但真正的 cloud remote review parity 仍未完成。
+  - `/ultraverify` 已按 Claude hosted verification / `RemoteAgentTask` 用户语义接进 Electron；当前传输层适配是 detached `Claude CLI` verification worker，启动后会先回显 task id / output path，聊天区保持 waiting / background，完成后自动回流完整 verification report 与 `VERDICT`。
+  - provider runtime identity 已收口：身份层固定为 KainClaw，多功能助手文案留在 system prompt；当前 provider / model 信息由宿主注入 runtime identity note，不再让模型自由脑补自己是 Claude / GPT / DeepSeek。
+  - 第三方 `Anthropic` / `DeepSeek` 路径的工具池已按 Claude `src/cli/print.ts` 的 `uniqBy(name)` 逻辑去重，避免严格上游因重复工具名直接报 `Tool names must be unique.`。
 - 强规则已收口：凡是 Claude 源码已有的功能、行为、工作流、prompt contract、renderer 行为、tool/runtime 路径或 session 生命周期，必须先读 Claude 源码并按其逻辑复刻基线；只有 Claude 源码没有的 KainClaw 扩展，才按 KainClaw 自研标准开发。
 - 本批已同步的 Claude parity 收口项覆盖 `890510a..00076dc`：
   - 文档/规则：Claude 源码优先、handoff、gap analysis、source-reference、UTF-8 without BOM。
@@ -103,7 +106,7 @@
 | 文件 / 命令 / 浏览器工具 | 已实现 | `src/toolRuntime.ts` `src/browserRuntime.ts` | Browser automation parity 仍未完全对齐 |
 | Tasks / background command | 部分实现 | `src/tasks/taskRuntime.ts` `src/backgroundTaskHost.ts` `src/backgroundCommandWorker.ts` `src/toolRuntime.ts` | `local_bash`、Claude-style id、Task 工具合同、UTF-8 shell 输出、`TaskOutput` abort wait 和 adapter-backed remote `TaskStop -> killed` 已对齐；完整 hosted / detached background task parity 未完成 |
 | built-in Review | 部分实现 | `src/review/runner.ts` `src/agent/built-in/reviewAgent.ts` | 本地 `/review` 主链已稳定；`/ultrareview` 已按 Claude lifecycle 做 detached `Claude CLI` 适配，但真正的云端 remote review 生命周期仍未完善 |
-| built-in Verification | 部分实现 | `src/verification/runner.ts` `src/agent/built-in/verificationAgent.ts` `src/inspectionPromptHost.ts` `src/inspectionWorkspace.ts` | scope gate、workspace evidence fallback、locale、diff/provenance/report fence 已补齐；hosted / detached verification parity 未完成 |
+| built-in Verification | 部分实现 | `src/verification/runner.ts` `src/agent/built-in/verificationAgent.ts` `src/inspectionPromptHost.ts` `src/inspectionWorkspace.ts` `src/remoteVerificationHost.ts` `src/backgroundVerificationWorker.ts` | scope gate、workspace evidence fallback、locale、diff/provenance/report fence、Electron `/ultraverify` detached hosted verification、waiting/background 状态、自动 report 回流与 stop 路径 已补齐；真正的云端 remote verification 生命周期 parity 仍未完成 |
 | Plan Mode | 部分实现 | `src/planMode/planMode.ts` `src/planModeHost.ts` `src/planMode/planModePrompt.ts` | 更完整的官方 plan workflow 仍缺 |
 | Thinking / Effort / Fast mode | 部分实现 | `src/thinkingEffort/effort.ts` `src/thinkingEffort/thinking.ts` `src/thinkingEffort/fastMode.ts` | phase 2 parity 仍未完全收口 |
 | Compact / Auto-compact | 部分实现 | `src/compact/compact.ts` `src/compact/autoCompact.ts` `src/compactHost.ts` `src/storage/sessionRepository.ts` | 可见 transcript 与模型侧 sidecar history 分离已补齐；token / transcript lifecycle 更深 parity 未收尾 |

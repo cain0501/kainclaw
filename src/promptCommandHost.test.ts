@@ -92,6 +92,7 @@ describe("promptCommandHost", () => {
     expect(result).toContain("/tools");
     expect(result).toContain("/verify");
     expect(result).toContain("/ultrareview");
+    expect(result).toContain("/ultraverify");
   });
 
   it("lists built-in agents through /agents", async () => {
@@ -482,6 +483,7 @@ describe("promptCommandHost", () => {
       "/tools",
       "/review",
       "/ultrareview",
+      "/ultraverify",
       "/verify",
     ]);
   });
@@ -503,6 +505,7 @@ describe("promptCommandHost", () => {
       handleCompactCommand: async () => false,
       handleReviewCommand: async () => false,
       handleUltrareviewCommand: async () => false,
+      handleUltraverifyCommand: async () => false,
       handleVerificationCommand: async () => false,
     });
 
@@ -530,6 +533,7 @@ describe("promptCommandHost", () => {
       handleCompactCommand: handleCompactCommand as any,
       handleReviewCommand: async () => false,
       handleUltrareviewCommand: async () => false,
+      handleUltraverifyCommand: async () => false,
       handleVerificationCommand: async () => false,
     });
 
@@ -543,6 +547,7 @@ describe("promptCommandHost", () => {
   it("short-circuits when a command handler consumes the prompt", async () => {
     const handleReviewCommand = vi.fn();
     const handleUltrareviewCommand = vi.fn();
+    const handleUltraverifyCommand = vi.fn();
     const handleVerificationCommand = vi.fn();
 
     const result = await runPromptCommandChain({
@@ -559,12 +564,14 @@ describe("promptCommandHost", () => {
       handleCompactCommand: async () => true,
       handleReviewCommand: handleReviewCommand as any,
       handleUltrareviewCommand: handleUltrareviewCommand as any,
+      handleUltraverifyCommand: handleUltraverifyCommand as any,
       handleVerificationCommand: handleVerificationCommand as any,
     });
 
     expect(result).toEqual({ kind: "handled" });
     expect(handleReviewCommand).not.toHaveBeenCalled();
     expect(handleUltrareviewCommand).not.toHaveBeenCalled();
+    expect(handleUltraverifyCommand).not.toHaveBeenCalled();
     expect(handleVerificationCommand).not.toHaveBeenCalled();
   });
 
@@ -585,11 +592,37 @@ describe("promptCommandHost", () => {
       handleCompactCommand: async () => false,
       handleReviewCommand: async () => false,
       handleUltrareviewCommand: handleUltrareviewCommand as any,
+      handleUltraverifyCommand: async () => false,
       handleVerificationCommand: async () => false,
     });
 
     expect(result).toEqual({ kind: "handled" });
     expect(handleUltrareviewCommand).toHaveBeenCalledTimes(1);
+  });
+
+  it("routes /ultraverify through the hosted verification handler", async () => {
+    const handleUltraverifyCommand = vi.fn(async () => true);
+
+    const result = await runPromptCommandChain({
+      prompt: "/ultraverify HEAD~2..HEAD",
+      config: providerConfig,
+      workspaceRoot: "E:\\repo",
+      envMap: {},
+      runtime: {},
+      tools: [],
+      runtimeOptions: {},
+      effortLevel: "high",
+      tryHandleLocalCommand: async () => null,
+      tryHandlePlanModeCommand: async () => null,
+      handleCompactCommand: async () => false,
+      handleReviewCommand: async () => false,
+      handleUltrareviewCommand: async () => false,
+      handleUltraverifyCommand: handleUltraverifyCommand as any,
+      handleVerificationCommand: async () => false,
+    });
+
+    expect(result).toEqual({ kind: "handled" });
+    expect(handleUltraverifyCommand).toHaveBeenCalledTimes(1);
   });
 
   it("falls through to continue when no handlers consume the prompt", async () => {
@@ -607,6 +640,7 @@ describe("promptCommandHost", () => {
       handleCompactCommand: async () => false,
       handleReviewCommand: async () => false,
       handleUltrareviewCommand: async () => false,
+      handleUltraverifyCommand: async () => false,
       handleVerificationCommand: async () => false,
     });
 
@@ -639,6 +673,7 @@ describe("promptCommandHost", () => {
       handleCompactCommand: async () => false,
       handleReviewCommand: async () => false,
       handleUltrareviewCommand: async () => false,
+      handleUltraverifyCommand: async () => false,
       handleVerificationCommand: async () => false,
     });
 
@@ -676,6 +711,7 @@ describe("promptCommandHost", () => {
       handleCompactCommand: async () => false,
       handleReviewCommand: async () => false,
       handleUltrareviewCommand: async () => false,
+      handleUltraverifyCommand: async () => false,
       handleVerificationCommand: async () => false,
     });
 
@@ -722,6 +758,7 @@ describe("promptCommandHost", () => {
       handleCompactCommand: async () => false,
       handleReviewCommand: async () => false,
       handleUltrareviewCommand: async () => false,
+      handleUltraverifyCommand: async () => false,
       handleVerificationCommand: async () => false,
     });
 
@@ -772,6 +809,7 @@ describe("promptCommandHost", () => {
       handleCompactCommand: async () => false,
       handleReviewCommand: async () => false,
       handleUltrareviewCommand: async () => false,
+      handleUltraverifyCommand: async () => false,
       handleVerificationCommand: async () => false,
     });
 
@@ -794,6 +832,7 @@ describe("promptCommandHost", () => {
       handleCompactCommand: async () => false,
       handleReviewCommand: async () => false,
       handleUltrareviewCommand: async () => false,
+      handleUltraverifyCommand: async () => false,
       handleVerificationCommand: async () => false,
     });
 
@@ -833,6 +872,7 @@ describe("promptCommandHost", () => {
       handleCompactCommand: async () => false,
       handleReviewCommand: async () => false,
       handleUltrareviewCommand: async () => false,
+      handleUltraverifyCommand: async () => false,
       handleVerificationCommand: async () => false,
     });
 
@@ -856,6 +896,7 @@ describe("promptCommandHost", () => {
       handleCompactCommand: async () => false,
       handleReviewCommand: async () => false,
       handleUltrareviewCommand: async () => false,
+      handleUltraverifyCommand: async () => false,
       handleVerificationCommand: async () => false,
     });
 
@@ -893,6 +934,7 @@ describe("promptCommandHost", () => {
       handleCompactCommand: async () => false,
       handleReviewCommand: async () => false,
       handleUltrareviewCommand: async () => false,
+      handleUltraverifyCommand: async () => false,
       handleVerificationCommand: async () => false,
     });
 
@@ -948,6 +990,7 @@ describe("promptCommandHost", () => {
       handleCompactCommand: async () => false,
       handleReviewCommand: async () => false,
       handleUltrareviewCommand: async () => false,
+      handleUltraverifyCommand: async () => false,
       handleVerificationCommand: async () => false,
     });
 
@@ -991,6 +1034,7 @@ describe("promptCommandHost", () => {
       handleCompactCommand: async () => false,
       handleReviewCommand: async () => false,
       handleUltrareviewCommand: async () => false,
+      handleUltraverifyCommand: async () => false,
       handleVerificationCommand: async () => false,
     });
 

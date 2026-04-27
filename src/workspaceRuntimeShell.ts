@@ -7,6 +7,7 @@ import {
 } from "./mcpRuntime";
 import type { McpOAuthHost } from "./mcpOAuth";
 import {
+  dedupeToolDefinitionsByName,
   getBuiltInToolDefinitions,
   type ToolActionApprovalRequest,
   type ToolContext,
@@ -105,7 +106,7 @@ export class WorkspaceRuntime {
     const builtInTools = getBuiltInToolDefinitions({
       lspAvailable: this.lspRuntime?.isAvailable?.() ?? !!this.lspRuntime,
     });
-    return [...builtInTools, ...mcpTools];
+    return dedupeToolDefinitionsByName([...builtInTools, ...mcpTools]);
   }
 
   async getMcpStatusSummary(): Promise<McpServerStatusSummary[]> {

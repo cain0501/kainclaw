@@ -72,6 +72,12 @@ export function formatBackgroundTaskNotification(
   ) {
     return formatHostedReviewNotification(task);
   }
+  if (
+    task.taskType === "remote_agent" &&
+    getRemoteTaskType(task) === "claude_cli_verification"
+  ) {
+    return formatHostedVerificationNotification(task);
+  }
 
   const label = formatNotificationLabel(task);
   const taskKind =
@@ -142,6 +148,66 @@ function formatHostedReviewNotification(task: BackgroundTaskRecord): string {
       break;
     default:
       lines.push(`Hosted review update: ${label}`);
+      break;
+  }
+
+  if (typeof task.outputPath === "string" && task.outputPath.trim()) {
+    lines.push(`Output file: ${path.normalize(task.outputPath.trim())}`);
+  }
+
+  return lines.join("\n");
+}
+
+function formatHostedVerificationNotification(task: BackgroundTaskRecord): string {
+  const label = formatNotificationLabel(task);
+  const lines: string[] = [];
+
+  switch (task.status) {
+    case "completed": {
+      lines.push(`Hosted verification completed: ${label}`);
+      if (typeof task.outputPath === "string" && task.outputPath.trim()) {
+        lines.push(`Output file: ${path.normalize(task.outputPath.trim())}`);
+      }
+      const report = task.result?.trim() || task.output.trim();
+      if (report) {
+        lines.push("");
+        lines.push(report);
+      } else {
+        lines.push("");
+        lines.push(
+          "Hosted verification completed, but no report was captured. Check the output file and rerun `/ultraverify` if needed.",
+        );
+      }
+      return lines.join("\n");
+    }
+    case "failed": {
+      lines.push(`Hosted verification finished with issues: ${label}`);
+      if (typeof task.outputPath === "string" && task.outputPath.trim()) {
+        lines.push(`Output file: ${path.normalize(task.outputPath.trim())}`);
+      }
+      const report = task.result?.trim();
+      if (report) {
+        lines.push("");
+        lines.push(report);
+        return lines.join("\n");
+      }
+      if (task.error?.trim()) {
+        lines.push(`Error: ${task.error.trim()}`);
+      }
+      lines.push("Retry `/ultraverify`, or use `/verify` for a local verification run.");
+      return lines.join("\n");
+    }
+    case "killed":
+      lines.push(`Hosted verification was stopped: ${label}`);
+      break;
+    case "cancelled":
+      lines.push(`Hosted verification was cancelled: ${label}`);
+      break;
+    case "lost":
+      lines.push(`Hosted verification was interrupted after a runtime restart: ${label}`);
+      break;
+    default:
+      lines.push(`Hosted verification update: ${label}`);
       break;
   }
 

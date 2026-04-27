@@ -19,6 +19,7 @@ import { distillAndSaveSkill, meetsDistillationThreshold } from "./skills/skillD
 
 export const BACKGROUND_COMMAND_TIMEOUT_MS = 15 * 60 * 1000;
 export const DETACHED_REVIEW_TIMEOUT_MS = 30 * 60 * 1000;
+export const DETACHED_VERIFICATION_TIMEOUT_MS = 30 * 60 * 1000;
 
 export type BuiltInAgentSessionOptions<TResult> = {
   workspaceRoot: string;
@@ -85,6 +86,14 @@ type DetachedReviewLaunchResult = {
   runnerPid?: number;
 };
 
+type DetachedVerificationLaunchRequest = {
+  configPath: string;
+};
+
+type DetachedVerificationLaunchResult = {
+  runnerPid?: number;
+};
+
 type ActiveBuiltInAgentRun = {
   abortController: AbortController;
   agentType: string;
@@ -102,6 +111,9 @@ type BackgroundTaskHostOptions = {
   launchDetachedReview?: (
     request: DetachedReviewLaunchRequest,
   ) => Promise<DetachedReviewLaunchResult>;
+  launchDetachedVerification?: (
+    request: DetachedVerificationLaunchRequest,
+  ) => Promise<DetachedVerificationLaunchResult>;
   stopDetachedProcess?: (pid: number) => Promise<void>;
   archiveRemoteSession?: (sessionId: string) => Promise<void>;
 };
@@ -587,6 +599,111 @@ export class BackgroundTaskHost {
     };
   }
 
+  async runDetachedRemoteVerification(options: {
+    workspaceRoot: string;
+    commandText: string;
+    taskDescription: string;
+    verificationRequest: string;
+    provider: {
+      cliPath?: string;
+      model?: string;
+    };
+    systemPrompt: string;
+    sessionId: string;
+    remoteTaskType: string;
+    metadata?: Record<string, unknown>;
+  }): Promise<{
+    taskId: string;
+    command: string;
+    workspaceRoot: string;
+    outputPath: string;
+    sessionId: string;
+  }> {
+    const taskRuntime = this.options.getTaskRuntime(options.workspaceRoot);
+    const taskId = generateBackgroundTaskId("remote_agent");
+    const timeoutMs = DETACHED_VERIFICATION_TIMEOUT_MS;
+    const artifactPaths = this.getDetachedRemoteVerificationArtifactPaths(taskId);
+    const initialOutput = `Started remote verification:\n${options.commandText.trim()}\n`;
+
+    await fs.mkdir(artifactPaths.directory, { recursive: true });
+    await fs.writeFile(artifactPaths.outputPath, initialOutput, "utf8");
+    await fs.writeFile(
+      artifactPaths.configPath,
+      JSON.stringify(
+        {
+          workspaceRoot: options.workspaceRoot,
+          commandText: options.commandText,
+          verificationRequest: options.verificationRequest,
+          outputPath: artifactPaths.outputPath,
+          statePath: artifactPaths.statePath,
+          cancelPath: artifactPaths.cancelPath,
+          timeoutMs,
+          sessionId: options.sessionId,
+          provider: options.provider,
+          systemPrompt: options.systemPrompt,
+        },
+        null,
+        2,
+      ),
+      "utf8",
+    );
+
+    const launched = await (
+      this.options.launchDetachedVerification ?? launchDetachedVerification
+    )({
+      configPath: artifactPaths.configPath,
+    });
+
+    await fs.writeFile(
+      artifactPaths.statePath,
+      JSON.stringify(
+        {
+          status: "running",
+          updatedAt: Date.now(),
+          ...(launched.runnerPid !== undefined
+            ? { runnerPid: launched.runnerPid }
+            : {}),
+        },
+        null,
+        2,
+      ),
+      "utf8",
+    );
+
+    await taskRuntime.registerBackgroundTask({
+      id: taskId,
+      taskType: "remote_agent",
+      status: "running",
+      description: options.taskDescription,
+      workspaceRoot: options.workspaceRoot,
+      command: options.commandText.trim(),
+      output: initialOutput,
+      metadata: {
+        remoteTaskType: options.remoteTaskType,
+        sessionId: options.sessionId,
+        ...(options.metadata ?? {}),
+        detached: {
+          mode: "detached",
+          statePath: artifactPaths.statePath,
+          outputPath: artifactPaths.outputPath,
+          cancelPath: artifactPaths.cancelPath,
+          configPath: artifactPaths.configPath,
+          ...(launched.runnerPid !== undefined
+            ? { runnerPid: launched.runnerPid }
+            : {}),
+        },
+      },
+    });
+
+    return {
+      taskId,
+      command: options.commandText.trim(),
+      workspaceRoot: options.workspaceRoot,
+      outputPath: artifactPaths.outputPath,
+      sessionId: options.sessionId,
+    };
+  }
+
   private getDetachedCommandArtifactPaths(taskId: string): {
     directory: string;
     configPath: string;
@@ -612,6 +729,23 @@ export class BackgroundTaskHost {
     cancelPath: string;
   } {
     const directory = path.join(this.options.storageRoot, "remote-reviews", taskId);
+    return {
+      directory,
+      configPath: path.join(directory, "config.json"),
+      statePath: path.join(directory, "state.json"),
+      outputPath: path.join(directory, "output.log"),
+      cancelPath: path.join(directory, "cancelled.flag"),
+    };
+  }
+
+  private getDetachedRemoteVerificationArtifactPaths(taskId: string): {
+    directory: string;
+    configPath: string;
+    statePath: string;
+    outputPath: string;
+    cancelPath: string;
+  } {
+    const directory = path.join(this.options.storageRoot, "remote-verifications", taskId);
     return {
       directory,
       configPath: path.join(directory, "config.json"),
@@ -655,12 +789,30 @@ function toErrorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
 }
 
+export function getDetachedWorkerSpawnEnvironment(options?: {
+  baseEnv?: NodeJS.ProcessEnv;
+  isElectronHost?: boolean;
+}): NodeJS.ProcessEnv {
+  const baseEnv = options?.baseEnv ?? process.env;
+  const isElectronHost =
+    options?.isElectronHost ?? typeof process.versions.electron === "string";
+  if (!isElectronHost) {
+    return { ...baseEnv };
+  }
+
+  return {
+    ...baseEnv,
+    ELECTRON_RUN_AS_NODE: "1",
+  };
+}
+
 async function launchDetachedBackgroundCommand(
   request: DetachedBackgroundCommandLaunchRequest,
 ): Promise<DetachedBackgroundCommandLaunchResult> {
   const workerPath = path.join(__dirname, "backgroundCommandWorker.js");
   const child = spawn(process.execPath, [workerPath, request.configPath], {
     detached: true,
+    env: getDetachedWorkerSpawnEnvironment(),
     windowsHide: true,
     stdio: "ignore",
   });
@@ -677,6 +829,24 @@ async function launchDetachedReview(
   const workerPath = path.join(__dirname, "backgroundReviewWorker.js");
   const child = spawn(process.execPath, [workerPath, request.configPath], {
     detached: true,
+    env: getDetachedWorkerSpawnEnvironment(),
+    windowsHide: true,
+    stdio: "ignore",
+  });
+  child.unref();
+
+  return {
+    ...(typeof child.pid === "number" ? { runnerPid: child.pid } : {}),
+  };
+}
+
+async function launchDetachedVerification(
+  request: DetachedVerificationLaunchRequest,
+): Promise<DetachedVerificationLaunchResult> {
+  const workerPath = path.join(__dirname, "backgroundVerificationWorker.js");
+  const child = spawn(process.execPath, [workerPath, request.configPath], {
+    detached: true,
+    env: getDetachedWorkerSpawnEnvironment(),
     windowsHide: true,
     stdio: "ignore",
   });

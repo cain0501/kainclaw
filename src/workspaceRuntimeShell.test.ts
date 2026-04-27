@@ -44,6 +44,18 @@ vi.mock("./lsp/lspRuntime", () => ({
 }));
 
 vi.mock("./toolRuntime", () => ({
+  dedupeToolDefinitionsByName: <T extends { name: string }>(tools: readonly T[]) => {
+    const seen = new Set<string>();
+    const deduped: T[] = [];
+    for (const tool of tools) {
+      if (seen.has(tool.name)) {
+        continue;
+      }
+      seen.add(tool.name);
+      deduped.push(tool);
+    }
+    return deduped;
+  },
   getBuiltInToolDefinitions: (
     { lspAvailable = true }: { lspAvailable?: boolean } = {},
   ) =>
@@ -224,6 +236,42 @@ describe("workspaceRuntimeShell", () => {
 
     await expect(runtime.getToolDefinitions()).resolves.toEqual([
       { name: "read_file" },
+      { name: "mcp_tool" },
+    ]);
+  });
+
+  it("deduplicates merged built-in and MCP tools by name like Claude tool assembly", async () => {
+    mcpRuntimeMock.getToolDefinitions.mockResolvedValueOnce([
+      { name: "read_file" },
+      { name: "mcp_tool" },
+      { name: "mcp_tool" },
+    ]);
+
+    const runtime = new WorkspaceRuntime(
+      () => "E:\\repo",
+      {},
+      vi.fn(async () => true),
+      vi.fn(async () => true),
+      vi.fn(),
+      {
+        getState: () => ({ active: false }),
+        enter: async () => ({ planFilePath: "", planContent: "" }),
+        getPlanContent: async () => null,
+        exit: async () => ({ planFilePath: "", planContent: "" }),
+      },
+      () => undefined,
+      () => ({}) as any,
+      () => ({}) as any,
+      vi.fn(async () => ({ taskId: "", taskType: "", command: "" })),
+      vi.fn(async () => ({ taskId: "", verdict: "PASS" as const, report: "" })),
+      vi.fn(async () => ({ taskId: "", report: "" })),
+      vi.fn(async () => ({ taskId: "", command: "", workspaceRoot: "" })),
+      vi.fn(async () => null),
+    );
+
+    await expect(runtime.getToolDefinitions()).resolves.toEqual([
+      { name: "read_file" },
+      { name: "LSP" },
       { name: "mcp_tool" },
     ]);
   });

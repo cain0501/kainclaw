@@ -6,6 +6,7 @@ const {
   handleCompactCommandWithHostMock,
   handleReviewCommandWithHostMock,
   handleUltrareviewCommandWithHostMock,
+  handleUltraverifyCommandWithHostMock,
   handleVerificationCommandWithHostMock,
 } = vi.hoisted(() => ({
   handleLocalPromptCommandMock: vi.fn(),
@@ -13,6 +14,7 @@ const {
   handleCompactCommandWithHostMock: vi.fn(),
   handleReviewCommandWithHostMock: vi.fn(),
   handleUltrareviewCommandWithHostMock: vi.fn(),
+  handleUltraverifyCommandWithHostMock: vi.fn(),
   handleVerificationCommandWithHostMock: vi.fn(),
 }));
 
@@ -32,6 +34,7 @@ vi.mock("./compactHost", () => ({
 vi.mock("./inspectionHost", () => ({
   handleReviewCommandWithHost: handleReviewCommandWithHostMock,
   handleUltrareviewCommandWithHost: handleUltrareviewCommandWithHostMock,
+  handleUltraverifyCommandWithHost: handleUltraverifyCommandWithHostMock,
   handleVerificationCommandWithHost: handleVerificationCommandWithHostMock,
 }));
 
@@ -57,6 +60,7 @@ describe("promptExecutionHost", () => {
     handleCompactCommandWithHostMock.mockResolvedValue(true);
     handleReviewCommandWithHostMock.mockResolvedValue(true);
     handleUltrareviewCommandWithHostMock.mockResolvedValue(true);
+    handleUltraverifyCommandWithHostMock.mockResolvedValue(true);
     handleVerificationCommandWithHostMock.mockResolvedValue(true);
 
     const handlers = createPromptExecutionCommandHandlers({
@@ -77,6 +81,7 @@ describe("promptExecutionHost", () => {
         runBuiltInAgentSession: vi.fn(),
         buildFollowUpMessage: vi.fn(() => "follow-up"),
         runDetachedRemoteReview: vi.fn(),
+        runDetachedRemoteVerification: vi.fn(),
       } as any,
       findActiveBuiltInAgentTask: vi.fn(async () => undefined),
       createProviderAdapter: vi.fn(() => ({
@@ -134,6 +139,18 @@ describe("promptExecutionHost", () => {
       ),
     ).resolves.toBe(true);
     await expect(
+      handlers.handleUltraverifyCommand(
+        "prompt",
+        "E:\\repo",
+        providerConfig,
+        {},
+        { getToolContext: () => ({ workspaceRoot: "E:\\repo", invokerKind: "main" }) } as any,
+        [],
+        {},
+        "high",
+      ),
+    ).resolves.toBe(true);
+    await expect(
       handlers.handleVerificationCommand(
         "prompt",
         "E:\\repo",
@@ -151,6 +168,7 @@ describe("promptExecutionHost", () => {
     expect(handleCompactCommandWithHostMock).toHaveBeenCalledTimes(1);
     expect(handleReviewCommandWithHostMock).toHaveBeenCalledTimes(1);
     expect(handleUltrareviewCommandWithHostMock).toHaveBeenCalledTimes(1);
+    expect(handleUltraverifyCommandWithHostMock).toHaveBeenCalledTimes(1);
     expect(handleVerificationCommandWithHostMock).toHaveBeenCalledTimes(1);
   });
 
@@ -175,6 +193,7 @@ describe("promptExecutionHost", () => {
       handleCompactCommand: async () => false,
       handleReviewCommand: async () => false,
       handleUltrareviewCommand: async () => false,
+      handleUltraverifyCommand: async () => false,
       handleVerificationCommand: async () => false,
     });
 
@@ -215,6 +234,7 @@ describe("promptExecutionHost", () => {
       handleCompactCommand: async () => false,
       handleReviewCommand: async () => false,
       handleUltrareviewCommand: async () => false,
+      handleUltraverifyCommand: async () => false,
       handleVerificationCommand: async () => false,
     });
 
@@ -264,6 +284,7 @@ describe("promptExecutionHost", () => {
       handleCompactCommand: async () => true,
       handleReviewCommand: async () => false,
       handleUltrareviewCommand: async () => false,
+      handleUltraverifyCommand: async () => false,
       handleVerificationCommand: async () => false,
     });
 
@@ -310,6 +331,7 @@ describe("promptExecutionHost", () => {
       handleCompactCommand: async () => false,
       handleReviewCommand: async () => false,
       handleUltrareviewCommand: async () => false,
+      handleUltraverifyCommand: async () => false,
       handleVerificationCommand: async () => false,
     });
 

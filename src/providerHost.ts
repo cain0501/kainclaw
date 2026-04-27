@@ -9,6 +9,71 @@ import { loadEnvFallbackConfig } from "./legacyEnvFallback";
 import { SettingsRepository } from "./storage/settingsRepository";
 import type { ProviderRuntimeOptions } from "./thinkingEffort/types";
 
+function appendSystemPromptSection(
+  basePrompt: string,
+  heading: string,
+  lines: string[],
+): string {
+  const section = [`# ${heading}`, ...lines].join("\n");
+  return `${basePrompt.trimEnd()}\n\n${section}`;
+}
+
+export function buildKainClawRuntimeIdentityNote(
+  config: AdapterProviderConfig,
+): string {
+  const lines = [
+    "Your identity is KainClaw. If the user asks who you are, answer that you are KainClaw, a multifunctional AI assistant.",
+    "You can say that you help with programming, document editing, information search, debugging, image generation, and UI/page design tasks.",
+    "When the user asks what model or provider is currently in use, do not guess. Use only the runtime facts below.",
+  ];
+
+  if (config.type === "claude-cli") {
+    lines.push(
+      config.model?.trim()
+        ? `Current runtime fact: you are currently running through Claude CLI with configured model "${config.model.trim()}".`
+        : "Current runtime fact: you are currently running through Claude CLI. If the user asks for the exact model name, explain that no explicit model is configured in the app and the local Claude CLI may choose the effective model.",
+    );
+  } else if (config.type === "anthropic") {
+    lines.push(
+      `Current runtime fact: the app is configured to use the official Anthropic provider${config.model?.trim() ? ` with model "${config.model.trim()}"` : ""}.`,
+    );
+  } else if (config.type === "openai") {
+    lines.push(
+      `Current runtime fact: the app is configured to use the official OpenAI provider${config.model?.trim() ? ` with model "${config.model.trim()}"` : ""}.`,
+    );
+  } else {
+    const modelPart = config.model?.trim()
+      ? ` model "${config.model.trim()}"`
+      : " an unspecified model";
+    const baseUrlPart = config.baseUrl?.trim()
+      ? ` via ${config.baseUrl.trim()}`
+      : "";
+    lines.push(
+      `Current runtime fact: the app is configured to use an OpenAI-compatible provider with${modelPart}${baseUrlPart}.`,
+    );
+    lines.push(
+      "The true upstream model may be replaced, aliased, or masked by the third-party gateway, so you must not claim full certainty about the real upstream LLM unless the user separately confirms it.",
+    );
+  }
+
+  lines.push(
+    "Do not freely claim that you are Claude, GPT, DeepSeek, or another model family as your identity. Keep your identity as KainClaw, then describe the configured runtime when asked about the current model/provider.",
+  );
+
+  return lines.join("\n");
+}
+
+export function buildProviderSystemPrompt(
+  baseSystemPrompt: string,
+  config: AdapterProviderConfig,
+): string {
+  return appendSystemPromptSection(
+    baseSystemPrompt,
+    "Runtime Identity Note",
+    buildKainClawRuntimeIdentityNote(config).split("\n"),
+  );
+}
+
 export async function resolveProviderConfig(
   settings: SettingsRepository,
   workspaceRoot: string,
@@ -74,8 +139,9 @@ export function buildProviderAdapter(
   envMap: Record<string, string> = {},
   runtimeOptions: ProviderRuntimeOptions = {},
 ) {
+  const resolvedSystemPrompt = buildProviderSystemPrompt(systemPrompt, config);
   if (config.type === "openai" || config.type === "openai-compatible") {
-    return new OpenAIAdapter(config, systemPrompt, runtimeOptions);
+    return new OpenAIAdapter(config, resolvedSystemPrompt, runtimeOptions);
   }
 
   if (config.type === "claude-cli") {
@@ -83,10 +149,10 @@ export function buildProviderAdapter(
       config,
       workspaceRoot,
       envMap,
-      systemPrompt,
+      resolvedSystemPrompt,
       runtimeOptions,
     );
   }
 
-  return new AnthropicAdapter(config, systemPrompt, runtimeOptions);
+  return new AnthropicAdapter(config, resolvedSystemPrompt, runtimeOptions);
 }

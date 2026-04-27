@@ -27,14 +27,20 @@ import type {
 } from "../src/agent/providers/IProviderAdapter";
 import { McpRuntime, type McpServerStatusSummary } from "../src/mcpRuntime";
 import { runAgent, SYSTEM_PROMPT } from "../src/agent/agentRunner";
-import { toolDefinitions as builtinToolDefinitions } from "../src/toolRuntime";
+import {
+  dedupeToolDefinitionsByName,
+  toolDefinitions as builtinToolDefinitions,
+} from "../src/toolRuntime";
 import type { ToolContext, ToolDefinition } from "../src/toolRuntime";
 import { handleElectronPromptCommand } from "../src/electronPromptCommandHost";
 import { parsePromptSlashCommand } from "../src/promptCommandHost";
 import { handleCompactCommandWithHost } from "../src/compactHost";
+import { pollElectronBackgroundTaskNotifications } from "../src/electronBackgroundTaskNotificationHost";
+import { shouldNotifyBackgroundTask } from "../src/backgroundTaskNotificationHost";
 import {
   handleReviewCommandWithHost,
   handleUltrareviewCommandWithHost,
+  handleUltraverifyCommandWithHost,
   handleVerificationCommandWithHost,
 } from "../src/inspectionHost";
 import {
@@ -105,7 +111,9 @@ const ELECTRON_SHELL_PROMPT_NOTE = `
 
 # Desktop Shell Note
 - You are running inside a limited Electron validation shell, not the full VS Code host.
-- Identify yourself as KainClaw. Do not claim to be Claude, Anthropic, OpenAI, DeepSeek, or any provider.
+- Identify yourself as KainClaw. You are a multifunctional AI assistant.
+- You can say that you help with programming, document editing, information search, debugging, image generation, and UI/page design tasks.
+- If the user asks what model or provider is currently in use, rely on the runtime identity note already injected by the host. Do not invent extra certainty.
 - Only use the tools that are actually exposed in this shell.
 - Plan mode, worktree switching, browser automation, LSP, advanced memory management, and skill management are not available here.
 - Explicit slash commands for /compact, /todo, /review, and /verify are wired into this shell. Treat them as user-invoked shell commands, not autonomous capabilities to invent on your own.
@@ -130,7 +138,7 @@ type InspectionConversationMessage = {
   content: string;
 };
 
-type ActiveRequestKind = "chat" | "image";
+type ActiveRequestKind = "background" | "chat" | "image";
 
 /**
  * Electron equivalent of ChatSidebarProvider.
@@ -170,6 +178,8 @@ export class ElectronChatPanel {
   private readonly backgroundTaskHost: BackgroundTaskHost;
   private readonly cachedWorkspaceResolutions = new Map<string, ResolvedWorkspaceRoot>();
   private sessionMessageWriteQueue: Promise<void> = Promise.resolve();
+  private backgroundTaskNotificationTimer: NodeJS.Timeout | undefined;
+  private backgroundTaskNotificationPollInFlight: Promise<number> | undefined;
 
   constructor(
     private readonly sessions: SessionRepository,
@@ -201,14 +211,70 @@ export class ElectronChatPanel {
         }),
       );
     }
+
+    this.backgroundTaskNotificationTimer = setInterval(() => {
+      void this.pollBackgroundTaskNotifications();
+    }, 1500);
+    this.backgroundTaskNotificationTimer.unref?.();
   }
 
   dispose(): void {
     this.backgroundTaskHost.dispose();
+    if (this.backgroundTaskNotificationTimer) {
+      clearInterval(this.backgroundTaskNotificationTimer);
+      this.backgroundTaskNotificationTimer = undefined;
+    }
     while (this.cleanupHandlers.length > 0) {
       const cleanup = this.cleanupHandlers.pop();
       cleanup?.();
     }
+  }
+
+  private async pollBackgroundTaskNotifications(): Promise<number> {
+    if (this.backgroundTaskNotificationPollInFlight) {
+      return this.backgroundTaskNotificationPollInFlight;
+    }
+
+    const operation = pollElectronBackgroundTaskNotifications({
+      getTaskRuntimes: async () => {
+        if (!this.currentSessionId) {
+          return [];
+        }
+
+        const workspaceContext = await this.getResolvedWorkspaceContext();
+        const roots = new Set<string>();
+        if (this.currentSessionWorkspaceRoot.trim()) {
+          roots.add(this.currentSessionWorkspaceRoot.trim());
+        }
+        if (workspaceContext.effectiveRoot.trim()) {
+          roots.add(workspaceContext.effectiveRoot.trim());
+        }
+
+        return [...roots].map(workspaceRoot =>
+          this.getConversationTaskRuntime(workspaceRoot),
+        );
+      },
+      recordAssistantReply: (reply, includeInConversation) =>
+        this.currentSessionId
+          ? this.recordCommandAssistantReply(
+              this.currentSessionId,
+              reply,
+              includeInConversation,
+            )
+          : Promise.resolve(),
+    }).then(async delivered => {
+      if (delivered > 0) {
+        await this.postState();
+      }
+      return delivered;
+    }).finally(() => {
+      if (this.backgroundTaskNotificationPollInFlight === operation) {
+        this.backgroundTaskNotificationPollInFlight = undefined;
+      }
+    });
+
+    this.backgroundTaskNotificationPollInFlight = operation;
+    return operation;
   }
 
   private clearWorkspaceResolutionCache(selectedRoot?: string): void {
@@ -391,7 +457,7 @@ export class ElectronChatPanel {
   }
 
   private buildInspectionWorkspaceWarning(
-    commandName: "/review" | "/ultrareview" | "/verify",
+    commandName: "/review" | "/ultrareview" | "/verify" | "/ultraverify",
     workspace: ResolvedWorkspaceRoot,
   ): string | undefined {
     switch (workspace.kind) {
@@ -414,11 +480,12 @@ export class ElectronChatPanel {
 
   private async warnOnDegradedInspectionWorkspace(
     sessionId: string,
-    commandName: "/review" | "/ultrareview" | "/verify",
+    commandName: "/review" | "/ultrareview" | "/verify" | "/ultraverify",
     commandText: string,
   ): Promise<void> {
     const diffRef =
-      commandName === "/review" || commandName === "/ultrareview"
+      commandName === "/review" ||
+      commandName === "/ultrareview"
         ? parseReviewDiffRef(commandText)
         : parseVerificationDiffRef(commandText);
     if (diffRef && /^https?:\/\//i.test(diffRef.trim())) {
@@ -703,10 +770,46 @@ export class ElectronChatPanel {
     return activeRequest.streamingText;
   }
 
-  private isCurrentSessionBusy(): boolean {
-    return !!(
-      this.currentSessionId && this.inFlightRequests.has(this.currentSessionId)
+  private getConversationTaskRuntimesForCurrentSession(
+    workspaceInfo: ResolvedWorkspaceRoot,
+  ): ConversationTaskRuntime[] {
+    if (!this.currentSessionId) {
+      return [];
+    }
+
+    const roots = new Set<string>();
+    if (this.currentSessionWorkspaceRoot.trim()) {
+      roots.add(this.currentSessionWorkspaceRoot.trim());
+    }
+    if (workspaceInfo.effectiveRoot.trim()) {
+      roots.add(workspaceInfo.effectiveRoot.trim());
+    }
+
+    return [...roots].map(workspaceRoot =>
+      this.getConversationTaskRuntime(workspaceRoot),
     );
+  }
+
+  private async getCurrentSessionBackgroundBusy(
+    workspaceInfo: ResolvedWorkspaceRoot,
+  ): Promise<boolean> {
+    for (const runtime of this.getConversationTaskRuntimesForCurrentSession(workspaceInfo)) {
+      const tasks = await runtime.listBackgroundTasks();
+      if (
+        tasks.some(task =>
+          task.taskType !== "built_in_agent" &&
+          (
+            task.status === "running" ||
+            task.status === "pending" ||
+            shouldNotifyBackgroundTask(task)
+          ),
+        )
+      ) {
+        return true;
+      }
+    }
+
+    return false;
   }
 
   private async appendAssistantMessageToSession(
@@ -1804,7 +1907,10 @@ export class ElectronChatPanel {
       } catch {
         // MCP not configured or failed – proceed with built-in tools only
       }
-      const allTools = [...getSupportedElectronTools(), ...mcpTools];
+      const allTools = dedupeToolDefinitionsByName([
+        ...getSupportedElectronTools(),
+        ...mcpTools,
+      ]);
       const runtimeOptions = this.buildProviderRuntimeOptions();
       const promptRuntime = this.createPromptRuntime(
         workspaceRoot,
@@ -1876,6 +1982,33 @@ export class ElectronChatPanel {
           effortLevel,
         ) =>
           this.handleUltrareviewPromptCommand(
+            requestSessionId,
+            commandText,
+            workspaceContext.effectiveRoot,
+            commandConfig,
+            commandEnvMap,
+            this.createPromptRuntime(
+              workspaceContext.effectiveRoot,
+              commandEnvMap,
+              commandTools,
+              commandMcpRuntime,
+              abortController.signal,
+            ),
+            commandTools,
+            commandRuntimeOptions,
+            effortLevel,
+          ),
+        handleUltraverifyCommand: (
+          commandText,
+          _commandWorkspaceRoot,
+          commandConfig,
+          commandEnvMap,
+          _commandRuntime,
+          commandTools,
+          commandRuntimeOptions,
+          effortLevel,
+        ) =>
+          this.handleUltraverifyPromptCommand(
             requestSessionId,
             commandText,
             workspaceContext.effectiveRoot,
@@ -2267,7 +2400,10 @@ export class ElectronChatPanel {
 
   private getUserFacingInspectionBackgroundTaskHost(): Pick<
     BackgroundTaskHost,
-    "runBuiltInAgentSession" | "buildFollowUpMessage" | "runDetachedRemoteReview"
+    | "runBuiltInAgentSession"
+    | "buildFollowUpMessage"
+    | "runDetachedRemoteReview"
+    | "runDetachedRemoteVerification"
   > {
     return {
       runBuiltInAgentSession: request =>
@@ -2275,6 +2411,8 @@ export class ElectronChatPanel {
       buildFollowUpMessage: () => "",
       runDetachedRemoteReview: request =>
         this.backgroundTaskHost.runDetachedRemoteReview(request),
+      runDetachedRemoteVerification: request =>
+        this.backgroundTaskHost.runDetachedRemoteVerification(request),
     };
   }
 
@@ -2465,6 +2603,47 @@ export class ElectronChatPanel {
   ): Promise<boolean> {
     await this.warnOnDegradedInspectionWorkspace(sessionId, "/ultrareview", commandText);
     return handleUltrareviewCommandWithHost({
+      commandText,
+      workspaceRoot,
+      config,
+      envMap,
+      runtime,
+      tools,
+      runtimeOptions,
+      effortLevel: effortLevel as import("../src/thinkingEffort/types").EffortLevel | undefined,
+      sessionMessages: this.sessionMessages.map(message => ({
+        role: message.role,
+        content: message.content,
+      })),
+      blockedByPlanMode: false,
+      getConversationHistory: () =>
+        this.buildInspectionConversationHistory(this.sessionMessages),
+      getPendingPlanVerification: () => undefined,
+      backgroundTaskHost: this.getUserFacingInspectionBackgroundTaskHost(),
+      addPhaseActivity: () => this.createPhaseActivityStub(),
+      finishPhaseActivity: () => this.finishPhaseActivityStub(),
+      recordAssistantReply: (reply, includeInConversation) =>
+        this.recordCommandAssistantReply(sessionId, reply, includeInConversation),
+      setCompanionState: () => this.setCommandCompanionState(),
+      clearStreamingText: () => this.clearStreamingForSession(sessionId),
+      updateMood: () => this.updateCommandMood(),
+      isAbortLikeError: error => this.isAbortLikeError(error),
+    });
+  }
+
+  private async handleUltraverifyPromptCommand(
+    sessionId: string,
+    commandText: string,
+    workspaceRoot: string,
+    config: AdapterProviderConfig,
+    envMap: Record<string, string>,
+    runtime: ElectronPromptRuntime,
+    tools: ToolDefinition[],
+    runtimeOptions: ProviderRuntimeOptions,
+    effortLevel: EffortLevel | undefined,
+  ): Promise<boolean> {
+    await this.warnOnDegradedInspectionWorkspace(sessionId, "/ultraverify", commandText);
+    return handleUltraverifyCommandWithHost({
       commandText,
       workspaceRoot,
       config,
@@ -2696,10 +2875,12 @@ export class ElectronChatPanel {
 
   private async postState(): Promise<void> {
     this.streamingText = this.getVisibleStreamingText();
-    const sessionBusy = this.isCurrentSessionBusy();
+    const workspaceInfo = await this.getResolvedWorkspaceContext();
     const activeRequest = this.currentSessionId
       ? this.inFlightRequests.get(this.currentSessionId)
       : undefined;
+    const backgroundBusy = await this.getCurrentSessionBackgroundBusy(workspaceInfo);
+    const sessionBusy = !!activeRequest || backgroundBusy;
 
     const onboardingDone = this.settings.isOnboardingDone();
     const providerMeta = this.settings.getActiveProviderMeta();
@@ -2707,7 +2888,6 @@ export class ElectronChatPanel {
       ? `${providerMeta.type} / ${providerMeta.model ?? "default"}`
       : "未配置";
 
-    const workspaceInfo = await this.getResolvedWorkspaceContext();
     const workspaceRoot = workspaceInfo.selectedRoot;
 
     let mcpServers: unknown[] = [];
@@ -2720,7 +2900,7 @@ export class ElectronChatPanel {
     this.sendToRenderer({
       type: "state",
       isBusy: sessionBusy,
-      activeRequestKind: activeRequest?.kind ?? null,
+      activeRequestKind: activeRequest?.kind ?? (backgroundBusy ? "background" : null),
       providerLabel,
       mcpServers,
       desktopRuntime: this.buildDesktopRuntimeState(),

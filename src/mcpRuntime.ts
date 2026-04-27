@@ -14,7 +14,14 @@ import {
   type McpOAuthHost,
   performMcpOAuthFlow,
 } from "./mcpOAuth";
-import type { McpToolAdapter, ToolContext, ToolDefinition, ToolExecutionResult, ToolInput } from "./toolRuntime";
+import {
+  dedupeToolDefinitionsByName,
+  type McpToolAdapter,
+  type ToolContext,
+  type ToolDefinition,
+  type ToolExecutionResult,
+  type ToolInput,
+} from "./toolRuntime";
 
 type JsonRecord = Record<string, unknown>;
 
@@ -545,7 +552,9 @@ export class McpRuntime implements McpToolAdapter {
       toolDefinitions.push(LIST_MCP_RESOURCES_TOOL_DEFINITION, READ_MCP_RESOURCE_TOOL_DEFINITION);
     }
 
-    this.cachedToolDefinitions = toolDefinitions.filter(tool => !tool.name.endsWith("__status"));
+    this.cachedToolDefinitions = dedupeToolDefinitionsByName(
+      toolDefinitions.filter(tool => !tool.name.endsWith("__status")),
+    );
     return [...this.cachedToolDefinitions];
   }
 

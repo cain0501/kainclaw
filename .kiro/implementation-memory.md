@@ -23,12 +23,16 @@
   - `npm run build:electron`
   - `npm run check:electron`
 - 当前验证基线：
-  - `148` 个测试文件
-  - `1068` 个测试通过
+  - `151` 个测试文件
+  - `1085` 个测试通过
 - hosted review / RemoteAgentTask 适配规则：
   - `/ultrareview` 这类 Claude 已覆盖的能力，生命周期和用户语义要先对齐 Claude 源码。
   - 如果本地没有 Claude 的云端 CCR / RemoteAgentTask backend，允许只对传输层做薄适配；当前适配方式是 detached `Claude CLI` review worker，而不是另起一套 KainClaw review 语义。
   - hosted review 完成后，应通过 notification-first 路径把完整 findings 回流给用户，而不是只给 `Result:` 截断预览。
+- hosted verification / RemoteAgentTask 适配规则：
+  - `/ultraverify` 这类 Claude 已覆盖的能力，也要先对齐 Claude hosted verification / `RemoteAgentTask` 生命周期；当前本地适配方式是 detached `Claude CLI` verification worker。
+  - 启动阶段要先回显 task id / output path，同时聊天保持 waiting / background 状态；完成后自动回流完整 verification report + `VERDICT`，不要一启动就让 UI 回到 idle。
+  - 用户 stop 后要进入 stopped / cancelled 路径，不能把中断任务伪装成自然完成。
 - 本批 Claude parity 已同步收口项：
   - 文档/规则：Claude 源码优先、handoff、gap analysis、source-reference、UTF-8 without BOM。
   - Renderer：Electron Markdown 与 `/verify` report 渲染以 Claude `marked.lexer()` token 模型为 baseline。
@@ -44,8 +48,10 @@
   - Task tool aliases：`KillShell` 归一到 `TaskStop`，`AgentOutputTool` / `BashOutputTool` 归一到 `TaskOutput`；ToolSearch 对这些 deprecated Claude aliases 返回 canonical 工具名。
   - MCP runtime：按 Claude MCP 源码补齐 `type: "http"` / `type: "sse"` transport 语义、`needs-auth` + `mcp__<server>__authenticate` placeholder、无 resources server 的明确错误、MCP result priority、`isError` 工具错误处理，以及 `normalizeNameForMCP` 对外工具名安全化。
   - MCP runtime：远端 `http` / `sse` OAuth 现在也按 Claude `OAuthClientProvider + localhost callback + PKCE` 主链接通；prompt surface 按 Claude `fetchCommandsForClient()` 语义落为 `mcp__<server>__<prompt>` commands；执行层兼容模型产出的单下划线 / 连字符转下划线变体；Electron transcript 已补回 Claude-style `tool_use / tool_result` 可见性。
+  - provider runtime identity：身份层固定为 KainClaw，多功能助手文案放在 system prompt；当前 provider / model 信息改由宿主注入 runtime identity note，不让模型自由脑补自己是 Claude / GPT / DeepSeek。
+  - tool assembly parity：按 Claude `src/cli/print.ts` 的 `uniqBy(name)` 逻辑，对 MCP tool 列表、workspace tool 聚合、Electron shell tool 池，以及发给 provider 的 `tools` payload 做最终按名去重，避免第三方 `Anthropic` / `DeepSeek` 上游直接报 `Tool names must be unique.`。
 - MCP 本轮定向验证：
-  - `npm test -- --run src/mcpRuntime.test.ts src/mcpRuntime.helpers.test.ts`（20 tests passed）
+  - `npm test -- --run src/mcpRuntime.test.ts src/mcpRuntime.helpers.test.ts`（25 tests passed）
   - `npm test -- --run src/toolRuntime.test.ts`（90 tests passed）
   - `npm run check`
   - `npm run build`
@@ -120,7 +126,7 @@
 
 ### 3. 验证基线登记
 
-- 当前登记基线：`148` 个测试文件，`1068` 个测试通过。
+- 当前登记基线：`151` 个测试文件，`1085` 个测试通过。
 - 当前登记通过命令：
   - `npm test`
   - `npm run check`
@@ -302,6 +308,7 @@
 - LSP provider 返回 `undefined` 要表示 provider/server 不可用，不能混同为“有 provider 但空结果”；无 LSP runtime 的 workspace 不应把 `LSP` 工具暴露给模型或 ToolSearch。
 - ToolSearchTool 的搜索语法必须以 Claude `ToolSearchTool.ts` 为 baseline：`select:` 直接选工具、裸工具名精确选中、`mcp__server` 前缀匹配 MCP 工具、`+required` 作为必选词、`max_results` 作为官方输入别名。KainClaw 只做当前可用工具和 MCP 动态工具聚合适配。
 - Task 工具的 deprecated aliases 也属于 Claude 源码合同：`KillShell` 必须路由到 `TaskStop`，`AgentOutputTool` / `BashOutputTool` 必须路由到 `TaskOutput`。但 `TaskOutput` 的输入仍按官方合同只接受 `task_id`，不要因为 `KillShell` 兼容而给 `TaskOutput` 增加 `shell_id`。
+- Claude 源码在最终 tool pool assembly 上还会按 `name` 去重（参考 `src/cli/print.ts` 的 `uniqBy(..., "name")`）。KainClaw 的 MCP 列表、workspace tool 聚合、Electron shell tool 池，以及发给 provider 的 `tools` payload 也必须做同样的去重，避免第三方 `Anthropic` / `DeepSeek` 这类严格上游直接报 `Tool names must be unique.`。
 - gitignored 过滤要前置到 definition / implementation / references / workspaceSymbols / call hierarchy 这些入口。
 - `maxResults` 必须在更外层先收口，避免深层结果再裁切。
 - Worktree 要做：

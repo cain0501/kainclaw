@@ -73,6 +73,18 @@ vi.mock("../src/agent/agentRunner", () => ({
 }));
 
 vi.mock("../src/toolRuntime", () => ({
+  dedupeToolDefinitionsByName: <T extends { name: string }>(tools: readonly T[]) => {
+    const seen = new Set<string>();
+    const deduped: T[] = [];
+    for (const tool of tools) {
+      if (seen.has(tool.name)) {
+        continue;
+      }
+      seen.add(tool.name);
+      deduped.push(tool);
+    }
+    return deduped;
+  },
   toolDefinitions: [],
 }));
 
@@ -2794,5 +2806,40 @@ describe("ElectronChatPanel session lifecycle", () => {
       batchCount: 2,
       responseFormat: "url",
     });
+  });
+
+  it("keeps Electron in a background waiting state while a hosted task is still running", async () => {
+    const harness = await createHarness();
+    tempDirs.push(harness.storagePath);
+
+    await harness.settings.setOnboardingDone(true);
+    await harness.panel.handleMessage({ type: "ready" });
+
+    (harness.panel as any).currentSessionWorkspaceRoot = "E:\\repo";
+    const runtime = (harness.panel as any).getConversationTaskRuntime("E:\\repo");
+    await runtime.registerBackgroundTask({
+      id: "remote-verify-1",
+      taskType: "remote_agent",
+      status: "running",
+      description: "Hosted verification: HEAD~1..HEAD",
+      workspaceRoot: "E:\\repo",
+      command: "/ultraverify HEAD~1..HEAD",
+      metadata: {
+        remoteTaskType: "claude_cli_verification",
+      },
+      output: "Started remote verification",
+    });
+
+    await (harness.panel as any).postState();
+
+    const lastStatePayload = [...harness.rendererPayloads]
+      .reverse()
+      .find(payload => (payload as { type?: string }).type === "state") as {
+        isBusy: boolean;
+        activeRequestKind: string | null;
+      };
+
+    expect(lastStatePayload.isBusy).toBe(true);
+    expect(lastStatePayload.activeRequestKind).toBe("background");
   });
 });

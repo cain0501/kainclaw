@@ -41,7 +41,10 @@ export type PromptEntryCommandBindings<TRuntime extends PromptRuntimeLike> = {
   ) => void;
   backgroundTaskHost: Pick<
     BackgroundTaskHost,
-    "runBuiltInAgentSession" | "buildFollowUpMessage" | "runDetachedRemoteReview"
+    | "runBuiltInAgentSession"
+    | "buildFollowUpMessage"
+    | "runDetachedRemoteReview"
+    | "runDetachedRemoteVerification"
   >;
   findActiveBuiltInAgentTask: (
     workspaceRoot: string,
@@ -198,7 +201,10 @@ export function createPromptEntryBindingsFromShared<
   ) => void;
   backgroundTaskHost: Pick<
     BackgroundTaskHost,
-    "runBuiltInAgentSession" | "buildFollowUpMessage" | "runDetachedRemoteReview"
+    | "runBuiltInAgentSession"
+    | "buildFollowUpMessage"
+    | "runDetachedRemoteReview"
+    | "runDetachedRemoteVerification"
   >;
   findActiveBuiltInAgentTask: (
     workspaceRoot: string,

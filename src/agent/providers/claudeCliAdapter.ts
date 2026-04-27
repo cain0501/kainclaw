@@ -57,7 +57,7 @@ export class ClaudeCliAdapter implements IProviderAdapter {
     const prompt = buildClaudeCliPrompt(messages, this.systemPrompt);
 
     const sessionId = randomUUID();
-    const args = ["-p", prompt, "--output-format", "text", "--session-id", sessionId];
+    const args = ["--print", "--output-format", "text", "--session-id", sessionId];
     if (this.config.model) args.push("--model", this.config.model);
 
     const child =
@@ -86,6 +86,8 @@ export class ClaudeCliAdapter implements IProviderAdapter {
       child.stdout.on("data", (chunk: Buffer) => { stdout += chunk.toString(); });
       child.stderr.on("data", (chunk: Buffer) => { stderr += chunk.toString(); });
       child.on("error", err => { clearTimeout(handle); reject(err); });
+      child.stdin.write(prompt);
+      child.stdin.end();
       abortSignal?.addEventListener("abort", () => {
         child.kill();
         clearTimeout(handle);

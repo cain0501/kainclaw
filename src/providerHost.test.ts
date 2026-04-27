@@ -28,7 +28,12 @@ vi.mock("./legacyEnvFallback", () => ({
   loadEnvFallbackConfig: loadEnvFallbackConfigMock,
 }));
 
-import { buildProviderAdapter, resolveProviderConfig } from "./providerHost";
+import {
+  buildKainClawRuntimeIdentityNote,
+  buildProviderAdapter,
+  buildProviderSystemPrompt,
+  resolveProviderConfig,
+} from "./providerHost";
 
 const originalEnv = { ...process.env };
 
@@ -116,7 +121,7 @@ describe("providerHost", () => {
     );
     expect(openAICtor).toHaveBeenCalledWith(
       expect.objectContaining({ type: "openai-compatible" }),
-      "system prompt",
+      expect.stringContaining("the app is configured to use an OpenAI-compatible provider"),
       { fastMode: true },
     );
 
@@ -135,7 +140,7 @@ describe("providerHost", () => {
       expect.objectContaining({ type: "claude-cli" }),
       "E:\\repo",
       { HELLO: "world" },
-      "system prompt",
+      expect.stringContaining('you are currently running through Claude CLI with configured model "claude-sonnet"'),
       { fastMode: true },
     );
 
@@ -152,8 +157,35 @@ describe("providerHost", () => {
     );
     expect(anthropicCtor).toHaveBeenCalledWith(
       expect.objectContaining({ type: "anthropic" }),
-      "system prompt",
+      expect.stringContaining('the app is configured to use the official Anthropic provider with model "claude-sonnet"'),
       { fastMode: true },
     );
+  });
+
+  it("builds a stable identity note and marks openai-compatible runtimes as lower confidence", () => {
+    const note = buildKainClawRuntimeIdentityNote({
+      type: "openai-compatible",
+      apiKey: "secret",
+      model: "gpt-4.1",
+      baseUrl: "https://gateway.example/v1",
+    });
+
+    expect(note).toContain("Your identity is KainClaw.");
+    expect(note).toContain("programming, document editing, information search, debugging, image generation, and UI/page design tasks");
+    expect(note).toContain('the app is configured to use an OpenAI-compatible provider with model "gpt-4.1" via https://gateway.example/v1.');
+    expect(note).toContain("The true upstream model may be replaced, aliased, or masked by the third-party gateway");
+  });
+
+  it("appends the runtime identity note to the base system prompt", () => {
+    const prompt = buildProviderSystemPrompt("base prompt", {
+      type: "openai",
+      apiKey: "secret",
+      model: "gpt-4.1",
+    });
+
+    expect(prompt).toContain("base prompt");
+    expect(prompt).toContain("# Runtime Identity Note");
+    expect(prompt).toContain("Your identity is KainClaw.");
+    expect(prompt).toContain('the app is configured to use the official OpenAI provider with model "gpt-4.1"');
   });
 });

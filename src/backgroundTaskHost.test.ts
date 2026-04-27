@@ -8,6 +8,7 @@ import { formatBuiltInAgentToolEvent } from "./agent/built-in/backgroundTask";
 import {
   BackgroundTaskHost,
   buildBackgroundCommandTaskDescription,
+  getDetachedWorkerSpawnEnvironment,
 } from "./backgroundTaskHost";
 import { PersistentTaskRuntimeStore } from "./tasks/taskRuntime";
 
@@ -40,6 +41,21 @@ afterEach(async () => {
 });
 
 describe("backgroundTaskHost helpers", () => {
+  it("uses ELECTRON_RUN_AS_NODE when launching detached workers from Electron", () => {
+    const env = getDetachedWorkerSpawnEnvironment({
+      baseEnv: { PATH: "C:\\Windows\\System32" },
+      isElectronHost: true,
+    });
+    expect(env.PATH).toBe("C:\\Windows\\System32");
+    expect(env.ELECTRON_RUN_AS_NODE).toBe("1");
+
+    const nodeEnv = getDetachedWorkerSpawnEnvironment({
+      baseEnv: { PATH: "C:\\Windows\\System32" },
+      isElectronHost: false,
+    });
+    expect(nodeEnv.ELECTRON_RUN_AS_NODE).toBeUndefined();
+  });
+
   it("builds compact background command descriptions and follow-up messages", async () => {
     const storageRoot = await createStorageRoot("cain-background-host-");
     const runtime = await createTaskRuntime(storageRoot);
@@ -420,6 +436,74 @@ describe("backgroundTaskHost helpers", () => {
     expect(refreshedTask?.output).toContain("### Findings");
   });
 
+  it("launches detached hosted verifications and refreshes the final report from worker state", async () => {
+    const storageRoot = await createStorageRoot("cain-background-host-");
+    const runtime = await createTaskRuntime(storageRoot);
+    const host = new BackgroundTaskHost({
+      storageRoot,
+      getTaskRuntime: () => runtime,
+      launchDetachedVerification: async () => ({ runnerPid: 2121 }),
+    });
+
+    const started = await host.runDetachedRemoteVerification({
+      workspaceRoot: "E:\\claudecodejingiang\\vscode-extension",
+      commandText: "/ultraverify HEAD~2..HEAD",
+      taskDescription: "Hosted verification: HEAD~2..HEAD",
+      verificationRequest: "Verify the diff.",
+      provider: {
+        model: "claude-3-7-sonnet",
+      },
+      systemPrompt: "verification prompt",
+      sessionId: "session-hosted-verify",
+      remoteTaskType: "claude_cli_verification",
+      metadata: {
+        diffRef: "HEAD~2..HEAD",
+      },
+    });
+
+    const initialTask = await runtime.getBackgroundTask(started.taskId);
+    const detached = initialTask?.metadata?.detached as
+      | { statePath?: string; outputPath?: string }
+      | undefined;
+
+    expect(initialTask).toMatchObject({
+      taskType: "remote_agent",
+      status: "running",
+    });
+
+    await fs.writeFile(
+      detached!.outputPath!,
+      "Started remote verification:\n/ultraverify HEAD~2..HEAD\nVERDICT: PASS\n",
+      "utf8",
+    );
+    await fs.writeFile(
+      detached!.statePath!,
+      JSON.stringify(
+        {
+          status: "completed",
+          updatedAt: Date.now(),
+          childPid: 3131,
+          result: "### Check: build\nVERDICT: PASS",
+        },
+        null,
+        2,
+      ),
+      "utf8",
+    );
+
+    const refreshedTask = await runtime.getBackgroundTask(started.taskId);
+
+    expect(refreshedTask).toMatchObject({
+      status: "completed",
+      result: "### Check: build\nVERDICT: PASS",
+      metadata: {
+        remoteTaskType: "claude_cli_verification",
+        diffRef: "HEAD~2..HEAD",
+      },
+    });
+    expect(refreshedTask?.output).toContain("VERDICT: PASS");
+  });
+
   it("stops detached hosted reviews through the detached process controller", async () => {
     const storageRoot = await createStorageRoot("cain-background-host-");
     const runtime = await createTaskRuntime(storageRoot);
@@ -472,6 +556,61 @@ describe("backgroundTaskHost helpers", () => {
       command: "/ultrareview HEAD~2..HEAD",
     });
     expect(stopDetachedProcess).toHaveBeenCalledWith(5050);
+    await expect(fs.readFile(detached!.cancelPath!, "utf8")).resolves.toBe("cancelled");
+  });
+
+  it("stops detached hosted verifications through the detached process controller", async () => {
+    const storageRoot = await createStorageRoot("cain-background-host-");
+    const runtime = await createTaskRuntime(storageRoot);
+    const stopDetachedProcess = vi.fn(async () => undefined);
+    const host = new BackgroundTaskHost({
+      storageRoot,
+      getTaskRuntime: () => runtime,
+      launchDetachedVerification: async () => ({ runnerPid: 4141 }),
+      stopDetachedProcess,
+    });
+
+    const started = await host.runDetachedRemoteVerification({
+      workspaceRoot: "E:\\claudecodejingiang\\vscode-extension",
+      commandText: "/ultraverify HEAD~2..HEAD",
+      taskDescription: "Hosted verification: HEAD~2..HEAD",
+      verificationRequest: "Verify the diff.",
+      provider: {},
+      systemPrompt: "verification prompt",
+      sessionId: "session-hosted-verify-stop",
+      remoteTaskType: "claude_cli_verification",
+    });
+
+    const storedTask = await runtime.getBackgroundTask(started.taskId);
+    const detached = storedTask?.metadata?.detached as
+      | { statePath?: string; cancelPath?: string }
+      | undefined;
+    await fs.writeFile(
+      detached!.statePath!,
+      JSON.stringify(
+        {
+          status: "running",
+          updatedAt: Date.now(),
+          childPid: 5151,
+          runnerPid: 4141,
+        },
+        null,
+        2,
+      ),
+      "utf8",
+    );
+
+    const stopped = await host.stopTask(
+      started.taskId,
+      "E:\\claudecodejingiang\\vscode-extension",
+    );
+
+    expect(stopped).toEqual({
+      taskId: started.taskId,
+      taskType: "remote_agent",
+      command: "/ultraverify HEAD~2..HEAD",
+    });
+    expect(stopDetachedProcess).toHaveBeenCalledWith(5151);
     await expect(fs.readFile(detached!.cancelPath!, "utf8")).resolves.toBe("cancelled");
   });
 

@@ -485,6 +485,55 @@ describe("McpRuntime config discovery cache", () => {
     expect(callRecords).toEqual([{ serverName: "github.com", toolName: "create issue" }]);
   });
 
+  it("deduplicates duplicate MCP tool names before exposing them to the model", async () => {
+    const workspaceRoot = await fs.mkdtemp(path.join(os.tmpdir(), "cain-mcp-runtime-dedupe-"));
+    tempDirs.push(workspaceRoot);
+    await fs.writeFile(
+      path.join(workspaceRoot, ".mcp.json"),
+      JSON.stringify({
+        mcpServers: {
+          notion: {
+            command: "node",
+            args: ["server.js"],
+          },
+        },
+      }),
+      "utf8",
+    );
+
+    const runtime = new McpRuntime(() => workspaceRoot, {});
+    (runtime as any).ensureConnection = async () => ({
+      client: {
+        getServerCapabilities: () => ({ tools: {} }),
+        listTools: async () => ({
+          tools: [
+            {
+              name: "notion-get-users",
+              description: "Get users",
+              inputSchema: { type: "object", properties: {} },
+            },
+            {
+              name: "notion-get-users",
+              description: "Duplicate get users",
+              inputSchema: { type: "object", properties: {} },
+            },
+          ],
+        }),
+      },
+      transport: {
+        close: async () => undefined,
+      },
+    });
+
+    const tools = await runtime.getToolDefinitions();
+
+    expect(tools).toEqual([
+      expect.objectContaining({
+        name: "mcp__notion__notion-get-users",
+      }),
+    ]);
+  });
+
   it("accepts model-normalized MCP tool names that replace separators with single underscores", async () => {
     const workspaceRoot = await fs.mkdtemp(path.join(os.tmpdir(), "cain-mcp-runtime-normalized-alias-"));
     tempDirs.push(workspaceRoot);
