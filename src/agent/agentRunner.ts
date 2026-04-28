@@ -192,6 +192,11 @@ function createInstalledSkillHookAgentRunner(options: {
 }): (hook: HookDefinition, context: HookContext) => Promise<void> {
   return async (hook, context) => {
     const hookPrompt = buildInstalledSkillAgentHookPrompt(hook, context);
+    const rebuilt = await rebuildAgentProviderForInstalledSkill({
+      runtimeContext: options.providerRuntimeContext,
+      currentProvider: options.provider,
+      modelOverride: hook.agentModel,
+    });
     await runAgent(
       [
         {
@@ -200,10 +205,10 @@ function createInstalledSkillHookAgentRunner(options: {
         },
       ],
       {
-        provider: options.provider,
+        provider: rebuilt.provider,
         tools: options.tools,
         toolContext: options.toolContext,
-        providerRuntimeContext: options.providerRuntimeContext,
+        providerRuntimeContext: rebuilt.runtimeContext,
       },
     );
   };

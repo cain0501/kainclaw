@@ -624,4 +624,124 @@ describe("agentRunner", () => {
       executeSpy.mockRestore();
     }
   });
+
+  it("rebuilds the hook sub-run provider when an installed-skill agent hook requests agentModel", async () => {
+    const outerProvider = new ScriptedProvider([
+      {
+        text: "use the hooked skill",
+        toolCalls: [{ id: "tool-1", name: "read_file", input: { path: "README.md" } }],
+        done: false,
+      },
+      {
+        text: "done",
+        toolCalls: [],
+        done: true,
+      },
+    ]);
+    const hookProvider: IProviderAdapter = {
+      async runStep() {
+        return {
+          text: "hook validation complete",
+          toolCalls: [],
+          done: true,
+        };
+      },
+    };
+
+    const toolContext: ToolContext = {
+      workspaceRoot: "E:\\claudecodejingiang\\vscode-extension",
+    };
+
+    const tools: ToolDefinition[] = [
+      {
+        name: "read_file",
+        description: "Read a file",
+        input_schema: { type: "object", properties: {} },
+      },
+    ];
+
+    const executeSpy = vi.spyOn(await import("../toolRuntime.js"), "executeTool").mockResolvedValue({
+      summary: "Read README.md",
+      content: "content",
+    });
+
+    const buildWorkspaceSystemPrompt = vi.fn(async () => "hook system prompt");
+    const buildProviderAdapter = vi.fn(() => hookProvider);
+    const createRuntimeOptions = vi.fn(
+      (_config: ProviderConfig, effortLevel: "low" | "medium" | "high" | "max" | undefined): ProviderRuntimeOptions => ({
+        effortLevel,
+      }),
+    );
+
+    try {
+      const result = await runAgent([], {
+        provider: outerProvider,
+        tools,
+        toolContext,
+        installedSkillHooks: [
+          {
+            id: "hook-1",
+            name: "hook-1",
+            type: "agent",
+            description: "hook",
+            events: ["PreToolCall"],
+            matcher: "read_file",
+            agentPrompt: "Validate the read result",
+            agentModel: "claude-opus-4-6",
+          },
+        ],
+        providerRuntimeContext: {
+          config: {
+            type: "anthropic",
+            apiKey: "secret",
+            model: "claude-sonnet",
+          },
+          workspaceRoot: "E:\\claudecodejingiang\\vscode-extension",
+          envMap: { HELLO: "world" },
+          runtimeOptions: { effortLevel: "medium" },
+          effortLevel: "medium",
+          buildWorkspaceSystemPrompt,
+          buildProviderAdapter,
+          createRuntimeOptions,
+        },
+      });
+
+      expect(result).toBe("done");
+      expect(createRuntimeOptions).toHaveBeenCalledWith(
+        {
+          type: "anthropic",
+          apiKey: "secret",
+          model: "claude-opus-4-6",
+        },
+        "medium",
+      );
+      expect(buildWorkspaceSystemPrompt).toHaveBeenCalledWith(
+        "E:\\claudecodejingiang\\vscode-extension",
+        {
+          type: "anthropic",
+          apiKey: "secret",
+          model: "claude-opus-4-6",
+        },
+        "medium",
+      );
+      expect(buildProviderAdapter).toHaveBeenCalledWith({
+        config: {
+          type: "anthropic",
+          apiKey: "secret",
+          model: "claude-opus-4-6",
+        },
+        workspaceRoot: "E:\\claudecodejingiang\\vscode-extension",
+        systemPrompt: "hook system prompt",
+        envMap: { HELLO: "world" },
+        runtimeOptions: { effortLevel: "medium" },
+      });
+      expect(executeSpy).toHaveBeenCalledWith(
+        "read_file",
+        { path: "README.md" },
+        toolContext,
+      );
+    } finally {
+      executeSpy.mockRestore();
+    }
+  });
 });

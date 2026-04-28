@@ -91,7 +91,7 @@ describe("installedSkillModelRegistry", () => {
           },
         ],
       }),
-    ).toBe(false);
+    ).toBe(true);
   });
 
   it("loads only model-invocable installed skills from the configured roots", async () => {
@@ -106,12 +106,18 @@ describe("installedSkillModelRegistry", () => {
     const simpleSkillDir = path.join(kainclawHome, "skills", "simple-skill");
     const blockedSkillDir = path.join(kainclawHome, "skills", "blocked-skill");
     const hookedSkillDir = path.join(kainclawHome, "skills", "hooked-skill");
+    const agentModelHookSkillDir = path.join(
+      kainclawHome,
+      "skills",
+      "agent-model-hook-skill",
+    );
     const overrideSkillDir = path.join(kainclawHome, "skills", "override-skill");
     const forkedSkillDir = path.join(workspaceRoot, ".kainclaw", "skills", "forked-skill");
 
     await fs.mkdir(simpleSkillDir, { recursive: true });
     await fs.mkdir(blockedSkillDir, { recursive: true });
     await fs.mkdir(hookedSkillDir, { recursive: true });
+    await fs.mkdir(agentModelHookSkillDir, { recursive: true });
     await fs.mkdir(overrideSkillDir, { recursive: true });
     await fs.mkdir(forkedSkillDir, { recursive: true });
 
@@ -150,6 +156,22 @@ hooks:
       "utf8",
     );
     await fs.writeFile(
+      path.join(agentModelHookSkillDir, "SKILL.md"),
+      `---
+name: agent-model-hook-skill
+description: Agent-model hook helper
+hooks:
+  PreToolUse:
+    - matcher: read_file
+      hooks:
+        - type: agent
+          prompt: Validate the read result
+          model: claude-opus-4-6
+---
+`,
+      "utf8",
+    );
+    await fs.writeFile(
       path.join(overrideSkillDir, "SKILL.md"),
       `---
 name: override-skill
@@ -175,6 +197,7 @@ context: fork
 
     expect(skills.map(skill => skill.id)).toEqual([
       "forked-skill",
+      "agent-model-hook-skill",
       "hooked-skill",
       "override-skill",
       "simple-skill",

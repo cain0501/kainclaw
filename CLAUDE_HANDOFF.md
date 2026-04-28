@@ -14,8 +14,9 @@
   - The model-side `SkillTool` path now also supports safe `context=fork` installed skills by running them in an isolated recursive agent turn and returning the fork result back to the parent model as the tool result.
   - Model-visible installed skills can now also register their hooks through the shared session hook store, and those hooks take effect both later in the same model run and on subsequent prompts in the same conversation.
   - Model-visible installed skills can now also apply per-skill `model` / `effort` overrides: inline skills rebuild the active provider for the rest of the current run, while forked skills apply their overrides only inside the isolated fork.
-  - The remaining model-side gap on the installed-skills line is now mainly installed skills that require agent-hook-specific model overrides; those still stay slash-only.
-  - Current automated baseline after this slice: `153` test files, `1133` tests passed.
+  - Model-visible installed skills now also honor agent-hook-specific `agentModel` overrides by rebuilding the hook sub-run provider only for that hook execution.
+  - The installed-skills parity line is now effectively closed for the current KainClaw architecture; any remaining work is follow-on polish or broader ecosystem integration, not a core missing runtime semantic.
+  - Current automated baseline after this slice: `153` test files, `1134` tests passed.
 
 - 本批 Claude parity 收口后的验证基线：
   - `npm test`

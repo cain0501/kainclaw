@@ -13,8 +13,9 @@
   - KainClaw now also supports safe model-side `context=fork` installed skills by recursively running a separate agent turn with the forked skill prompt and returning its final text as the parent tool result. This keeps the fork isolated from the parent conversation state while avoiding a wider host/runtime refactor.
   - Model-visible installed skills can now also register hooks through the same conversation-scoped installed-skill hook store used by slash execution. Those hooks are applied immediately to later tool calls in the same model run and continue to persist for later prompts in the same conversation.
   - Model-visible installed skills can now also apply per-skill `model` / `effort` overrides by rebuilding the active provider/runtime state for the rest of the current run, or by applying the override only inside the fork when the skill runs with `context=fork`.
-  - Remaining meaningful gaps are narrower now: installed skills that require agent-hook-specific model overrides still stay slash-only because the model-side execution path cannot yet reproduce that runtime semantic safely.
-  - Current automated baseline after this slice: `153` test files, `1133` tests passed.
+  - Model-visible installed skills now also honor agent-hook-specific `agentModel` overrides by rebuilding the provider only for the hook sub-run, matching the existing prompt-side installed-skill hook behavior closely without introducing a second hook runtime.
+  - The installed-skills parity line is now effectively closed for the current KainClaw architecture; any remaining work is follow-on polish or broader ecosystem integration rather than a missing core runtime semantic.
+  - Current automated baseline after this slice: `153` test files, `1134` tests passed.
 
 - 硬规则（用户明确设定）：
   - 只要功能已经在本地 Claude 源码存在，实施和调试都必须先沿着 Claude 的源码链路做端到端复刻，再做 KainClaw 宿主适配。
