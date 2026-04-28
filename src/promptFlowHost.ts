@@ -10,6 +10,7 @@ import { buildInjectedPrompt, triggerHooks } from "./hooks/hooksTrigger";
 import type { AgentRunner, HookContext } from "./hooks/hooksExecutor";
 import { applyPromptTurnUserContext } from "./promptSetupHost";
 import {
+  createAgentProviderRuntimeContext,
   createPromptTurnAgentCallbacks,
   runPromptAgentTurn,
   runPromptTurnWithHost,
@@ -106,6 +107,15 @@ async function runInstalledSkillAgentHook<TRuntime extends PromptRuntimeLike>(op
     ],
     provider,
     tools: options.promptExecution.tools,
+    providerRuntimeContext: createAgentProviderRuntimeContext({
+      workspaceRoot: options.promptExecution.workspaceRoot,
+      config: hookConfig,
+      envMap: options.promptExecution.envMap,
+      runtimeOptions: options.promptExecution.runtimeOptions,
+      effortLevel: options.promptExecution.effortLevel,
+      buildWorkspaceSystemPrompt: options.buildWorkspaceSystemPrompt,
+      buildProviderAdapter: options.buildProviderAdapter,
+    }),
     toolContext: options.promptExecution.runtime.getToolContext(),
   });
 }
@@ -258,6 +268,15 @@ async function runForkedInstalledSkillFlow<TRuntime extends PromptRuntimeLike>(o
       history,
       provider,
       tools: options.promptExecution.tools,
+      providerRuntimeContext: createAgentProviderRuntimeContext({
+        workspaceRoot: options.promptExecution.workspaceRoot,
+        config: options.promptExecution.config,
+        envMap: options.promptExecution.envMap,
+        runtimeOptions: options.promptExecution.runtimeOptions,
+        effortLevel: options.promptExecution.effortLevel,
+        buildWorkspaceSystemPrompt: options.buildWorkspaceSystemPrompt,
+        buildProviderAdapter: options.buildProviderAdapter,
+      }),
       toolContext: options.promptExecution.runtime.getToolContext(),
       installedSkillHooks: prePromptHooks,
       onToken: promptTurnAgentCallbacks.onToken,

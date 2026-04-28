@@ -1,5 +1,9 @@
 import { randomUUID } from "node:crypto";
-import type { IProviderAdapter, NormalizedMessage } from "./providers/IProviderAdapter";
+import type {
+  IProviderAdapter,
+  NormalizedMessage,
+  ProviderConfig as AdapterProviderConfig,
+} from "./providers/IProviderAdapter";
 import type {
   ToolDefinition,
   ToolContext,
@@ -10,6 +14,7 @@ import type { SwarmCoordinator } from "./swarm/SwarmCoordinator";
 import { triggerHooks } from "../hooks/hooksTrigger";
 import type { HookContext } from "../hooks/hooksExecutor";
 import type { HookDefinition } from "../hooksRegistry";
+import type { EffortLevel, ProviderRuntimeOptions } from "../thinkingEffort/types";
 
 export const SYSTEM_PROMPT = `You are KainClaw, a multifunctional AI assistant. You can help with programming, document editing, information search, debugging, image generation, and UI/page design tasks.
 
@@ -118,6 +123,7 @@ export interface AgentRunnerOptions {
     toolContext: ToolContext,
   ) => Promise<void>;
   installedSkillHooks?: HookDefinition[];
+  providerRuntimeContext?: AgentProviderRuntimeContext;
   /** Maximum turn count to prevent infinite loops. */
   maxTurns?: number;
   /**
@@ -127,6 +133,30 @@ export interface AgentRunnerOptions {
    */
   swarm?: SwarmCoordinator;
 }
+
+export type AgentProviderRuntimeContext = {
+  config: AdapterProviderConfig;
+  workspaceRoot: string;
+  envMap: Record<string, string>;
+  runtimeOptions: ProviderRuntimeOptions;
+  effortLevel: EffortLevel | undefined;
+  buildWorkspaceSystemPrompt: (
+    workspaceRoot: string,
+    config: AdapterProviderConfig,
+    effortLevel: EffortLevel | undefined,
+  ) => Promise<string>;
+  buildProviderAdapter: (options: {
+    config: AdapterProviderConfig;
+    workspaceRoot: string;
+    systemPrompt: string;
+    envMap: Record<string, string>;
+    runtimeOptions: ProviderRuntimeOptions;
+  }) => IProviderAdapter;
+  createRuntimeOptions: (
+    config: AdapterProviderConfig,
+    effortLevel: EffortLevel | undefined,
+  ) => ProviderRuntimeOptions;
+};
 
 function buildInstalledSkillAgentHookPrompt(
   hook: HookDefinition,
@@ -158,6 +188,7 @@ function createInstalledSkillHookAgentRunner(options: {
   provider: IProviderAdapter;
   toolContext: ToolContext;
   tools: ToolDefinition[];
+  providerRuntimeContext?: AgentProviderRuntimeContext;
 }): (hook: HookDefinition, context: HookContext) => Promise<void> {
   return async (hook, context) => {
     const hookPrompt = buildInstalledSkillAgentHookPrompt(hook, context);
@@ -172,8 +203,65 @@ function createInstalledSkillHookAgentRunner(options: {
         provider: options.provider,
         tools: options.tools,
         toolContext: options.toolContext,
+        providerRuntimeContext: options.providerRuntimeContext,
       },
     );
+  };
+}
+
+async function rebuildAgentProviderForInstalledSkill(options: {
+  runtimeContext: AgentProviderRuntimeContext | undefined;
+  currentProvider: IProviderAdapter;
+  modelOverride?: string;
+  effortOverride?: EffortLevel;
+}): Promise<{
+  provider: IProviderAdapter;
+  runtimeContext: AgentProviderRuntimeContext | undefined;
+}> {
+  if (!options.modelOverride && !options.effortOverride) {
+    return {
+      provider: options.currentProvider,
+      runtimeContext: options.runtimeContext,
+    };
+  }
+
+  if (!options.runtimeContext) {
+    throw new Error(
+      "Installed skill requested model/effort overrides, but the current agent run cannot rebuild provider runtime state.",
+    );
+  }
+
+  const nextConfig = options.modelOverride
+    ? { ...options.runtimeContext.config, model: options.modelOverride }
+    : options.runtimeContext.config;
+  const nextEffortLevel =
+    options.effortOverride ?? options.runtimeContext.effortLevel;
+  const nextRuntimeOptions = options.runtimeContext.createRuntimeOptions(
+    nextConfig,
+    nextEffortLevel,
+  );
+  const nextSystemPrompt =
+    await options.runtimeContext.buildWorkspaceSystemPrompt(
+      options.runtimeContext.workspaceRoot,
+      nextConfig,
+      nextEffortLevel,
+    );
+  const nextProvider = options.runtimeContext.buildProviderAdapter({
+    config: nextConfig,
+    workspaceRoot: options.runtimeContext.workspaceRoot,
+    systemPrompt: nextSystemPrompt,
+    envMap: options.runtimeContext.envMap,
+    runtimeOptions: nextRuntimeOptions,
+  });
+
+  return {
+    provider: nextProvider,
+    runtimeContext: {
+      ...options.runtimeContext,
+      config: nextConfig,
+      runtimeOptions: nextRuntimeOptions,
+      effortLevel: nextEffortLevel,
+    },
   };
 }
 
@@ -182,10 +270,17 @@ async function runForkedInstalledSkill(options: {
   historyBeforeToolCall: NormalizedMessage[];
   toolContext: ToolContext;
   allTools: ToolDefinition[];
+  providerRuntimeContext?: AgentProviderRuntimeContext;
   request: NonNullable<
     Awaited<ReturnType<typeof executeTool>>["forkedSkillRunRequest"]
   >;
 }): Promise<string> {
+  const rebuilt = await rebuildAgentProviderForInstalledSkill({
+    runtimeContext: options.providerRuntimeContext,
+    currentProvider: options.provider,
+    modelOverride: options.request.modelOverride,
+    effortOverride: options.request.effortOverride,
+  });
   const forkTools = options.request.allowedToolNames?.length
     ? options.allTools.filter(tool =>
         options.request.allowedToolNames?.includes(tool.name),
@@ -201,11 +296,12 @@ async function runForkedInstalledSkill(options: {
       },
     ],
     {
-      provider: options.provider,
+      provider: rebuilt.provider,
       tools: forkTools,
       toolContext: options.toolContext,
       installedSkillHooks:
         options.request.installedSkillHooks ?? [],
+      providerRuntimeContext: rebuilt.runtimeContext,
     },
   );
 }
@@ -231,6 +327,7 @@ export async function runAgent(
     beforeToolCall,
     afterToolCall,
     installedSkillHooks = [],
+    providerRuntimeContext,
     maxTurns = 40,
     swarm,
   } = options;
@@ -240,6 +337,8 @@ export async function runAgent(
     : tools;
 
   const messages: NormalizedMessage[] = [...history];
+  let activeProvider = provider;
+  let activeProviderRuntimeContext = providerRuntimeContext;
   let activeTools = [...allTools];
   let activeInstalledSkillHooks = [...installedSkillHooks];
   let lastText = "";
@@ -260,7 +359,12 @@ export async function runAgent(
     }
 
     const toolsPayload = getOpenAIToolsPayload(activeTools);
-    const step = await provider.runStep(messages, toolsPayload, onToken, abortSignal);
+    const step = await activeProvider.runStep(
+      messages,
+      toolsPayload,
+      onToken,
+      abortSignal,
+    );
     if (step.thinkingText?.trim()) {
       onThinkingSummary?.(step.thinkingText.trim());
     }
@@ -293,9 +397,10 @@ export async function runAgent(
               toolInput: toolCall.input,
             },
             createInstalledSkillHookAgentRunner({
-              provider,
+              provider: activeProvider,
               toolContext,
               tools: activeTools,
+              providerRuntimeContext: activeProviderRuntimeContext,
             }),
           );
           if (preToolHooks.blocked) {
@@ -326,10 +431,11 @@ export async function runAgent(
 
         if (result.forkedSkillRunRequest) {
           const forkResult = await runForkedInstalledSkill({
-            provider,
+            provider: activeProvider,
             historyBeforeToolCall: messages.slice(0, -1),
             toolContext,
             allTools,
+            providerRuntimeContext: activeProviderRuntimeContext,
             request: result.forkedSkillRunRequest,
           });
           toolResultSummary = `Installed skill ${result.forkedSkillRunRequest.skillId} completed (forked execution)`;
@@ -350,9 +456,10 @@ export async function runAgent(
               },
             },
             createInstalledSkillHookAgentRunner({
-              provider,
+              provider: activeProvider,
               toolContext,
               tools: activeTools,
+              providerRuntimeContext: activeProviderRuntimeContext,
             }),
           );
         }
@@ -381,6 +488,16 @@ export async function runAgent(
           const allowedSet = new Set(result.allowedToolNames);
           activeTools = allTools.filter(tool => allowedSet.has(tool.name));
         }
+        if (result.modelOverride || result.effortOverride) {
+          const rebuilt = await rebuildAgentProviderForInstalledSkill({
+            runtimeContext: activeProviderRuntimeContext,
+            currentProvider: activeProvider,
+            modelOverride: result.modelOverride,
+            effortOverride: result.effortOverride,
+          });
+          activeProvider = rebuilt.provider;
+          activeProviderRuntimeContext = rebuilt.runtimeContext;
+        }
       } catch (error) {
         const msg = error instanceof Error ? error.message : String(error);
         if (activeInstalledSkillHooks.length > 0) {
@@ -395,9 +512,10 @@ export async function runAgent(
               reply: msg,
             },
             createInstalledSkillHookAgentRunner({
-              provider,
+              provider: activeProvider,
               toolContext,
               tools: activeTools,
+              providerRuntimeContext: activeProviderRuntimeContext,
             }),
           );
         }

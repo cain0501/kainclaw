@@ -1,4 +1,5 @@
 import { runAgent } from "./agent/agentRunner";
+import type { AgentProviderRuntimeContext } from "./agent/agentRunner";
 import type {
   IProviderAdapter,
   ProviderConfig as AdapterProviderConfig,
@@ -16,6 +17,45 @@ import type { AgentRunner } from "./hooks/hooksExecutor";
 import type { HookDefinition } from "./hooksRegistry";
 import type { ToolContext, ToolDefinition } from "./toolRuntime";
 import type { EffortLevel, ProviderRuntimeOptions } from "./thinkingEffort/types";
+import { buildProviderRuntimeOptions } from "./thinkingEffort/thinking";
+
+export function createAgentProviderRuntimeContext(options: {
+  workspaceRoot: string;
+  config: AdapterProviderConfig;
+  envMap: Record<string, string>;
+  runtimeOptions: ProviderRuntimeOptions;
+  effortLevel: EffortLevel | undefined;
+  buildWorkspaceSystemPrompt: (
+    workspaceRoot: string,
+    config: AdapterProviderConfig,
+    effortLevel: EffortLevel | undefined,
+  ) => Promise<string>;
+  buildProviderAdapter: (options: {
+    config: AdapterProviderConfig;
+    workspaceRoot: string;
+    systemPrompt: string;
+    envMap: Record<string, string>;
+    runtimeOptions: ProviderRuntimeOptions;
+  }) => IProviderAdapter;
+}): AgentProviderRuntimeContext {
+  return {
+    config: options.config,
+    workspaceRoot: options.workspaceRoot,
+    envMap: options.envMap,
+    runtimeOptions: options.runtimeOptions,
+    effortLevel: options.effortLevel,
+    buildWorkspaceSystemPrompt: options.buildWorkspaceSystemPrompt,
+    buildProviderAdapter: options.buildProviderAdapter,
+    createRuntimeOptions: (config, effortLevel) => ({
+      ...buildProviderRuntimeOptions(
+        config,
+        effortLevel,
+        options.runtimeOptions.fastMode,
+      ),
+      onFastModeDisabled: options.runtimeOptions.onFastModeDisabled,
+    }),
+  };
+}
 
 export function resolvePromptTurnSwarm<TSwarm>(options: {
   swarmEnabledForTurn: boolean;
@@ -109,6 +149,15 @@ export async function runPromptTurnWithHost<TSwarm>(options: {
     tools: options.tools,
     installedSkillHooks: options.installedSkillHooks,
     installedSkillAgentRunner: options.installedSkillAgentRunner,
+    providerRuntimeContext: createAgentProviderRuntimeContext({
+      workspaceRoot: options.workspaceRoot,
+      config: options.config,
+      envMap: options.envMap,
+      runtimeOptions: options.runtimeOptions,
+      effortLevel: options.effortLevel,
+      buildWorkspaceSystemPrompt: options.buildWorkspaceSystemPrompt,
+      buildProviderAdapter: options.buildProviderAdapter,
+    }),
     runtime: options.runtime,
     swarmEnabledForTurn,
     existingSwarm: options.existingSwarm,
@@ -138,6 +187,7 @@ export async function executePreparedPromptTurn<TSwarm>(options: {
   tools: ToolDefinition[];
   installedSkillHooks?: HookDefinition[];
   installedSkillAgentRunner?: AgentRunner;
+  providerRuntimeContext?: AgentProviderRuntimeContext;
   runtime: { getToolContext(mode?: string): ToolContext };
   swarmEnabledForTurn: boolean;
   existingSwarm?: TSwarm;
@@ -207,6 +257,7 @@ export async function executePreparedPromptTurn<TSwarm>(options: {
       tools: options.tools,
       installedSkillHooks: options.installedSkillHooks,
       installedSkillAgentRunner: options.installedSkillAgentRunner,
+      providerRuntimeContext: options.providerRuntimeContext,
       toolContext: options.runtime.getToolContext(),
       activeSwarm: activeSwarm as SwarmCoordinator | undefined,
       onToken: promptTurnAgentCallbacks.onToken,
@@ -331,6 +382,7 @@ export async function runPromptAgentTurn(options: {
   tools: ToolDefinition[];
   installedSkillHooks?: HookDefinition[];
   installedSkillAgentRunner?: AgentRunner;
+  providerRuntimeContext?: AgentProviderRuntimeContext;
   toolContext: ToolContext;
   activeSwarm?: SwarmCoordinator;
   onToken?: (token: string, meta: { isFirstToken: boolean }) => void;
@@ -408,6 +460,7 @@ export async function runPromptAgentTurn(options: {
     },
     onToolStart: options.onToolStart,
     onToolEnd: options.onToolEnd,
+    providerRuntimeContext: options.providerRuntimeContext,
     swarm: options.activeSwarm,
   });
 

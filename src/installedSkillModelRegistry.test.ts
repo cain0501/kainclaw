@@ -54,13 +54,13 @@ describe("installedSkillModelRegistry", () => {
         ...baseSkill,
         modelOverride: "claude-opus-4-6",
       }),
-    ).toBe(false);
+    ).toBe(true);
     expect(
       isModelInvocableInstalledSkill({
         ...baseSkill,
         effort: "high",
       }),
-    ).toBe(false);
+    ).toBe(true);
     expect(
       isModelInvocableInstalledSkill({
         ...baseSkill,
@@ -106,11 +106,13 @@ describe("installedSkillModelRegistry", () => {
     const simpleSkillDir = path.join(kainclawHome, "skills", "simple-skill");
     const blockedSkillDir = path.join(kainclawHome, "skills", "blocked-skill");
     const hookedSkillDir = path.join(kainclawHome, "skills", "hooked-skill");
+    const overrideSkillDir = path.join(kainclawHome, "skills", "override-skill");
     const forkedSkillDir = path.join(workspaceRoot, ".kainclaw", "skills", "forked-skill");
 
     await fs.mkdir(simpleSkillDir, { recursive: true });
     await fs.mkdir(blockedSkillDir, { recursive: true });
     await fs.mkdir(hookedSkillDir, { recursive: true });
+    await fs.mkdir(overrideSkillDir, { recursive: true });
     await fs.mkdir(forkedSkillDir, { recursive: true });
 
     await fs.writeFile(
@@ -148,6 +150,17 @@ hooks:
       "utf8",
     );
     await fs.writeFile(
+      path.join(overrideSkillDir, "SKILL.md"),
+      `---
+name: override-skill
+description: Override helper
+model: claude-opus-4-6
+effort: high
+---
+`,
+      "utf8",
+    );
+    await fs.writeFile(
       path.join(forkedSkillDir, "SKILL.md"),
       `---
 name: forked-skill
@@ -163,6 +176,7 @@ context: fork
     expect(skills.map(skill => skill.id)).toEqual([
       "forked-skill",
       "hooked-skill",
+      "override-skill",
       "simple-skill",
     ]);
   });

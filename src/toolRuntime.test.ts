@@ -277,6 +277,45 @@ Inspect the workspace carefully.
       }),
     ]);
   });
+
+  it("SkillTool surfaces model and effort overrides for model-visible installed skills", async () => {
+    const kainclawHome = await fs.mkdtemp(path.join(os.tmpdir(), "cain-kainclaw-home-"));
+    const claudeHome = await fs.mkdtemp(path.join(os.tmpdir(), "cain-claude-home-"));
+    const workspaceRoot = await fs.mkdtemp(path.join(os.tmpdir(), "cain-skill-workspace-"));
+    tempDirs.push(kainclawHome, claudeHome, workspaceRoot);
+    process.env.KAINCLAW_CONFIG_HOME = kainclawHome;
+    process.env.CLAUDE_CONFIG_HOME = claudeHome;
+
+    const skillDir = path.join(kainclawHome, "skills", "override-skill");
+    await fs.mkdir(skillDir, { recursive: true });
+    await fs.writeFile(
+      path.join(skillDir, "SKILL.md"),
+      `---
+name: override-skill
+description: Override helper
+model: claude-opus-4-6
+effort: high
+---
+
+Use the override helper.
+`,
+      "utf8",
+    );
+
+    const result = await executeTool(
+      "SkillTool",
+      {
+        skill: "override-skill",
+      },
+      { workspaceRoot },
+    );
+
+    expect(result.modelOverride).toBe("claude-opus-4-6");
+    expect(result.effortOverride).toBe("high");
+    expect(result.content).toContain(
+      "This skill overrides the current runtime for the rest of the current model turn with model claude-opus-4-6 and effort high.",
+    );
+  });
 });
 
 describe("toolRuntime background task semantics", () => {

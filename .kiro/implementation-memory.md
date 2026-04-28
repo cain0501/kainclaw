@@ -8,12 +8,13 @@
   - Installed-skill hooks now execute in KainClaw for prompt / command / http / agent definitions, support matcher filtering for tool events, and persist as session-scoped hooks for the active conversation.
   - Electron prompt handling now reuses the same conversation-scoped installed-skill hook store, so follow-up desktop prompts inherit hooks registered by earlier slash-skill invocations.
   - Installed-skill command rewrites now collapse into a single `installedSkillExecution` plan object that carries prompt text, tool filters, model/effort overrides, fork context, and per-invocation hooks through prompt preparation and execution.
-  - KainClaw now exposes a model-visible installed-skill registry through the workspace system prompt and a minimal `SkillTool` entrypoint for simple installed skills. The tool loads the expanded installed-skill prompt and enforces a model-side gate for `disable-model-invocation` plus other advanced metadata that the current runtime cannot honor safely.
+  - KainClaw now exposes a model-visible installed-skill registry through the workspace system prompt and a `SkillTool` entrypoint for installed skills whose runtime semantics can already be represented safely. The tool loads the expanded installed-skill prompt and enforces a model-side gate for `disable-model-invocation` plus the remaining advanced metadata that the current runtime cannot honor safely.
   - The model-side `SkillTool` path now also applies installed-skill `allowed-tools` by shrinking the provider-visible tool payload for the rest of the current agent run after a skill is loaded.
   - KainClaw now also supports safe model-side `context=fork` installed skills by recursively running a separate agent turn with the forked skill prompt and returning its final text as the parent tool result. This keeps the fork isolated from the parent conversation state while avoiding a wider host/runtime refactor.
   - Model-visible installed skills can now also register hooks through the same conversation-scoped installed-skill hook store used by slash execution. Those hooks are applied immediately to later tool calls in the same model run and continue to persist for later prompts in the same conversation.
-  - Remaining meaningful gaps are narrower now: installed skills that require per-skill model overrides or effort overrides still stay slash-only because the model-side execution path cannot yet reproduce those runtime semantics safely.
-  - Current automated baseline after this slice: `153` test files, `1131` tests passed.
+  - Model-visible installed skills can now also apply per-skill `model` / `effort` overrides by rebuilding the active provider/runtime state for the rest of the current run, or by applying the override only inside the fork when the skill runs with `context=fork`.
+  - Remaining meaningful gaps are narrower now: installed skills that require agent-hook-specific model overrides still stay slash-only because the model-side execution path cannot yet reproduce that runtime semantic safely.
+  - Current automated baseline after this slice: `153` test files, `1133` tests passed.
 
 - 硬规则（用户明确设定）：
   - 只要功能已经在本地 Claude 源码存在，实施和调试都必须先沿着 Claude 的源码链路做端到端复刻，再做 KainClaw 宿主适配。

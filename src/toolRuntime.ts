@@ -13,6 +13,7 @@ import { isPlanWritablePath } from "./planMode/planMode";
 import type { LspToolAdapter } from "./lsp/lspRuntime";
 import { LSP_TOOL_NAME, normalizeLspOperation } from "./lsp/types";
 import type { HookDefinition } from "./hooksRegistry";
+import type { EffortLevel } from "./thinkingEffort/types";
 import type {
   BackgroundTaskRecord,
   BackgroundTaskStatus,
@@ -157,11 +158,15 @@ export type ToolExecutionResult = {
   content: string;
   allowedToolNames?: string[];
   installedSkillHooks?: HookDefinition[];
+  modelOverride?: string;
+  effortOverride?: EffortLevel;
   forkedSkillRunRequest?: {
     skillId: string;
     prompt: string;
     allowedToolNames?: string[];
     installedSkillHooks?: HookDefinition[];
+    modelOverride?: string;
+    effortOverride?: EffortLevel;
   };
 };
 
@@ -4111,6 +4116,12 @@ const handlers: Record<string, ToolHandler> = {
                 ...(registeredHooks?.length
                   ? { installedSkillHooks: registeredHooks }
                   : {}),
+                ...(execution.modelOverride
+                  ? { modelOverride: execution.modelOverride }
+                  : {}),
+                ...(execution.effortOverride
+                  ? { effortOverride: execution.effortOverride }
+                  : {}),
               },
             }
           : {
@@ -4119,6 +4130,12 @@ const handlers: Record<string, ToolHandler> = {
                 prompt: execution.prompt,
                 ...(registeredHooks?.length
                   ? { installedSkillHooks: registeredHooks }
+                  : {}),
+                ...(execution.modelOverride
+                  ? { modelOverride: execution.modelOverride }
+                  : {}),
+                ...(execution.effortOverride
+                  ? { effortOverride: execution.effortOverride }
                   : {}),
               },
             }),
@@ -4141,6 +4158,12 @@ const handlers: Record<string, ToolHandler> = {
       ...(registeredHooks?.length
         ? { installedSkillHooks: registeredHooks }
         : {}),
+      ...(execution.modelOverride
+        ? { modelOverride: execution.modelOverride }
+        : {}),
+      ...(execution.effortOverride
+        ? { effortOverride: execution.effortOverride }
+        : {}),
       content: [
         `Loaded installed skill "/${skill.id}".`,
         "Follow the skill instructions below in this conversation.",
@@ -4148,6 +4171,12 @@ const handlers: Record<string, ToolHandler> = {
           ? [
               "",
               `This skill narrows the available tool set for the rest of the current model turn to: ${execution.allowedTools.join(", ")}.`,
+            ]
+          : []),
+        ...(execution.modelOverride || execution.effortOverride
+          ? [
+              "",
+              `This skill overrides the current runtime for the rest of the current model turn${execution.modelOverride ? ` with model ${execution.modelOverride}` : ""}${execution.effortOverride ? `${execution.modelOverride ? " and" : " with"} effort ${execution.effortOverride}` : ""}.`,
             ]
           : []),
         "",

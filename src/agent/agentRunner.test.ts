@@ -1,7 +1,9 @@
 import { describe, expect, it, vi } from "vitest";
 import { runAgent } from "./agentRunner";
 import type { IProviderAdapter, NormalizedMessage, NormalizedStep } from "./providers/IProviderAdapter";
+import type { ProviderConfig } from "./providers/IProviderAdapter";
 import type { ToolContext, ToolDefinition } from "../toolRuntime";
+import type { ProviderRuntimeOptions } from "../thinkingEffort/types";
 
 class ScriptedProvider implements IProviderAdapter {
   private index = 0;
@@ -512,6 +514,113 @@ describe("agentRunner", () => {
       );
     } finally {
       hooksSpy.mockRestore();
+      executeSpy.mockRestore();
+    }
+  });
+
+  it("rebuilds the active provider when SkillTool returns model/effort overrides", async () => {
+    const baseProvider: IProviderAdapter = {
+      async runStep(_messages, _tools) {
+        return {
+          text: "load override skill",
+          toolCalls: [{ id: "tool-1", name: "SkillTool", input: { skill: "override-skill" } }],
+          done: false,
+        };
+      },
+    };
+    const rebuiltProvider: IProviderAdapter = {
+      async runStep() {
+        return {
+          text: "done with rebuilt provider",
+          toolCalls: [],
+          done: true,
+        };
+      },
+    };
+
+    const toolContext: ToolContext = {
+      workspaceRoot: "E:\\claudecodejingiang\\vscode-extension",
+    };
+
+    const tools: ToolDefinition[] = [
+      {
+        name: "SkillTool",
+        description: "Load installed skills",
+        input_schema: { type: "object", properties: {} },
+      },
+    ];
+
+    const buildWorkspaceSystemPrompt = vi.fn(async () => "rebuilt system prompt");
+    const buildProviderAdapter = vi.fn(() => rebuiltProvider);
+    const createRuntimeOptions = vi.fn(
+      (_config: ProviderConfig, effortLevel: "low" | "medium" | "high" | "max" | undefined): ProviderRuntimeOptions => ({
+        effortLevel,
+      }),
+    );
+
+    const executeSpy = vi.spyOn(await import("../toolRuntime.js"), "executeTool").mockResolvedValue({
+      summary: "Loaded installed skill override-skill",
+      content: "override skill body",
+      modelOverride: "claude-opus-4-6",
+      effortOverride: "high",
+    });
+
+    try {
+      const result = await runAgent([], {
+        provider: baseProvider,
+        tools,
+        toolContext,
+        providerRuntimeContext: {
+          config: {
+            type: "anthropic",
+            apiKey: "secret",
+            model: "claude-sonnet",
+          },
+          workspaceRoot: "E:\\claudecodejingiang\\vscode-extension",
+          envMap: { HELLO: "world" },
+          runtimeOptions: { effortLevel: "medium" },
+          effortLevel: "medium",
+          buildWorkspaceSystemPrompt,
+          buildProviderAdapter,
+          createRuntimeOptions,
+        },
+      });
+
+      expect(result).toBe("done with rebuilt provider");
+      expect(createRuntimeOptions).toHaveBeenCalledWith(
+        {
+          type: "anthropic",
+          apiKey: "secret",
+          model: "claude-opus-4-6",
+        },
+        "high",
+      );
+      expect(buildWorkspaceSystemPrompt).toHaveBeenCalledWith(
+        "E:\\claudecodejingiang\\vscode-extension",
+        {
+          type: "anthropic",
+          apiKey: "secret",
+          model: "claude-opus-4-6",
+        },
+        "high",
+      );
+      expect(buildProviderAdapter).toHaveBeenCalledWith({
+        config: {
+          type: "anthropic",
+          apiKey: "secret",
+          model: "claude-opus-4-6",
+        },
+        workspaceRoot: "E:\\claudecodejingiang\\vscode-extension",
+        systemPrompt: "rebuilt system prompt",
+        envMap: { HELLO: "world" },
+        runtimeOptions: { effortLevel: "high" },
+      });
+      expect(executeSpy).toHaveBeenCalledWith(
+        "SkillTool",
+        { skill: "override-skill" },
+        toolContext,
+      );
+    } finally {
       executeSpy.mockRestore();
     }
   });

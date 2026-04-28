@@ -12,8 +12,9 @@
   - KainClaw now also applies installed-skill `allowed-tools` on the model-side path by narrowing the visible tool payload for the rest of the current run once `SkillTool` loads a skill.
   - KainClaw now also supports safe model-side `context=fork` installed skills by executing them in an isolated recursive agent turn and feeding the fork result back to the parent model as a tool result.
   - KainClaw now also supports model-side installed-skill hook registration by reusing the shared session hook store and the existing hook executor/trigger path, so skill-loaded hooks affect both later tool calls in the same run and later prompts in the same conversation.
-  - Remaining material parity gaps on this line are now mainly the missing Claude-level per-skill `model` / `effort` switching semantics inside the model-side path.
-  - Current automated baseline after this slice: `153` test files, `1131` tests passed.
+  - KainClaw now also supports model-side per-skill `model` / `effort` switching semantics by rebuilding the active provider/runtime state for inline skills and scoping the override to the isolated fork for `context=fork` skills.
+  - Remaining material parity gaps on this line are now mainly installed skills that require agent-hook-specific model overrides inside the model-side path.
+  - Current automated baseline after this slice: `153` test files, `1133` tests passed.
 
 - 本轮已验证：
   - `npm test`
