@@ -8,7 +8,7 @@
   - Installed-skill hooks now support prompt / command / http / agent definitions and matcher filtering for tool events.
   - Electron now matches the VS Code host on session-scoped installed-skill hook carry-over, rather than treating each desktop prompt turn as hook-isolated after the original slash invocation.
   - Installed-skill slash rewrites now flow through a unified `installedSkillExecution` plan object instead of duplicating tool/model/effort/context metadata across separate fields in later prompt stages.
-  - KainClaw now exposes a model-visible installed-skill registry via the workspace system prompt and a minimal `SkillTool` for simple installed skills, which closes the previous “model cannot see or load installed skills at all” gap.
+  - KainClaw now exposes a model-visible installed-skill registry via the workspace system prompt and a `SkillTool` for installed skills whose runtime semantics can already be represented safely, which closes the previous 鈥渕odel cannot see or load installed skills at all鈥?gap.
   - KainClaw now also applies installed-skill `allowed-tools` on the model-side path by narrowing the visible tool payload for the rest of the current run once `SkillTool` loads a skill.
   - KainClaw now also supports safe model-side `context=fork` installed skills by executing them in an isolated recursive agent turn and feeding the fork result back to the parent model as a tool result.
   - KainClaw now also supports model-side installed-skill hook registration by reusing the shared session hook store and the existing hook executor/trigger path, so skill-loaded hooks affect both later tool calls in the same run and later prompts in the same conversation.
