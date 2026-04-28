@@ -551,7 +551,25 @@ describe("promptFlowHost", () => {
         } as PromptRuntimeLike,
         tools: [{ name: "read_file" }] as any,
         effectivePrompt: "Run the forked installed skill",
-        installedSkillExecutionContext: "fork",
+        installedSkillExecution: {
+          skill: {
+            id: "browse",
+            title: "browse",
+            summary: "Browser automation helper",
+            argumentNames: [],
+            disableModelInvocation: false,
+            hooks: [],
+            entrypoint: "/browse",
+            source: "user",
+            skillPath: "E:/skills/browse/SKILL.md",
+            allowedTools: [],
+          },
+          prompt: "Run the forked installed skill",
+          allowedTools: [],
+          disableModelInvocation: false,
+          executionContext: "fork",
+          hooks: [],
+        },
       },
     });
 

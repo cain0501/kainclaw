@@ -7,6 +7,7 @@ import type { SkillStore } from "./skills/skillStore";
 import type { ProfileStore } from "./userModel/profileStore";
 import type { BackgroundTaskHost } from "./backgroundTaskHost";
 import type { HookDefinition } from "./hooksRegistry";
+import type { InstalledSkillExecutionPlan } from "./installedSkillsRegistry";
 import { handleCompactCommandWithHost } from "./compactHost";
 import type { PendingPlanVerificationState } from "./conversationRuntimeStateHost";
 import {
@@ -52,9 +53,7 @@ export type PromptExecutionResult<TRuntime> =
       tools: ToolDefinition[];
       effectivePrompt: string;
       effectivePromptAttachments?: NormalizedImageAttachment[];
-      installedSkillAllowedTools?: string[];
-      installedSkillDisableModelInvocation?: boolean;
-      installedSkillExecutionContext?: "fork";
+      installedSkillExecution?: InstalledSkillExecutionPlan;
       installedSkillHooks?: HookDefinition[];
     };
 
@@ -583,24 +582,43 @@ export async function preparePromptExecutionStep<TRuntime extends PromptRuntimeL
     if (promptCommandResult.kind === "rewrite") {
       const activeSessionHooks =
         options.getSessionInstalledSkillHooks?.() ??
+        promptCommandResult.installedSkillExecution?.hooks ??
         promptCommandResult.installedSkillHooks;
-      const effectiveConfig = promptCommandResult.modelOverride
-        ? { ...providerContext.config, model: promptCommandResult.modelOverride }
+      const installedSkillExecution = promptCommandResult.installedSkillExecution
+        ? {
+            ...promptCommandResult.installedSkillExecution,
+            ...(activeSessionHooks
+              ? {
+                  hooks: activeSessionHooks,
+                }
+              : {}),
+          }
+        : undefined;
+      const effectiveModelOverride =
+        installedSkillExecution?.modelOverride ??
+        promptCommandResult.modelOverride;
+      const effectiveAllowedTools =
+        installedSkillExecution?.allowedTools ??
+        promptCommandResult.allowedTools;
+      const effectiveConfig = effectiveModelOverride
+        ? { ...providerContext.config, model: effectiveModelOverride }
         : providerContext.config;
       const effectiveEffortLevel =
-        promptCommandResult.effortOverride ?? providerContext.effortLevel;
+        installedSkillExecution?.effortOverride ??
+        promptCommandResult.effortOverride ??
+        providerContext.effortLevel;
       const effectiveRuntimeOptions =
-        promptCommandResult.modelOverride || promptCommandResult.effortOverride
+        effectiveModelOverride || effectiveEffortLevel !== providerContext.effortLevel
           ? options.createProviderRuntimeOptions(effectiveConfig)
           : providerContext.runtimeOptions;
-      if (promptCommandResult.effortOverride) {
-        effectiveRuntimeOptions.effortLevel = promptCommandResult.effortOverride;
+      if (effectiveEffortLevel) {
+        effectiveRuntimeOptions.effortLevel = effectiveEffortLevel;
       }
       const effectiveTools =
-        promptCommandResult.allowedTools &&
-        promptCommandResult.allowedTools.length > 0
+        effectiveAllowedTools &&
+        effectiveAllowedTools.length > 0
           ? loadedTools.tools.filter(tool =>
-              promptCommandResult.allowedTools?.includes(tool.name),
+              effectiveAllowedTools.includes(tool.name),
             )
           : loadedTools.tools;
       return {
@@ -616,16 +634,10 @@ export async function preparePromptExecutionStep<TRuntime extends PromptRuntimeL
         ...(promptCommandResult.attachments?.length
           ? { effectivePromptAttachments: promptCommandResult.attachments }
           : {}),
-        ...(promptCommandResult.allowedTools?.length
-          ? { installedSkillAllowedTools: promptCommandResult.allowedTools }
+        ...(installedSkillExecution
+          ? { installedSkillExecution }
           : {}),
-        ...(promptCommandResult.disableModelInvocation
-          ? { installedSkillDisableModelInvocation: true }
-          : {}),
-        ...(promptCommandResult.executionContext
-          ? { installedSkillExecutionContext: promptCommandResult.executionContext }
-          : {}),
-        ...(activeSessionHooks?.length
+        ...(activeSessionHooks?.length && !installedSkillExecution
           ? { installedSkillHooks: activeSessionHooks }
           : {}),
       };

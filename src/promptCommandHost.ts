@@ -33,13 +33,13 @@ import {
   loadCustomSkills,
 } from "./customSkillsRegistry";
 import {
-  buildInstalledSkillPrompt,
+  buildInstalledSkillExecutionPlan,
+  formatInstalledSkillCommandDetail,
   getInstalledSkill,
   getInstalledSkillByEntrypoint,
   loadInstalledSkills,
-  mapInstalledSkillAllowedToolsToKainClawTools,
+  type InstalledSkillExecutionPlan,
 } from "./installedSkillsRegistry";
-import { expandInstalledSkillShellCommands } from "./installedSkillPromptShell";
 import { getBuiltInSkill, listBuiltInSkills } from "./skillsRegistry";
 import type { SkillStore } from "./skills/skillStore";
 import type { ProfileStore } from "./userModel/profileStore";
@@ -97,6 +97,7 @@ type PromptCommandChainResult =
       disableModelInvocation?: boolean;
       executionContext?: "fork";
       installedSkillHooks?: HookDefinition[];
+      installedSkillExecution?: InstalledSkillExecutionPlan;
     }
   | { kind: "handled" };
 
@@ -256,22 +257,7 @@ async function buildPromptSlashCommandHelp(options: {
       normalizedArgs,
     );
     if (installedSkill) {
-      return [
-        `Command: ${installedSkill.entrypoint}`,
-        `Source: installed-${installedSkill.source}`,
-        `Skill: ${installedSkill.title}`,
-        `Summary: ${installedSkill.summary}`,
-        `When to use: ${installedSkill.whenToUse ?? "(none)"}`,
-        `Path: ${installedSkill.skillPath}`,
-        `Arguments: ${installedSkill.argumentNames.join(", ") || "(none)"}`,
-        `Disable model invocation: ${installedSkill.disableModelInvocation ? "yes" : "no"}`,
-        `Context: ${installedSkill.executionContext ?? "inline"}`,
-        `Shell: ${installedSkill.shell ?? "(default)"}`,
-        `Hooks: ${installedSkill.hooks.length}`,
-        `Allowed tools: ${installedSkill.allowedTools.join(", ") || "(none)"}`,
-        `Model: ${installedSkill.modelOverride ?? "(inherit)"}`,
-        `Effort: ${installedSkill.effort ?? "(inherit)"}`,
-      ].join("\n");
+      return formatInstalledSkillCommandDetail(installedSkill, "command");
     }
 
     return `Unknown slash command "${normalizedArgs}". Use /commands to list available commands.`;
@@ -443,21 +429,7 @@ async function buildSkillsHelp(
 
   const installedSkill = getInstalledSkill(installedSkills, normalizedArgs);
   if (installedSkill) {
-    return [
-      `Skill: ${installedSkill.title}`,
-      `Id: ${installedSkill.id}`,
-      `Source: installed-${installedSkill.source}`,
-      `Summary: ${installedSkill.summary}`,
-      `When to use: ${installedSkill.whenToUse ?? "(none)"}`,
-      `Entrypoint: ${installedSkill.entrypoint}`,
-      `Path: ${installedSkill.skillPath}`,
-      `Arguments: ${installedSkill.argumentNames.join(", ") || "(none)"}`,
-      `Disable model invocation: ${installedSkill.disableModelInvocation ? "yes" : "no"}`,
-      `Context: ${installedSkill.executionContext ?? "inline"}`,
-      `Shell: ${installedSkill.shell ?? "(default)"}`,
-      `Hooks: ${installedSkill.hooks.length}`,
-      `Allowed tools: ${installedSkill.allowedTools.join(", ") || "(none)"}`,
-    ].join("\n");
+    return formatInstalledSkillCommandDetail(installedSkill, "skill");
   }
 
   const customSkill = getCustomSkill(customSkills, normalizedArgs);
@@ -918,46 +890,16 @@ async function tryRewriteInstalledSkillCommand(options: {
     return null;
   }
 
-  let prompt = await buildInstalledSkillPrompt({
+  const execution = await buildInstalledSkillExecutionPlan({
     skill: installedSkill,
     args: options.parsedCommand.args,
+    toolContext: options.runtime.getToolContext?.("main") as any,
   });
-  const toolContext = options.runtime.getToolContext?.("main");
-  if (toolContext) {
-    prompt = await expandInstalledSkillShellCommands({
-      prompt,
-      slashCommandName: installedSkill.entrypoint,
-      toolContext: toolContext as any,
-      shell: installedSkill.shell,
-    });
-  }
 
   return {
     kind: "rewrite",
-    prompt,
-    ...(installedSkill.allowedTools.length > 0
-      ? {
-          allowedTools:
-            mapInstalledSkillAllowedToolsToKainClawTools(
-              installedSkill.allowedTools,
-            ),
-        }
-      : {}),
-    ...(installedSkill.modelOverride
-      ? { modelOverride: installedSkill.modelOverride }
-      : {}),
-    ...(installedSkill.effort
-      ? { effortOverride: installedSkill.effort }
-      : {}),
-    ...(installedSkill.disableModelInvocation
-      ? { disableModelInvocation: true }
-      : {}),
-    ...(installedSkill.executionContext
-      ? { executionContext: installedSkill.executionContext }
-      : {}),
-    ...(installedSkill.hooks.length > 0
-      ? { installedSkillHooks: installedSkill.hooks }
-      : {}),
+    prompt: execution.prompt,
+    installedSkillExecution: execution,
   };
 }
 
@@ -1285,14 +1227,18 @@ export async function runPromptCommandChain(options: {
   });
   if (rewrittenInstalledSkillCommand) {
     if (
-      rewrittenInstalledSkillCommand.installedSkillHooks?.length &&
+      rewrittenInstalledSkillCommand.installedSkillExecution?.hooks.length &&
       options.registerSessionInstalledSkillHooks
     ) {
+      const registeredHooks = options.registerSessionInstalledSkillHooks(
+        rewrittenInstalledSkillCommand.installedSkillExecution.hooks,
+      );
       return {
         ...rewrittenInstalledSkillCommand,
-        installedSkillHooks: options.registerSessionInstalledSkillHooks(
-          rewrittenInstalledSkillCommand.installedSkillHooks,
-        ),
+        installedSkillExecution: {
+          ...rewrittenInstalledSkillCommand.installedSkillExecution,
+          hooks: registeredHooks,
+        },
       };
     }
     return rewrittenInstalledSkillCommand;

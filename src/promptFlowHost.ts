@@ -181,7 +181,10 @@ async function runForkedInstalledSkillFlow<TRuntime extends PromptRuntimeLike>(o
   runPromptAgentTurnImpl?: typeof runPromptAgentTurn;
 }): Promise<void> {
   const modelActivityId = options.createModelActivity();
-  const prePromptHooks = options.promptExecution.installedSkillHooks ?? [];
+  const prePromptHooks =
+    options.promptExecution.installedSkillExecution?.hooks ??
+    options.promptExecution.installedSkillHooks ??
+    [];
   const installedSkillAgentRunner = createInstalledSkillAgentRunner({
     promptExecution: options.promptExecution,
     buildWorkspaceSystemPrompt: options.buildWorkspaceSystemPrompt,
@@ -256,7 +259,7 @@ async function runForkedInstalledSkillFlow<TRuntime extends PromptRuntimeLike>(o
       provider,
       tools: options.promptExecution.tools,
       toolContext: options.promptExecution.runtime.getToolContext(),
-      installedSkillHooks: options.promptExecution.installedSkillHooks,
+      installedSkillHooks: prePromptHooks,
       onToken: promptTurnAgentCallbacks.onToken,
       onToolStart: promptTurnAgentCallbacks.onToolStart,
       onToolEnd: promptTurnAgentCallbacks.onToolEnd,
@@ -766,7 +769,7 @@ export async function runPromptFlowWithHost<
     buildWorkspaceSystemPrompt: options.buildWorkspaceSystemPrompt,
     buildProviderAdapter: options.buildProviderAdapter,
   });
-  if (continuePromptExecution.installedSkillExecutionContext === "fork") {
+  if (continuePromptExecution.installedSkillExecution?.executionContext === "fork") {
     await runForkedInstalledSkillFlow({
       promptExecution: continuePromptExecution,
       createModelActivity: options.createModelActivity,
@@ -790,7 +793,10 @@ export async function runPromptFlowWithHost<
   }
 
   let effectivePrompt = continuePromptExecution.effectivePrompt;
-  const installedSkillHooks = continuePromptExecution.installedSkillHooks ?? [];
+  const installedSkillHooks =
+    continuePromptExecution.installedSkillExecution?.hooks ??
+    continuePromptExecution.installedSkillHooks ??
+    [];
   if (installedSkillHooks.length > 0) {
     const prePromptResult = await triggerHooks(
       "PrePrompt",
@@ -841,13 +847,13 @@ export async function runPromptFlowWithHost<
     envMap: continuePromptExecution.envMap,
     runtimeOptions: continuePromptExecution.runtimeOptions,
     effortLevel: continuePromptExecution.effortLevel,
-      runtime: continuePromptExecution.runtime as {
-        getToolContext(mode?: string): ToolContext;
-      },
-      tools: continuePromptExecution.tools as ToolDefinition[],
-      installedSkillHooks,
-      installedSkillAgentRunner,
-      existingSwarm: options.existingSwarm,
+    runtime: continuePromptExecution.runtime as {
+      getToolContext(mode?: string): ToolContext;
+    },
+    tools: continuePromptExecution.tools as ToolDefinition[],
+    installedSkillHooks,
+    installedSkillAgentRunner,
+    existingSwarm: options.existingSwarm,
     createSwarm: () =>
       options.createSwarm({
         workerToolContext:
@@ -877,8 +883,8 @@ export async function runPromptFlowWithHost<
         config: continuePromptExecution.config,
         envMap: continuePromptExecution.envMap,
       }),
-      updateMood: options.updateMood,
-    });
+    updateMood: options.updateMood,
+  });
 
   if (installedSkillHooks.length > 0) {
     const latestReply =

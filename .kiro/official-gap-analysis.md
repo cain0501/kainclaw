@@ -7,7 +7,8 @@
   - Installed-skill execution now covers argument substitution, `allowed-tools`, model/effort overrides, `context=fork`, shell metadata, and explicit session-scoped hook persistence.
   - Installed-skill hooks now support prompt / command / http / agent definitions and matcher filtering for tool events.
   - Electron now matches the VS Code host on session-scoped installed-skill hook carry-over, rather than treating each desktop prompt turn as hook-isolated after the original slash invocation.
-  - Remaining material parity gaps on this line are now mainly the lack of a true model-side `disable-model-invocation` gate and fuller Claude command-object parity.
+  - Installed-skill slash rewrites now flow through a unified `installedSkillExecution` plan object instead of duplicating tool/model/effort/context metadata across separate fields in later prompt stages.
+  - Remaining material parity gaps on this line are now mainly the lack of a true model-side `disable-model-invocation` gate and the absence of a full Claude model-side skill-command registry path.
   - Current automated baseline after this slice: `152` test files, `1121` tests passed.
 
 - 本轮已验证：

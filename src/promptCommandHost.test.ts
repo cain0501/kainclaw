@@ -342,7 +342,8 @@ context: fork
     });
 
     expect(detailResult).toContain("Source: installed-user");
-    expect(detailResult).toContain("Entrypoint: /browse");
+    expect(detailResult).toContain("Skill: browse");
+    expect(detailResult).toContain("Path:");
     expect(detailResult).toContain("Allowed tools: Bash, Read");
     expect(detailResult).toContain("Disable model invocation: yes");
     expect(detailResult).toContain("Context: fork");
@@ -1246,9 +1247,15 @@ Requested target: $ARGUMENTS
       expect(result.prompt).toContain("Requested target: https://www.baidu.com");
       expect(result.prompt).not.toContain("${CLAUDE_SKILL_DIR}");
       expect(result.prompt).not.toContain("$ARGUMENTS");
-      expect(result.allowedTools).toEqual(["run_command", "read_file"]);
-      expect(result.modelOverride).toBe("claude-opus-4-6");
-      expect(result.effortOverride).toBe("high");
+      expect(result.installedSkillExecution).toMatchObject({
+        allowedTools: ["run_command", "read_file"],
+        modelOverride: "claude-opus-4-6",
+        effortOverride: "high",
+        skill: expect.objectContaining({
+          id: "browse",
+          entrypoint: "/browse",
+        }),
+      });
     }
   });
 

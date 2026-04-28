@@ -2,6 +2,7 @@ import type {
   ProviderConfig as AdapterProviderConfig,
 } from "./agent/providers/IProviderAdapter";
 import {
+  formatInstalledSkillCommandDetail,
   getInstalledSkillByEntrypoint,
   loadInstalledSkills,
 } from "./installedSkillsRegistry";
@@ -91,18 +92,7 @@ async function buildElectronPromptCommandHelp(options: {
       normalizedArgs,
     );
     if (installedSkill) {
-      return [
-        `Command: ${installedSkill.entrypoint}`,
-        `Source: installed-${installedSkill.source}`,
-        `Skill: ${installedSkill.title}`,
-        `Summary: ${installedSkill.summary}`,
-        `When to use: ${installedSkill.whenToUse ?? "(none)"}`,
-        `Path: ${installedSkill.skillPath}`,
-        `Shell: ${installedSkill.shell ?? "(default)"}`,
-        `Allowed tools: ${installedSkill.allowedTools.join(", ") || "(none)"}`,
-        `Model: ${installedSkill.modelOverride ?? "(inherit)"}`,
-        `Effort: ${installedSkill.effort ?? "(inherit)"}`,
-      ].join("\n");
+      return formatInstalledSkillCommandDetail(installedSkill, "command");
     }
 
     return `Unknown slash command "${normalizedArgs}". Use /commands to list available commands.`;

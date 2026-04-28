@@ -8,7 +8,8 @@
   - Installed-skill shell expansion now supports the Claude-style `!` / ` ```! ` patterns through the existing PowerShell-backed execution path; `shell: bash` is rejected explicitly instead of silently falling back.
   - Installed-skill hooks now support prompt / command / http / agent definitions, tool-event matcher filtering, and session-scoped persistence for the active conversation.
   - The Electron desktop shell now also preserves those installed-skill hooks across follow-up prompts in the same conversation, instead of dropping them after the initial slash-command invocation.
-  - Remaining meaningful gaps on the installed-skills line: no true model-side `SkillTool` gate for `disable-model-invocation` yet, and fuller Claude command-object parity is still missing.
+  - Installed-skill slash execution is now carried end-to-end by a unified `installedSkillExecution` object, so prompt preparation and flow control no longer have to keep separate per-field copies of tool/model/effort/context metadata.
+  - Remaining meaningful gaps on the installed-skills line: no true model-side `SkillTool` gate for `disable-model-invocation` yet, and KainClaw still does not expose a full Claude model-side skill-command registry path.
   - Current automated baseline after this slice: `152` test files, `1121` tests passed.
 
 - 本批 Claude parity 收口后的验证基线：

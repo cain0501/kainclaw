@@ -436,16 +436,20 @@ Requested target: $ARGUMENTS
         { name: "read_file" },
         { name: "run_command" },
       ],
-      installedSkillAllowedTools: ["run_command", "read_file"],
-      installedSkillDisableModelInvocation: true,
-      installedSkillExecutionContext: "fork",
-      installedSkillHooks: [
-        expect.objectContaining({
-          type: "prompt",
-          events: ["PrePrompt"],
-          prompt: "Be concise.",
-        }),
-      ],
+      installedSkillExecution: expect.objectContaining({
+        allowedTools: ["run_command", "read_file"],
+        modelOverride: "claude-opus-4-6",
+        effortOverride: "high",
+        disableModelInvocation: true,
+        executionContext: "fork",
+        hooks: [
+          expect.objectContaining({
+            type: "prompt",
+            events: ["PrePrompt"],
+            prompt: "Be concise.",
+          }),
+        ],
+      }),
     });
     expect(createProviderRuntimeOptions).toHaveBeenCalledWith(
       expect.objectContaining({ model: "claude-opus-4-6" }),
@@ -519,13 +523,16 @@ Requested target: $ARGUMENTS
 
     expect(first).toMatchObject({
       kind: "continue",
-      installedSkillHooks: [
-        expect.objectContaining({
-          type: "prompt",
-          events: ["PrePrompt"],
-          prompt: "Be concise.",
-        }),
-      ],
+      installedSkillExecution: expect.objectContaining({
+        skill: expect.objectContaining({ id: "browse" }),
+        hooks: [
+          expect.objectContaining({
+            type: "prompt",
+            events: ["PrePrompt"],
+            prompt: "Be concise.",
+          }),
+        ],
+      }),
     });
     expect(sessionHooks).toHaveLength(1);
 

@@ -11,6 +11,7 @@ import {
   parseInstalledSkillHooksBlock,
 } from "./installedSkillHooks";
 import { EFFORT_LEVELS, type EffortLevel } from "./thinkingEffort/types";
+import type { ToolContext } from "./toolRuntime";
 
 export type InstalledSkillShell = "bash" | "powershell";
 
@@ -33,6 +34,17 @@ export type InstalledSkillDefinition = {
   source: InstalledSkillSource;
   skillPath: string;
   allowedTools: string[];
+};
+
+export type InstalledSkillExecutionPlan = {
+  skill: InstalledSkillDefinition;
+  prompt: string;
+  allowedTools: string[];
+  modelOverride?: string;
+  effortOverride?: EffortLevel;
+  disableModelInvocation: boolean;
+  executionContext?: "fork";
+  hooks: HookDefinition[];
 };
 
 type ParsedInstalledSkillMetadata = {
@@ -462,6 +474,35 @@ export function getInstalledSkillByEntrypoint(
   return skills.find(skill => skill.entrypoint.trim().toLowerCase() === normalized);
 }
 
+export function formatInstalledSkillCommandDetail(
+  skill: InstalledSkillDefinition,
+  kind: "command" | "skill" = "command",
+): string {
+  const heading = kind === "command"
+    ? `Command: ${skill.entrypoint}`
+    : `Skill: ${skill.title}`;
+  const secondary = kind === "command"
+    ? `Skill: ${skill.title}`
+    : `Entrypoint: ${skill.entrypoint}`;
+
+  return [
+    heading,
+    ...(kind === "command" ? [secondary] : [`Id: ${skill.id}`]),
+    `Source: installed-${skill.source}`,
+    `Summary: ${skill.summary}`,
+    `When to use: ${skill.whenToUse ?? "(none)"}`,
+    `Path: ${skill.skillPath}`,
+    `Arguments: ${skill.argumentNames.join(", ") || "(none)"}`,
+    `Disable model invocation: ${skill.disableModelInvocation ? "yes" : "no"}`,
+    `Context: ${skill.executionContext ?? "inline"}`,
+    `Shell: ${skill.shell ?? "(default)"}`,
+    `Hooks: ${skill.hooks.length}`,
+    `Allowed tools: ${skill.allowedTools.join(", ") || "(none)"}`,
+    `Model: ${skill.modelOverride ?? "(inherit)"}`,
+    `Effort: ${skill.effort ?? "(inherit)"}`,
+  ].join("\n");
+}
+
 export async function buildInstalledSkillPrompt(options: {
   skill: InstalledSkillDefinition;
   args?: string;
@@ -484,6 +525,46 @@ export async function buildInstalledSkillPrompt(options: {
   );
 
   return prompt;
+}
+
+export async function buildInstalledSkillExecutionPlan(options: {
+  skill: InstalledSkillDefinition;
+  args?: string;
+  toolContext?: ToolContext;
+}): Promise<InstalledSkillExecutionPlan> {
+  let prompt = await buildInstalledSkillPrompt({
+    skill: options.skill,
+    args: options.args,
+  });
+
+  if (options.toolContext) {
+    const { expandInstalledSkillShellCommands } = await import("./installedSkillPromptShell.js");
+    prompt = await expandInstalledSkillShellCommands({
+      prompt,
+      slashCommandName: options.skill.entrypoint,
+      toolContext: options.toolContext,
+      shell: options.skill.shell,
+    });
+  }
+
+  return {
+    skill: options.skill,
+    prompt,
+    allowedTools: mapInstalledSkillAllowedToolsToKainClawTools(
+      options.skill.allowedTools,
+    ),
+    ...(options.skill.modelOverride
+      ? { modelOverride: options.skill.modelOverride }
+      : {}),
+    ...(options.skill.effort
+      ? { effortOverride: options.skill.effort }
+      : {}),
+    disableModelInvocation: options.skill.disableModelInvocation,
+    ...(options.skill.executionContext
+      ? { executionContext: options.skill.executionContext }
+      : {}),
+    hooks: options.skill.hooks,
+  };
 }
 
 export function mapInstalledSkillAllowedToolsToKainClawTools(

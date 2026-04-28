@@ -7,7 +7,8 @@
   - The installed-skills execution path now covers argument substitution, `allowed-tools`, model/effort overrides, `context=fork`, and explicit shell metadata handling.
   - Installed-skill hooks now execute in KainClaw for prompt / command / http / agent definitions, support matcher filtering for tool events, and persist as session-scoped hooks for the active conversation.
   - Electron prompt handling now reuses the same conversation-scoped installed-skill hook store, so follow-up desktop prompts inherit hooks registered by earlier slash-skill invocations.
-  - Remaining meaningful gaps are narrower now: no true model-side `disable-model-invocation` gate exists yet because KainClaw still lacks Claude's model-side `SkillTool` entrypoint, and fuller command-object parity remains outstanding.
+  - Installed-skill command rewrites now collapse into a single `installedSkillExecution` plan object that carries prompt text, tool filters, model/effort overrides, fork context, and per-invocation hooks through prompt preparation and execution.
+  - Remaining meaningful gaps are narrower now: no true model-side `disable-model-invocation` gate exists yet because KainClaw still lacks Claude's model-side `SkillTool` entrypoint, and there is still no full Claude-style model-visible skill-command registry path.
   - Current automated baseline after this slice: `152` test files, `1121` tests passed.
 
 - 硬规则（用户明确设定）：
