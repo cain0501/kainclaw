@@ -246,4 +246,79 @@ describe("agentRunner", () => {
       executeSpy.mockRestore();
     }
   });
+
+  it("narrows the visible tool payload after SkillTool returns allowedToolNames", async () => {
+    const seenTools: unknown[][] = [];
+    const provider: IProviderAdapter = {
+      async runStep(_messages, tools) {
+        seenTools.push(tools);
+        if (seenTools.length === 1) {
+          return {
+            text: "load the skill",
+            toolCalls: [{ id: "tool-1", name: "SkillTool", input: { skill: "simple-skill" } }],
+            done: false,
+          };
+        }
+        return {
+          text: "done",
+          toolCalls: [],
+          done: true,
+        };
+      },
+    };
+
+    const toolContext: ToolContext = {
+      workspaceRoot: "E:\\claudecodejingiang\\vscode-extension",
+    };
+
+    const tools: ToolDefinition[] = [
+      {
+        name: "SkillTool",
+        description: "Load installed skills",
+        input_schema: { type: "object", properties: {} },
+      },
+      {
+        name: "read_file",
+        description: "Read a file",
+        input_schema: { type: "object", properties: {} },
+      },
+      {
+        name: "write_file",
+        description: "Write a file",
+        input_schema: { type: "object", properties: {} },
+      },
+    ];
+
+    const executeSpy = vi.spyOn(await import("../toolRuntime.js"), "executeTool").mockResolvedValue({
+      summary: "Loaded installed skill simple-skill",
+      content: "skill body",
+      allowedToolNames: ["read_file"],
+    });
+
+    try {
+      const result = await runAgent([], {
+        provider,
+        tools,
+        toolContext,
+      });
+
+      expect(result).toBe("done");
+      expect(seenTools).toHaveLength(2);
+      expect(seenTools[0]).toHaveLength(3);
+      expect(seenTools[1]).toHaveLength(1);
+      expect(seenTools[1]?.[0]).toMatchObject({
+        type: "function",
+        function: {
+          name: "read_file",
+        },
+      });
+      expect(executeSpy).toHaveBeenCalledWith(
+        "SkillTool",
+        { skill: "simple-skill" },
+        toolContext,
+      );
+    } finally {
+      executeSpy.mockRestore();
+    }
+  });
 });

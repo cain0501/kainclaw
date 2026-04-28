@@ -117,6 +117,8 @@ name: simple-skill
 description: Simple helper
 when_to_use: Use for lightweight helper tasks.
 arguments: query
+allowed-tools:
+  - Bash
 ---
 
 Use the helper for: $query
@@ -138,6 +140,10 @@ Use the helper for: $query
     expect(result.content).toContain("<installed_skill>");
     expect(result.content).toContain("Base directory for this skill:");
     expect(result.content).toContain("Use the helper for: latest react docs");
+    expect(result.allowedToolNames).toEqual(["run_command"]);
+    expect(result.content).toContain(
+      "This skill narrows the available tool set for the rest of the current model turn to: run_command.",
+    );
   });
 
   it("SkillTool rejects installed skills that are not model-invocable", async () => {

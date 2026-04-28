@@ -154,6 +154,7 @@ export type ToolInput = Record<string, unknown>;
 export type ToolExecutionResult = {
   summary: string;
   content: string;
+  allowedToolNames?: string[];
 };
 
 export function buildUtf8PowerShellEncodedCommand(command: string): string {
@@ -4084,9 +4085,18 @@ const handlers: Record<string, ToolHandler> = {
 
     return {
       summary: `Loaded installed skill ${skill.id}`,
+      ...(execution.allowedTools.length > 0
+        ? { allowedToolNames: execution.allowedTools }
+        : {}),
       content: [
         `Loaded installed skill "/${skill.id}".`,
         "Follow the skill instructions below in this conversation.",
+        ...(execution.allowedTools.length > 0
+          ? [
+              "",
+              `This skill narrows the available tool set for the rest of the current model turn to: ${execution.allowedTools.join(", ")}.`,
+            ]
+          : []),
         "",
         "<installed_skill>",
         execution.prompt,

@@ -149,7 +149,7 @@ export async function runAgent(
     : tools;
 
   const messages: NormalizedMessage[] = [...history];
-  const toolsPayload = getOpenAIToolsPayload(allTools);
+  let activeTools = [...allTools];
   let lastText = "";
   let lastToolResultContent = "";
   let turns = 0;
@@ -167,6 +167,7 @@ export async function runAgent(
       }
     }
 
+    const toolsPayload = getOpenAIToolsPayload(activeTools);
     const step = await provider.runStep(messages, toolsPayload, onToken, abortSignal);
     if (step.thinkingText?.trim()) {
       onThinkingSummary?.(step.thinkingText.trim());
@@ -192,7 +193,7 @@ export async function runAgent(
       try {
         await beforeToolCall?.(toolCall.name, toolCall.input, toolContext);
         onToolStart?.(toolCall.name, toolCall.input, execId);
-        let result: { summary: string; content: string };
+        let result: { summary: string; content: string; allowedToolNames?: string[] };
 
         if (swarm && ["spawn_agent", "send_message", "wait_for_agents"].includes(toolCall.name)) {
           result = await swarm.executeSwarmTool(toolCall.name, toolCall.input);
@@ -214,6 +215,11 @@ export async function runAgent(
           toolCallId: toolCall.id,
           content: lastToolResultContent,
         });
+
+        if (result.allowedToolNames && result.allowedToolNames.length > 0) {
+          const allowedSet = new Set(result.allowedToolNames);
+          activeTools = allTools.filter(tool => allowedSet.has(tool.name));
+        }
       } catch (error) {
         const msg = error instanceof Error ? error.message : String(error);
         await afterToolCall?.(
