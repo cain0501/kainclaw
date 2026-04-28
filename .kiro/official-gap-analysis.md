@@ -17,8 +17,10 @@
   - KainClaw now also supports model-side per-skill `model` / `effort` switching semantics by rebuilding the active provider/runtime state for inline skills and scoping the override to the isolated fork for `context=fork` skills.
   - KainClaw now also supports model-side agent-hook-specific `agentModel` overrides by rebuilding the provider only for that hook sub-run.
   - Installed command hooks now preserve `skillRoot`, map official matcher aliases (`Bash`, `Edit`, `Write`) onto KainClaw tool names, pass the official stdin/environment payloads into hook scripts, and honor the official `permissionDecision` contract for `ask` / `deny`.
-  - Electron now also exposes a minimal `AskUserQuestion` modal flow for installed skills, so official interactive skills no longer have to degrade into plain chat-only follow-up prompts.
+  - Electron now also exposes a minimal `AskUserQuestion` modal flow for installed skills, including multiple-choice answers, an Other/custom answer path, and optional user notes, so official interactive skills no longer have to degrade into plain chat-only follow-up prompts.
   - Manual Electron checks now confirm the official Claude-compatible `freeze` skill works end-to-end for allow/write, deny/write, and `/unfreeze`, and the official `careful` skill now warns first and then allows a single confirmed destructive command attempt through to real shell execution.
+  - The Electron renderer approval overlay no longer depends on duplicate helper definitions for `AskUserQuestion`; only the question-aware approval path remains active, which removes a fragile renderer shadowing pattern from the current parity slice.
+  - Electron transcript UI now renders `Tool Use` tool names as badge-style chips rather than plain inline code, tightening parity with the existing `Tool Result` badge treatment without overstating result semantics.
   - Installed-skills runtime parity is now broadly usable, but not fully closed: Electron now has a working `AskUserQuestion` compatibility modal, yet the broader official skill UX/setup/product-surface parity still remains open.
   - Current automated baseline after this slice: `154` test files, `1145` tests passed.
 
