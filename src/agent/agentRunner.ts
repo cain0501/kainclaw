@@ -7,6 +7,9 @@ import type {
 } from "../toolRuntime";
 import { executeTool, getOpenAIToolsPayload } from "../toolRuntime";
 import type { SwarmCoordinator } from "./swarm/SwarmCoordinator";
+import { triggerHooks } from "../hooks/hooksTrigger";
+import type { HookContext } from "../hooks/hooksExecutor";
+import type { HookDefinition } from "../hooksRegistry";
 
 export const SYSTEM_PROMPT = `You are KainClaw, a multifunctional AI assistant. You can help with programming, document editing, information search, debugging, image generation, and UI/page design tasks.
 
@@ -114,6 +117,7 @@ export interface AgentRunnerOptions {
     isError: boolean,
     toolContext: ToolContext,
   ) => Promise<void>;
+  installedSkillHooks?: HookDefinition[];
   /** Maximum turn count to prevent infinite loops. */
   maxTurns?: number;
   /**
@@ -122,6 +126,55 @@ export interface AgentRunnerOptions {
    * Worker inbox messages are also drained back into the coordinator history before each turn.
    */
   swarm?: SwarmCoordinator;
+}
+
+function buildInstalledSkillAgentHookPrompt(
+  hook: HookDefinition,
+  context: HookContext,
+): string {
+  const payload = JSON.stringify({
+    event: context.event,
+    workspaceRoot: context.workspaceRoot,
+    sessionId: context.sessionId,
+    toolName: context.toolName,
+    toolInput: context.toolInput,
+    toolOutput: context.toolOutput,
+    prompt: context.prompt,
+    reply: context.reply,
+  });
+
+  const template = hook.agentPrompt ?? hook.prompt ?? "";
+  if (!template.trim()) {
+    return `Installed skill agent hook context:\n\n${payload}`;
+  }
+
+  const replaced = template.replaceAll("$ARGUMENTS", payload);
+  return replaced === template
+    ? `${template}\n\nARGUMENTS: ${payload}`
+    : replaced;
+}
+
+function createInstalledSkillHookAgentRunner(options: {
+  provider: IProviderAdapter;
+  toolContext: ToolContext;
+  tools: ToolDefinition[];
+}): (hook: HookDefinition, context: HookContext) => Promise<void> {
+  return async (hook, context) => {
+    const hookPrompt = buildInstalledSkillAgentHookPrompt(hook, context);
+    await runAgent(
+      [
+        {
+          role: "user",
+          content: hookPrompt,
+        },
+      ],
+      {
+        provider: options.provider,
+        tools: options.tools,
+        toolContext: options.toolContext,
+      },
+    );
+  };
 }
 
 async function runForkedInstalledSkill(options: {
@@ -151,6 +204,8 @@ async function runForkedInstalledSkill(options: {
       provider: options.provider,
       tools: forkTools,
       toolContext: options.toolContext,
+      installedSkillHooks:
+        options.request.installedSkillHooks ?? [],
     },
   );
 }
@@ -175,6 +230,7 @@ export async function runAgent(
     abortSignal,
     beforeToolCall,
     afterToolCall,
+    installedSkillHooks = [],
     maxTurns = 40,
     swarm,
   } = options;
@@ -185,6 +241,7 @@ export async function runAgent(
 
   const messages: NormalizedMessage[] = [...history];
   let activeTools = [...allTools];
+  let activeInstalledSkillHooks = [...installedSkillHooks];
   let lastText = "";
   let lastToolResultContent = "";
   let turns = 0;
@@ -226,6 +283,27 @@ export async function runAgent(
       const execId = randomUUID();
 
       try {
+        if (activeInstalledSkillHooks.length > 0) {
+          const preToolHooks = await triggerHooks(
+            "PreToolCall",
+            activeInstalledSkillHooks,
+            {
+              workspaceRoot: toolContext.workspaceRoot,
+              toolName: toolCall.name,
+              toolInput: toolCall.input,
+            },
+            createInstalledSkillHookAgentRunner({
+              provider,
+              toolContext,
+              tools: activeTools,
+            }),
+          );
+          if (preToolHooks.blocked) {
+            throw new Error(
+              `Installed skill hook blocked tool call: ${toolCall.name}`,
+            );
+          }
+        }
         await beforeToolCall?.(toolCall.name, toolCall.input, toolContext);
         onToolStart?.(toolCall.name, toolCall.input, execId);
         let result: ToolExecutionResult;
@@ -258,6 +336,39 @@ export async function runAgent(
           toolResultContent = forkResult;
         }
 
+        if (activeInstalledSkillHooks.length > 0) {
+          await triggerHooks(
+            "PostToolCall",
+            activeInstalledSkillHooks,
+            {
+              workspaceRoot: toolContext.workspaceRoot,
+              toolName: toolCall.name,
+              toolInput: toolCall.input,
+              toolOutput: {
+                summary: toolResultSummary,
+                content: toolResultContent,
+              },
+            },
+            createInstalledSkillHookAgentRunner({
+              provider,
+              toolContext,
+              tools: activeTools,
+            }),
+          );
+        }
+
+        if (result.installedSkillHooks && result.installedSkillHooks.length > 0) {
+          const existingHookIds = new Set(
+            activeInstalledSkillHooks.map(hook => hook.id),
+          );
+          activeInstalledSkillHooks = [
+            ...activeInstalledSkillHooks,
+            ...result.installedSkillHooks.filter(
+              hook => !existingHookIds.has(hook.id),
+            ),
+          ];
+        }
+
         onToolEnd?.(execId, toolResultSummary, false, toolResultContent);
         lastToolResultContent = `${toolResultSummary}\n\n${toolResultContent}`;
         messages.push({
@@ -272,6 +383,24 @@ export async function runAgent(
         }
       } catch (error) {
         const msg = error instanceof Error ? error.message : String(error);
+        if (activeInstalledSkillHooks.length > 0) {
+          await triggerHooks(
+            "PostToolCall",
+            activeInstalledSkillHooks,
+            {
+              workspaceRoot: toolContext.workspaceRoot,
+              toolName: toolCall.name,
+              toolInput: toolCall.input,
+              toolOutput: msg,
+              reply: msg,
+            },
+            createInstalledSkillHookAgentRunner({
+              provider,
+              toolContext,
+              tools: activeTools,
+            }),
+          );
+        }
         await afterToolCall?.(
           toolCall.name,
           toolCall.input,

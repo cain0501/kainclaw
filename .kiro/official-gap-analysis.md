@@ -11,8 +11,9 @@
   - KainClaw now exposes a model-visible installed-skill registry via the workspace system prompt and a minimal `SkillTool` for simple installed skills, which closes the previous “model cannot see or load installed skills at all” gap.
   - KainClaw now also applies installed-skill `allowed-tools` on the model-side path by narrowing the visible tool payload for the rest of the current run once `SkillTool` loads a skill.
   - KainClaw now also supports safe model-side `context=fork` installed skills by executing them in an isolated recursive agent turn and feeding the fork result back to the parent model as a tool result.
-  - Remaining material parity gaps on this line are now mainly the missing Claude-level runtime semantics for hook registration and per-skill model/effort switching inside the model-side path.
-  - Current automated baseline after this slice: `153` test files, `1129` tests passed.
+  - KainClaw now also supports model-side installed-skill hook registration by reusing the shared session hook store and the existing hook executor/trigger path, so skill-loaded hooks affect both later tool calls in the same run and later prompts in the same conversation.
+  - Remaining material parity gaps on this line are now mainly the missing Claude-level per-skill `model` / `effort` switching semantics inside the model-side path.
+  - Current automated baseline after this slice: `153` test files, `1131` tests passed.
 
 - 本轮已验证：
   - `npm test`

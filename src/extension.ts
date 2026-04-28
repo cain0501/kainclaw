@@ -610,6 +610,17 @@ class ChatSidebarProvider implements vscode.WebviewViewProvider, vscode.Disposab
         this.conversationRuntimeStateBindings.resetPendingPlanVerificationToAwaitingStart(),
       getConversationHistory: () =>
         this.conversationHistoryBindings.getConversationHistory(),
+      getSessionInstalledSkillHooks: () =>
+        getSessionInstalledSkillHooks(
+          this.sessionInstalledSkillHooks,
+          this.conversationFeatureBindings.getConversationKey(),
+        ),
+      registerSessionInstalledSkillHooks: hooks =>
+        registerSessionInstalledSkillHooks(
+          this.sessionInstalledSkillHooks,
+          this.conversationFeatureBindings.getConversationKey(),
+          hooks,
+        ),
       getSessionMessages: () => this.sessionMessages,
       getTasks: workspaceFolderPath =>
         this.conversationScopeBindings.getConversationTaskRuntime(workspaceFolderPath),

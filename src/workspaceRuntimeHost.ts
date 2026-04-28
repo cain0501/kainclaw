@@ -34,6 +34,7 @@ import {
   type WorkspacePlanVerificationState,
 } from "./workspaceRuntimeShell";
 import { runProviderExtractionStep } from "./providerHost";
+import type { HookDefinition } from "./hooksRegistry";
 
 type StoppedBackgroundTask = {
   taskId: string;
@@ -95,6 +96,10 @@ export type WorkspaceRuntimeHostOptions = {
     request: WebContentExtractionRequest,
   ) => Promise<string>;
   skillStore?: SkillStore;
+  getSessionInstalledSkillHooks?: () => HookDefinition[];
+  registerSessionInstalledSkillHooks?: (
+    hooks: HookDefinition[],
+  ) => HookDefinition[];
   mcpOAuthHost?: McpOAuthHost;
 };
 
@@ -123,6 +128,10 @@ export type WorkspaceRuntimeHostFactoryState = {
     content: string;
     attachments?: Array<{ data: string; mimeType: string }>;
   }>;
+  getSessionInstalledSkillHooks: () => HookDefinition[];
+  registerSessionInstalledSkillHooks: (
+    hooks: HookDefinition[],
+  ) => HookDefinition[];
   getSessionMessages: () => ChatMessage[];
   getTasks: (workspaceFolderPath: string) => ConversationTaskRuntime;
   getWorktree: (workspaceFolderPath: string) => ConversationWorktreeRuntime;
@@ -183,6 +192,10 @@ export function createWorkspaceRuntimeHostFactory<
     workspaceFolderPath: string,
     request: { command: string },
   ) => Promise<BackgroundCommandResult | null>;
+  getSessionInstalledSkillHooks?: () => HookDefinition[];
+  registerSessionInstalledSkillHooks?: (
+    hooks: HookDefinition[],
+  ) => HookDefinition[];
   skillStore?: SkillStore;
   mcpOAuthHost?: McpOAuthHost;
 }): WorkspaceRuntimeHostFactory<TRuntime> {
@@ -308,6 +321,10 @@ export function createWorkspaceRuntimeHostFactory<
         });
       },
       skillStore: options.skillStore,
+      getSessionInstalledSkillHooks:
+        state.getSessionInstalledSkillHooks,
+      registerSessionInstalledSkillHooks:
+        state.registerSessionInstalledSkillHooks,
       mcpOAuthHost: options.mcpOAuthHost,
     });
 }
@@ -361,6 +378,8 @@ export class WorkspaceRuntimeHost {
           request,
         ),
       this.options.skillStore,
+      this.options.getSessionInstalledSkillHooks,
+      this.options.registerSessionInstalledSkillHooks,
       undefined,
       this.options.mcpOAuthHost,
       request =>

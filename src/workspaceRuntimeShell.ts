@@ -20,6 +20,7 @@ import type { ConversationTaskRuntime } from "./tasks/types";
 import type { ConversationWorktreeRuntime } from "./worktree/types";
 import type { VerificationVerdict } from "./verification/prompt";
 import type { SkillStore } from "./skills/skillStore";
+import type { HookDefinition } from "./hooksRegistry";
 
 type WorkspacePlanModeState = {
   active: boolean;
@@ -81,6 +82,10 @@ export class WorkspaceRuntime {
       command: string;
     }) => Promise<{ taskId: string; command: string; workspaceRoot: string } | null>,
     private readonly skillStore?: SkillStore,
+    private readonly getSessionInstalledSkillHooks?: () => HookDefinition[],
+    private readonly registerSessionInstalledSkillHooks?: (
+      hooks: HookDefinition[],
+    ) => HookDefinition[],
     enableLsp = true,
     private readonly mcpOAuthHost?: McpOAuthHost,
     private readonly extractWebContent?: ToolContext["extractWebContent"],
@@ -176,6 +181,9 @@ export class WorkspaceRuntime {
         },
       },
       skillStore: this.skillStore,
+      getSessionInstalledSkillHooks: this.getSessionInstalledSkillHooks,
+      registerSessionInstalledSkillHooks:
+        this.registerSessionInstalledSkillHooks,
     };
   }
 

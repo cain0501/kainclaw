@@ -125,6 +125,8 @@ describe("workspaceRuntimeShell", () => {
       runReview,
       runCommandInBackground,
       findReusableBackgroundCommand,
+      undefined,
+      undefined,
     );
 
     const toolContext = runtime.getToolContext("main");
@@ -169,6 +171,8 @@ describe("workspaceRuntimeShell", () => {
       vi.fn(async () => ({ taskId: "", report: "" })),
       vi.fn(async () => ({ taskId: "", command: "", workspaceRoot: "" })),
       vi.fn(async () => null),
+      undefined,
+      undefined,
     );
 
     runtime.updateEnvMap({ HELLO: "world" });
@@ -231,6 +235,8 @@ describe("workspaceRuntimeShell", () => {
       vi.fn(async () => ({ taskId: "", command: "", workspaceRoot: "" })),
       vi.fn(async () => null),
       undefined,
+      undefined,
+      undefined,
       false,
     );
 
@@ -267,6 +273,8 @@ describe("workspaceRuntimeShell", () => {
       vi.fn(async () => ({ taskId: "", report: "" })),
       vi.fn(async () => ({ taskId: "", command: "", workspaceRoot: "" })),
       vi.fn(async () => null),
+      undefined,
+      undefined,
     );
 
     await expect(runtime.getToolDefinitions()).resolves.toEqual([

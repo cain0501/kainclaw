@@ -12,6 +12,7 @@ import { loadModelInvocableInstalledSkills } from "./installedSkillModelRegistry
 import { isPlanWritablePath } from "./planMode/planMode";
 import type { LspToolAdapter } from "./lsp/lspRuntime";
 import { LSP_TOOL_NAME, normalizeLspOperation } from "./lsp/types";
+import type { HookDefinition } from "./hooksRegistry";
 import type {
   BackgroundTaskRecord,
   BackgroundTaskStatus,
@@ -155,10 +156,12 @@ export type ToolExecutionResult = {
   summary: string;
   content: string;
   allowedToolNames?: string[];
+  installedSkillHooks?: HookDefinition[];
   forkedSkillRunRequest?: {
     skillId: string;
     prompt: string;
     allowedToolNames?: string[];
+    installedSkillHooks?: HookDefinition[];
   };
 };
 
@@ -319,6 +322,10 @@ export type ToolContext = {
     active: boolean;
   };
   skillStore?: SkillStore;
+  getSessionInstalledSkillHooks?: () => HookDefinition[];
+  registerSessionInstalledSkillHooks?: (
+    hooks: HookDefinition[],
+  ) => HookDefinition[];
 };
 
 type ToolHandler = (input: ToolInput, context: ToolContext) => Promise<ToolExecutionResult>;
@@ -4087,6 +4094,10 @@ const handlers: Record<string, ToolHandler> = {
       args,
       toolContext: context,
     });
+    const registeredHooks = execution.hooks.length > 0
+      ? context.registerSessionInstalledSkillHooks?.(execution.hooks) ??
+        execution.hooks
+      : undefined;
 
     if (execution.executionContext === "fork") {
       return {
@@ -4097,12 +4108,18 @@ const handlers: Record<string, ToolHandler> = {
                 skillId: skill.id,
                 prompt: execution.prompt,
                 allowedToolNames: execution.allowedTools,
+                ...(registeredHooks?.length
+                  ? { installedSkillHooks: registeredHooks }
+                  : {}),
               },
             }
           : {
               forkedSkillRunRequest: {
                 skillId: skill.id,
                 prompt: execution.prompt,
+                ...(registeredHooks?.length
+                  ? { installedSkillHooks: registeredHooks }
+                  : {}),
               },
             }),
         content: [
@@ -4120,6 +4137,9 @@ const handlers: Record<string, ToolHandler> = {
       summary: `Loaded installed skill ${skill.id}`,
       ...(execution.allowedTools.length > 0
         ? { allowedToolNames: execution.allowedTools }
+        : {}),
+      ...(registeredHooks?.length
+        ? { installedSkillHooks: registeredHooks }
         : {}),
       content: [
         `Loaded installed skill "/${skill.id}".`,

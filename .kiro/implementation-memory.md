@@ -11,8 +11,9 @@
   - KainClaw now exposes a model-visible installed-skill registry through the workspace system prompt and a minimal `SkillTool` entrypoint for simple installed skills. The tool loads the expanded installed-skill prompt and enforces a model-side gate for `disable-model-invocation` plus other advanced metadata that the current runtime cannot honor safely.
   - The model-side `SkillTool` path now also applies installed-skill `allowed-tools` by shrinking the provider-visible tool payload for the rest of the current agent run after a skill is loaded.
   - KainClaw now also supports safe model-side `context=fork` installed skills by recursively running a separate agent turn with the forked skill prompt and returning its final text as the parent tool result. This keeps the fork isolated from the parent conversation state while avoiding a wider host/runtime refactor.
-  - Remaining meaningful gaps are narrower now: installed skills that require hook registration, model overrides, or effort overrides still stay slash-only because the model-side execution path cannot yet reproduce those runtime semantics safely.
-  - Current automated baseline after this slice: `153` test files, `1129` tests passed.
+  - Model-visible installed skills can now also register hooks through the same conversation-scoped installed-skill hook store used by slash execution. Those hooks are applied immediately to later tool calls in the same model run and continue to persist for later prompts in the same conversation.
+  - Remaining meaningful gaps are narrower now: installed skills that require per-skill model overrides or effort overrides still stay slash-only because the model-side execution path cannot yet reproduce those runtime semantics safely.
+  - Current automated baseline after this slice: `153` test files, `1131` tests passed.
 
 - 硬规则（用户明确设定）：
   - 只要功能已经在本地 Claude 源码存在，实施和调试都必须先沿着 Claude 的源码链路做端到端复刻，再做 KainClaw 宿主适配。

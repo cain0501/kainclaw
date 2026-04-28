@@ -12,7 +12,7 @@ export function isModelInvocableInstalledSkill(
     !skill.disableModelInvocation &&
     !skill.modelOverride &&
     !skill.effort &&
-    skill.hooks.length === 0
+    skill.hooks.every(hook => !hook.agentModel)
   );
 }
 
@@ -45,7 +45,7 @@ export function buildInstalledSkillsSystemPrompt(
     "The workspace defines installed skills that you can load with the SkillTool.",
     "Use SkillTool only for the exact installed skills listed below. Do not guess skill names.",
     "Only the installed skills listed here are safe for direct model invocation in the current KainClaw runtime.",
-    "Some installed skills run inline, while others run in an isolated forked agent context. Skills that require model overrides, effort overrides, or hook registration still remain slash-only and are intentionally excluded.",
+    "Some installed skills run inline, while others run in an isolated forked agent context. Skills that require model overrides, effort overrides, or agent-hook model overrides still remain slash-only and are intentionally excluded.",
     "",
     "Available model-invocable installed skills:",
   ];

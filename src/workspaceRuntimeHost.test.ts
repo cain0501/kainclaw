@@ -358,6 +358,10 @@ describe("workspaceRuntimeHost", () => {
       createProviderAdapter,
       runCommandInBackground,
       findReusableBackgroundCommand,
+      getSessionInstalledSkillHooks: () => [],
+      registerSessionInstalledSkillHooks: (
+        hooks: import("./hooksRegistry").HookDefinition[],
+      ) => hooks,
     });
 
     const host = factory({
@@ -379,6 +383,10 @@ describe("workspaceRuntimeHost", () => {
       markPendingPlanVerificationCompleted: vi.fn(),
       resetPendingPlanVerificationToAwaitingStart: vi.fn(),
       getConversationHistory: () => conversationHistory,
+      getSessionInstalledSkillHooks: () => [],
+      registerSessionInstalledSkillHooks: (
+        hooks: import("./hooksRegistry").HookDefinition[],
+      ) => hooks,
       getSessionMessages: () => sessionMessages,
       getTasks: vi.fn(() => ({ kind: "tasks" } as any)),
       getWorktree: vi.fn(() => ({ kind: "worktree" } as any)),

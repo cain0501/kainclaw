@@ -225,6 +225,58 @@ Inspect the workspace carefully.
       'Loaded installed skill "/forked-skill" for isolated forked execution.',
     );
   });
+
+  it("SkillTool registers installed-skill hooks into the session hook store", async () => {
+    const kainclawHome = await fs.mkdtemp(path.join(os.tmpdir(), "cain-kainclaw-home-"));
+    const claudeHome = await fs.mkdtemp(path.join(os.tmpdir(), "cain-claude-home-"));
+    const workspaceRoot = await fs.mkdtemp(path.join(os.tmpdir(), "cain-skill-workspace-"));
+    tempDirs.push(kainclawHome, claudeHome, workspaceRoot);
+    process.env.KAINCLAW_CONFIG_HOME = kainclawHome;
+    process.env.CLAUDE_CONFIG_HOME = claudeHome;
+
+    const skillDir = path.join(kainclawHome, "skills", "hooked-skill");
+    await fs.mkdir(skillDir, { recursive: true });
+    await fs.writeFile(
+      path.join(skillDir, "SKILL.md"),
+      `---
+name: hooked-skill
+description: Hooked helper
+hooks:
+  PreToolUse:
+    - matcher: read_file
+      hooks:
+        - type: agent
+          prompt: Validate the read result
+---
+
+Inspect the workspace carefully.
+`,
+      "utf8",
+    );
+
+    const registerSessionInstalledSkillHooks = vi.fn(hooks => hooks);
+
+    const result = await executeTool(
+      "SkillTool",
+      {
+        skill: "hooked-skill",
+      },
+      {
+        workspaceRoot,
+        registerSessionInstalledSkillHooks,
+      },
+    );
+
+    expect(registerSessionInstalledSkillHooks).toHaveBeenCalledTimes(1);
+    expect(result.installedSkillHooks).toEqual([
+      expect.objectContaining({
+        type: "agent",
+        events: ["PreToolCall"],
+        matcher: "read_file",
+        agentPrompt: "Validate the read result",
+      }),
+    ]);
+  });
 });
 
 describe("toolRuntime background task semantics", () => {

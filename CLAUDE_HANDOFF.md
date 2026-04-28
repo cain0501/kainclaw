@@ -9,11 +9,12 @@
   - Installed-skill hooks now support prompt / command / http / agent definitions, tool-event matcher filtering, and session-scoped persistence for the active conversation.
   - The Electron desktop shell now also preserves those installed-skill hooks across follow-up prompts in the same conversation, instead of dropping them after the initial slash-command invocation.
   - Installed-skill slash execution is now carried end-to-end by a unified `installedSkillExecution` object, so prompt preparation and flow control no longer have to keep separate per-field copies of tool/model/effort/context metadata.
-  - KainClaw now exposes a model-visible installed-skill registry in the workspace system prompt and a minimal `SkillTool` for simple installed skills that do not require forked execution, hook registration, or model/effort overrides.
+  - KainClaw now exposes a model-visible installed-skill registry in the workspace system prompt and a minimal `SkillTool` for installed skills whose runtime semantics can already be represented safely on the model-side path.
   - The model-side `SkillTool` path now also enforces installed-skill `allowed-tools` by narrowing the visible tool payload for the rest of the current model turn after the skill is loaded.
   - The model-side `SkillTool` path now also supports safe `context=fork` installed skills by running them in an isolated recursive agent turn and returning the fork result back to the parent model as the tool result.
-  - Advanced installed skills still remain slash-only for now; the model-side path does not yet support hook registration or per-skill model/effort switching.
-  - Current automated baseline after this slice: `153` test files, `1129` tests passed.
+  - Model-visible installed skills can now also register their hooks through the shared session hook store, and those hooks take effect both later in the same model run and on subsequent prompts in the same conversation.
+  - The remaining model-side gap on the installed-skills line is now mainly per-skill `model` / `effort` switching; skills that require those runtime overrides still stay slash-only.
+  - Current automated baseline after this slice: `153` test files, `1131` tests passed.
 
 - 本批 Claude parity 收口后的验证基线：
   - `npm test`

@@ -75,6 +75,22 @@ describe("installedSkillModelRegistry", () => {
           },
         ],
       }),
+    ).toBe(true);
+    expect(
+      isModelInvocableInstalledSkill({
+        ...baseSkill,
+        hooks: [
+          {
+            id: "hook-2",
+            name: "hook-2",
+            type: "agent",
+            description: "agent hook",
+            events: ["PostToolCall"],
+            agentPrompt: "Validate the tool result",
+            agentModel: "claude-opus-4-6",
+          },
+        ],
+      }),
     ).toBe(false);
   });
 
@@ -89,10 +105,12 @@ describe("installedSkillModelRegistry", () => {
 
     const simpleSkillDir = path.join(kainclawHome, "skills", "simple-skill");
     const blockedSkillDir = path.join(kainclawHome, "skills", "blocked-skill");
+    const hookedSkillDir = path.join(kainclawHome, "skills", "hooked-skill");
     const forkedSkillDir = path.join(workspaceRoot, ".kainclaw", "skills", "forked-skill");
 
     await fs.mkdir(simpleSkillDir, { recursive: true });
     await fs.mkdir(blockedSkillDir, { recursive: true });
+    await fs.mkdir(hookedSkillDir, { recursive: true });
     await fs.mkdir(forkedSkillDir, { recursive: true });
 
     await fs.writeFile(
@@ -116,6 +134,20 @@ disable-model-invocation: true
       "utf8",
     );
     await fs.writeFile(
+      path.join(hookedSkillDir, "SKILL.md"),
+      `---
+name: hooked-skill
+description: Hooked helper
+hooks:
+  UserPromptSubmit:
+    - hooks:
+        - type: prompt
+          prompt: Be concise.
+---
+`,
+      "utf8",
+    );
+    await fs.writeFile(
       path.join(forkedSkillDir, "SKILL.md"),
       `---
 name: forked-skill
@@ -130,6 +162,7 @@ context: fork
 
     expect(skills.map(skill => skill.id)).toEqual([
       "forked-skill",
+      "hooked-skill",
       "simple-skill",
     ]);
   });

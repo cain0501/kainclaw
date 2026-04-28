@@ -417,4 +417,102 @@ describe("agentRunner", () => {
       executeSpy.mockRestore();
     }
   });
+
+  it("applies installed-skill hooks returned by SkillTool to later tool calls in the same run", async () => {
+    const provider = new ScriptedProvider([
+      {
+        text: "load a hooked skill",
+        toolCalls: [{ id: "tool-1", name: "SkillTool", input: { skill: "hooked-skill" } }],
+        done: false,
+      },
+      {
+        text: "use the loaded skill",
+        toolCalls: [{ id: "tool-2", name: "read_file", input: { path: "README.md" } }],
+        done: false,
+      },
+      {
+        text: "done",
+        toolCalls: [],
+        done: true,
+      },
+    ]);
+
+    const toolContext: ToolContext = {
+      workspaceRoot: "E:\\claudecodejingiang\\vscode-extension",
+    };
+
+    const tools: ToolDefinition[] = [
+      {
+        name: "SkillTool",
+        description: "Load installed skills",
+        input_schema: { type: "object", properties: {} },
+      },
+      {
+        name: "read_file",
+        description: "Read a file",
+        input_schema: { type: "object", properties: {} },
+      },
+    ];
+
+    const executeSpy = vi.spyOn(await import("../toolRuntime.js"), "executeTool");
+    executeSpy.mockImplementation(async (name: string) => {
+      if (name === "SkillTool") {
+        return {
+          summary: "Loaded installed skill hooked-skill",
+          content: "hooked skill body",
+          installedSkillHooks: [
+            {
+              id: "hook-1",
+              name: "hook-1",
+              type: "agent",
+              description: "hook",
+              events: ["PreToolCall"],
+              matcher: "read_file",
+              agentPrompt: "Validate the read result",
+            },
+          ],
+        };
+      }
+
+      return {
+        summary: "Read README.md",
+        content: "content",
+      };
+    });
+
+    const hooksSpy = vi.spyOn(await import("../hooks/hooksTrigger.js"), "triggerHooks");
+    hooksSpy.mockResolvedValue({});
+
+    try {
+      const result = await runAgent([], {
+        provider,
+        tools,
+        toolContext,
+      });
+
+      expect(result).toBe("done");
+      expect(hooksSpy).toHaveBeenCalledWith(
+        "PreToolCall",
+        [
+          expect.objectContaining({
+            matcher: "read_file",
+            agentPrompt: "Validate the read result",
+          }),
+        ],
+        expect.objectContaining({
+          workspaceRoot: "E:\\claudecodejingiang\\vscode-extension",
+          toolName: "read_file",
+        }),
+        expect.any(Function),
+      );
+      expect(executeSpy).toHaveBeenCalledWith(
+        "read_file",
+        { path: "README.md" },
+        toolContext,
+      );
+    } finally {
+      hooksSpy.mockRestore();
+      executeSpy.mockRestore();
+    }
+  });
 });
