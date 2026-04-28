@@ -24,9 +24,10 @@
   - `Tool Use` transcript rows should present the tool name as a badge/chip rather than plain inline code. Keep the tool label visually distinct from result badges: tool identity is neutral metadata, not success/failure state.
   - Electron AskUserQuestion should keep renderer-local draft state per question. Do not regress to a flat one-shot form for multi-question flows now that the desktop shell supports question chips, intermediate next/review transitions, and a final review/submit step.
   - When the user navigates inside Electron AskUserQuestion, preserve custom Other answers, optional notes, and selected preview metadata in the final response payload. Those annotations are part of the tool contract now, not disposable UI-only state.
+  - Keep `/debug ask-user-question [single|multi]` available in the Electron shell as a deterministic parity trigger. It exists specifically so QA can exercise the real AskUserQuestion callback path without waiting for an unrelated feature to emit the right tool request.
   - Dangerous commands that have already been confirmed through an installed-skill hook now receive a one-shot pass-through for the current `run_command` invocation. Without that override, `/careful` can warn correctly but the host allowlist will still hard-block the confirmed command and break Claude parity.
   - The right success bar for official-skill parity is now: discovery, slash execution, hook persistence, compat state file semantics, and the real Electron runtime behavior of representative official skills (`freeze`, `careful`). Do not mark parity closed just because the registry or model-side `SkillTool` exists.
-  - Current automated baseline after this slice: `154` test files, `1145` tests passed.
+  - Current automated baseline after this slice: `154` test files, `1146` tests passed.
 
 - 硬规则（用户明确设定）：
   - 只要功能已经在本地 Claude 源码存在，实施和调试都必须先沿着 Claude 的源码链路做端到端复刻，再做 KainClaw 宿主适配。

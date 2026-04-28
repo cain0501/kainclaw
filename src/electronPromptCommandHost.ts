@@ -12,8 +12,9 @@ import {
   listRegisteredPromptSlashCommands,
   parsePromptSlashCommand,
   runPromptCommandChain,
+  type RegisteredPromptSlashCommand,
 } from "./promptCommandHost";
-import type { ToolDefinition } from "./toolRuntime";
+import { executeTool, type ToolDefinition } from "./toolRuntime";
 import type { ProviderRuntimeOptions } from "./thinkingEffort/types";
 import type { EffortLevel } from "./thinkingEffort/types";
 import type { ProfileStore } from "./userModel/profileStore";
@@ -49,8 +50,18 @@ const UNSUPPORTED_ELECTRON_PROMPT_COMMANDS = new Set([
   "/exitplan",
 ]);
 
+const ELECTRON_ONLY_PROMPT_COMMANDS: RegisteredPromptSlashCommand[] = [
+  {
+    name: "/debug",
+    description:
+      "Run Electron-only debug helpers such as AskUserQuestion parity test flows.",
+    stage: "local",
+  },
+];
+
 const SUPPORTED_ELECTRON_PROMPT_COMMANDS = new Set([
   "/commands",
+  ...ELECTRON_ONLY_PROMPT_COMMANDS.map(command => command.name),
   "/effort",
   "/agents",
   "/skills",
@@ -73,9 +84,13 @@ async function buildElectronPromptCommandHelp(options: {
     return trimmed.startsWith("/") ? trimmed : `/${trimmed}`;
   })();
   const installedSkills = await loadInstalledSkills(options.workspaceRoot);
+  const helpCommands = [
+    ...listRegisteredPromptSlashCommands(),
+    ...ELECTRON_ONLY_PROMPT_COMMANDS,
+  ];
 
   if (normalizedArgs) {
-    const registeredCommand = listRegisteredPromptSlashCommands().find(command =>
+    const registeredCommand = helpCommands.find(command =>
       SUPPORTED_ELECTRON_PROMPT_COMMANDS.has(command.name) &&
       command.name === normalizedArgs,
     );
@@ -99,7 +114,7 @@ async function buildElectronPromptCommandHelp(options: {
     return `Unknown slash command "${normalizedArgs}". Use /commands to list available commands.`;
   }
 
-  const supportedCommands = listRegisteredPromptSlashCommands().filter(command =>
+  const supportedCommands = helpCommands.filter(command =>
     SUPPORTED_ELECTRON_PROMPT_COMMANDS.has(command.name),
   );
   const localCommands = supportedCommands.filter(
@@ -137,6 +152,123 @@ async function buildElectronPromptCommandHelp(options: {
 
 function buildUnsupportedElectronPromptCommandReply(commandName: string): string {
   return `${commandName} is not yet wired into the Electron desktop shell. Use the VS Code host for this capability for now.`;
+}
+
+function buildDebugAskUserQuestionInput(variant: "single" | "multi"): Record<string, unknown> {
+  if (variant === "multi") {
+    return {
+      title: "AskUserQuestion Multi-Step Debug",
+      questions: [
+        {
+          header: "Approach",
+          question: "How should I continue this parity task?",
+          options: [
+            {
+              label: "Keep current plan",
+              description: "Stay on the current implementation path.",
+              preview:
+                "Preview:\n- continue renderer parity work\n- avoid widening shared runtime scope",
+            },
+            {
+              label: "Re-scope first",
+              description: "Tighten scope before continuing.",
+              preview:
+                "Preview:\n- stop after cleanup\n- defer broader product-surface work",
+            },
+          ],
+        },
+        {
+          header: "Checks",
+          question: "Which follow-up checks do you want?",
+          multiSelect: true,
+          options: [
+            {
+              label: "Manual Electron test",
+              description: "Run the desktop shell manually again.",
+            },
+            {
+              label: "Build/Test",
+              description: "Run automated verification.",
+            },
+            {
+              label: "Doc sync",
+              description: "Update handoff and parity notes.",
+            },
+          ],
+        },
+      ],
+    };
+  }
+
+  return {
+    title: "AskUserQuestion Single-Step Debug",
+    questions: [
+      {
+        header: "Freeze Dir",
+        question:
+          "Which directory should I restrict edits to? Files outside this path will be blocked from editing.",
+        options: [
+          {
+            label: "Current workspace",
+            description: "Use the active workspace root.",
+            preview: "Preview:\n- writes stay inside the current workspace",
+          },
+          {
+            label: "Parent project",
+            description: "Use the parent project directory.",
+            preview: "Preview:\n- allows edits across sibling folders under the parent project",
+          },
+        ],
+      },
+    ],
+  };
+}
+
+async function tryHandleElectronDebugPromptCommand(options: {
+  parsedCommand: ReturnType<typeof parsePromptSlashCommand>;
+  runtime: RuntimeLike;
+}): Promise<string | null> {
+  if (!options.parsedCommand || options.parsedCommand.name !== "/debug") {
+    return null;
+  }
+
+  const trimmedArgs = options.parsedCommand.args.trim();
+  if (!trimmedArgs) {
+    return [
+      "Electron debug commands:",
+      "- /debug ask-user-question",
+      "- /debug ask-user-question single",
+      "- /debug ask-user-question multi",
+    ].join("\n");
+  }
+
+  const [debugTarget, debugVariantRaw] = trimmedArgs.split(/\s+/, 2);
+  if (debugTarget?.toLowerCase() !== "ask-user-question") {
+    return `Unknown Electron debug command "${trimmedArgs}". Use /debug to list available debug commands.`;
+  }
+
+  const variant =
+    debugVariantRaw?.trim().toLowerCase() === "multi" ? "multi" : "single";
+  if (
+    debugVariantRaw &&
+    debugVariantRaw.trim() &&
+    debugVariantRaw.trim().toLowerCase() !== "single" &&
+    debugVariantRaw.trim().toLowerCase() !== "multi"
+  ) {
+    return "Usage: `/debug ask-user-question [single|multi]`";
+  }
+
+  const toolContext = options.runtime.getToolContext?.("main");
+  if (!toolContext) {
+    return "AskUserQuestion debug flow is unavailable because the Electron tool context is not ready.";
+  }
+
+  const result = await executeTool(
+    "AskUserQuestion",
+    buildDebugAskUserQuestionInput(variant),
+    toolContext as any,
+  );
+  return result.content;
 }
 
 export type ElectronPromptCommandResult =
@@ -234,6 +366,14 @@ export async function handleElectronPromptCommand(options: {
         workspaceRoot: options.workspaceRoot,
       }),
     };
+  }
+
+  const debugReply = await tryHandleElectronDebugPromptCommand({
+    parsedCommand,
+    runtime: options.runtime,
+  });
+  if (debugReply) {
+    return { kind: "reply", reply: debugReply };
   }
 
   const localReply = await handleLocalPromptCommand({

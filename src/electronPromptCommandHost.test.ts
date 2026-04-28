@@ -4,6 +4,7 @@ import path from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { handleElectronPromptCommand } from "./electronPromptCommandHost";
+import * as toolRuntime from "./toolRuntime";
 
 const providerConfig = {
   type: "anthropic" as const,
@@ -19,6 +20,7 @@ afterEach(async () => {
   );
   delete process.env.CLAUDE_CONFIG_HOME;
   delete process.env.KAINCLAW_CONFIG_HOME;
+  vi.restoreAllMocks();
 });
 
 describe("electronPromptCommandHost", () => {
@@ -50,8 +52,65 @@ describe("electronPromptCommandHost", () => {
     }
     expect(result.reply).toContain("Available slash commands in the Electron desktop shell:");
     expect(result.reply).toContain("/commands");
+    expect(result.reply).toContain("/debug: Run Electron-only debug helpers such as AskUserQuestion parity test flows.");
     expect(result.reply).toContain("/verify: Run the built-in verification agent against the current workspace state.");
     expect(result.reply).toContain("Unavailable in this shell: /plan, /exitplan");
+  });
+
+  it("runs the Electron AskUserQuestion debug command through the real tool path", async () => {
+    const executeToolSpy = vi.spyOn(toolRuntime, "executeTool").mockResolvedValue({
+      summary: "Collected answers for 2 question(s)",
+      content:
+        'User has answered your questions: "How should I continue this parity task?"="Keep current plan".',
+    } as Awaited<ReturnType<typeof toolRuntime.executeTool>>);
+
+    const toolContext = { workspaceRoot: "E:\\repo" };
+    const result = await handleElectronPromptCommand({
+      prompt: "/debug ask-user-question multi",
+      config: providerConfig,
+      workspaceRoot: "E:\\repo",
+      envMap: {},
+      runtime: {
+        getToolContext: () => toolContext,
+      },
+      tools: [],
+      currentEffortLevel: "high",
+      setEffortLevel: async () => undefined,
+      currentFastMode: false,
+      setFastMode: async () => undefined,
+      setActiveProviderModel: async () => undefined,
+      refreshWorkspaceStatus: () => undefined,
+      runtimeOptions: {},
+      handleCompactCommand: async () => false,
+      handleReviewCommand: async () => false,
+      handleUltrareviewCommand: async () => false,
+      handleUltraverifyCommand: async () => false,
+      handleVerificationCommand: async () => false,
+    });
+
+    expect(result).toEqual({
+      kind: "reply",
+      reply:
+        'User has answered your questions: "How should I continue this parity task?"="Keep current plan".',
+    });
+    expect(executeToolSpy).toHaveBeenCalledWith(
+      "AskUserQuestion",
+      expect.objectContaining({
+        title: "AskUserQuestion Multi-Step Debug",
+        questions: [
+          expect.objectContaining({
+            header: "Approach",
+            question: "How should I continue this parity task?",
+          }),
+          expect.objectContaining({
+            header: "Checks",
+            question: "Which follow-up checks do you want?",
+            multiSelect: true,
+          }),
+        ],
+      }),
+      toolContext,
+    );
   });
 
   it("surfaces installed skill commands through /commands in the Electron shell", async () => {

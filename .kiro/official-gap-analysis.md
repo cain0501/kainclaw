@@ -23,8 +23,9 @@
   - Electron transcript UI now renders `Tool Use` tool names as badge-style chips rather than plain inline code, tightening parity with the existing `Tool Result` badge treatment without overstating result semantics.
   - Electron AskUserQuestion now runs as a step-by-step questionnaire with renderer-kept draft state, question navigation chips, and a final review/submit step for multi-question flows instead of a single flat modal dump.
   - Electron AskUserQuestion now preserves custom Other answers, optional notes, and single-select preview annotations across navigation and returns them in the final tool response payload.
+  - Electron now has a dedicated parity-test entrypoint for AskUserQuestion: `/debug ask-user-question [single|multi]` triggers the real tool path inside the desktop shell, so multi-question behavior can be regression-tested without waiting for a product feature to emit the right tool call.
   - Installed-skills runtime parity is now broadly usable, but not fully closed: Electron now has a working `AskUserQuestion` compatibility modal, yet the broader official skill UX/setup/product-surface parity still remains open.
-  - Current automated baseline after this slice: `154` test files, `1145` tests passed.
+  - Current automated baseline after this slice: `154` test files, `1146` tests passed.
 
 - 本轮已验证：
   - `npm test`
