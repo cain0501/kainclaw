@@ -17,10 +17,12 @@
   - Model-visible installed skills can now also apply per-skill `model` / `effort` overrides by rebuilding the active provider/runtime state for the rest of the current run, or by applying the override only inside the fork when the skill runs with `context=fork`.
   - Model-visible installed skills now also honor agent-hook-specific `agentModel` overrides by rebuilding the provider only for the hook sub-run, matching the existing prompt-side installed-skill hook behavior closely without introducing a second hook runtime.
   - Installed command hooks now preserve `skillRoot`, accept official matcher aliases (`Bash`, `Edit`, `Write`) against KainClaw tools, pass the official stdin/environment payload (`tool_input`, `CLAUDE_PLUGIN_DATA`, `CLAUDE_SKILL_DIR`) to hook scripts, and honor `permissionDecision: ask|deny` instead of relying only on exit codes.
+  - Electron now has a minimal `AskUserQuestion` compatibility modal. It supports multiple-choice questions, multi-select, and an Other/custom free-text answer path, and is good enough to let official interactive skills keep their control flow inside the desktop shell instead of spilling back into plain chat.
   - Electron now carries a targeted official-skill compatibility lane for `freeze` / `unfreeze`: the desktop shell asks for the directory path in-chat, writes the active boundary to `CLAUDE_PLUGIN_DATA` / `~/.gstack/freeze-dir.txt`, and clears that state on `/unfreeze`.
+  - That `freeze` compatibility lane should now prefer the `AskUserQuestion` modal rather than a free-form assistant message. If a future edit reintroduces plain chat prompts for interactive skills while the modal exists, treat that as a regression.
   - Dangerous commands that have already been confirmed through an installed-skill hook now receive a one-shot pass-through for the current `run_command` invocation. Without that override, `/careful` can warn correctly but the host allowlist will still hard-block the confirmed command and break Claude parity.
   - The right success bar for official-skill parity is now: discovery, slash execution, hook persistence, compat state file semantics, and the real Electron runtime behavior of representative official skills (`freeze`, `careful`). Do not mark parity closed just because the registry or model-side `SkillTool` exists.
-  - Current automated baseline after this slice: `154` test files, `1143` tests passed.
+  - Current automated baseline after this slice: `154` test files, `1145` tests passed.
 
 - 硬规则（用户明确设定）：
   - 只要功能已经在本地 Claude 源码存在，实施和调试都必须先沿着 Claude 的源码链路做端到端复刻，再做 KainClaw 宿主适配。

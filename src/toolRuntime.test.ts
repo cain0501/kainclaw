@@ -1129,6 +1129,47 @@ describe("toolRuntime background task semantics", () => {
     expect(result.content).toContain("<status>already_running</status>");
   });
 
+  it("AskUserQuestion collects answers from the host interaction callback", async () => {
+    const context: ToolContext = {
+      workspaceRoot: "E:\\claudecodejingiang\\vscode-extension",
+      requestUserQuestion: async request => ({
+        questions: request.questions,
+        answers: {
+          "Which directory should I restrict edits to?":
+            "E:\\claudecodejingiang\\vscode-extension",
+        },
+      }),
+    };
+
+    const result = await executeTool(
+      "AskUserQuestion",
+      {
+        questions: [
+          {
+            question: "Which directory should I restrict edits to?",
+            header: "Freeze Dir",
+            options: [
+              {
+                label: "Current workspace",
+                description: "Use the current workspace root.",
+              },
+              {
+                label: "Other",
+                description: "Type another path.",
+              },
+            ],
+          },
+        ],
+      },
+      context,
+    );
+
+    expect(result.summary).toContain("Collected answers");
+    expect(result.content).toContain(
+      "\"Which directory should I restrict edits to?\"=\"E:\\claudecodejingiang\\vscode-extension\"",
+    );
+  });
+
   it("VerifyPlanExecution returns reusable status when a verification task is already running", async () => {
     const context: ToolContext = {
       workspaceRoot: "E:\\claudecodejingiang\\vscode-extension",

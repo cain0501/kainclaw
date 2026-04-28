@@ -236,6 +236,37 @@ export type ToolActionApprovalRequest = {
   inputPreview: string;
 };
 
+export type AskUserQuestionOption = {
+  label: string;
+  description: string;
+  preview?: string;
+};
+
+export type AskUserQuestionPrompt = {
+  question: string;
+  header: string;
+  options: AskUserQuestionOption[];
+  multiSelect?: boolean;
+};
+
+export type AskUserQuestionAnnotations = Record<
+  string,
+  { preview?: string; notes?: string }
+>;
+
+export type AskUserQuestionRequest = {
+  kind: "question";
+  id?: string;
+  title?: string;
+  questions: AskUserQuestionPrompt[];
+};
+
+export type AskUserQuestionResponse = {
+  questions: AskUserQuestionPrompt[];
+  answers: Record<string, string>;
+  annotations?: AskUserQuestionAnnotations;
+};
+
 export type ToolLifecycleEvent = {
   executionId: string;
   phase: "start" | "finish";
@@ -312,6 +343,9 @@ export type ToolContext = {
   }) => Promise<{ taskId: string; command: string; workspaceRoot: string; outputPath?: string } | null>;
   requestFileApproval?: (request: WriteApprovalRequest) => Promise<boolean>;
   requestToolApproval?: (request: ToolActionApprovalRequest) => Promise<boolean>;
+  requestUserQuestion?: (
+    request: AskUserQuestionRequest,
+  ) => Promise<AskUserQuestionResponse | null>;
   allowDangerousCommandOnce?: (
     command: string,
     options?: { skipGenericApproval?: boolean },
@@ -2929,6 +2963,103 @@ const handlers: Record<string, ToolHandler> = {
     };
   },
 
+  async AskUserQuestion(input, context) {
+    if (!context.requestUserQuestion) {
+      throw new Error("AskUserQuestion is not available in the current host runtime.");
+    }
+
+    const rawQuestions = Array.isArray(input.questions) ? input.questions : [];
+    if (rawQuestions.length === 0) {
+      throw new Error("questions is required");
+    }
+
+    const questions: AskUserQuestionPrompt[] = rawQuestions.map((question, index) => {
+      if (!question || typeof question !== "object" || Array.isArray(question)) {
+        throw new Error(`Question ${index + 1} must be an object.`);
+      }
+      const record = question as Record<string, unknown>;
+      const prompt = typeof record.question === "string" ? record.question.trim() : "";
+      const header = typeof record.header === "string" ? record.header.trim() : "";
+      const rawOptions = Array.isArray(record.options) ? record.options : [];
+      if (!prompt || !header || rawOptions.length < 2) {
+        throw new Error(`Question ${index + 1} is missing required fields.`);
+      }
+
+      const options = rawOptions.map((option, optionIndex) => {
+        if (!option || typeof option !== "object" || Array.isArray(option)) {
+          throw new Error(
+            `Question ${index + 1} option ${optionIndex + 1} must be an object.`,
+          );
+        }
+        const optionRecord = option as Record<string, unknown>;
+        const label =
+          typeof optionRecord.label === "string" ? optionRecord.label.trim() : "";
+        const description =
+          typeof optionRecord.description === "string"
+            ? optionRecord.description.trim()
+            : "";
+        const preview =
+          typeof optionRecord.preview === "string"
+            ? optionRecord.preview
+            : undefined;
+        if (!label || !description) {
+          throw new Error(
+            `Question ${index + 1} option ${optionIndex + 1} is missing required fields.`,
+          );
+        }
+        return {
+          label,
+          description,
+          ...(preview ? { preview } : {}),
+        };
+      });
+
+      return {
+        question: prompt,
+        header,
+        options,
+        ...(record.multiSelect === true ? { multiSelect: true } : {}),
+      };
+    });
+
+    const response = await context.requestUserQuestion({
+      kind: "question",
+      title:
+        typeof input.title === "string" && input.title.trim()
+          ? input.title.trim()
+          : "Answer questions",
+      questions,
+    });
+
+    if (!response) {
+      return {
+        summary: "User declined to answer questions",
+        content: "User declined to answer questions.",
+      };
+    }
+
+    const answersText = Object.entries(response.answers)
+      .map(([questionText, answer]) => {
+        const annotation = response.annotations?.[questionText];
+        const parts = [`"${questionText}"="${answer}"`];
+        if (annotation?.preview) {
+          parts.push(`selected preview:\n${annotation.preview}`);
+        }
+        if (annotation?.notes) {
+          parts.push(`user notes: ${annotation.notes}`);
+        }
+        return parts.join(" ");
+      })
+      .join(", ");
+
+    return {
+      summary: `Collected answers for ${questions.length} question(s)`,
+      content:
+        `User has answered your questions: ${answersText}. ` +
+        "You can now continue with the user's answers in mind.",
+    };
+  },
+
   async write_file(input, context) {
     const rawPath = typeof input.path === "string" ? input.path : "";
     const content = typeof input.content === "string" ? input.content : "";
@@ -5119,6 +5250,68 @@ export const toolDefinitions: ToolDefinition[] = [
     },
   },
   {
+    name: "AskUserQuestion",
+    description:
+      "Ask the user one or more multiple-choice questions, optionally with an Other/custom path answer, and wait for the answers before continuing.",
+    input_schema: {
+      type: "object",
+      properties: {
+        title: {
+          type: "string",
+          description: "Optional dialog title shown above the questions.",
+        },
+        questions: {
+          type: "array",
+          description:
+            "Required list of 1-4 questions. Each question must include question, header, and 2-4 options with label and description.",
+          items: {
+            type: "object",
+            properties: {
+              question: {
+                type: "string",
+                description: "The full question text shown to the user.",
+              },
+              header: {
+                type: "string",
+                description: "Short label for this question, shown as a compact header.",
+              },
+              multiSelect: {
+                type: "boolean",
+                description: "Allow multiple selections for this question.",
+              },
+              options: {
+                type: "array",
+                description: "The available answer options.",
+                items: {
+                  type: "object",
+                  properties: {
+                    label: {
+                      type: "string",
+                      description: "Short user-facing option label.",
+                    },
+                    description: {
+                      type: "string",
+                      description: "One-sentence explanation of the option.",
+                    },
+                    preview: {
+                      type: "string",
+                      description: "Optional preview content for the focused option.",
+                    },
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
+      required: ["questions"],
+    },
+    annotations: {
+      readOnlyHint: true,
+      title: "Ask user question",
+    },
+  },
+  {
     name: "SkillTool",
     description:
       "Load a model-invocable installed skill from the current KainClaw or Claude-compatible skill directories and return its expanded prompt instructions.",
@@ -5189,15 +5382,21 @@ export const toolDefinitions: ToolDefinition[] = [
 export function getBuiltInToolDefinitions(options: {
   lspAvailable?: boolean;
   includeLegacyFetchUrl?: boolean;
+  askUserQuestionAvailable?: boolean;
 } = {}): ToolDefinition[] {
   const lspAvailable = options.lspAvailable ?? true;
   const includeLegacyFetchUrl = options.includeLegacyFetchUrl ?? false;
+  const askUserQuestionAvailable = options.askUserQuestionAvailable ?? false;
   return toolDefinitions.filter(tool => {
     if (!lspAvailable && tool.name === LSP_TOOL_NAME) {
       return false;
     }
 
     if (!includeLegacyFetchUrl && tool.name === "fetch_url") {
+      return false;
+    }
+
+     if (!askUserQuestionAvailable && tool.name === "AskUserQuestion") {
       return false;
     }
 

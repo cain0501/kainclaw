@@ -878,6 +878,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-seri
         <pre id="approval-diff-content" style="font-family:'SF Mono',Consolas,monospace;font-size:11px;line-height:1.6;margin:0;color:#e4e4e7;white-space:pre-wrap;max-height:200px;overflow-y:auto"></pre>
       </div>
       <div id="approval-preview" style="background:#f4f4f5;border-radius:7px;padding:9px 12px;font-size:12px;color:#52525b;margin-bottom:12px;display:none;font-family:'SF Mono',Consolas,monospace;max-height:120px;overflow-y:auto"></div>
+      <div id="approval-question" style="display:none;margin-bottom:12px"></div>
       <div style="display:flex;gap:8px">
       <button onclick="rejectApproval()" style="flex:1;border:1px solid #e4e4e7;border-radius:7px;padding:8px;font-size:13px;font-weight:500;cursor:pointer;background:transparent;font-family:inherit;color:#52525b">拒绝</button>
       <button onclick="approveApproval()" class="btn-red" style="flex:1;justify-content:center;padding:8px">确认执行</button>
@@ -934,6 +935,8 @@ let appState = {
   licenseActivated: false,
   workspaceInfo: null,
 };
+
+let currentPendingQuestionRequest = null;
 
 let pendingAttachments = []; // { dataUrl, mimeType, name }
 let chatPendingImageRequest = null;
@@ -5233,6 +5236,163 @@ function renderApproval(approval) {
 
 function approveApproval() { send({ type: 'approvePendingAction' }); }
 function rejectApproval() { send({ type: 'rejectPendingAction' }); }
+
+function renderQuestionApprovalHtml(approval) {
+  return approval.questions.map((question, questionIndex) => {
+    const optionName = `pending-question-${questionIndex}`;
+    const optionType = question.multiSelect ? 'checkbox' : 'radio';
+    const optionHtml = question.options.map((option, optionIndex) => {
+      const optionId = `${optionName}-${optionIndex}`;
+      const previewHtml = option.preview
+        ? `<div style="margin-top:4px;padding:8px;border:1px solid #e4e4e7;border-radius:6px;background:#fafafa;font-size:11px;color:#52525b;white-space:pre-wrap">${escapeHtml(option.preview)}</div>`
+        : '';
+      return `<label for="${optionId}" style="display:block;border:1px solid #e4e4e7;border-radius:8px;padding:9px 10px;margin-bottom:8px;cursor:pointer">
+        <div style="display:flex;gap:8px;align-items:flex-start">
+          <input id="${optionId}" type="${optionType}" name="${optionName}" value="${escapeHtml(option.label)}" style="margin-top:2px">
+          <div style="flex:1">
+            <div style="font-size:12px;font-weight:600;color:#18181b">${escapeHtml(option.label)}</div>
+            <div style="font-size:11px;color:#71717a;line-height:1.5;margin-top:2px">${escapeHtml(option.description)}</div>
+            ${previewHtml}
+          </div>
+        </div>
+      </label>`;
+    }).join('');
+
+    const otherId = `${optionName}-other`;
+    return `<div style="margin-bottom:14px">
+      <div style="font-size:11px;font-weight:700;color:#E84040;margin-bottom:4px">${escapeHtml(question.header)}</div>
+      <div style="font-size:13px;font-weight:600;color:#18181b;line-height:1.5;margin-bottom:8px">${escapeHtml(question.question)}</div>
+      ${optionHtml}
+      <label for="${otherId}" style="display:block;border:1px dashed #d4d4d8;border-radius:8px;padding:9px 10px;cursor:pointer">
+        <div style="display:flex;gap:8px;align-items:flex-start">
+          <input id="${otherId}" type="${optionType}" name="${optionName}" value="__other__" style="margin-top:2px">
+          <div style="flex:1">
+            <div style="font-size:12px;font-weight:600;color:#18181b">Other</div>
+            <div style="font-size:11px;color:#71717a;line-height:1.5;margin-top:2px">Type a custom answer.</div>
+            <input id="${otherId}-text" type="text" placeholder="Custom answer" style="width:100%;margin-top:8px;border:1px solid #e4e4e7;border-radius:6px;padding:8px 10px;font-size:12px;font-family:inherit">
+          </div>
+        </div>
+      </label>
+    </div>`;
+  }).join('');
+}
+
+function collectPendingQuestionResponse() {
+  if (!currentPendingQuestionRequest) return null;
+  const answers = {};
+  const annotations = {};
+
+  for (let questionIndex = 0; questionIndex < currentPendingQuestionRequest.questions.length; questionIndex += 1) {
+    const question = currentPendingQuestionRequest.questions[questionIndex];
+    const optionName = `pending-question-${questionIndex}`;
+    if (question.multiSelect) {
+      const checked = Array.from(document.querySelectorAll(`input[name="${optionName}"]:checked`));
+      if (!checked.length) return null;
+      const values = [];
+      for (const input of checked) {
+        if (input.value === '__other__') {
+          const text = document.getElementById(`${optionName}-other-text`).value.trim();
+          if (!text) return null;
+          values.push(text);
+        } else {
+          values.push(input.value);
+        }
+      }
+      answers[question.question] = values.join(', ');
+    } else {
+      const selected = document.querySelector(`input[name="${optionName}"]:checked`);
+      if (!selected) return null;
+      if (selected.value === '__other__') {
+        const text = document.getElementById(`${optionName}-other-text`).value.trim();
+        if (!text) return null;
+        answers[question.question] = text;
+      } else {
+        answers[question.question] = selected.value;
+        const option = question.options.find(candidate => candidate.label === selected.value);
+        if (option && option.preview) {
+          annotations[question.question] = { preview: option.preview };
+        }
+      }
+    }
+  }
+
+  return {
+    answers,
+    ...(Object.keys(annotations).length ? { annotations } : {}),
+  };
+}
+
+function renderApproval(approval) {
+  const overlay = document.getElementById('approval-overlay');
+  const diffEl = document.getElementById('approval-diff');
+  const diffContent = document.getElementById('approval-diff-content');
+  const previewEl = document.getElementById('approval-preview');
+  const questionEl = document.getElementById('approval-question');
+  const buttons = Array.from(overlay.querySelectorAll('button'));
+  const cancelBtn = buttons[0];
+  const confirmBtn = buttons[1];
+
+  if (!approval) {
+    currentPendingQuestionRequest = null;
+    questionEl.innerHTML = '';
+    overlay.classList.remove('show');
+    return;
+  }
+
+  document.getElementById('approval-title').textContent = approval.title || 'Need confirmation';
+  document.getElementById('approval-summary').textContent = approval.summary || '';
+
+  if (approval.kind === 'question') {
+    currentPendingQuestionRequest = approval;
+    diffEl.style.display = 'none';
+    previewEl.style.display = 'none';
+    questionEl.style.display = '';
+    cancelBtn.textContent = 'Cancel';
+    confirmBtn.textContent = 'Submit answers';
+    questionEl.innerHTML = renderQuestionApprovalHtml(approval);
+  } else {
+    currentPendingQuestionRequest = null;
+    questionEl.style.display = 'none';
+    questionEl.innerHTML = '';
+    cancelBtn.textContent = '拒绝';
+    confirmBtn.textContent = '确认执行';
+    if (approval.diff) {
+      diffContent.textContent = approval.diff;
+      diffEl.style.display = '';
+    } else {
+      diffEl.style.display = 'none';
+    }
+    if (approval.inputPreview) {
+      previewEl.textContent = approval.inputPreview;
+      previewEl.style.display = '';
+    } else {
+      previewEl.style.display = 'none';
+    }
+  }
+
+  overlay.classList.add('show');
+}
+
+function approveApproval() {
+  if (currentPendingQuestionRequest?.kind === 'question') {
+    const response = collectPendingQuestionResponse();
+    if (!response) {
+      alert('Please answer all questions before submitting.');
+      return;
+    }
+    send({ type: 'submitPendingQuestion', ...response });
+    return;
+  }
+  send({ type: 'approvePendingAction' });
+}
+
+function rejectApproval() {
+  if (currentPendingQuestionRequest?.kind === 'question') {
+    send({ type: 'cancelPendingQuestion' });
+    return;
+  }
+  send({ type: 'rejectPendingAction' });
+}
 
 // MCP
 function renderMcpServers(servers) {

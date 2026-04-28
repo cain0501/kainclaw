@@ -17,9 +17,10 @@
   - KainClaw now also supports model-side per-skill `model` / `effort` switching semantics by rebuilding the active provider/runtime state for inline skills and scoping the override to the isolated fork for `context=fork` skills.
   - KainClaw now also supports model-side agent-hook-specific `agentModel` overrides by rebuilding the provider only for that hook sub-run.
   - Installed command hooks now preserve `skillRoot`, map official matcher aliases (`Bash`, `Edit`, `Write`) onto KainClaw tool names, pass the official stdin/environment payloads into hook scripts, and honor the official `permissionDecision` contract for `ask` / `deny`.
+  - Electron now also exposes a minimal `AskUserQuestion` modal flow for installed skills, so official interactive skills no longer have to degrade into plain chat-only follow-up prompts.
   - Manual Electron checks now confirm the official Claude-compatible `freeze` skill works end-to-end for allow/write, deny/write, and `/unfreeze`, and the official `careful` skill now warns first and then allows a single confirmed destructive command attempt through to real shell execution.
-  - Installed-skills runtime parity is now broadly usable, but not fully closed: true `AskUserQuestion` dialog parity and broader official skill UX/setup polish in Electron remain open gaps.
-  - Current automated baseline after this slice: `154` test files, `1143` tests passed.
+  - Installed-skills runtime parity is now broadly usable, but not fully closed: Electron now has a working `AskUserQuestion` compatibility modal, yet the broader official skill UX/setup/product-surface parity still remains open.
+  - Current automated baseline after this slice: `154` test files, `1145` tests passed.
 
 - 本轮已验证：
   - `npm test`

@@ -34,9 +34,16 @@ import { McpRuntime, type McpServerStatusSummary } from "../src/mcpRuntime";
 import { runAgent, SYSTEM_PROMPT } from "../src/agent/agentRunner";
 import {
   dedupeToolDefinitionsByName,
+  getBuiltInToolDefinitions,
   toolDefinitions as builtinToolDefinitions,
 } from "../src/toolRuntime";
-import type { ToolContext, ToolDefinition } from "../src/toolRuntime";
+import type {
+  AskUserQuestionAnnotations,
+  AskUserQuestionRequest,
+  AskUserQuestionResponse,
+  ToolContext,
+  ToolDefinition,
+} from "../src/toolRuntime";
 import type { HookDefinition } from "../src/hooksRegistry";
 import {
   getInstalledSkillByEntrypoint,
@@ -121,6 +128,7 @@ import type { ConversationWorktreeRuntime } from "../src/worktree/types";
 import type { EffortLevel, ProviderRuntimeOptions } from "../src/thinkingEffort/types";
 
 const SUPPORTED_ELECTRON_TOOL_NAMES = new Set([
+  "AskUserQuestion",
   "list_files",
   "read_file",
   "search_files",
@@ -183,7 +191,7 @@ function buildElectronInstalledSkillAgentHookPrompt(
 }
 
 function getSupportedElectronTools() {
-  return builtinToolDefinitions.filter(tool =>
+  return getBuiltInToolDefinitions({ askUserQuestionAvailable: true }).filter(tool =>
     SUPPORTED_ELECTRON_TOOL_NAMES.has(tool.name),
   );
 }
@@ -200,11 +208,10 @@ type InspectionConversationMessage = {
 };
 
 type ActiveRequestKind = "background" | "chat" | "image";
-type PendingInstalledSkillCompat =
-  | {
-      kind: "freeze";
-      hooks: HookDefinition[];
-    };
+type PendingQuestionState = {
+  request: AskUserQuestionRequest & { id: string };
+  resolve: (response: AskUserQuestionResponse | null) => void;
+};
 
 /**
  * Electron equivalent of ChatSidebarProvider.
@@ -245,7 +252,7 @@ export class ElectronChatPanel {
   private readonly browserRuntime: BrowserRuntime;
   private readonly cachedWorkspaceResolutions = new Map<string, ResolvedWorkspaceRoot>();
   private readonly sessionInstalledSkillHooks = new Map<string, HookDefinition[]>();
-  private readonly pendingInstalledSkillCompat = new Map<string, PendingInstalledSkillCompat>();
+  private pendingQuestion: PendingQuestionState | undefined;
   private sessionMessageWriteQueue: Promise<void> = Promise.resolve();
   private backgroundTaskNotificationTimer: NodeJS.Timeout | undefined;
   private backgroundTaskNotificationPollInFlight: Promise<number> | undefined;
@@ -727,6 +734,21 @@ export class ElectronChatPanel {
     }
     if (type === "approvePendingAction") { this.host.resolveApproval(true); return; }
     if (type === "rejectPendingAction") { this.host.resolveApproval(false); return; }
+    if (type === "submitPendingQuestion") {
+      this.resolvePendingQuestion(
+        message.answers && typeof message.answers === "object"
+          ? {
+              questions: this.pendingQuestion?.request.questions ?? [],
+              answers: message.answers as Record<string, string>,
+              ...(message.annotations && typeof message.annotations === "object"
+                ? { annotations: message.annotations as AskUserQuestionAnnotations }
+                : {}),
+            }
+          : null,
+      );
+      return;
+    }
+    if (type === "cancelPendingQuestion") { this.resolvePendingQuestion(null); return; }
     if (type === "requestEditorSelection") { this.sendToRenderer({ type: "editorSelection", selectedText: "", language: "" }); return; }
     if (type === "mcp:refresh") { await this.refreshMcpStatus(); return; }
   }
@@ -921,7 +943,9 @@ export class ElectronChatPanel {
 
     await this.sessions.deleteSession(id);
     clearSessionInstalledSkillHooks(this.sessionInstalledSkillHooks, id);
-    this.pendingInstalledSkillCompat.delete(id);
+    if (this.currentSessionId === id) {
+      this.pendingQuestion = undefined;
+    }
 
     if (wasActiveSession) {
       this.currentSessionId = undefined;
@@ -1817,7 +1841,7 @@ export class ElectronChatPanel {
     await this.imageGalleryStore.clear();
     await this.host.deleteSecret("cain.licenseKey");
     clearAllSessionInstalledSkillHooks(this.sessionInstalledSkillHooks);
-    this.pendingInstalledSkillCompat.clear();
+    this.pendingQuestion = undefined;
     this.sessionMessages = [];
     this.modelConversationMessages = [];
     this.compactBoundary = undefined;
@@ -1854,7 +1878,7 @@ export class ElectronChatPanel {
       this.sessionInstalledSkillHooks,
       this.getConversationKey(),
     );
-    this.setCurrentPendingInstalledSkillCompat(undefined);
+    this.pendingQuestion = undefined;
     this.sessionMessages = [];
     this.modelConversationMessages = [];
     this.compactBoundary = undefined;
@@ -2480,21 +2504,36 @@ export class ElectronChatPanel {
     return this.currentSessionId ?? "electron";
   }
 
-  private getCurrentPendingInstalledSkillCompat():
-    | PendingInstalledSkillCompat
-    | undefined {
-    return this.pendingInstalledSkillCompat.get(this.getConversationKey());
+  private getPendingInteraction(): unknown {
+    return this.pendingQuestion?.request ?? this.host.getPendingApproval();
   }
 
-  private setCurrentPendingInstalledSkillCompat(
-    pending: PendingInstalledSkillCompat | undefined,
-  ): void {
-    const key = this.getConversationKey();
-    if (!pending) {
-      this.pendingInstalledSkillCompat.delete(key);
-      return;
+  private async requestUserQuestion(
+    request: AskUserQuestionRequest,
+  ): Promise<AskUserQuestionResponse | null> {
+    if (this.pendingQuestion || this.host.getPendingApproval()) {
+      throw new Error("Another user interaction is already pending.");
     }
-    this.pendingInstalledSkillCompat.set(key, pending);
+
+    const nextRequest = {
+      ...request,
+      id: request.id ?? randomUUID(),
+    };
+    const response = await new Promise<AskUserQuestionResponse | null>(resolve => {
+      this.pendingQuestion = {
+        request: nextRequest,
+        resolve,
+      };
+      void this.postState();
+    });
+    return response;
+  }
+
+  private resolvePendingQuestion(response: AskUserQuestionResponse | null): void {
+    const pending = this.pendingQuestion;
+    this.pendingQuestion = undefined;
+    void this.postState();
+    pending?.resolve(response);
   }
 
   private getCurrentSessionInstalledSkillHooks(): HookDefinition[] {
@@ -2552,16 +2591,54 @@ export class ElectronChatPanel {
             hooks: installedSkill.hooks,
           });
         } else {
-          this.registerCurrentSessionInstalledSkillHooks(installedSkill.hooks);
-          this.setCurrentPendingInstalledSkillCompat({
-            kind: "freeze",
-            hooks: installedSkill.hooks,
+          const workspaceLabel = path.basename(options.workspaceRoot) || options.workspaceRoot;
+          const parentRoot = path.dirname(options.workspaceRoot);
+          const parentLabel = path.basename(parentRoot) || parentRoot;
+          const questionResponse = await this.requestUserQuestion({
+            kind: "question",
+            title: "Freeze Directory",
+            questions: [
+              {
+                header: "Freeze Dir",
+                question:
+                  "Which directory should I restrict edits to? Files outside this path will be blocked from editing.",
+                options: [
+                  {
+                    label: workspaceLabel,
+                    description: `Current workspace directory: ${options.workspaceRoot}`,
+                  },
+                  {
+                    label: parentLabel,
+                    description: `Parent project directory: ${parentRoot}`,
+                  },
+                ],
+              },
+            ],
           });
-          await this.appendAssistantMessageToSession(options.sessionId, {
-            role: "assistant",
-            content:
-              "Which directory should I restrict edits to? Files outside this path will be blocked from editing.\n\nPlease type the directory path you want to lock edits to:",
-            timestamp: Date.now(),
+          if (!questionResponse) {
+            await this.appendAssistantMessageToSession(options.sessionId, {
+              role: "assistant",
+              content: "Freeze setup cancelled.",
+              timestamp: Date.now(),
+            });
+            return true;
+          }
+
+          const selected =
+            questionResponse.answers[
+              "Which directory should I restrict edits to? Files outside this path will be blocked from editing."
+            ]?.trim() ?? "";
+          const rawPath =
+            selected === workspaceLabel
+              ? options.workspaceRoot
+              : selected === parentLabel
+                ? parentRoot
+                : selected;
+          await this.applyFreezeBoundary({
+            sessionId: options.sessionId,
+            workspaceRoot: options.workspaceRoot,
+            rawPath,
+            hooks: installedSkill.hooks,
           });
         }
         return true;
@@ -2572,7 +2649,6 @@ export class ElectronChatPanel {
         this.unregisterCurrentSessionInstalledSkillHooks(
           hook => hook.name.startsWith("freeze:"),
         );
-        this.setCurrentPendingInstalledSkillCompat(undefined);
         await this.appendAssistantMessageToSession(options.sessionId, {
           role: "assistant",
           content:
@@ -2581,17 +2657,6 @@ export class ElectronChatPanel {
         });
         return true;
       }
-    }
-
-    const pendingCompat = this.getCurrentPendingInstalledSkillCompat();
-    if (pendingCompat?.kind === "freeze" && !parsedCommand) {
-      await this.applyFreezeBoundary({
-        sessionId: options.sessionId,
-        workspaceRoot: options.workspaceRoot,
-        rawPath: trimmedPrompt,
-        hooks: pendingCompat.hooks,
-      });
-      return true;
     }
 
     return false;
@@ -2610,7 +2675,6 @@ export class ElectronChatPanel {
     await validateFreezeBoundaryPath(resolved);
     const savedBoundary = await writeFreezeBoundary(resolved);
     this.registerCurrentSessionInstalledSkillHooks(options.hooks);
-    this.setCurrentPendingInstalledSkillCompat(undefined);
     await this.appendAssistantMessageToSession(options.sessionId, {
       role: "assistant",
       content:
@@ -2670,6 +2734,7 @@ export class ElectronChatPanel {
         }),
       requestFileApproval: request => this.host.requestFileApproval(request),
       requestToolApproval: request => this.host.requestToolApproval(request),
+      requestUserQuestion: request => this.requestUserQuestion(request),
       allowDangerousCommandOnce: (command, approvalOptions) => {
         dangerousCommandApprovals.set(command, approvalOptions ?? {});
       },
@@ -3360,7 +3425,7 @@ export class ElectronChatPanel {
       fastModeConnected: false,
       showThinkingSummaries: this.settings.getShowThinkingSummaries(),
       planMode: { active: false, planFilePath: null },
-      pendingApproval: this.host.getPendingApproval(),
+      pendingApproval: this.getPendingInteraction(),
       onboardingDone,
       workspaceRoot,
       workspaceInfo,

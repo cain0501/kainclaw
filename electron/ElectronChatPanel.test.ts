@@ -93,6 +93,7 @@ vi.mock("../src/toolRuntime", () => ({
     }
     return deduped;
   },
+  getBuiltInToolDefinitions: () => mockedBuiltinToolDefinitions,
   toolDefinitions: mockedBuiltinToolDefinitions,
 }));
 
@@ -1752,22 +1753,36 @@ Freeze skill body.
     await harness.settings.setWorkspaceRoot(workspaceRoot);
     await harness.panel.handleMessage({ type: "ready" });
 
-    await harness.panel.handleMessage({
+    const freezeRequest = harness.panel.handleMessage({
       type: "sendPrompt",
       prompt: "/freeze",
     });
 
+    await vi.waitFor(() => {
+      const latestState = harness.rendererPayloads
+        .filter(payload => (payload as { type?: string }).type === "state")
+        .at(-1) as { pendingApproval?: { kind: string; questions?: Array<{ question: string }> } };
+      expect(latestState.pendingApproval).toMatchObject({
+        kind: "question",
+      });
+    });
     const afterFreezePrompt = harness.rendererPayloads
       .filter(payload => (payload as { type?: string }).type === "state")
-      .at(-1) as { messages: Array<{ content: string }> };
-    expect(afterFreezePrompt.messages.at(-1)?.content).toContain(
-      "Please type the directory path you want to lock edits to:",
+      .at(-1) as { pendingApproval?: { kind: string; questions?: Array<{ question: string }> } };
+    expect(afterFreezePrompt.pendingApproval).toMatchObject({
+      kind: "question",
+    });
+    expect(afterFreezePrompt.pendingApproval?.questions?.[0]?.question).toContain(
+      "Which directory should I restrict edits to?",
     );
 
     await harness.panel.handleMessage({
-      type: "sendPrompt",
-      prompt: allowedDir,
+      type: "submitPendingQuestion",
+      answers: {
+        "Which directory should I restrict edits to? Files outside this path will be blocked from editing.": allowedDir,
+      },
     });
+    await freezeRequest;
 
     const freezeFileContent = await readFile(
       path.join(pluginDataDir, "freeze-dir.txt"),

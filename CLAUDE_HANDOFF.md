@@ -18,10 +18,12 @@
   - Model-visible installed skills can now also apply per-skill `model` / `effort` overrides: inline skills rebuild the active provider for the rest of the current run, while forked skills apply their overrides only inside the isolated fork.
   - Model-visible installed skills now also honor agent-hook-specific `agentModel` overrides by rebuilding the hook sub-run provider only for that hook execution.
   - Installed command hooks now preserve `skillRoot`, accept Claude-style matcher aliases (`Bash`, `Edit`, `Write`) against KainClaw tool names, pass the official stdin/environment payload into hook scripts, and honor the official `permissionDecision` contract for `ask` / `deny`.
+  - Electron now also exposes a minimal `AskUserQuestion` modal flow for installed skills. The desktop shell can collect multiple-choice answers plus an Other/custom answer path instead of forcing every interactive skill to fall back to plain chat.
   - Electron now also has a targeted official-skill compatibility lane for `freeze` / `unfreeze`, and manual Electron checks now confirm `freeze` allow/write, deny/write, and `/unfreeze` recovery all work end-to-end on the desktop shell.
+  - The `freeze` compatibility lane now uses that `AskUserQuestion` modal instead of a free-form chat reply, which brings the Electron UX materially closer to the official Claude flow even though it is not yet pixel-identical.
   - Manual Electron checks now also confirm the official `careful` skill can warn, require explicit confirmation, and then allow the single confirmed destructive command attempt through to the real PowerShell execution path.
-  - The installed-skills runtime mainline is now usable in Electron, but true official-skill UX parity is still open: `AskUserQuestion` dialog parity and broader official skill setup/product-surface polish remain follow-on work.
-  - Current automated baseline after this slice: `154` test files, `1143` tests passed.
+  - The installed-skills runtime mainline is now usable in Electron, but true official-skill UX parity is still open: the Electron `AskUserQuestion` modal is now functional, yet it is still a minimal compatibility surface rather than a full Claude-equivalent interaction stack.
+  - Current automated baseline after this slice: `154` test files, `1145` tests passed.
 
 - 本批 Claude parity 收口后的验证基线：
   - `npm test`
