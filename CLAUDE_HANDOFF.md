@@ -23,6 +23,9 @@
   - The `freeze` compatibility lane now uses that `AskUserQuestion` modal instead of a free-form chat reply, which brings the Electron UX materially closer to the official Claude flow even though it is not yet pixel-identical.
   - The Electron renderer approval overlay now keeps only the question-aware approval path active; the older duplicate approval helpers are retired so `AskUserQuestion` no longer depends on last-definition-wins behavior inside `electron/renderer/index.html`.
   - Electron transcript polish also improved slightly: `Tool Use` now renders the tool name as a badge-style chip instead of plain inline code, so the visual hierarchy matches `Tool Result` more closely without implying a success/error state.
+  - The Electron AskUserQuestion modal now keeps per-question draft state in the renderer and moves through questions step-by-step instead of dumping the whole questionnaire into one long form.
+  - Multi-question AskUserQuestion flows now expose question navigation chips plus a final review/submit step in Electron, which is materially closer to Claude's question-navigation + submit model than the previous flat modal.
+  - The Electron AskUserQuestion modal now also preserves custom Other answers, optional notes, and single-select previews across navigation and includes those annotations in the final tool response payload.
   - Manual Electron checks now also confirm the official `careful` skill can warn, require explicit confirmation, and then allow the single confirmed destructive command attempt through to the real PowerShell execution path.
   - The installed-skills runtime mainline is now usable in Electron, but true official-skill UX parity is still open: the Electron `AskUserQuestion` modal is now functional, yet it is still a minimal compatibility surface rather than a full Claude-equivalent interaction stack.
   - Current automated baseline after this slice: `154` test files, `1145` tests passed.

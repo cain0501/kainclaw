@@ -938,6 +938,8 @@ let appState = {
 };
 
 let currentPendingQuestionRequest = null;
+let currentPendingQuestionIndex = 0;
+let currentPendingQuestionDraft = null;
 
 let pendingAttachments = []; // { dataUrl, mimeType, name }
 let chatPendingImageRequest = null;
@@ -5208,93 +5210,249 @@ function activateLicense() {
 }
 
 // Approval
-function renderQuestionApprovalHtml(approval) {
-  return approval.questions.map((question, questionIndex) => {
-    const optionName = `pending-question-${questionIndex}`;
-    const optionType = question.multiSelect ? 'checkbox' : 'radio';
-    const optionHtml = question.options.map((option, optionIndex) => {
-      const optionId = `${optionName}-${optionIndex}`;
-      const previewHtml = option.preview
-        ? `<div style="margin-top:4px;padding:8px;border:1px solid #e4e4e7;border-radius:6px;background:#fafafa;font-size:11px;color:#52525b;white-space:pre-wrap">${escapeHtml(option.preview)}</div>`
-        : '';
-      return `<label for="${optionId}" style="display:block;border:1px solid #e4e4e7;border-radius:8px;padding:9px 10px;margin-bottom:8px;cursor:pointer">
-        <div style="display:flex;gap:8px;align-items:flex-start">
-          <input id="${optionId}" type="${optionType}" name="${optionName}" value="${escapeHtml(option.label)}" style="margin-top:2px">
-          <div style="flex:1">
-            <div style="font-size:12px;font-weight:600;color:#18181b">${escapeHtml(option.label)}</div>
-            <div style="font-size:11px;color:#71717a;line-height:1.5;margin-top:2px">${escapeHtml(option.description)}</div>
-            ${previewHtml}
-          </div>
-        </div>
-      </label>`;
-    }).join('');
+function getPendingQuestionHideSubmitTab(request = currentPendingQuestionRequest) {
+  return !!(request && request.questions.length === 1 && !request.questions[0]?.multiSelect);
+}
 
-    const otherId = `${optionName}-other`;
-    const notesId = `${optionName}-notes`;
-    return `<div style="margin-bottom:14px">
+function createPendingQuestionDraft(request) {
+  return {
+    requestId: request?.id || null,
+    selectedValues: {},
+    otherTexts: {},
+    notes: {},
+  };
+}
+
+function ensurePendingQuestionState(request) {
+  if (!request) return;
+  const requestId = request.id || null;
+  if (!currentPendingQuestionDraft || currentPendingQuestionDraft.requestId !== requestId) {
+    currentPendingQuestionDraft = createPendingQuestionDraft(request);
+    currentPendingQuestionIndex = 0;
+  }
+}
+
+function getPendingQuestionMaxIndex() {
+  if (!currentPendingQuestionRequest) return 0;
+  return getPendingQuestionHideSubmitTab()
+    ? Math.max(currentPendingQuestionRequest.questions.length - 1, 0)
+    : currentPendingQuestionRequest.questions.length;
+}
+
+function getPendingQuestionSelectedValue(questionIndex) {
+  if (!currentPendingQuestionDraft) return undefined;
+  return currentPendingQuestionDraft.selectedValues[questionIndex];
+}
+
+function getPendingQuestionOtherText(questionIndex) {
+  if (!currentPendingQuestionDraft) return '';
+  return currentPendingQuestionDraft.otherTexts[questionIndex] || '';
+}
+
+function getPendingQuestionNote(questionIndex) {
+  if (!currentPendingQuestionDraft) return '';
+  return currentPendingQuestionDraft.notes[questionIndex] || '';
+}
+
+function updatePendingQuestionOtherText(questionIndex, value) {
+  ensurePendingQuestionState(currentPendingQuestionRequest);
+  currentPendingQuestionDraft.otherTexts[questionIndex] = value;
+}
+
+function updatePendingQuestionNotes(questionIndex, value) {
+  ensurePendingQuestionState(currentPendingQuestionRequest);
+  currentPendingQuestionDraft.notes[questionIndex] = value;
+}
+
+function syncPendingQuestionDraftFromDom() {
+  if (!currentPendingQuestionRequest || !currentPendingQuestionDraft) return;
+  if (currentPendingQuestionIndex >= currentPendingQuestionRequest.questions.length) return;
+  const question = currentPendingQuestionRequest.questions[currentPendingQuestionIndex];
+  const optionName = `pending-question-${currentPendingQuestionIndex}`;
+  currentPendingQuestionDraft.otherTexts[currentPendingQuestionIndex] =
+    document.getElementById(`${optionName}-other-text`)?.value || '';
+  currentPendingQuestionDraft.notes[currentPendingQuestionIndex] =
+    document.getElementById(`${optionName}-notes`)?.value || '';
+  if (question.multiSelect) {
+    currentPendingQuestionDraft.selectedValues[currentPendingQuestionIndex] = Array.from(
+      document.querySelectorAll(`input[name="${optionName}"]:checked`),
+    ).map(input => input.value);
+    return;
+  }
+  currentPendingQuestionDraft.selectedValues[currentPendingQuestionIndex] =
+    document.querySelector(`input[name="${optionName}"]:checked`)?.value || '';
+}
+
+function handlePendingQuestionInputChange() {
+  syncPendingQuestionDraftFromDom();
+  renderApproval(currentPendingQuestionRequest);
+}
+
+function goPendingQuestionIndex(index) {
+  if (!currentPendingQuestionRequest) return;
+  syncPendingQuestionDraftFromDom();
+  currentPendingQuestionIndex = Math.max(0, Math.min(index, getPendingQuestionMaxIndex()));
+  renderApproval(currentPendingQuestionRequest);
+}
+
+function getPendingQuestionAnswer(question, questionIndex) {
+  if (!currentPendingQuestionDraft) return null;
+  const selectedValue = getPendingQuestionSelectedValue(questionIndex);
+  if (question.multiSelect) {
+    const values = Array.isArray(selectedValue) ? selectedValue : [];
+    if (!values.length) return null;
+    const normalized = [];
+    for (const value of values) {
+      if (value === '__other__') {
+        const otherText = getPendingQuestionOtherText(questionIndex).trim();
+        if (!otherText) return null;
+        normalized.push(otherText);
+      } else {
+        normalized.push(value);
+      }
+    }
+    return normalized.join(', ');
+  }
+
+  if (!selectedValue || Array.isArray(selectedValue)) return null;
+  if (selectedValue === '__other__') {
+    const otherText = getPendingQuestionOtherText(questionIndex).trim();
+    return otherText ? otherText : null;
+  }
+  return selectedValue;
+}
+
+function isPendingQuestionAnswered(questionIndex) {
+  if (!currentPendingQuestionRequest) return false;
+  const question = currentPendingQuestionRequest.questions[questionIndex];
+  return !!(question && getPendingQuestionAnswer(question, questionIndex));
+}
+
+function renderPendingQuestionNavigation(approval, hideSubmitTab) {
+  const chips = approval.questions.map((question, questionIndex) => {
+    const isActive = currentPendingQuestionIndex === questionIndex;
+    const isAnswered = isPendingQuestionAnswered(questionIndex);
+    const label = `${isAnswered ? '✓' : '○'} ${escapeHtml(question.header || `Q${questionIndex + 1}`)}`;
+    return `<button type="button" onclick="goPendingQuestionIndex(${questionIndex})" style="border:1px solid ${isActive ? '#E84040' : '#d4d4d8'};background:${isActive ? '#fff5f5' : '#fff'};color:${isActive ? '#E84040' : '#52525b'};border-radius:999px;padding:5px 10px;font-size:11px;font-weight:600;cursor:pointer">${label}</button>`;
+  }).join('');
+
+  const submitChip = hideSubmitTab
+    ? ''
+    : `<button type="button" onclick="goPendingQuestionIndex(${approval.questions.length})" style="border:1px solid ${currentPendingQuestionIndex === approval.questions.length ? '#E84040' : '#d4d4d8'};background:${currentPendingQuestionIndex === approval.questions.length ? '#fff5f5' : '#fff'};color:${currentPendingQuestionIndex === approval.questions.length ? '#E84040' : '#52525b'};border-radius:999px;padding:5px 10px;font-size:11px;font-weight:600;cursor:pointer">✓ Submit</button>`;
+
+  return `<div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:12px">${chips}${submitChip}</div>`;
+}
+
+function renderPendingQuestionReviewHtml(approval) {
+  const rows = approval.questions.map((question, questionIndex) => {
+    const answer = getPendingQuestionAnswer(question, questionIndex);
+    const note = getPendingQuestionNote(questionIndex).trim();
+    return `<div style="border:1px solid #e4e4e7;border-radius:8px;padding:10px 12px;margin-bottom:8px;background:#fafafa">
+      <div style="font-size:11px;font-weight:700;color:#E84040;margin-bottom:4px">${escapeHtml(question.header || `Q${questionIndex + 1}`)}</div>
+      <div style="font-size:12px;font-weight:600;color:#18181b;line-height:1.5;margin-bottom:4px">${escapeHtml(question.question)}</div>
+      <div style="font-size:12px;color:${answer ? '#18181b' : '#b91c1c'}">${answer ? escapeHtml(answer) : 'Not answered yet'}</div>
+      ${note ? `<div style="margin-top:6px;font-size:11px;color:#71717a;white-space:pre-wrap"><strong>Note:</strong> ${escapeHtml(note)}</div>` : ''}
+    </div>`;
+  }).join('');
+
+  const warning = approval.questions.every((_, questionIndex) => isPendingQuestionAnswered(questionIndex))
+    ? ''
+    : `<div style="margin-bottom:8px;font-size:12px;color:#b91c1c">Please answer all questions before submitting.</div>`;
+
+  return `${renderPendingQuestionNavigation(approval, false)}
+    <div style="font-size:13px;font-weight:600;color:#18181b;margin-bottom:8px">Review your answers</div>
+    ${warning}
+    ${rows}`;
+}
+
+function renderQuestionApprovalHtml(approval) {
+  ensurePendingQuestionState(approval);
+  const hideSubmitTab = getPendingQuestionHideSubmitTab(approval);
+  if (!hideSubmitTab && currentPendingQuestionIndex === approval.questions.length) {
+    return renderPendingQuestionReviewHtml(approval);
+  }
+
+  const questionIndex = currentPendingQuestionIndex;
+  const question = approval.questions[questionIndex];
+  const optionName = `pending-question-${questionIndex}`;
+  const optionType = question.multiSelect ? 'checkbox' : 'radio';
+  const selectedValue = getPendingQuestionSelectedValue(questionIndex);
+  const selectedValues = Array.isArray(selectedValue) ? selectedValue : [];
+  const optionHtml = question.options.map((option, optionIndex) => {
+    const optionId = `${optionName}-${optionIndex}`;
+    const checked = question.multiSelect
+      ? selectedValues.includes(option.label)
+      : selectedValue === option.label;
+    return `<label for="${optionId}" style="display:block;border:1px solid ${checked ? '#f1b4b4' : '#e4e4e7'};border-radius:8px;padding:9px 10px;margin-bottom:8px;cursor:pointer;background:${checked ? '#fff5f5' : '#fff'}">
+      <div style="display:flex;gap:8px;align-items:flex-start">
+        <input id="${optionId}" type="${optionType}" name="${optionName}" value="${escapeHtml(option.label)}" ${checked ? 'checked' : ''} onchange="handlePendingQuestionInputChange()" style="margin-top:2px">
+        <div style="flex:1">
+          <div style="font-size:12px;font-weight:600;color:#18181b">${escapeHtml(option.label)}</div>
+          <div style="font-size:11px;color:#71717a;line-height:1.5;margin-top:2px">${escapeHtml(option.description)}</div>
+        </div>
+      </div>
+    </label>`;
+  }).join('');
+
+  const otherId = `${optionName}-other`;
+  const otherChecked = question.multiSelect
+    ? selectedValues.includes('__other__')
+    : selectedValue === '__other__';
+  const selectedPreview = !question.multiSelect && selectedValue && selectedValue !== '__other__'
+    ? question.options.find(option => option.label === selectedValue)?.preview
+    : '';
+
+  return `${renderPendingQuestionNavigation(approval, hideSubmitTab)}
+    <div style="margin-bottom:14px">
       <div style="font-size:11px;font-weight:700;color:#E84040;margin-bottom:4px">${escapeHtml(question.header)}</div>
       <div style="font-size:13px;font-weight:600;color:#18181b;line-height:1.5;margin-bottom:8px">${escapeHtml(question.question)}</div>
       ${optionHtml}
-      <label for="${otherId}" style="display:block;border:1px dashed #d4d4d8;border-radius:8px;padding:9px 10px;cursor:pointer">
+      <label for="${otherId}" style="display:block;border:1px dashed ${otherChecked ? '#f1b4b4' : '#d4d4d8'};border-radius:8px;padding:9px 10px;cursor:pointer;background:${otherChecked ? '#fff5f5' : '#fff'}">
         <div style="display:flex;gap:8px;align-items:flex-start">
-          <input id="${otherId}" type="${optionType}" name="${optionName}" value="__other__" style="margin-top:2px">
+          <input id="${otherId}" type="${optionType}" name="${optionName}" value="__other__" ${otherChecked ? 'checked' : ''} onchange="handlePendingQuestionInputChange()" style="margin-top:2px">
           <div style="flex:1">
             <div style="font-size:12px;font-weight:600;color:#18181b">Other</div>
             <div style="font-size:11px;color:#71717a;line-height:1.5;margin-top:2px">Type a custom answer.</div>
-            <input id="${otherId}-text" type="text" placeholder="Custom answer" style="width:100%;margin-top:8px;border:1px solid #e4e4e7;border-radius:6px;padding:8px 10px;font-size:12px;font-family:inherit">
+            <input id="${otherId}-other-text" type="text" placeholder="Custom answer" value="${escapeHtml(getPendingQuestionOtherText(questionIndex))}" oninput="updatePendingQuestionOtherText(${questionIndex}, this.value)" style="width:100%;margin-top:8px;border:1px solid #e4e4e7;border-radius:6px;padding:8px 10px;font-size:12px;font-family:inherit">
           </div>
         </div>
       </label>
+      ${selectedPreview ? `<div style="margin-top:8px;padding:8px 10px;border:1px solid #e4e4e7;border-radius:8px;background:#fafafa;font-size:11px;color:#52525b;white-space:pre-wrap">${escapeHtml(selectedPreview)}</div>` : ''}
       <div style="margin-top:8px">
         <div style="font-size:11px;color:#71717a;margin-bottom:4px">Optional note</div>
-        <textarea id="${notesId}" placeholder="Add context for Claude" style="width:100%;min-height:70px;border:1px solid #e4e4e7;border-radius:8px;padding:8px 10px;font-size:12px;line-height:1.5;font-family:inherit;resize:vertical"></textarea>
+        <textarea id="${optionName}-notes" placeholder="Add context for Claude" oninput="updatePendingQuestionNotes(${questionIndex}, this.value)" style="width:100%;min-height:70px;border:1px solid #e4e4e7;border-radius:8px;padding:8px 10px;font-size:12px;line-height:1.5;font-family:inherit;resize:vertical">${escapeHtml(getPendingQuestionNote(questionIndex))}</textarea>
       </div>
     </div>`;
-  }).join('');
 }
 
 function collectPendingQuestionResponse() {
   if (!currentPendingQuestionRequest) return null;
+  syncPendingQuestionDraftFromDom();
   const answers = {};
   const annotations = {};
 
   for (let questionIndex = 0; questionIndex < currentPendingQuestionRequest.questions.length; questionIndex += 1) {
     const question = currentPendingQuestionRequest.questions[questionIndex];
-    const optionName = `pending-question-${questionIndex}`;
-    const notes = document.getElementById(`${optionName}-notes`)?.value.trim();
-    if (question.multiSelect) {
-      const checked = Array.from(document.querySelectorAll(`input[name="${optionName}"]:checked`));
-      if (!checked.length) return null;
-      const values = [];
-      for (const input of checked) {
-        if (input.value === '__other__') {
-          const text = document.getElementById(`${optionName}-other-text`).value.trim();
-          if (!text) return null;
-          values.push(text);
-        } else {
-          values.push(input.value);
-        }
-      }
-      answers[question.question] = values.join(', ');
-    } else {
-      const selected = document.querySelector(`input[name="${optionName}"]:checked`);
-      if (!selected) return null;
-      if (selected.value === '__other__') {
-        const text = document.getElementById(`${optionName}-other-text`).value.trim();
-        if (!text) return null;
-        answers[question.question] = text;
-      } else {
-        answers[question.question] = selected.value;
-        const option = question.options.find(candidate => candidate.label === selected.value);
-        if (option && option.preview) {
-          annotations[question.question] = { preview: option.preview };
+    const answer = getPendingQuestionAnswer(question, questionIndex);
+    if (!answer) return null;
+    answers[question.question] = answer;
+    const note = getPendingQuestionNote(questionIndex).trim();
+    if (!question.multiSelect) {
+      const selected = getPendingQuestionSelectedValue(questionIndex);
+      if (selected && !Array.isArray(selected) && selected !== '__other__') {
+        const option = question.options.find(candidate => candidate.label === selected);
+        if (option?.preview) {
+          annotations[question.question] = {
+            ...(annotations[question.question] || {}),
+            preview: option.preview,
+          };
         }
       }
     }
-    if (notes) {
+    if (note) {
       annotations[question.question] = {
         ...(annotations[question.question] || {}),
-        notes,
+        notes: note,
       };
     }
   }
@@ -5317,6 +5475,8 @@ function renderApproval(approval) {
 
   if (!approval) {
     currentPendingQuestionRequest = null;
+    currentPendingQuestionDraft = null;
+    currentPendingQuestionIndex = 0;
     questionEl.innerHTML = '';
     overlay.classList.remove('show');
     return;
@@ -5326,15 +5486,27 @@ function renderApproval(approval) {
   document.getElementById('approval-summary').textContent = approval.summary || '';
 
   if (approval.kind === 'question') {
+    ensurePendingQuestionState(approval);
     currentPendingQuestionRequest = approval;
     diffEl.style.display = 'none';
     previewEl.style.display = 'none';
     questionEl.style.display = '';
     cancelBtn.textContent = 'Cancel';
-    confirmBtn.textContent = 'Submit answers';
+    const hideSubmitTab = getPendingQuestionHideSubmitTab(approval);
+    if (!hideSubmitTab && currentPendingQuestionIndex === approval.questions.length) {
+      confirmBtn.textContent = 'Submit answers';
+    } else if (hideSubmitTab && currentPendingQuestionIndex === approval.questions.length - 1) {
+      confirmBtn.textContent = 'Submit answers';
+    } else if (currentPendingQuestionIndex === approval.questions.length - 1) {
+      confirmBtn.textContent = 'Review answers';
+    } else {
+      confirmBtn.textContent = 'Next question';
+    }
     questionEl.innerHTML = renderQuestionApprovalHtml(approval);
   } else {
     currentPendingQuestionRequest = null;
+    currentPendingQuestionDraft = null;
+    currentPendingQuestionIndex = 0;
     questionEl.style.display = 'none';
     questionEl.innerHTML = '';
     cancelBtn.textContent = '拒绝';
@@ -5358,12 +5530,46 @@ function renderApproval(approval) {
 
 function approveApproval() {
   if (currentPendingQuestionRequest?.kind === 'question') {
-    const response = collectPendingQuestionResponse();
-    if (!response) {
-      alert('Please answer all questions before submitting.');
+    syncPendingQuestionDraftFromDom();
+    const hideSubmitTab = getPendingQuestionHideSubmitTab();
+    const isReviewStep =
+      !hideSubmitTab &&
+      currentPendingQuestionIndex === currentPendingQuestionRequest.questions.length;
+    if (isReviewStep) {
+      const reviewResponse = collectPendingQuestionResponse();
+      if (!reviewResponse) {
+        alert('Please answer all questions before submitting.');
+        return;
+      }
+      send({ type: 'submitPendingQuestion', ...reviewResponse });
       return;
     }
-    send({ type: 'submitPendingQuestion', ...response });
+
+    if (!isPendingQuestionAnswered(currentPendingQuestionIndex)) {
+      alert('Please answer the current question before continuing.');
+      return;
+    }
+
+    const isLastQuestion =
+      currentPendingQuestionIndex === currentPendingQuestionRequest.questions.length - 1;
+    if (hideSubmitTab && isLastQuestion) {
+      const finalResponse = collectPendingQuestionResponse();
+      if (!finalResponse) {
+        alert('Please answer all questions before submitting.');
+        return;
+      }
+      send({ type: 'submitPendingQuestion', ...finalResponse });
+      return;
+    }
+
+    if (isLastQuestion) {
+      currentPendingQuestionIndex = currentPendingQuestionRequest.questions.length;
+      renderApproval(currentPendingQuestionRequest);
+      return;
+    }
+
+    currentPendingQuestionIndex += 1;
+    renderApproval(currentPendingQuestionRequest);
     return;
   }
   send({ type: 'approvePendingAction' });
@@ -5462,4 +5668,3 @@ function cycleEffort() {
 </script>
 </body>
 </html>
-

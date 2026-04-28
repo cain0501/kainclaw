@@ -21,6 +21,8 @@
   - Manual Electron checks now confirm the official Claude-compatible `freeze` skill works end-to-end for allow/write, deny/write, and `/unfreeze`, and the official `careful` skill now warns first and then allows a single confirmed destructive command attempt through to real shell execution.
   - The Electron renderer approval overlay no longer depends on duplicate helper definitions for `AskUserQuestion`; only the question-aware approval path remains active, which removes a fragile renderer shadowing pattern from the current parity slice.
   - Electron transcript UI now renders `Tool Use` tool names as badge-style chips rather than plain inline code, tightening parity with the existing `Tool Result` badge treatment without overstating result semantics.
+  - Electron AskUserQuestion now runs as a step-by-step questionnaire with renderer-kept draft state, question navigation chips, and a final review/submit step for multi-question flows instead of a single flat modal dump.
+  - Electron AskUserQuestion now preserves custom Other answers, optional notes, and single-select preview annotations across navigation and returns them in the final tool response payload.
   - Installed-skills runtime parity is now broadly usable, but not fully closed: Electron now has a working `AskUserQuestion` compatibility modal, yet the broader official skill UX/setup/product-surface parity still remains open.
   - Current automated baseline after this slice: `154` test files, `1145` tests passed.
 
