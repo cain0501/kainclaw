@@ -99,6 +99,82 @@ describe("toolRuntime PowerShell helpers", () => {
   });
 });
 
+describe("toolRuntime installed skill model execution", () => {
+  it("SkillTool loads a model-invocable installed skill and expands its prompt", async () => {
+    const kainclawHome = await fs.mkdtemp(path.join(os.tmpdir(), "cain-kainclaw-home-"));
+    const claudeHome = await fs.mkdtemp(path.join(os.tmpdir(), "cain-claude-home-"));
+    const workspaceRoot = await fs.mkdtemp(path.join(os.tmpdir(), "cain-skill-workspace-"));
+    tempDirs.push(kainclawHome, claudeHome, workspaceRoot);
+    process.env.KAINCLAW_CONFIG_HOME = kainclawHome;
+    process.env.CLAUDE_CONFIG_HOME = claudeHome;
+
+    const skillDir = path.join(kainclawHome, "skills", "simple-skill");
+    await fs.mkdir(skillDir, { recursive: true });
+    await fs.writeFile(
+      path.join(skillDir, "SKILL.md"),
+      `---
+name: simple-skill
+description: Simple helper
+when_to_use: Use for lightweight helper tasks.
+arguments: query
+---
+
+Use the helper for: $query
+`,
+      "utf8",
+    );
+
+    const result = await executeTool(
+      "SkillTool",
+      {
+        skill: "simple-skill",
+        args: `"latest react docs"`,
+      },
+      { workspaceRoot },
+    );
+
+    expect(result.summary).toBe("Loaded installed skill simple-skill");
+    expect(result.content).toContain('Loaded installed skill "/simple-skill".');
+    expect(result.content).toContain("<installed_skill>");
+    expect(result.content).toContain("Base directory for this skill:");
+    expect(result.content).toContain("Use the helper for: latest react docs");
+  });
+
+  it("SkillTool rejects installed skills that are not model-invocable", async () => {
+    const kainclawHome = await fs.mkdtemp(path.join(os.tmpdir(), "cain-kainclaw-home-"));
+    const claudeHome = await fs.mkdtemp(path.join(os.tmpdir(), "cain-claude-home-"));
+    const workspaceRoot = await fs.mkdtemp(path.join(os.tmpdir(), "cain-skill-workspace-"));
+    tempDirs.push(kainclawHome, claudeHome, workspaceRoot);
+    process.env.KAINCLAW_CONFIG_HOME = kainclawHome;
+    process.env.CLAUDE_CONFIG_HOME = claudeHome;
+
+    const skillDir = path.join(kainclawHome, "skills", "blocked-skill");
+    await fs.mkdir(skillDir, { recursive: true });
+    await fs.writeFile(
+      path.join(skillDir, "SKILL.md"),
+      `---
+name: blocked-skill
+description: Blocked helper
+disable-model-invocation: true
+---
+`,
+      "utf8",
+    );
+
+    await expect(
+      executeTool(
+        "SkillTool",
+        {
+          skill: "blocked-skill",
+        },
+        { workspaceRoot },
+      ),
+    ).rejects.toThrow(
+      'Installed skill "blocked-skill" is not available for model invocation in this workspace.',
+    );
+  });
+});
+
 describe("toolRuntime background task semantics", () => {
   it("TaskStop rejects already completed background tasks like Claude stopTask", async () => {
     const context = await createTaskContext();

@@ -8,8 +8,9 @@
   - Installed-skill hooks now support prompt / command / http / agent definitions and matcher filtering for tool events.
   - Electron now matches the VS Code host on session-scoped installed-skill hook carry-over, rather than treating each desktop prompt turn as hook-isolated after the original slash invocation.
   - Installed-skill slash rewrites now flow through a unified `installedSkillExecution` plan object instead of duplicating tool/model/effort/context metadata across separate fields in later prompt stages.
-  - Remaining material parity gaps on this line are now mainly the lack of a true model-side `disable-model-invocation` gate and the absence of a full Claude model-side skill-command registry path.
-  - Current automated baseline after this slice: `152` test files, `1121` tests passed.
+  - KainClaw now exposes a model-visible installed-skill registry via the workspace system prompt and a minimal `SkillTool` for simple installed skills, which closes the previous “model cannot see or load installed skills at all” gap.
+  - Remaining material parity gaps on this line are now mainly the missing Claude-level runtime semantics for advanced installed skills: dynamic tool filtering, fork execution, per-skill model/effort switching, and hook registration inside the model-side path.
+  - Current automated baseline after this slice: `153` test files, `1126` tests passed.
 
 - 本轮已验证：
   - `npm test`

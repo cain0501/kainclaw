@@ -9,8 +9,9 @@
   - Installed-skill hooks now support prompt / command / http / agent definitions, tool-event matcher filtering, and session-scoped persistence for the active conversation.
   - The Electron desktop shell now also preserves those installed-skill hooks across follow-up prompts in the same conversation, instead of dropping them after the initial slash-command invocation.
   - Installed-skill slash execution is now carried end-to-end by a unified `installedSkillExecution` object, so prompt preparation and flow control no longer have to keep separate per-field copies of tool/model/effort/context metadata.
-  - Remaining meaningful gaps on the installed-skills line: no true model-side `SkillTool` gate for `disable-model-invocation` yet, and KainClaw still does not expose a full Claude model-side skill-command registry path.
-  - Current automated baseline after this slice: `152` test files, `1121` tests passed.
+  - KainClaw now exposes a model-visible installed-skill registry in the workspace system prompt and a minimal `SkillTool` for simple installed skills that do not require forked execution, hook registration, or model/effort overrides.
+  - Advanced installed skills remain slash-only for now; the model-side path still does not support Claude-level dynamic tool filtering, fork execution, or per-skill model/effort switching.
+  - Current automated baseline after this slice: `153` test files, `1126` tests passed.
 
 - 本批 Claude parity 收口后的验证基线：
   - `npm test`

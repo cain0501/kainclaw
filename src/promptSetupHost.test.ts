@@ -6,6 +6,8 @@ const {
   buildAutoMemorySystemPromptMock,
   loadContextConfigMock,
   buildContextSystemPromptMock,
+  loadModelInvocableInstalledSkillsMock,
+  buildInstalledSkillsSystemPromptMock,
   buildPlanModeSystemPromptMock,
   buildPendingPlanVerificationSystemPromptMock,
   buildThinkingEffortSystemPromptMock,
@@ -18,6 +20,8 @@ const {
     pinnedFiles: [],
   })),
   buildContextSystemPromptMock: vi.fn(() => "context prompt"),
+  loadModelInvocableInstalledSkillsMock: vi.fn(async () => []),
+  buildInstalledSkillsSystemPromptMock: vi.fn(() => "installed skills prompt"),
   buildPlanModeSystemPromptMock: vi.fn(() => "plan prompt"),
   buildPendingPlanVerificationSystemPromptMock: vi.fn(
     () => "verification prompt",
@@ -41,6 +45,11 @@ vi.mock("./autoMemory/prompt", () => ({
 vi.mock("./contextRegistry", () => ({
   loadContextConfig: loadContextConfigMock,
   buildContextSystemPrompt: buildContextSystemPromptMock,
+}));
+
+vi.mock("./installedSkillModelRegistry", () => ({
+  loadModelInvocableInstalledSkills: loadModelInvocableInstalledSkillsMock,
+  buildInstalledSkillsSystemPrompt: buildInstalledSkillsSystemPromptMock,
 }));
 
 vi.mock("./planMode/planModePrompt", () => ({
@@ -109,7 +118,12 @@ describe("promptSetupHost", () => {
         extraDirectories: ["docs"],
       },
     );
-    expect(buildPlanModeSystemPromptMock).toHaveBeenCalledWith("context prompt", {
+    expect(loadModelInvocableInstalledSkillsMock).toHaveBeenCalledWith("E:\\repo");
+    expect(buildInstalledSkillsSystemPromptMock).toHaveBeenCalledWith(
+      "context prompt",
+      [],
+    );
+    expect(buildPlanModeSystemPromptMock).toHaveBeenCalledWith("installed skills prompt", {
       planFilePath: ".omx/plans/test.md",
       planHasContent: true,
     });
@@ -154,7 +168,7 @@ describe("promptSetupHost", () => {
     expect(buildPlanModeSystemPromptMock).not.toHaveBeenCalled();
     expect(buildPendingPlanVerificationSystemPromptMock).not.toHaveBeenCalled();
     expect(buildThinkingEffortSystemPromptMock).toHaveBeenCalledWith(
-      "context prompt",
+      "installed skills prompt",
       {
         type: "anthropic",
         apiKey: "secret",
@@ -322,10 +336,14 @@ describe("promptSetupHost", () => {
       "high",
     );
 
-    expect(buildPlanModeSystemPromptMock).toHaveBeenCalledWith("context prompt", {
+    expect(buildPlanModeSystemPromptMock).toHaveBeenCalledWith("installed skills prompt", {
       planFilePath: ".omx/plans/test.md",
       planHasContent: true,
     });
+    expect(buildInstalledSkillsSystemPromptMock).toHaveBeenCalledWith(
+      "context prompt",
+      [],
+    );
     expect(buildPendingPlanVerificationSystemPromptMock).toHaveBeenCalledWith(
       "plan prompt",
       {

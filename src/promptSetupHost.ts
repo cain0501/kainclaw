@@ -7,6 +7,10 @@ import { getAutoMemoryDir, readAutoMemoryEntrypoint } from "./autoMemory/paths";
 import { buildAutoMemorySystemPrompt } from "./autoMemory/prompt";
 import type { PendingPlanVerificationState } from "./conversationRuntimeStateHost";
 import { buildContextSystemPrompt, loadContextConfig } from "./contextRegistry";
+import {
+  buildInstalledSkillsSystemPrompt,
+  loadModelInvocableInstalledSkills,
+} from "./installedSkillModelRegistry";
 import { buildPlanModeSystemPrompt } from "./planMode/planModePrompt";
 import { buildThinkingEffortSystemPrompt } from "./thinkingEffort/prompt";
 import type { ProviderRuntimeOptions, EffortLevel } from "./thinkingEffort/types";
@@ -91,6 +95,11 @@ export async function buildWorkspaceSystemPrompt(options: {
     workspaceRoot: options.workspaceRoot,
     extraDirectories: (await loadContextConfig(options.workspaceRoot)).extraDirectories,
   });
+
+  systemPrompt = buildInstalledSkillsSystemPrompt(
+    systemPrompt,
+    await loadModelInvocableInstalledSkills(options.workspaceRoot),
+  );
 
   if (options.planModeState.active && options.planModeState.planFilePath) {
     const planContent = await options.getPlanContent(options.workspaceRoot);

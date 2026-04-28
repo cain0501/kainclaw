@@ -4,6 +4,11 @@ import path from "node:path";
 import { promisify } from "node:util";
 import { createPatch } from "diff";
 import { normalizeHttpUrl } from "./browserRuntime";
+import {
+  buildInstalledSkillExecutionPlan,
+  getInstalledSkill,
+} from "./installedSkillsRegistry";
+import { loadModelInvocableInstalledSkills } from "./installedSkillModelRegistry";
 import { isPlanWritablePath } from "./planMode/planMode";
 import type { LspToolAdapter } from "./lsp/lspRuntime";
 import { LSP_TOOL_NAME, normalizeLspOperation } from "./lsp/types";
@@ -4051,6 +4056,45 @@ const handlers: Record<string, ToolHandler> = {
     };
   },
 
+  async SkillTool(input, context) {
+    const rawSkill = typeof input.skill === "string" ? input.skill.trim() : "";
+    const args = typeof input.args === "string" ? input.args : undefined;
+
+    if (!rawSkill) {
+      throw new Error("skill is required");
+    }
+
+    const normalizedSkillId = rawSkill.replace(/^\//, "").trim().toLowerCase();
+    const availableSkills = await loadModelInvocableInstalledSkills(
+      context.workspaceRoot,
+    );
+    const skill = getInstalledSkill(availableSkills, normalizedSkillId);
+
+    if (!skill) {
+      throw new Error(
+        `Installed skill "${normalizedSkillId}" is not available for model invocation in this workspace.`,
+      );
+    }
+
+    const execution = await buildInstalledSkillExecutionPlan({
+      skill,
+      args,
+      toolContext: context,
+    });
+
+    return {
+      summary: `Loaded installed skill ${skill.id}`,
+      content: [
+        `Loaded installed skill "/${skill.id}".`,
+        "Follow the skill instructions below in this conversation.",
+        "",
+        "<installed_skill>",
+        execution.prompt,
+        "</installed_skill>",
+      ].join("\n"),
+    };
+  },
+
   async SkillManagerTool(input, context) {
     if (!context.skillStore) {
       throw new Error("Skill store is not available in this context");
@@ -4967,6 +5011,31 @@ export const toolDefinitions: ToolDefinition[] = [
     },
     annotations: {
       title: "Run background command",
+    },
+  },
+  {
+    name: "SkillTool",
+    description:
+      "Load a model-invocable installed skill from the current KainClaw or Claude-compatible skill directories and return its expanded prompt instructions.",
+    input_schema: {
+      type: "object",
+      properties: {
+        skill: {
+          type: "string",
+          description:
+            "Installed skill id to load. Use the exact id from the Installed Skills section of the system prompt.",
+        },
+        args: {
+          type: "string",
+          description:
+            "Optional raw argument string passed to the installed skill prompt expander.",
+        },
+      },
+      required: ["skill"],
+    },
+    annotations: {
+      readOnlyHint: true,
+      title: "Load installed skill",
     },
   },
   {
