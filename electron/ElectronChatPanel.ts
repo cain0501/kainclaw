@@ -44,6 +44,8 @@ import {
   getSessionInstalledSkillHooks,
   registerSessionInstalledSkillHooks,
 } from "../src/sessionInstalledSkillHooks";
+import { buildInjectedPrompt, triggerHooks } from "../src/hooks/hooksTrigger";
+import type { AgentRunner, HookContext } from "../src/hooks/hooksExecutor";
 import { handleElectronPromptCommand } from "../src/electronPromptCommandHost";
 import { parsePromptSlashCommand } from "../src/promptCommandHost";
 import { handleCompactCommandWithHost } from "../src/compactHost";
@@ -143,6 +145,32 @@ const ELECTRON_SHELL_PROMPT_NOTE = `
 - When the user asks about the current workspace or local files, rely on the provided workspace root and tool results. Do not guess.
 - If the user asks for one of those unavailable capabilities, say it is not yet wired in the desktop shell instead of pretending to use it.
 `;
+
+function buildElectronInstalledSkillAgentHookPrompt(
+  hook: HookDefinition,
+  context: HookContext,
+): string {
+  const payload = JSON.stringify({
+    event: context.event,
+    workspaceRoot: context.workspaceRoot,
+    sessionId: context.sessionId,
+    toolName: context.toolName,
+    toolInput: context.toolInput,
+    toolOutput: context.toolOutput,
+    prompt: context.prompt,
+    reply: context.reply,
+  });
+
+  const template = hook.agentPrompt ?? hook.prompt ?? "";
+  if (!template.trim()) {
+    return `Installed skill agent hook context:\n\n${payload}`;
+  }
+
+  const replaced = template.replaceAll("$ARGUMENTS", payload);
+  return replaced === template
+    ? `${template}\n\nARGUMENTS: ${payload}`
+    : replaced;
+}
 
 function getSupportedElectronTools() {
   return builtinToolDefinitions.filter(tool =>
@@ -1954,6 +1982,38 @@ export class ElectronChatPanel {
         commandMcpRuntime,
         abortController.signal,
       );
+      const sessionInstalledSkillHooks = this.getCurrentSessionInstalledSkillHooks();
+      const installedSkillAgentRunner: AgentRunner = async (hook, context) => {
+        const hookPrompt = buildElectronInstalledSkillAgentHookPrompt(
+          hook,
+          context,
+        );
+        const hookConfig =
+          hook.agentModel && "model" in config
+            ? { ...config, model: hook.agentModel }
+            : config;
+        const hookProvider = buildProviderAdapter(
+          hookConfig,
+          workspaceRoot,
+          SYSTEM_PROMPT + workspaceNote + ELECTRON_SHELL_PROMPT_NOTE,
+          envMap,
+          runtimeOptions,
+        );
+        await runAgent(
+          [
+            {
+              role: "user",
+              content: hookPrompt,
+            },
+          ],
+          {
+            provider: hookProvider,
+            tools: allTools,
+            toolContext: promptRuntime.getToolContext("main"),
+            abortSignal: abortController.signal,
+          },
+        );
+      };
 
       const commandResult = await handleElectronPromptCommand({
         prompt,
@@ -2112,13 +2172,43 @@ export class ElectronChatPanel {
         return;
       }
 
-      if (commandResult.kind === "handled") {
-        return;
+        if (commandResult.kind === "handled") {
+          return;
+        }
+
+      let effectivePrompt = prompt;
+      if (sessionInstalledSkillHooks.length > 0) {
+        const prePromptResult = await triggerHooks(
+          "PrePrompt",
+          sessionInstalledSkillHooks,
+          {
+            workspaceRoot,
+            prompt: effectivePrompt,
+          },
+          installedSkillAgentRunner,
+        );
+        if (prePromptResult.blocked) {
+          throw new Error("Installed skill hook blocked prompt execution.");
+        }
+        if (prePromptResult.promptPrefixInjection) {
+          effectivePrompt = buildInjectedPrompt(
+            effectivePrompt,
+            prePromptResult.promptPrefixInjection,
+            "prefix",
+          );
+        }
+        if (prePromptResult.promptSuffixInjection) {
+          effectivePrompt = buildInjectedPrompt(
+            effectivePrompt,
+            prePromptResult.promptSuffixInjection,
+            "suffix",
+          );
+        }
       }
 
       const modelUserMessage: PersistedConversationMessage = {
         role: "user",
-        content: prompt,
+        content: effectivePrompt,
         ...(normalizedAttachments && normalizedAttachments.length > 0
           ? { attachments: normalizedAttachments }
           : {}),
@@ -2149,6 +2239,38 @@ export class ElectronChatPanel {
         provider: adapter,
         tools: allTools,
         toolContext,
+        beforeToolCall: sessionInstalledSkillHooks.length > 0
+          ? async (toolName, input, context) => {
+              const result = await triggerHooks(
+                "PreToolCall",
+                sessionInstalledSkillHooks,
+                {
+                  workspaceRoot: context.workspaceRoot,
+                  toolName,
+                  toolInput: input,
+                },
+                installedSkillAgentRunner,
+              );
+              if (result.blocked) {
+                throw new Error(`Installed skill hook blocked tool call: ${toolName}`);
+              }
+            }
+          : undefined,
+        afterToolCall: sessionInstalledSkillHooks.length > 0
+          ? async (toolName, input, output, _isError, context) => {
+              await triggerHooks(
+                "PostToolCall",
+                sessionInstalledSkillHooks,
+                {
+                  workspaceRoot: context.workspaceRoot,
+                  toolName,
+                  toolInput: input,
+                  toolOutput: output,
+                },
+                installedSkillAgentRunner,
+              );
+            }
+          : undefined,
         onToken: (token) => {
           const requestState = this.inFlightRequests.get(requestSessionId);
           if (!requestState) {
@@ -2207,6 +2329,18 @@ export class ElectronChatPanel {
         content: finalText,
         timestamp: Date.now(),
       };
+      if (sessionInstalledSkillHooks.length > 0) {
+        await triggerHooks(
+          "PostPrompt",
+          sessionInstalledSkillHooks,
+          {
+            workspaceRoot,
+            prompt: effectivePrompt,
+            reply: finalText,
+          },
+          installedSkillAgentRunner,
+        );
+      }
       await this.appendAssistantMessageToSession(requestSessionId, assistantMessage);
       this.modelConversationMessages = [
         ...requestModelConversation,
