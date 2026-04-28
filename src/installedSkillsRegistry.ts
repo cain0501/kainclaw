@@ -63,11 +63,15 @@ type ParsedInstalledSkillMetadata = {
   contentBody: string;
 };
 
+function stripUtf8Bom(value: string): string {
+  return value.charCodeAt(0) === 0xfeff ? value.slice(1) : value;
+}
+
 function parseBooleanFrontmatter(value: string): boolean {
   return value.trim().toLowerCase() === "true";
 }
 
-function getClaudeConfigHomeDir(): string {
+export function getClaudeConfigHomeDir(): string {
   const configured = process.env.CLAUDE_CONFIG_HOME?.trim();
   if (configured) {
     return configured;
@@ -76,7 +80,7 @@ function getClaudeConfigHomeDir(): string {
   return path.join(os.homedir(), ".claude");
 }
 
-function getKainClawConfigHomeDir(): string {
+export function getKainClawConfigHomeDir(): string {
   const configured = process.env.KAINCLAW_CONFIG_HOME?.trim();
   if (configured) {
     return configured;
@@ -104,6 +108,21 @@ function getSkillsRootsForSource(
     path.join(workspaceRoot, ".kainclaw", "skills"),
     path.join(workspaceRoot, ".claude", "skills"),
   ];
+}
+
+export function getPrimaryInstalledSkillsRoot(
+  source: InstalledSkillSource,
+  workspaceRoot?: string,
+): string | null {
+  if (source === "user") {
+    return path.join(getKainClawConfigHomeDir(), "skills");
+  }
+
+  if (!workspaceRoot) {
+    return null;
+  }
+
+  return path.join(workspaceRoot, ".kainclaw", "skills");
 }
 
 function parseInlineList(value: string): string[] {
@@ -139,9 +158,10 @@ function parseInstalledSkillMetadata(
   content: string,
   resolvedSkillId = "installed-skill",
 ): ParsedInstalledSkillMetadata {
-  const match = /^---\r?\n([\s\S]*?)\r?\n---\r?\n?([\s\S]*)$/.exec(content);
+  const normalizedContent = stripUtf8Bom(content);
+  const match = /^---\r?\n([\s\S]*?)\r?\n---\r?\n?([\s\S]*)$/.exec(normalizedContent);
   const frontmatterBody = match?.[1] ?? "";
-  const contentBody = match?.[2] ?? content;
+  const contentBody = match?.[2] ?? normalizedContent;
   const metadata: ParsedInstalledSkillMetadata = {
     allowedTools: [],
     argumentNames: [],
@@ -340,7 +360,10 @@ async function readInstalledSkillFile(
       modelOverride: metadata.modelOverride?.trim() || undefined,
       effort: metadata.effort,
       shell: metadata.shell,
-      hooks: metadata.hooks,
+      hooks: metadata.hooks.map(hook => ({
+        ...hook,
+        skillRoot: path.dirname(skillPath),
+      })),
       entrypoint: `/${skillId}`,
       source,
       skillPath,

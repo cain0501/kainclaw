@@ -355,4 +355,37 @@ Run the helper.
       ]),
     );
   });
+
+  it("parses frontmatter correctly when SKILL.md is saved with a UTF-8 BOM", async () => {
+    const kainclawHome = await fs.mkdtemp(path.join(os.tmpdir(), "cain-kainclaw-home-"));
+    tempDirs.push(kainclawHome);
+    process.env.KAINCLAW_CONFIG_HOME = kainclawHome;
+
+    const skillDir = path.join(kainclawHome, "skills", "bom-skill");
+    await fs.mkdir(skillDir, { recursive: true });
+    const content =
+      "\ufeff---\n" +
+      "name: BOM Skill\n" +
+      "description: BOM-safe skill description.\n" +
+      "arguments: target\n" +
+      "---\n\n" +
+      "SKILL_OK: $ARGUMENTS\n";
+    await fs.writeFile(path.join(skillDir, "SKILL.md"), content, "utf8");
+
+    const [skill] = await loadInstalledSkills();
+    expect(skill).toMatchObject({
+      id: "bom-skill",
+      title: "BOM Skill",
+      summary: "BOM-safe skill description.",
+      argumentNames: ["target"],
+      entrypoint: "/bom-skill",
+    });
+
+    const prompt = await buildInstalledSkillPrompt({
+      skill: skill!,
+      args: "hello-bom",
+    });
+    expect(prompt).toContain("SKILL_OK: hello-bom");
+    expect(prompt).not.toContain("\ufeff");
+  });
 });

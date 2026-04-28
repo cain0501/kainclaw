@@ -18,6 +18,7 @@ afterEach(async () => {
     tempDirs.splice(0).map(dir => fs.rm(dir, { recursive: true, force: true })),
   );
   delete process.env.CLAUDE_CONFIG_HOME;
+  delete process.env.KAINCLAW_CONFIG_HOME;
 });
 
 describe("electronPromptCommandHost", () => {
@@ -129,6 +130,54 @@ allowed-tools:
     expect(detailResult.reply).toContain("Command: /browse");
     expect(detailResult.reply).toContain("Source: installed-user");
     expect(detailResult.reply).toContain("Allowed tools: Bash");
+  });
+
+  it("rewrites installed skill slash commands in the Electron shell instead of passing them through as plain chat", async () => {
+    const kainclawHome = await fs.mkdtemp(path.join(os.tmpdir(), "cain-kainclaw-home-"));
+    const workspaceRoot = await fs.mkdtemp(path.join(os.tmpdir(), "cain-electron-skill-workspace-"));
+    tempDirs.push(kainclawHome, workspaceRoot);
+    process.env.KAINCLAW_CONFIG_HOME = kainclawHome;
+
+    const skillDir = path.join(kainclawHome, "skills", "echo-qa");
+    await fs.mkdir(skillDir, { recursive: true });
+    await fs.writeFile(
+      path.join(skillDir, "SKILL.md"),
+      `---
+name: Echo QA
+description: Electron installed skill rewrite test.
+---
+
+SKILL_OK: $ARGUMENTS
+`,
+      "utf8",
+    );
+
+    const result = await handleElectronPromptCommand({
+      prompt: "/echo-qa hello-electron",
+      config: providerConfig,
+      workspaceRoot,
+      envMap: {},
+      runtime: {},
+      tools: [],
+      currentEffortLevel: "high",
+      setEffortLevel: async () => undefined,
+      currentFastMode: false,
+      setFastMode: async () => undefined,
+      setActiveProviderModel: async () => undefined,
+      refreshWorkspaceStatus: () => undefined,
+      runtimeOptions: {},
+      handleCompactCommand: async () => false,
+      handleReviewCommand: async () => false,
+      handleUltrareviewCommand: async () => false,
+      handleUltraverifyCommand: async () => false,
+      handleVerificationCommand: async () => false,
+    });
+
+    expect(result.kind).toBe("continue");
+    if (result.kind !== "continue") {
+      throw new Error("Expected continue result.");
+    }
+    expect(result.effectivePrompt).toContain("SKILL_OK: hello-electron");
   });
 
   it("returns an explicit desktop-shell reply for unsupported runtime commands", async () => {

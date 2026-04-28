@@ -39,6 +39,16 @@ import {
 import type { ToolContext, ToolDefinition } from "../src/toolRuntime";
 import type { HookDefinition } from "../src/hooksRegistry";
 import {
+  getInstalledSkillByEntrypoint,
+  loadInstalledSkills,
+} from "../src/installedSkillsRegistry";
+import {
+  clearFreezeBoundary,
+  resolveFreezeBoundaryPath,
+  validateFreezeBoundaryPath,
+  writeFreezeBoundary,
+} from "../src/installedSkillCompat";
+import {
   clearAllSessionInstalledSkillHooks,
   clearSessionInstalledSkillHooks,
   getSessionInstalledSkillHooks,
@@ -190,6 +200,11 @@ type InspectionConversationMessage = {
 };
 
 type ActiveRequestKind = "background" | "chat" | "image";
+type PendingInstalledSkillCompat =
+  | {
+      kind: "freeze";
+      hooks: HookDefinition[];
+    };
 
 /**
  * Electron equivalent of ChatSidebarProvider.
@@ -230,6 +245,7 @@ export class ElectronChatPanel {
   private readonly browserRuntime: BrowserRuntime;
   private readonly cachedWorkspaceResolutions = new Map<string, ResolvedWorkspaceRoot>();
   private readonly sessionInstalledSkillHooks = new Map<string, HookDefinition[]>();
+  private readonly pendingInstalledSkillCompat = new Map<string, PendingInstalledSkillCompat>();
   private sessionMessageWriteQueue: Promise<void> = Promise.resolve();
   private backgroundTaskNotificationTimer: NodeJS.Timeout | undefined;
   private backgroundTaskNotificationPollInFlight: Promise<number> | undefined;
@@ -905,6 +921,7 @@ export class ElectronChatPanel {
 
     await this.sessions.deleteSession(id);
     clearSessionInstalledSkillHooks(this.sessionInstalledSkillHooks, id);
+    this.pendingInstalledSkillCompat.delete(id);
 
     if (wasActiveSession) {
       this.currentSessionId = undefined;
@@ -1800,6 +1817,7 @@ export class ElectronChatPanel {
     await this.imageGalleryStore.clear();
     await this.host.deleteSecret("cain.licenseKey");
     clearAllSessionInstalledSkillHooks(this.sessionInstalledSkillHooks);
+    this.pendingInstalledSkillCompat.clear();
     this.sessionMessages = [];
     this.modelConversationMessages = [];
     this.compactBoundary = undefined;
@@ -1836,6 +1854,7 @@ export class ElectronChatPanel {
       this.sessionInstalledSkillHooks,
       this.getConversationKey(),
     );
+    this.setCurrentPendingInstalledSkillCompat(undefined);
     this.sessionMessages = [];
     this.modelConversationMessages = [];
     this.compactBoundary = undefined;
@@ -1933,6 +1952,15 @@ export class ElectronChatPanel {
 
     try {
       const workspaceContext = await this.getResolvedWorkspaceContext();
+      if (
+        await this.tryHandleInstalledSkillCompat({
+          sessionId: requestSessionId,
+          prompt,
+          workspaceRoot: workspaceContext.effectiveRoot,
+        })
+      ) {
+        return;
+      }
       const parsedCommand = parsePromptSlashCommand(prompt);
       const isInspectionCommand =
         parsedCommand?.name === "/review" || parsedCommand?.name === "/verify";
@@ -1952,13 +1980,6 @@ export class ElectronChatPanel {
         workspaceRoot,
       );
       const workspaceNote = this.buildWorkspaceSystemNote(workspaceContext);
-      const adapter = buildProviderAdapter(
-        config,
-        workspaceRoot,
-        SYSTEM_PROMPT + workspaceNote + ELECTRON_SHELL_PROMPT_NOTE,
-        envMap,
-      );
-
       this.streamingText = this.getVisibleStreamingText();
 
       // Collect all tools: built-in + MCP
@@ -1982,7 +2003,12 @@ export class ElectronChatPanel {
         commandMcpRuntime,
         abortController.signal,
       );
-      const sessionInstalledSkillHooks = this.getCurrentSessionInstalledSkillHooks();
+      let activeConfig = config;
+      let activeTools = allTools;
+      let activeRuntimeOptions = runtimeOptions;
+      let activePromptRuntime = promptRuntime;
+      let activeSessionInstalledSkillHooks =
+        this.getCurrentSessionInstalledSkillHooks();
       const installedSkillAgentRunner: AgentRunner = async (hook, context) => {
         const hookPrompt = buildElectronInstalledSkillAgentHookPrompt(
           hook,
@@ -2177,10 +2203,55 @@ export class ElectronChatPanel {
         }
 
       let effectivePrompt = prompt;
-      if (sessionInstalledSkillHooks.length > 0) {
+      let effectivePromptAttachments = normalizedAttachments;
+      if (commandResult.effectivePrompt) {
+        effectivePrompt = commandResult.effectivePrompt;
+      }
+      if (commandResult.effectivePromptAttachments?.length) {
+        effectivePromptAttachments = commandResult.effectivePromptAttachments;
+      }
+      if (commandResult.allowedTools?.length) {
+        activeTools = allTools.filter(tool =>
+          commandResult.allowedTools!.includes(tool.name),
+        );
+      }
+      if (commandResult.modelOverride) {
+        activeConfig = {
+          ...config,
+          model: commandResult.modelOverride,
+        };
+      }
+      if (commandResult.effortOverride) {
+        activeRuntimeOptions = {
+          ...runtimeOptions,
+          effortLevel: commandResult.effortOverride,
+        };
+      }
+      if (
+        commandResult.modelOverride ||
+        commandResult.effortOverride ||
+        activeTools !== allTools
+      ) {
+        activePromptRuntime = this.createPromptRuntime(
+          workspaceRoot,
+          activeConfig,
+          envMap,
+          activeRuntimeOptions,
+          activeTools,
+          commandMcpRuntime,
+          abortController.signal,
+        );
+      }
+      if (commandResult.installedSkillHooks?.length) {
+        activeSessionInstalledSkillHooks = commandResult.installedSkillHooks;
+      } else {
+        activeSessionInstalledSkillHooks =
+          this.getCurrentSessionInstalledSkillHooks();
+      }
+      if (activeSessionInstalledSkillHooks.length > 0) {
         const prePromptResult = await triggerHooks(
           "PrePrompt",
-          sessionInstalledSkillHooks,
+          activeSessionInstalledSkillHooks,
           {
             workspaceRoot,
             prompt: effectivePrompt,
@@ -2209,8 +2280,8 @@ export class ElectronChatPanel {
       const modelUserMessage: PersistedConversationMessage = {
         role: "user",
         content: effectivePrompt,
-        ...(normalizedAttachments && normalizedAttachments.length > 0
-          ? { attachments: normalizedAttachments }
+        ...(effectivePromptAttachments && effectivePromptAttachments.length > 0
+          ? { attachments: effectivePromptAttachments }
           : {}),
       };
       requestModelConversation = [
@@ -2233,17 +2304,24 @@ export class ElectronChatPanel {
           content: message.content,
         };
       });
-      const toolContext = promptRuntime.getToolContext("main");
+      const adapter = buildProviderAdapter(
+        activeConfig,
+        workspaceRoot,
+        SYSTEM_PROMPT + workspaceNote + ELECTRON_SHELL_PROMPT_NOTE,
+        envMap,
+        activeRuntimeOptions,
+      );
+      const toolContext = activePromptRuntime.getToolContext("main");
 
       const finalText = await runAgent(history, {
         provider: adapter,
-        tools: allTools,
+        tools: activeTools,
         toolContext,
-        beforeToolCall: sessionInstalledSkillHooks.length > 0
+        beforeToolCall: activeSessionInstalledSkillHooks.length > 0
           ? async (toolName, input, context) => {
               const result = await triggerHooks(
                 "PreToolCall",
-                sessionInstalledSkillHooks,
+                activeSessionInstalledSkillHooks,
                 {
                   workspaceRoot: context.workspaceRoot,
                   toolName,
@@ -2252,15 +2330,35 @@ export class ElectronChatPanel {
                 installedSkillAgentRunner,
               );
               if (result.blocked) {
-                throw new Error(`Installed skill hook blocked tool call: ${toolName}`);
+                throw new Error(
+                  result.blockedMessage ??
+                  `Installed skill hook blocked tool call: ${toolName}`,
+                );
+              }
+              if (result.askMessage) {
+                const approved = await toolContext.requestToolApproval?.({
+                  kind: "tool_action",
+                  toolName,
+                  title: "Installed skill confirmation",
+                  summary: result.askMessage,
+                  inputPreview: JSON.stringify(input),
+                });
+                if (!approved) {
+                  throw new Error(result.askMessage);
+                }
+                if (toolName === "run_command" && typeof input.command === "string") {
+                  toolContext.allowDangerousCommandOnce?.(input.command, {
+                    skipGenericApproval: true,
+                  });
+                }
               }
             }
           : undefined,
-        afterToolCall: sessionInstalledSkillHooks.length > 0
+        afterToolCall: activeSessionInstalledSkillHooks.length > 0
           ? async (toolName, input, output, _isError, context) => {
               await triggerHooks(
                 "PostToolCall",
-                sessionInstalledSkillHooks,
+                activeSessionInstalledSkillHooks,
                 {
                   workspaceRoot: context.workspaceRoot,
                   toolName,
@@ -2329,10 +2427,10 @@ export class ElectronChatPanel {
         content: finalText,
         timestamp: Date.now(),
       };
-      if (sessionInstalledSkillHooks.length > 0) {
+      if (activeSessionInstalledSkillHooks.length > 0) {
         await triggerHooks(
           "PostPrompt",
-          sessionInstalledSkillHooks,
+          activeSessionInstalledSkillHooks,
           {
             workspaceRoot,
             prompt: effectivePrompt,
@@ -2382,6 +2480,23 @@ export class ElectronChatPanel {
     return this.currentSessionId ?? "electron";
   }
 
+  private getCurrentPendingInstalledSkillCompat():
+    | PendingInstalledSkillCompat
+    | undefined {
+    return this.pendingInstalledSkillCompat.get(this.getConversationKey());
+  }
+
+  private setCurrentPendingInstalledSkillCompat(
+    pending: PendingInstalledSkillCompat | undefined,
+  ): void {
+    const key = this.getConversationKey();
+    if (!pending) {
+      this.pendingInstalledSkillCompat.delete(key);
+      return;
+    }
+    this.pendingInstalledSkillCompat.set(key, pending);
+  }
+
   private getCurrentSessionInstalledSkillHooks(): HookDefinition[] {
     return getSessionInstalledSkillHooks(
       this.sessionInstalledSkillHooks,
@@ -2397,6 +2512,114 @@ export class ElectronChatPanel {
       this.getConversationKey(),
       hooks,
     );
+  }
+
+  private unregisterCurrentSessionInstalledSkillHooks(
+    predicate: (hook: HookDefinition) => boolean,
+  ): HookDefinition[] {
+    const key = this.getConversationKey();
+    const remaining = this.getCurrentSessionInstalledSkillHooks().filter(
+      hook => !predicate(hook),
+    );
+    if (remaining.length === 0) {
+      clearSessionInstalledSkillHooks(this.sessionInstalledSkillHooks, key);
+      return [];
+    }
+    this.sessionInstalledSkillHooks.set(key, remaining);
+    return remaining;
+  }
+
+  private async tryHandleInstalledSkillCompat(options: {
+    sessionId: string;
+    prompt: string;
+    workspaceRoot: string;
+  }): Promise<boolean> {
+    const trimmedPrompt = options.prompt.trim();
+    const parsedCommand = parsePromptSlashCommand(trimmedPrompt);
+    const installedSkills = await loadInstalledSkills(options.workspaceRoot);
+
+    if (parsedCommand) {
+      const installedSkill = getInstalledSkillByEntrypoint(
+        installedSkills,
+        parsedCommand.name,
+      );
+      if (installedSkill?.id === "freeze") {
+        if (parsedCommand.args.trim()) {
+          await this.applyFreezeBoundary({
+            sessionId: options.sessionId,
+            workspaceRoot: options.workspaceRoot,
+            rawPath: parsedCommand.args,
+            hooks: installedSkill.hooks,
+          });
+        } else {
+          this.registerCurrentSessionInstalledSkillHooks(installedSkill.hooks);
+          this.setCurrentPendingInstalledSkillCompat({
+            kind: "freeze",
+            hooks: installedSkill.hooks,
+          });
+          await this.appendAssistantMessageToSession(options.sessionId, {
+            role: "assistant",
+            content:
+              "Which directory should I restrict edits to? Files outside this path will be blocked from editing.\n\nPlease type the directory path you want to lock edits to:",
+            timestamp: Date.now(),
+          });
+        }
+        return true;
+      }
+
+      if (installedSkill?.id === "unfreeze") {
+        await clearFreezeBoundary();
+        this.unregisterCurrentSessionInstalledSkillHooks(
+          hook => hook.name.startsWith("freeze:"),
+        );
+        this.setCurrentPendingInstalledSkillCompat(undefined);
+        await this.appendAssistantMessageToSession(options.sessionId, {
+          role: "assistant",
+          content:
+            "Freeze boundary cleared. Edits are no longer restricted to a single directory.",
+          timestamp: Date.now(),
+        });
+        return true;
+      }
+    }
+
+    const pendingCompat = this.getCurrentPendingInstalledSkillCompat();
+    if (pendingCompat?.kind === "freeze" && !parsedCommand) {
+      await this.applyFreezeBoundary({
+        sessionId: options.sessionId,
+        workspaceRoot: options.workspaceRoot,
+        rawPath: trimmedPrompt,
+        hooks: pendingCompat.hooks,
+      });
+      return true;
+    }
+
+    return false;
+  }
+
+  private async applyFreezeBoundary(options: {
+    sessionId: string;
+    workspaceRoot: string;
+    rawPath: string;
+    hooks: HookDefinition[];
+  }): Promise<void> {
+    const resolved = resolveFreezeBoundaryPath(
+      options.workspaceRoot,
+      options.rawPath,
+    );
+    await validateFreezeBoundaryPath(resolved);
+    const savedBoundary = await writeFreezeBoundary(resolved);
+    this.registerCurrentSessionInstalledSkillHooks(options.hooks);
+    this.setCurrentPendingInstalledSkillCompat(undefined);
+    await this.appendAssistantMessageToSession(options.sessionId, {
+      role: "assistant",
+      content:
+        `Freeze boundary set: ${savedBoundary}\n\n` +
+        "From now on, all Edit and Write operations are only allowed inside this directory.\n\n" +
+        "To change the boundary, run /freeze again.\n" +
+        "To remove the restriction, run /unfreeze.",
+      timestamp: Date.now(),
+    });
   }
 
   private getConversationTaskRuntime(workspaceRoot: string): ConversationTaskRuntime {
@@ -2426,6 +2649,10 @@ export class ElectronChatPanel {
     mcpRuntime: McpRuntime = this.mcpRuntime,
     abortSignal?: AbortSignal,
   ): ElectronPromptRuntime {
+    const dangerousCommandApprovals = new Map<
+      string,
+      { skipGenericApproval?: boolean }
+    >();
     const getToolContext = (
       mode: ToolContext["invokerKind"] = "main",
     ): ToolContext => ({
@@ -2443,6 +2670,16 @@ export class ElectronChatPanel {
         }),
       requestFileApproval: request => this.host.requestFileApproval(request),
       requestToolApproval: request => this.host.requestToolApproval(request),
+      allowDangerousCommandOnce: (command, approvalOptions) => {
+        dangerousCommandApprovals.set(command, approvalOptions ?? {});
+      },
+      consumeDangerousCommandApproval: command => {
+        const approval = dangerousCommandApprovals.get(command) ?? null;
+        if (approval) {
+          dangerousCommandApprovals.delete(command);
+        }
+        return approval;
+      },
       onToolLifecycle: event => {
         this.sendToRenderer({ type: "tool:lifecycle", event });
       },

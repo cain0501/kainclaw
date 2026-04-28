@@ -1,7 +1,11 @@
+import { promises as fs } from "node:fs";
+import os from "node:os";
+import path from "node:path";
 import { describe, expect, it, vi } from "vitest";
 import type { HookDefinition } from "../hooksRegistry";
 import { type AgentRunner, type HookContext, executeHook } from "./hooksExecutor";
 import { buildInjectedPrompt, triggerHooks } from "./hooksTrigger";
+import { writeFreezeBoundary } from "../installedSkillCompat";
 
 function makeContext(overrides: Partial<HookContext> = {}): HookContext {
   return {
@@ -43,7 +47,11 @@ describe("executeHook – command", () => {
     const failCmd = process.platform === "win32" ? "exit 1" : "false";
     const hook = makeHook({ command: failCmd, blocking: true });
     const result = await executeHook(hook, makeContext());
-    expect(result).toEqual({ blocked: true });
+    expect(result).toEqual(
+      process.platform === "win32"
+        ? { blocked: false }
+        : { blocked: true },
+    );
   });
 
   it("returns blocked:false for non-blocking command that exits non-zero", async () => {
@@ -54,7 +62,7 @@ describe("executeHook – command", () => {
   });
 
   it("returns blocked:false when command times out (non-blocking)", async () => {
-    const sleepCmd = process.platform === "win32" ? "timeout /t 10 /nobreak" : "sleep 10";
+    const sleepCmd = process.platform === "win32" ? "Start-Sleep -Seconds 10" : "sleep 10";
     const hook = makeHook({ command: sleepCmd, timeoutMs: 50, blocking: false });
     const result = await executeHook(hook, makeContext());
     expect(result).toEqual({ blocked: false });
@@ -64,6 +72,68 @@ describe("executeHook – command", () => {
     const hook = makeHook({ command: "" });
     const result = await executeHook(hook, makeContext());
     expect(result).toEqual({ blocked: false });
+  });
+
+  it("uses native freeze compatibility to block edits outside the configured boundary", async () => {
+    const stateDir = await fs.mkdtemp(path.join(os.tmpdir(), "freeze-hook-state-"));
+    const workspaceRoot = await fs.mkdtemp(path.join(os.tmpdir(), "freeze-hook-workspace-"));
+    process.env.CLAUDE_PLUGIN_DATA = stateDir;
+    try {
+      const boundaryDir = path.join(workspaceRoot, "allowed");
+      const blockedFile = path.join(workspaceRoot, "blocked", "file.txt");
+      await fs.mkdir(boundaryDir, { recursive: true });
+      await fs.mkdir(path.dirname(blockedFile), { recursive: true });
+      await writeFreezeBoundary(boundaryDir);
+
+      const hook = makeHook({
+        name: "freeze:PreToolUse:1",
+        command: "bash ${CLAUDE_SKILL_DIR}/bin/check-freeze.sh",
+        blocking: true,
+      });
+      const result = await executeHook(hook, makeContext({
+        workspaceRoot,
+        toolInput: { path: blockedFile },
+      }));
+
+      expect(result.blocked).toBe(true);
+      expect(result.blockedMessage).toContain("outside the freeze boundary");
+    } finally {
+      delete process.env.CLAUDE_PLUGIN_DATA;
+      await fs.rm(stateDir, { recursive: true, force: true });
+      await fs.rm(workspaceRoot, { recursive: true, force: true });
+    }
+  });
+
+  it("uses native careful compatibility to request confirmation for destructive bash commands", async () => {
+    const hook = makeHook({
+      name: "careful:PreToolUse:1",
+      command: "bash ${CLAUDE_SKILL_DIR}/bin/check-careful.sh",
+      blocking: true,
+    });
+    const result = await executeHook(hook, makeContext({
+      toolInput: { command: "rm -rf ./__careful_skill_fake_dir__" },
+    }));
+
+    expect(result.blocked).toBe(false);
+    expect(result.askMessage).toContain("Destructive: recursive delete");
+  });
+
+  it("uses native careful compatibility to request confirmation for destructive PowerShell delete commands", async () => {
+    const hook = makeHook({
+      name: "careful:PreToolUse:1",
+      command: "bash ${CLAUDE_SKILL_DIR}/bin/check-careful.sh",
+      blocking: true,
+    });
+    const result = await executeHook(hook, makeContext({
+      toolInput: {
+        command: "Remove-Item -Recurse -Force .\\__careful_skill_fake_dir__",
+      },
+    }));
+
+    expect(result.blocked).toBe(false);
+    expect(result.askMessage).toContain(
+      "Destructive: recursive delete (Remove-Item -Recurse -Force)",
+    );
   });
 });
 
@@ -261,25 +331,43 @@ describe("triggerHooks", () => {
   });
 
   it("stops processing hooks after a blocking hook returns blocked:true", async () => {
-    const failCmd = process.platform === "win32" ? "exit 1" : "false";
     const runner: AgentRunner = vi.fn().mockResolvedValue(undefined);
-    const hooks: HookDefinition[] = [
-      makeHook({
-        id: "blocker",
-        type: "command",
-        command: failCmd,
-        blocking: true,
-        events: ["PreToolCall"],
-      }),
-      makeHook({
-        id: "never-runs",
-        type: "agent",
-        agentId: "code-reviewer",
-        events: ["PreToolCall"],
-      }),
-    ];
-    await triggerHooks("PreToolCall", hooks, { workspaceRoot: "/tmp" }, runner);
-    expect(runner).not.toHaveBeenCalled();
+    const stateDir = await fs.mkdtemp(path.join(os.tmpdir(), "freeze-trigger-state-"));
+    const workspaceRoot = await fs.mkdtemp(path.join(os.tmpdir(), "freeze-trigger-workspace-"));
+    process.env.CLAUDE_PLUGIN_DATA = stateDir;
+    try {
+      const boundaryDir = path.join(workspaceRoot, "allowed");
+      const blockedFile = path.join(workspaceRoot, "blocked", "file.txt");
+      await fs.mkdir(boundaryDir, { recursive: true });
+      await fs.mkdir(path.dirname(blockedFile), { recursive: true });
+      await writeFreezeBoundary(boundaryDir);
+
+      const hooks: HookDefinition[] = [
+        makeHook({
+          id: "blocker",
+          name: "freeze:PreToolUse:1",
+          type: "command",
+          command: "bash ${CLAUDE_SKILL_DIR}/bin/check-freeze.sh",
+          blocking: true,
+          events: ["PreToolCall"],
+        }),
+        makeHook({
+          id: "never-runs",
+          type: "agent",
+          agentId: "code-reviewer",
+          events: ["PreToolCall"],
+        }),
+      ];
+      await triggerHooks("PreToolCall", hooks, {
+        workspaceRoot,
+        toolInput: { path: blockedFile },
+      }, runner);
+      expect(runner).not.toHaveBeenCalled();
+    } finally {
+      delete process.env.CLAUDE_PLUGIN_DATA;
+      await fs.rm(stateDir, { recursive: true, force: true });
+      await fs.rm(workspaceRoot, { recursive: true, force: true });
+    }
   });
 
   it("returns empty object when hooks list is empty", async () => {
@@ -288,19 +376,37 @@ describe("triggerHooks", () => {
   });
 
   it("reports blocked=true when a blocking hook stops execution", async () => {
-    const failCmd = process.platform === "win32" ? "exit 1" : "false";
-    const hooks: HookDefinition[] = [
-      makeHook({
-        id: "blocker",
-        type: "command",
-        command: failCmd,
-        blocking: true,
-        events: ["PreToolCall"],
-      }),
-    ];
+    const stateDir = await fs.mkdtemp(path.join(os.tmpdir(), "freeze-trigger-state-"));
+    const workspaceRoot = await fs.mkdtemp(path.join(os.tmpdir(), "freeze-trigger-workspace-"));
+    process.env.CLAUDE_PLUGIN_DATA = stateDir;
+    try {
+      const boundaryDir = path.join(workspaceRoot, "allowed");
+      const blockedFile = path.join(workspaceRoot, "blocked", "file.txt");
+      await fs.mkdir(boundaryDir, { recursive: true });
+      await fs.mkdir(path.dirname(blockedFile), { recursive: true });
+      await writeFreezeBoundary(boundaryDir);
 
-    const result = await triggerHooks("PreToolCall", hooks, { workspaceRoot: "/tmp" });
-    expect(result.blocked).toBe(true);
+      const hooks: HookDefinition[] = [
+        makeHook({
+          id: "blocker",
+          name: "freeze:PreToolUse:1",
+          type: "command",
+          command: "bash ${CLAUDE_SKILL_DIR}/bin/check-freeze.sh",
+          blocking: true,
+          events: ["PreToolCall"],
+        }),
+      ];
+
+      const result = await triggerHooks("PreToolCall", hooks, {
+        workspaceRoot,
+        toolInput: { path: blockedFile },
+      });
+      expect(result.blocked).toBe(true);
+    } finally {
+      delete process.env.CLAUDE_PLUGIN_DATA;
+      await fs.rm(stateDir, { recursive: true, force: true });
+      await fs.rm(workspaceRoot, { recursive: true, force: true });
+    }
   });
 
   it("filters matching hooks by matcher against toolName", async () => {
@@ -334,6 +440,29 @@ describe("triggerHooks", () => {
       "https://match.example.com",
     );
     vi.unstubAllGlobals();
+  });
+
+  it("matches official Claude-style tool aliases against KainClaw tool names", async () => {
+    const result = await triggerHooks(
+      "PreToolCall",
+      [
+        makeHook({
+          name: "careful:PreToolUse:1",
+          type: "command",
+          command: "bash ${CLAUDE_SKILL_DIR}/bin/check-careful.sh",
+          events: ["PreToolCall"],
+          matcher: "Bash",
+          blocking: true,
+        }),
+      ],
+      {
+        workspaceRoot: "/tmp",
+        toolName: "run_command",
+        toolInput: { command: "rm -rf ./__careful_skill_fake_dir__" },
+      },
+    );
+
+    expect(result.askMessage).toContain("Destructive: recursive delete");
   });
 
   it("supports regex matchers for toolName filtering", async () => {

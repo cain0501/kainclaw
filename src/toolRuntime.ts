@@ -312,6 +312,13 @@ export type ToolContext = {
   }) => Promise<{ taskId: string; command: string; workspaceRoot: string; outputPath?: string } | null>;
   requestFileApproval?: (request: WriteApprovalRequest) => Promise<boolean>;
   requestToolApproval?: (request: ToolActionApprovalRequest) => Promise<boolean>;
+  allowDangerousCommandOnce?: (
+    command: string,
+    options?: { skipGenericApproval?: boolean },
+  ) => void;
+  consumeDangerousCommandApproval?: (
+    command: string,
+  ) => { skipGenericApproval?: boolean } | null;
   onToolLifecycle?: (event: ToolLifecycleEvent) => void;
   browser?: BrowserToolAdapter;
   mcp?: McpToolAdapter;
@@ -2865,12 +2872,15 @@ const handlers: Record<string, ToolHandler> = {
       throw new Error("command is required");
     }
 
-    assertSafeShellCommand(command, ALLOWED_COMMAND_PREFIXES);
+    const dangerousApproval = context.consumeDangerousCommandApproval?.(command);
+    if (!dangerousApproval) {
+      assertSafeShellCommand(command, ALLOWED_COMMAND_PREFIXES);
 
-    if (!commandStartsWithAllowedPrefix(command, ALLOWED_COMMAND_PREFIXES)) {
-      throw new Error(
-        `Command is not in the safe allowlist. Allowed prefixes: ${ALLOWED_COMMAND_PREFIXES.join(", ")}`,
-      );
+      if (!commandStartsWithAllowedPrefix(command, ALLOWED_COMMAND_PREFIXES)) {
+        throw new Error(
+          `Command is not in the safe allowlist. Allowed prefixes: ${ALLOWED_COMMAND_PREFIXES.join(", ")}`,
+        );
+      }
     }
 
     assertPlanModeCommandAccess(context, command);
@@ -2878,7 +2888,10 @@ const handlers: Record<string, ToolHandler> = {
       assertVerificationModeCommandAccess(command);
     }
 
-    if (!context.verificationMode?.active) {
+    if (
+      !context.verificationMode?.active &&
+      !dangerousApproval?.skipGenericApproval
+    ) {
       await requestActionApproval(context, {
         kind: "tool_action",
         toolName: "run_command",

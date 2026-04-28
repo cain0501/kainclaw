@@ -410,8 +410,32 @@ export async function runAgent(
           );
           if (preToolHooks.blocked) {
             throw new Error(
+              preToolHooks.blockedMessage ??
               `Installed skill hook blocked tool call: ${toolCall.name}`,
             );
+          }
+          if (preToolHooks.askMessage) {
+            if (!toolContext.requestToolApproval) {
+              throw new Error(preToolHooks.askMessage);
+            }
+            const approved = await toolContext.requestToolApproval({
+              kind: "tool_action",
+              toolName: toolCall.name,
+              title: "Installed skill confirmation",
+              summary: preToolHooks.askMessage,
+              inputPreview: JSON.stringify(toolCall.input),
+            });
+            if (!approved) {
+              throw new Error(preToolHooks.askMessage);
+            }
+            if (
+              toolCall.name === "run_command" &&
+              typeof toolCall.input.command === "string"
+            ) {
+              toolContext.allowDangerousCommandOnce?.(toolCall.input.command, {
+                skipGenericApproval: true,
+              });
+            }
           }
         }
         await beforeToolCall?.(toolCall.name, toolCall.input, toolContext);

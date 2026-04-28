@@ -4,10 +4,12 @@
 
 - 2026-04-28 installed-skills parity increment:
   - Primary installed-skill roots are now `~/.kainclaw/skills` and `.kainclaw/skills`, with `~/.claude/skills` and `.claude/skills` kept as compatibility roots.
+  - KainClaw now exposes a working installer MVP through `/skills list`, `/skills install <source>`, and `/skills remove <skill-id>`, and those writes stay on the primary KainClaw roots instead of the Claude compatibility roots.
   - Installed-skill prompt execution now covers argument substitution, `allowed-tools`, model/effort overrides, `context=fork`, and shell metadata.
   - Installed-skill shell expansion now supports the Claude-style `!` / ` ```! ` patterns through the existing PowerShell-backed execution path; `shell: bash` is rejected explicitly instead of silently falling back.
   - Installed-skill hooks now support prompt / command / http / agent definitions, tool-event matcher filtering, and session-scoped persistence for the active conversation.
   - The Electron desktop shell now also preserves those installed-skill hooks across follow-up prompts in the same conversation, instead of dropping them after the initial slash-command invocation.
+  - The Electron desktop shell now also carries installed-skill slash rewrites through to the real prompt execution path, instead of letting `/<installed-skill>` invocations fall back into plain chat after discovery succeeded.
   - Installed-skill slash execution is now carried end-to-end by a unified `installedSkillExecution` object, so prompt preparation and flow control no longer have to keep separate per-field copies of tool/model/effort/context metadata.
   - KainClaw now exposes a model-visible installed-skill registry in the workspace system prompt and a `SkillTool` for installed skills whose runtime semantics can already be represented safely on the model-side path.
   - The model-side `SkillTool` path now also enforces installed-skill `allowed-tools` by narrowing the visible tool payload for the rest of the current model turn after the skill is loaded.
@@ -15,8 +17,11 @@
   - Model-visible installed skills can now also register their hooks through the shared session hook store, and those hooks take effect both later in the same model run and on subsequent prompts in the same conversation.
   - Model-visible installed skills can now also apply per-skill `model` / `effort` overrides: inline skills rebuild the active provider for the rest of the current run, while forked skills apply their overrides only inside the isolated fork.
   - Model-visible installed skills now also honor agent-hook-specific `agentModel` overrides by rebuilding the hook sub-run provider only for that hook execution.
-  - The installed-skills parity line is now effectively closed for the current KainClaw architecture; any remaining work is follow-on polish or broader ecosystem integration, not a core missing runtime semantic.
-  - Current automated baseline after this slice: `153` test files, `1134` tests passed.
+  - Installed command hooks now preserve `skillRoot`, accept Claude-style matcher aliases (`Bash`, `Edit`, `Write`) against KainClaw tool names, pass the official stdin/environment payload into hook scripts, and honor the official `permissionDecision` contract for `ask` / `deny`.
+  - Electron now also has a targeted official-skill compatibility lane for `freeze` / `unfreeze`, and manual Electron checks now confirm `freeze` allow/write, deny/write, and `/unfreeze` recovery all work end-to-end on the desktop shell.
+  - Manual Electron checks now also confirm the official `careful` skill can warn, require explicit confirmation, and then allow the single confirmed destructive command attempt through to the real PowerShell execution path.
+  - The installed-skills runtime mainline is now usable in Electron, but true official-skill UX parity is still open: `AskUserQuestion` dialog parity and broader official skill setup/product-surface polish remain follow-on work.
+  - Current automated baseline after this slice: `154` test files, `1143` tests passed.
 
 - 本批 Claude parity 收口后的验证基线：
   - `npm test`

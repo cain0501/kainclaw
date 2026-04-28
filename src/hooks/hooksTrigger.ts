@@ -5,6 +5,8 @@ export interface TriggerResult {
   promptPrefixInjection?: string;
   promptSuffixInjection?: string;
   blocked?: boolean;
+  blockedMessage?: string;
+  askMessage?: string;
 }
 
 function matchesPattern(matchQuery: string, matcher: string): boolean {
@@ -30,16 +32,38 @@ function matchesPattern(matchQuery: string, matcher: string): boolean {
   }
 }
 
+function getToolMatcherCandidates(toolName: string | undefined): string[] {
+  if (!toolName) {
+    return [];
+  }
+
+  const candidates = [toolName];
+  const compatAliasMap = new Map<string, string>([
+    ["run_command", "Bash"],
+    ["write_file", "Write"],
+    ["replace_in_file", "Edit"],
+    ["read_file", "Read"],
+    ["glob_files", "Glob"],
+    ["search_files", "Grep"],
+  ]);
+  const alias = compatAliasMap.get(toolName);
+  if (alias) {
+    candidates.push(alias);
+  }
+
+  return candidates;
+}
+
 function resolveMatchQuery(
   event: HookEvent,
   context: Omit<HookContext, "event">,
-): string | undefined {
+): string[] {
   switch (event) {
     case "PreToolCall":
     case "PostToolCall":
-      return context.toolName;
+      return getToolMatcherCandidates(context.toolName);
     default:
-      return undefined;
+      return [];
   }
 }
 
@@ -49,15 +73,17 @@ export async function triggerHooks(
   context: Omit<HookContext, "event">,
   agentRunner?: AgentRunner,
 ): Promise<TriggerResult> {
-  const matchQuery = resolveMatchQuery(event, context);
+  const matchQueries = resolveMatchQuery(event, context);
   const matching = hooks.filter(h => {
     if (!h.events.includes(event)) {
       return false;
     }
-    if (!matchQuery || !h.matcher?.trim()) {
+    if (matchQueries.length === 0 || !h.matcher?.trim()) {
       return true;
     }
-    return matchesPattern(matchQuery, h.matcher.trim());
+    return matchQueries.some(matchQuery =>
+      matchesPattern(matchQuery, h.matcher!.trim()),
+    );
   });
   if (matching.length === 0) {
     return {};
@@ -67,6 +93,8 @@ export async function triggerHooks(
   const prefixParts: string[] = [];
   const suffixParts: string[] = [];
   let blocked = false;
+  let blockedMessage: string | undefined;
+  let askMessage: string | undefined;
 
   for (const hook of matching) {
     let result: HookResult;
@@ -86,6 +114,12 @@ export async function triggerHooks(
 
     if (result.blocked) {
       blocked = true;
+      blockedMessage = result.blockedMessage;
+      break;
+    }
+
+    if (result.askMessage) {
+      askMessage = result.askMessage;
       break;
     }
   }
@@ -98,6 +132,8 @@ export async function triggerHooks(
       ? { promptSuffixInjection: suffixParts.join("\n\n") }
       : {}),
     ...(blocked ? { blocked: true } : {}),
+    ...(blockedMessage ? { blockedMessage } : {}),
+    ...(askMessage ? { askMessage } : {}),
   };
 }
 

@@ -4,9 +4,11 @@
 
 - 2026-04-28 installed-skills parity update:
   - Installed-skill discovery now prefers `~/.kainclaw/skills` and `.kainclaw/skills`, with `~/.claude/skills` and `.claude/skills` retained as compatibility roots.
+  - KainClaw now exposes a working installer MVP through `/skills list`, `/skills install <source>`, and `/skills remove <skill-id>`, with writes landing only in the primary KainClaw skill roots.
   - Installed-skill execution now covers argument substitution, `allowed-tools`, model/effort overrides, `context=fork`, shell metadata, and explicit session-scoped hook persistence.
   - Installed-skill hooks now support prompt / command / http / agent definitions and matcher filtering for tool events.
   - Electron now matches the VS Code host on session-scoped installed-skill hook carry-over, rather than treating each desktop prompt turn as hook-isolated after the original slash invocation.
+  - Electron now also carries installed-skill slash rewrites into the real prompt execution path, so `/<installed-skill>` invocations no longer fall through to plain chat after discovery succeeds.
   - Installed-skill slash rewrites now flow through a unified `installedSkillExecution` plan object instead of duplicating tool/model/effort/context metadata across separate fields in later prompt stages.
   - KainClaw now exposes a model-visible installed-skill registry via the workspace system prompt and a `SkillTool` for installed skills whose runtime semantics can already be represented safely, which closes the previous 鈥渕odel cannot see or load installed skills at all鈥?gap.
   - KainClaw now also applies installed-skill `allowed-tools` on the model-side path by narrowing the visible tool payload for the rest of the current run once `SkillTool` loads a skill.
@@ -14,8 +16,10 @@
   - KainClaw now also supports model-side installed-skill hook registration by reusing the shared session hook store and the existing hook executor/trigger path, so skill-loaded hooks affect both later tool calls in the same run and later prompts in the same conversation.
   - KainClaw now also supports model-side per-skill `model` / `effort` switching semantics by rebuilding the active provider/runtime state for inline skills and scoping the override to the isolated fork for `context=fork` skills.
   - KainClaw now also supports model-side agent-hook-specific `agentModel` overrides by rebuilding the provider only for that hook sub-run.
-  - The installed-skills parity line is now effectively closed for the current KainClaw architecture; remaining work is follow-on polish or broader ecosystem integration, not a core missing runtime semantic.
-  - Current automated baseline after this slice: `153` test files, `1134` tests passed.
+  - Installed command hooks now preserve `skillRoot`, map official matcher aliases (`Bash`, `Edit`, `Write`) onto KainClaw tool names, pass the official stdin/environment payloads into hook scripts, and honor the official `permissionDecision` contract for `ask` / `deny`.
+  - Manual Electron checks now confirm the official Claude-compatible `freeze` skill works end-to-end for allow/write, deny/write, and `/unfreeze`, and the official `careful` skill now warns first and then allows a single confirmed destructive command attempt through to real shell execution.
+  - Installed-skills runtime parity is now broadly usable, but not fully closed: true `AskUserQuestion` dialog parity and broader official skill UX/setup polish in Electron remain open gaps.
+  - Current automated baseline after this slice: `154` test files, `1143` tests passed.
 
 - 本轮已验证：
   - `npm test`

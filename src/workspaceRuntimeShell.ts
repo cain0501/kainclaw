@@ -134,6 +134,10 @@ export class WorkspaceRuntime {
     const planMode = this.planMode;
     const getWorkspaceRoot = this.getWorkspaceRoot;
     const planVerification = this.getPlanVerificationState;
+    const dangerousCommandApprovals = new Map<
+      string,
+      { skipGenericApproval?: boolean }
+    >();
 
     return {
       get workspaceRoot() {
@@ -143,6 +147,16 @@ export class WorkspaceRuntime {
       extractWebContent: this.extractWebContent,
       requestFileApproval: this.requestFileApproval,
       requestToolApproval: this.requestToolApproval,
+      allowDangerousCommandOnce: (command, options) => {
+        dangerousCommandApprovals.set(command, options ?? {});
+      },
+      consumeDangerousCommandApproval: command => {
+        const approval = dangerousCommandApprovals.get(command) ?? null;
+        if (approval) {
+          dangerousCommandApprovals.delete(command);
+        }
+        return approval;
+      },
       onToolLifecycle: this.onToolLifecycle,
       browser: this.browserRuntime,
       mcp: this.mcpRuntime,

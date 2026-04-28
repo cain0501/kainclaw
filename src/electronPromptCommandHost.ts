@@ -1,4 +1,5 @@
 import type {
+  NormalizedImageAttachment,
   ProviderConfig as AdapterProviderConfig,
 } from "./agent/providers/IProviderAdapter";
 import {
@@ -139,7 +140,15 @@ function buildUnsupportedElectronPromptCommandReply(commandName: string): string
 }
 
 export type ElectronPromptCommandResult =
-  | { kind: "continue" }
+  | {
+      kind: "continue";
+      effectivePrompt?: string;
+      effectivePromptAttachments?: NormalizedImageAttachment[];
+      allowedTools?: string[];
+      modelOverride?: string;
+      effortOverride?: EffortLevel;
+      installedSkillHooks?: HookDefinition[];
+    }
   | { kind: "reply"; reply: string }
   | { kind: "handled" };
 
@@ -211,6 +220,11 @@ export async function handleElectronPromptCommand(options: {
   if (!parsedCommand) {
     return { kind: "continue" };
   }
+  const installedSkills = await loadInstalledSkills(options.workspaceRoot);
+  const installedSkillCommand = getInstalledSkillByEntrypoint(
+    installedSkills,
+    parsedCommand.name,
+  );
 
   if (parsedCommand.name === "/commands") {
     return {
@@ -244,7 +258,10 @@ export async function handleElectronPromptCommand(options: {
     };
   }
 
-  if (!SUPPORTED_ELECTRON_RUNTIME_PROMPT_COMMANDS.has(parsedCommand.name)) {
+  if (
+    !SUPPORTED_ELECTRON_RUNTIME_PROMPT_COMMANDS.has(parsedCommand.name) &&
+    !installedSkillCommand
+  ) {
     return { kind: "continue" };
   }
 
@@ -278,5 +295,35 @@ export async function handleElectronPromptCommand(options: {
     return { kind: "handled" };
   }
 
-  return { kind: "continue" };
+  if (result.kind === "rewrite") {
+    return {
+      kind: "continue",
+      effectivePrompt: result.prompt,
+      ...(result.attachments?.length
+        ? { effectivePromptAttachments: result.attachments }
+        : {}),
+      ...(result.installedSkillExecution?.allowedTools?.length
+        ? { allowedTools: result.installedSkillExecution.allowedTools }
+        : result.allowedTools?.length
+          ? { allowedTools: result.allowedTools }
+          : {}),
+      ...(result.installedSkillExecution?.modelOverride
+        ? { modelOverride: result.installedSkillExecution.modelOverride }
+        : result.modelOverride
+          ? { modelOverride: result.modelOverride }
+          : {}),
+      ...(result.installedSkillExecution?.effortOverride
+        ? { effortOverride: result.installedSkillExecution.effortOverride }
+        : result.effortOverride
+          ? { effortOverride: result.effortOverride }
+          : {}),
+      ...(result.installedSkillExecution?.hooks?.length
+        ? { installedSkillHooks: result.installedSkillExecution.hooks }
+        : result.installedSkillHooks?.length
+          ? { installedSkillHooks: result.installedSkillHooks }
+          : {}),
+    };
+  }
+
+  return result;
 }

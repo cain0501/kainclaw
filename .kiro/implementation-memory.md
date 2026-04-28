@@ -4,9 +4,11 @@
 
 - 2026-04-28 installed-skills implementation memory:
   - Primary installed-skill roots are now `~/.kainclaw/skills` and `.kainclaw/skills`, with Claude roots kept as compatibility-only readers.
+  - The installer MVP now lives on the `/skills` command surface: `/skills list`, `/skills install <source>`, and `/skills remove <skill-id>` write only to the primary KainClaw roots, while `~/.claude/skills` remains read-only compatibility input.
   - The installed-skills execution path now covers argument substitution, `allowed-tools`, model/effort overrides, `context=fork`, and explicit shell metadata handling.
   - Installed-skill hooks now execute in KainClaw for prompt / command / http / agent definitions, support matcher filtering for tool events, and persist as session-scoped hooks for the active conversation.
   - Electron prompt handling now reuses the same conversation-scoped installed-skill hook store, so follow-up desktop prompts inherit hooks registered by earlier slash-skill invocations.
+  - Electron prompt handling now also carries installed-skill slash rewrites all the way into the live prompt execution lane. Do not accept a state where `/commands` can discover an installed skill but typing `/<skill>` still falls through to plain chat.
   - Installed-skill command rewrites now collapse into a single `installedSkillExecution` plan object that carries prompt text, tool filters, model/effort overrides, fork context, and per-invocation hooks through prompt preparation and execution.
   - KainClaw now exposes a model-visible installed-skill registry through the workspace system prompt and a `SkillTool` entrypoint for installed skills whose runtime semantics can already be represented safely. The tool loads the expanded installed-skill prompt and enforces a model-side gate for `disable-model-invocation` plus the remaining advanced metadata that the current runtime cannot honor safely.
   - The model-side `SkillTool` path now also applies installed-skill `allowed-tools` by shrinking the provider-visible tool payload for the rest of the current agent run after a skill is loaded.
@@ -14,8 +16,11 @@
   - Model-visible installed skills can now also register hooks through the same conversation-scoped installed-skill hook store used by slash execution. Those hooks are applied immediately to later tool calls in the same model run and continue to persist for later prompts in the same conversation.
   - Model-visible installed skills can now also apply per-skill `model` / `effort` overrides by rebuilding the active provider/runtime state for the rest of the current run, or by applying the override only inside the fork when the skill runs with `context=fork`.
   - Model-visible installed skills now also honor agent-hook-specific `agentModel` overrides by rebuilding the provider only for the hook sub-run, matching the existing prompt-side installed-skill hook behavior closely without introducing a second hook runtime.
-  - The installed-skills parity line is now effectively closed for the current KainClaw architecture; any remaining work is follow-on polish or broader ecosystem integration rather than a missing core runtime semantic.
-  - Current automated baseline after this slice: `153` test files, `1134` tests passed.
+  - Installed command hooks now preserve `skillRoot`, accept official matcher aliases (`Bash`, `Edit`, `Write`) against KainClaw tools, pass the official stdin/environment payload (`tool_input`, `CLAUDE_PLUGIN_DATA`, `CLAUDE_SKILL_DIR`) to hook scripts, and honor `permissionDecision: ask|deny` instead of relying only on exit codes.
+  - Electron now carries a targeted official-skill compatibility lane for `freeze` / `unfreeze`: the desktop shell asks for the directory path in-chat, writes the active boundary to `CLAUDE_PLUGIN_DATA` / `~/.gstack/freeze-dir.txt`, and clears that state on `/unfreeze`.
+  - Dangerous commands that have already been confirmed through an installed-skill hook now receive a one-shot pass-through for the current `run_command` invocation. Without that override, `/careful` can warn correctly but the host allowlist will still hard-block the confirmed command and break Claude parity.
+  - The right success bar for official-skill parity is now: discovery, slash execution, hook persistence, compat state file semantics, and the real Electron runtime behavior of representative official skills (`freeze`, `careful`). Do not mark parity closed just because the registry or model-side `SkillTool` exists.
+  - Current automated baseline after this slice: `154` test files, `1143` tests passed.
 
 - 硬规则（用户明确设定）：
   - 只要功能已经在本地 Claude 源码存在，实施和调试都必须先沿着 Claude 的源码链路做端到端复刻，再做 KainClaw 宿主适配。

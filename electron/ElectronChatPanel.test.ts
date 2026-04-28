@@ -1,5 +1,5 @@
 import { execFile } from "node:child_process";
-import { mkdir, mkdtemp, rm } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { promisify } from "node:util";
@@ -234,6 +234,8 @@ describe("ElectronChatPanel session lifecycle", () => {
     await Promise.all(
       tempDirs.splice(0).map(dir => rm(dir, { recursive: true, force: true })),
     );
+    delete process.env.CLAUDE_CONFIG_HOME;
+    delete process.env.CLAUDE_PLUGIN_DATA;
     mockedBuiltinToolDefinitions.length = 0;
     vi.unstubAllGlobals();
     vi.clearAllMocks();
@@ -1708,6 +1710,79 @@ describe("ElectronChatPanel session lifecycle", () => {
     const messages = await harness.sessions.loadMessages(session.id);
     expect(messages.map(message => message.content)).toContain("/compact");
     expect(messages.map(message => message.content)).toContain("Context compacted.");
+  });
+
+  it("handles /freeze through the Electron installed-skill compatibility path and writes the official freeze state file", async () => {
+    const harness = await createHarness();
+    const claudeHome = await mkdtemp(path.join(os.tmpdir(), "claude-freeze-home-"));
+    const pluginDataDir = await mkdtemp(path.join(os.tmpdir(), "claude-freeze-state-"));
+    const workspaceRoot = await mkdtemp(path.join(os.tmpdir(), "freeze-compat-workspace-"));
+    tempDirs.push(harness.storagePath, claudeHome, pluginDataDir, workspaceRoot);
+    process.env.CLAUDE_CONFIG_HOME = claudeHome;
+    process.env.CLAUDE_PLUGIN_DATA = pluginDataDir;
+
+    const freezeSkillDir = path.join(claudeHome, "skills", "freeze");
+    await mkdir(freezeSkillDir, { recursive: true });
+    await writeFile(
+      path.join(freezeSkillDir, "SKILL.md"),
+      `---
+name: freeze
+description: Restrict edits to one directory.
+allowed-tools:
+  - Bash
+  - Read
+  - AskUserQuestion
+hooks:
+  PreToolUse:
+    - matcher: "Edit"
+      hooks:
+        - type: command
+          command: "bash \${CLAUDE_SKILL_DIR}/bin/check-freeze.sh"
+---
+
+Freeze skill body.
+`,
+      "utf8",
+    );
+
+    const allowedDir = path.join(workspaceRoot, ".tmp", "freeze-allowed");
+    await mkdir(allowedDir, { recursive: true });
+
+    await harness.settings.setOnboardingDone(true);
+    await harness.settings.setWorkspaceRoot(workspaceRoot);
+    await harness.panel.handleMessage({ type: "ready" });
+
+    await harness.panel.handleMessage({
+      type: "sendPrompt",
+      prompt: "/freeze",
+    });
+
+    const afterFreezePrompt = harness.rendererPayloads
+      .filter(payload => (payload as { type?: string }).type === "state")
+      .at(-1) as { messages: Array<{ content: string }> };
+    expect(afterFreezePrompt.messages.at(-1)?.content).toContain(
+      "Please type the directory path you want to lock edits to:",
+    );
+
+    await harness.panel.handleMessage({
+      type: "sendPrompt",
+      prompt: allowedDir,
+    });
+
+    const freezeFileContent = await readFile(
+      path.join(pluginDataDir, "freeze-dir.txt"),
+      "utf8",
+    );
+    expect(freezeFileContent.toLowerCase()).toContain(
+      allowedDir.toLowerCase(),
+    );
+
+    const finalStatePayload = harness.rendererPayloads
+      .filter(payload => (payload as { type?: string }).type === "state")
+      .at(-1) as { messages: Array<{ content: string }> };
+    expect(finalStatePayload.messages.at(-1)?.content).toContain(
+      "Freeze boundary set:",
+    );
   });
 
   it("keeps the visible Electron transcript intact when /compact rewrites model history", async () => {

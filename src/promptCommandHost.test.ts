@@ -25,6 +25,7 @@ afterEach(async () => {
     tempDirs.splice(0).map(dir => fs.rm(dir, { recursive: true, force: true })),
   );
   delete process.env.CLAUDE_CONFIG_HOME;
+  delete process.env.KAINCLAW_CONFIG_HOME;
 });
 
 describe("promptCommandHost", () => {
@@ -347,6 +348,136 @@ context: fork
     expect(detailResult).toContain("Allowed tools: Bash, Read");
     expect(detailResult).toContain("Disable model invocation: yes");
     expect(detailResult).toContain("Context: fork");
+  });
+
+  it("installs a local skill through /skills install and exposes it to /skills, /commands, and slash execution immediately", async () => {
+    const kainclawHome = await fs.mkdtemp(path.join(os.tmpdir(), "cain-kainclaw-home-"));
+    const workspaceRoot = await fs.mkdtemp(path.join(os.tmpdir(), "cain-skill-workspace-"));
+    const sourceRoot = await fs.mkdtemp(path.join(os.tmpdir(), "cain-skill-source-"));
+    tempDirs.push(kainclawHome, workspaceRoot, sourceRoot);
+    process.env.KAINCLAW_CONFIG_HOME = kainclawHome;
+
+    const sourceSkillDir = path.join(sourceRoot, "Browse QA");
+    await fs.mkdir(sourceSkillDir, { recursive: true });
+    await fs.writeFile(
+      path.join(sourceSkillDir, "SKILL.md"),
+      `---
+name: Browse QA
+description: |
+  Open a local QA browser helper.
+allowed-tools:
+  - Read
+---
+
+Target: $ARGUMENTS
+`,
+      "utf8",
+    );
+
+    const installResult = await handleLocalPromptCommand({
+      prompt: `/skills install "${sourceSkillDir}"`,
+      config: providerConfig,
+      workspaceRoot,
+      currentEffortLevel: "high",
+      setEffortLevel: async () => undefined,
+      currentFastMode: false,
+      setFastMode: async () => undefined,
+      setActiveProviderModel: async () => undefined,
+      refreshWorkspaceStatus: () => undefined,
+    });
+
+    expect(installResult).toContain("Installed skill: browse-qa");
+    expect(installResult).toContain("Visible now: yes");
+    expect(installResult).toContain("MVP source support: local directories or direct SKILL.md paths only.");
+
+    const skillsResult = await handleLocalPromptCommand({
+      prompt: "/skills browse-qa",
+      config: providerConfig,
+      workspaceRoot,
+      currentEffortLevel: "high",
+      setEffortLevel: async () => undefined,
+      currentFastMode: false,
+      setFastMode: async () => undefined,
+      setActiveProviderModel: async () => undefined,
+      refreshWorkspaceStatus: () => undefined,
+    });
+
+    expect(skillsResult).toContain("Source: installed-project");
+    expect(skillsResult).toContain("Skill: Browse QA");
+
+    const commandsResult = await handleLocalPromptCommand({
+      prompt: "/commands browse-qa",
+      config: providerConfig,
+      workspaceRoot,
+      currentEffortLevel: "high",
+      setEffortLevel: async () => undefined,
+      currentFastMode: false,
+      setFastMode: async () => undefined,
+      setActiveProviderModel: async () => undefined,
+      refreshWorkspaceStatus: () => undefined,
+    });
+
+    expect(commandsResult).toContain("Command: /browse-qa");
+    expect(commandsResult).toContain("Source: installed-project");
+
+    const listResult = await handleLocalPromptCommand({
+      prompt: "/skills list",
+      config: providerConfig,
+      workspaceRoot,
+      currentEffortLevel: "high",
+      setEffortLevel: async () => undefined,
+      currentFastMode: false,
+      setFastMode: async () => undefined,
+      setActiveProviderModel: async () => undefined,
+      refreshWorkspaceStatus: () => undefined,
+    });
+
+    expect(listResult).toContain("Installed skill targets:");
+    expect(listResult).toContain("browse-qa: Open a local QA browser helper.");
+
+    const rewriteResult = await runPromptCommandChain({
+      prompt: "/browse-qa https://example.com",
+      config: providerConfig,
+      workspaceRoot,
+      envMap: {},
+      runtime: {},
+      tools: [],
+      runtimeOptions: {},
+      effortLevel: "high",
+      tryHandleLocalCommand: async () => null,
+      tryHandlePlanModeCommand: async () => null,
+      handleCompactCommand: async () => false,
+      handleReviewCommand: async () => false,
+      handleUltrareviewCommand: async () => false,
+      handleUltraverifyCommand: async () => false,
+      handleVerificationCommand: async () => false,
+    });
+
+    expect(rewriteResult.kind).toBe("rewrite");
+    if (rewriteResult.kind === "rewrite") {
+      expect(rewriteResult.prompt).toContain("Target: https://example.com");
+      expect(rewriteResult.installedSkillExecution).toMatchObject({
+        allowedTools: ["read_file"],
+        skill: expect.objectContaining({
+          id: "browse-qa",
+          entrypoint: "/browse-qa",
+        }),
+      });
+    }
+
+    const removeResult = await handleLocalPromptCommand({
+      prompt: "/skills remove browse-qa",
+      config: providerConfig,
+      workspaceRoot,
+      currentEffortLevel: "high",
+      setEffortLevel: async () => undefined,
+      currentFastMode: false,
+      setFastMode: async () => undefined,
+      setActiveProviderModel: async () => undefined,
+      refreshWorkspaceStatus: () => undefined,
+    });
+
+    expect(removeResult).toContain("Removed installed skill: browse-qa");
   });
 
   it("lists custom skills from workspace config and shows custom skill detail", async () => {

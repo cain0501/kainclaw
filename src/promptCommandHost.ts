@@ -40,6 +40,13 @@ import {
   loadInstalledSkills,
   type InstalledSkillExecutionPlan,
 } from "./installedSkillsRegistry";
+import {
+  formatInstalledSkillsList,
+  installSkillFromLocalPath,
+  removeInstalledSkill,
+  verifyInstalledSkillVisible,
+  type InstalledSkillInstallScope,
+} from "./installedSkillsInstaller";
 import { getBuiltInSkill, listBuiltInSkills } from "./skillsRegistry";
 import type { SkillStore } from "./skills/skillStore";
 import type { ProfileStore } from "./userModel/profileStore";
@@ -124,7 +131,7 @@ const REGISTERED_PROMPT_SLASH_COMMANDS: RegisteredPromptSlashCommand[] = [
   },
   {
     name: "/skills",
-    description: "List built-in skills available in this shell, or inspect one by id.",
+    description: "List, inspect, install, or remove skills available in this shell.",
     stage: "local",
   },
   {
@@ -365,12 +372,21 @@ async function buildSkillsHelp(
   workspaceRoot?: string,
   skillStore?: SkillStore,
 ): Promise<string> {
-  const normalizedArgs = args.trim().toLowerCase();
+  const trimmedArgs = args.trim();
+  const normalizedArgs = trimmedArgs.toLowerCase();
   const customSkills = workspaceRoot
     ? await loadCustomSkills(workspaceRoot)
     : [];
   const installedSkills = await loadInstalledSkills(workspaceRoot);
   const userSkills = skillStore ? await skillStore.list() : [];
+
+  const skillsCommandReply = await tryHandleSkillsCommand({
+    args: trimmedArgs,
+    workspaceRoot,
+  });
+  if (skillsCommandReply) {
+    return skillsCommandReply;
+  }
 
   if (!normalizedArgs) {
     const lines = [
@@ -459,6 +475,99 @@ async function buildSkillsHelp(
   }
 
   return `Unknown skill "${normalizedArgs}". Use /skills to list available skills.`;
+}
+
+function parseSkillsSubcommand(args: string): {
+  action: "list" | "install" | "remove";
+  scope?: InstalledSkillInstallScope;
+  value: string;
+} | null {
+  const trimmed = args.trim();
+  if (!trimmed) {
+    return null;
+  }
+
+  const [head, ...rest] = trimmed.split(/\s+/);
+  const action = head?.toLowerCase();
+  if (action !== "list" && action !== "install" && action !== "remove") {
+    return null;
+  }
+
+  let scope: InstalledSkillInstallScope | undefined;
+  const valueParts: string[] = [];
+
+  for (let index = 0; index < rest.length; index += 1) {
+    const part = rest[index]!;
+    if (part === "--scope") {
+      const next = rest[index + 1]?.toLowerCase();
+      if (next === "project" || next === "user") {
+        scope = next;
+        index += 1;
+        continue;
+      }
+      throw new Error("Usage: `--scope project` or `--scope user`");
+    }
+
+    valueParts.push(part);
+  }
+
+  return {
+    action,
+    scope,
+    value: valueParts.join(" ").trim(),
+  };
+}
+
+async function tryHandleSkillsCommand(options: {
+  args: string;
+  workspaceRoot?: string;
+}): Promise<string | null> {
+  const parsed = parseSkillsSubcommand(options.args);
+  if (!parsed) {
+    return null;
+  }
+
+  if (parsed.action === "list") {
+    return formatInstalledSkillsList(options.workspaceRoot);
+  }
+
+  if (parsed.action === "install") {
+    const install = await installSkillFromLocalPath({
+      source: parsed.value,
+      scope: parsed.scope,
+      workspaceRoot: options.workspaceRoot,
+    });
+    const visible = await verifyInstalledSkillVisible({
+      skillId: install.installedId,
+      workspaceRoot: options.workspaceRoot,
+    });
+
+    return [
+      `Installed skill: ${install.installedId}`,
+      `Scope: ${install.scope}`,
+      `Source: ${install.sourcePath}`,
+      `Target: ${install.targetPath}`,
+      `Visible now: ${visible ? "yes" : "no"}`,
+      "",
+      "Verify with:",
+      `- /skills ${install.installedId}`,
+      `- /commands ${install.installedId}`,
+      `- /${install.installedId}`,
+      "",
+      "MVP source support: local directories or direct SKILL.md paths only.",
+    ].join("\n");
+  }
+
+  const removed = await removeInstalledSkill({
+    skillId: parsed.value,
+    scope: parsed.scope,
+    workspaceRoot: options.workspaceRoot,
+  });
+  return [
+    `Removed installed skill: ${removed.removedId}`,
+    `Scope: ${removed.scope}`,
+    `Path: ${removed.removedPath}`,
+  ].join("\n");
 }
 
 async function buildHooksHelp(
