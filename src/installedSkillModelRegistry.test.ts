@@ -48,7 +48,7 @@ describe("installedSkillModelRegistry", () => {
         ...baseSkill,
         executionContext: "fork",
       }),
-    ).toBe(false);
+    ).toBe(true);
     expect(
       isModelInvocableInstalledSkill({
         ...baseSkill,
@@ -128,7 +128,10 @@ context: fork
 
     const skills = await loadModelInvocableInstalledSkills(workspaceRoot);
 
-    expect(skills.map(skill => skill.id)).toEqual(["simple-skill"]);
+    expect(skills.map(skill => skill.id)).toEqual([
+      "forked-skill",
+      "simple-skill",
+    ]);
   });
 
   it("builds an installed-skills system prompt section for model-visible skills", () => {
@@ -151,6 +154,7 @@ context: fork
     expect(prompt).toContain("base prompt");
     expect(prompt).toContain("# Installed Skills");
     expect(prompt).toContain("SkillTool");
+    expect(prompt).toContain("isolated forked agent context");
     expect(prompt).toContain("- simple-skill: Simple model-invocable skill. | When to use: When a simple helper fits the task.");
   });
 });

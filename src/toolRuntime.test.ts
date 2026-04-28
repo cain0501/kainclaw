@@ -179,6 +179,52 @@ disable-model-invocation: true
       'Installed skill "blocked-skill" is not available for model invocation in this workspace.',
     );
   });
+
+  it("SkillTool returns a fork request for installed skills with context=fork", async () => {
+    const kainclawHome = await fs.mkdtemp(path.join(os.tmpdir(), "cain-kainclaw-home-"));
+    const claudeHome = await fs.mkdtemp(path.join(os.tmpdir(), "cain-claude-home-"));
+    const workspaceRoot = await fs.mkdtemp(path.join(os.tmpdir(), "cain-skill-workspace-"));
+    tempDirs.push(kainclawHome, claudeHome, workspaceRoot);
+    process.env.KAINCLAW_CONFIG_HOME = kainclawHome;
+    process.env.CLAUDE_CONFIG_HOME = claudeHome;
+
+    const skillDir = path.join(kainclawHome, "skills", "forked-skill");
+    await fs.mkdir(skillDir, { recursive: true });
+    await fs.writeFile(
+      path.join(skillDir, "SKILL.md"),
+      `---
+name: forked-skill
+description: Forked helper
+context: fork
+allowed-tools:
+  - Read
+---
+
+Inspect the workspace carefully.
+`,
+      "utf8",
+    );
+
+    const result = await executeTool(
+      "SkillTool",
+      {
+        skill: "forked-skill",
+      },
+      { workspaceRoot },
+    );
+
+    expect(result.summary).toBe(
+      "Loaded installed skill forked-skill for forked execution",
+    );
+    expect(result.forkedSkillRunRequest).toEqual({
+      skillId: "forked-skill",
+      prompt: expect.stringContaining("Inspect the workspace carefully."),
+      allowedToolNames: ["read_file"],
+    });
+    expect(result.content).toContain(
+      'Loaded installed skill "/forked-skill" for isolated forked execution.',
+    );
+  });
 });
 
 describe("toolRuntime background task semantics", () => {

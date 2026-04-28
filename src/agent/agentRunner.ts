@@ -1,6 +1,10 @@
 import { randomUUID } from "node:crypto";
 import type { IProviderAdapter, NormalizedMessage } from "./providers/IProviderAdapter";
-import type { ToolDefinition, ToolContext } from "../toolRuntime";
+import type {
+  ToolDefinition,
+  ToolContext,
+  ToolExecutionResult,
+} from "../toolRuntime";
 import { executeTool, getOpenAIToolsPayload } from "../toolRuntime";
 import type { SwarmCoordinator } from "./swarm/SwarmCoordinator";
 
@@ -120,6 +124,37 @@ export interface AgentRunnerOptions {
   swarm?: SwarmCoordinator;
 }
 
+async function runForkedInstalledSkill(options: {
+  provider: IProviderAdapter;
+  historyBeforeToolCall: NormalizedMessage[];
+  toolContext: ToolContext;
+  allTools: ToolDefinition[];
+  request: NonNullable<
+    Awaited<ReturnType<typeof executeTool>>["forkedSkillRunRequest"]
+  >;
+}): Promise<string> {
+  const forkTools = options.request.allowedToolNames?.length
+    ? options.allTools.filter(tool =>
+        options.request.allowedToolNames?.includes(tool.name),
+      )
+    : options.allTools;
+
+  return runAgent(
+    [
+      ...options.historyBeforeToolCall,
+      {
+        role: "user",
+        content: options.request.prompt,
+      },
+    ],
+    {
+      provider: options.provider,
+      tools: forkTools,
+      toolContext: options.toolContext,
+    },
+  );
+}
+
 /**
  * Shared agent execution loop.
  * The main coordinator uses this directly.
@@ -193,7 +228,7 @@ export async function runAgent(
       try {
         await beforeToolCall?.(toolCall.name, toolCall.input, toolContext);
         onToolStart?.(toolCall.name, toolCall.input, execId);
-        let result: { summary: string; content: string; allowedToolNames?: string[] };
+        let result: ToolExecutionResult;
 
         if (swarm && ["spawn_agent", "send_message", "wait_for_agents"].includes(toolCall.name)) {
           result = await swarm.executeSwarmTool(toolCall.name, toolCall.input);
@@ -208,8 +243,23 @@ export async function runAgent(
           false,
           toolContext,
         );
-        onToolEnd?.(execId, result.summary, false, result.content);
-        lastToolResultContent = `${result.summary}\n\n${result.content}`;
+        let toolResultSummary = result.summary;
+        let toolResultContent = result.content;
+
+        if (result.forkedSkillRunRequest) {
+          const forkResult = await runForkedInstalledSkill({
+            provider,
+            historyBeforeToolCall: messages.slice(0, -1),
+            toolContext,
+            allTools,
+            request: result.forkedSkillRunRequest,
+          });
+          toolResultSummary = `Installed skill ${result.forkedSkillRunRequest.skillId} completed (forked execution)`;
+          toolResultContent = forkResult;
+        }
+
+        onToolEnd?.(execId, toolResultSummary, false, toolResultContent);
+        lastToolResultContent = `${toolResultSummary}\n\n${toolResultContent}`;
         messages.push({
           role: "tool_result",
           toolCallId: toolCall.id,

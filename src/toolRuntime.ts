@@ -155,6 +155,11 @@ export type ToolExecutionResult = {
   summary: string;
   content: string;
   allowedToolNames?: string[];
+  forkedSkillRunRequest?: {
+    skillId: string;
+    prompt: string;
+    allowedToolNames?: string[];
+  };
 };
 
 export function buildUtf8PowerShellEncodedCommand(command: string): string {
@@ -4082,6 +4087,34 @@ const handlers: Record<string, ToolHandler> = {
       args,
       toolContext: context,
     });
+
+    if (execution.executionContext === "fork") {
+      return {
+        summary: `Loaded installed skill ${skill.id} for forked execution`,
+        ...(execution.allowedTools.length > 0
+          ? {
+              forkedSkillRunRequest: {
+                skillId: skill.id,
+                prompt: execution.prompt,
+                allowedToolNames: execution.allowedTools,
+              },
+            }
+          : {
+              forkedSkillRunRequest: {
+                skillId: skill.id,
+                prompt: execution.prompt,
+              },
+            }),
+        content: [
+          `Loaded installed skill "/${skill.id}" for isolated forked execution.`,
+          "The skill will run in a separate agent context and return its final result here.",
+          "",
+          "<installed_skill>",
+          execution.prompt,
+          "</installed_skill>",
+        ].join("\n"),
+      };
+    }
 
     return {
       summary: `Loaded installed skill ${skill.id}`,

@@ -321,4 +321,100 @@ describe("agentRunner", () => {
       executeSpy.mockRestore();
     }
   });
+
+  it("runs forked installed skills in an isolated recursive agent turn", async () => {
+    const seenMessages: NormalizedMessage[][] = [];
+    const seenTools: unknown[][] = [];
+    let callCount = 0;
+    const provider: IProviderAdapter = {
+      async runStep(messages, tools) {
+        callCount += 1;
+        seenMessages.push(messages.map(message => ({ ...message })));
+        seenTools.push(tools);
+
+        if (callCount === 1) {
+          return {
+            text: "run the forked skill",
+            toolCalls: [{ id: "tool-1", name: "SkillTool", input: { skill: "forked-skill" } }],
+            done: false,
+          };
+        }
+
+        if (callCount === 2) {
+          return {
+            text: "forked skill result",
+            toolCalls: [],
+            done: true,
+          };
+        }
+
+        return {
+          text: "outer finished",
+          toolCalls: [],
+          done: true,
+        };
+      },
+    };
+
+    const toolContext: ToolContext = {
+      workspaceRoot: "E:\\claudecodejingiang\\vscode-extension",
+    };
+
+    const tools: ToolDefinition[] = [
+      {
+        name: "SkillTool",
+        description: "Load installed skills",
+        input_schema: { type: "object", properties: {} },
+      },
+      {
+        name: "read_file",
+        description: "Read a file",
+        input_schema: { type: "object", properties: {} },
+      },
+      {
+        name: "write_file",
+        description: "Write a file",
+        input_schema: { type: "object", properties: {} },
+      },
+    ];
+
+    const executeSpy = vi.spyOn(await import("../toolRuntime.js"), "executeTool").mockResolvedValue({
+      summary: "Loaded installed skill forked-skill for forked execution",
+      content: "fork request",
+      forkedSkillRunRequest: {
+        skillId: "forked-skill",
+        prompt: "Run the forked helper",
+        allowedToolNames: ["read_file"],
+      },
+    });
+
+    try {
+      const result = await runAgent([], {
+        provider,
+        tools,
+        toolContext,
+      });
+
+      expect(result).toBe("outer finished");
+      expect(callCount).toBe(3);
+      expect(seenMessages[1]?.at(-1)).toEqual({
+        role: "user",
+        content: "Run the forked helper",
+      });
+      expect(seenTools[1]).toHaveLength(1);
+      expect(seenTools[1]?.[0]).toMatchObject({
+        type: "function",
+        function: {
+          name: "read_file",
+        },
+      });
+      expect(executeSpy).toHaveBeenCalledWith(
+        "SkillTool",
+        { skill: "forked-skill" },
+        toolContext,
+      );
+    } finally {
+      executeSpy.mockRestore();
+    }
+  });
 });
