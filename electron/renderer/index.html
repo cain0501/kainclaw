@@ -5413,7 +5413,7 @@ function renderQuestionApprovalHtml(approval) {
           <div style="flex:1">
             <div style="font-size:12px;font-weight:600;color:#18181b">Other</div>
             <div style="font-size:11px;color:#71717a;line-height:1.5;margin-top:2px">Type a custom answer.</div>
-            <input id="${otherId}-other-text" type="text" placeholder="Custom answer" value="${escapeHtml(getPendingQuestionOtherText(questionIndex))}" oninput="updatePendingQuestionOtherText(${questionIndex}, this.value)" style="width:100%;margin-top:8px;border:1px solid #e4e4e7;border-radius:6px;padding:8px 10px;font-size:12px;font-family:inherit">
+            <input id="${otherId}-text" type="text" placeholder="Custom answer" value="${escapeHtml(getPendingQuestionOtherText(questionIndex))}" oninput="updatePendingQuestionOtherText(${questionIndex}, this.value)" style="width:100%;margin-top:8px;border:1px solid #e4e4e7;border-radius:6px;padding:8px 10px;font-size:12px;font-family:inherit">
           </div>
         </div>
       </label>
@@ -5469,9 +5469,8 @@ function renderApproval(approval) {
   const diffContent = document.getElementById('approval-diff-content');
   const previewEl = document.getElementById('approval-preview');
   const questionEl = document.getElementById('approval-question');
-  const buttons = Array.from(overlay.querySelectorAll('button'));
-  const cancelBtn = buttons[0];
-  const confirmBtn = buttons[1];
+  const cancelBtn = overlay.querySelector('button[onclick="rejectApproval()"]');
+  const confirmBtn = overlay.querySelector('button[onclick="approveApproval()"]');
 
   if (!approval) {
     currentPendingQuestionRequest = null;
