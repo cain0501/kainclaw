@@ -6,6 +6,7 @@
   - Primary installed-skill roots are now `~/.kainclaw/skills` and `.kainclaw/skills`, with Claude roots kept as compatibility-only readers.
   - The installed-skills execution path now covers argument substitution, `allowed-tools`, model/effort overrides, `context=fork`, and explicit shell metadata handling.
   - Installed-skill hooks now execute in KainClaw for prompt / command / http / agent definitions, support matcher filtering for tool events, and persist as session-scoped hooks for the active conversation.
+  - Electron prompt handling now reuses the same conversation-scoped installed-skill hook store, so follow-up desktop prompts inherit hooks registered by earlier slash-skill invocations.
   - Remaining meaningful gaps are narrower now: no true model-side `disable-model-invocation` gate exists yet because KainClaw still lacks Claude's model-side `SkillTool` entrypoint, and fuller command-object parity remains outstanding.
   - Current automated baseline after this slice: `152` test files, `1121` tests passed.
 
@@ -30,8 +31,8 @@
   - `npm run build:electron`
   - `npm run check:electron`
 - 当前验证基线：
-  - `151` 个测试文件
-  - `1085` 个测试通过
+  - `152` 个测试文件
+  - `1121` 个测试通过
 - hosted review / RemoteAgentTask 适配规则：
   - `/ultrareview` 这类 Claude 已覆盖的能力，生命周期和用户语义要先对齐 Claude 源码。
   - 如果本地没有 Claude 的云端 CCR / RemoteAgentTask backend，允许只对传输层做薄适配；当前适配方式是 detached `Claude CLI` review worker，而不是另起一套 KainClaw review 语义。
@@ -133,7 +134,7 @@
 
 ### 3. 验证基线登记
 
-- 当前登记基线：`151` 个测试文件，`1085` 个测试通过。
+- 当前登记基线：`152` 个测试文件，`1121` 个测试通过。
 - 当前登记通过命令：
   - `npm test`
   - `npm run check`

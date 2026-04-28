@@ -7,6 +7,7 @@
   - Installed-skill prompt execution now covers argument substitution, `allowed-tools`, model/effort overrides, `context=fork`, and shell metadata.
   - Installed-skill shell expansion now supports the Claude-style `!` / ` ```! ` patterns through the existing PowerShell-backed execution path; `shell: bash` is rejected explicitly instead of silently falling back.
   - Installed-skill hooks now support prompt / command / http / agent definitions, tool-event matcher filtering, and session-scoped persistence for the active conversation.
+  - The Electron desktop shell now also preserves those installed-skill hooks across follow-up prompts in the same conversation, instead of dropping them after the initial slash-command invocation.
   - Remaining meaningful gaps on the installed-skills line: no true model-side `SkillTool` gate for `disable-model-invocation` yet, and fuller Claude command-object parity is still missing.
   - Current automated baseline after this slice: `152` test files, `1121` tests passed.
 
@@ -16,8 +17,8 @@
   - `npm run build`
   - `npm run build:electron`
   - `npm run check:electron`
-  - `151` 个测试文件
-  - `1085` 个测试通过
+  - `152` 个测试文件
+  - `1121` 个测试通过
 - 最近几组 `extension.ts` 宿主减债也已同步收口：
   - `extensionPromptRequestParts`
   - `sessionPanelActions`

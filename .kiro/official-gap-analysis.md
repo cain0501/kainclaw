@@ -6,6 +6,7 @@
   - Installed-skill discovery now prefers `~/.kainclaw/skills` and `.kainclaw/skills`, with `~/.claude/skills` and `.claude/skills` retained as compatibility roots.
   - Installed-skill execution now covers argument substitution, `allowed-tools`, model/effort overrides, `context=fork`, shell metadata, and explicit session-scoped hook persistence.
   - Installed-skill hooks now support prompt / command / http / agent definitions and matcher filtering for tool events.
+  - Electron now matches the VS Code host on session-scoped installed-skill hook carry-over, rather than treating each desktop prompt turn as hook-isolated after the original slash invocation.
   - Remaining material parity gaps on this line are now mainly the lack of a true model-side `disable-model-invocation` gate and fuller Claude command-object parity.
   - Current automated baseline after this slice: `152` test files, `1121` tests passed.
 
@@ -16,8 +17,8 @@
   - `npm run build:electron`
   - `npm run check:electron`
 - 当前自动化基线：
-  - `151` 个测试文件
-  - `1085` 个测试通过
+  - `152` 个测试文件
+  - `1121` 个测试通过
 - 最近几组 `extension.ts` 宿主减债也已同步收口：
   - `extensionPromptRequestParts`
   - `sessionPanelActions`
