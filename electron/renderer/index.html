@@ -969,10 +969,65 @@ function applyUiLanguageState(language, dialogStrings) {
     ...(dialogStrings || {}),
   };
   document.documentElement.lang = appState.uiLanguage === 'en-US' ? 'en' : 'zh-CN';
+  localizeMcpSurface();
 }
 
 function dialogText(key) {
   return currentDialogStrings[key] || DEFAULT_DIALOG_STRINGS[key] || '';
+}
+
+function isEnglishUi() {
+  return appState.uiLanguage === 'en-US';
+}
+
+function getMcpStrings() {
+  return isEnglishUi()
+    ? {
+        title: 'MCP Servers',
+        refreshTitle: 'Refresh',
+        workspace: 'Workspace',
+        workspaceUnset: 'Not set',
+        pickFolder: 'Choose folder',
+        configNote: 'MCP servers read configuration from the workspace root .mcp.json file',
+        empty: 'No MCP servers are configured yet',
+        emptyHint: 'Create .mcp.json in the workspace root and choose a folder',
+        connected: (count) => `Connected (${count || 0} tools)`,
+        auth: 'Authentication required',
+        error: 'Error',
+      }
+    : {
+        title: 'MCP Servers',
+        refreshTitle: '刷新',
+        workspace: '工作区',
+        workspaceUnset: '未设置',
+        pickFolder: '选择文件夹',
+        configNote: 'MCP 服务器从工作区根目录的 .mcp.json 读取配置',
+        empty: '尚未配置 MCP 服务器',
+        emptyHint: '在工作区根目录创建 .mcp.json 并选择文件夹',
+        connected: (count) => `已连接 (${count || 0} 工具)`,
+        auth: '需要认证',
+        error: '错误',
+      };
+}
+
+function localizeMcpSurface() {
+  const strings = getMcpStrings();
+  const title = document.querySelector('#page-mcp .ptop-title');
+  if (title) title.textContent = strings.title;
+  const refreshBtn = document.querySelector('#page-mcp button[onclick="refreshMcp()"]');
+  if (refreshBtn) refreshBtn.title = strings.refreshTitle;
+  const workspaceLabel = document.querySelector('#page-mcp div[style*="letter-spacing:.05em"]');
+  if (workspaceLabel) workspaceLabel.textContent = strings.workspace;
+  const workspacePath = document.getElementById('mcp-workspace-path');
+  if (workspacePath && (!workspacePath.textContent || /未设置/i.test(workspacePath.textContent) || /Not set/i.test(workspacePath.textContent))) {
+    workspacePath.textContent = strings.workspaceUnset;
+  }
+  const pickBtn = document.querySelector('#page-mcp button[onclick="pickWorkspace()"]');
+  if (pickBtn) pickBtn.textContent = strings.pickFolder;
+  const note = document.querySelector('#page-mcp div[style*="font-size:11px;color:#a1a1aa;margin-top:6px"]');
+  if (note) note.innerHTML = `${strings.configNote} <code style="background:#e4e4e7;padding:1px 4px;border-radius:3px">.mcp.json</code>`;
+  const empty = document.getElementById('mcp-empty');
+  if (empty) empty.innerHTML = `${strings.empty}<br><span style="font-size:11px">${strings.emptyHint}</span>`;
 }
 
 let currentPendingQuestionRequest = null;
@@ -2936,7 +2991,9 @@ function openPromptLibraryFromEditor() {
 }
 
 function showEditImageHint() {
-  alert('编辑图片请先在聊天流中的某张结果图上点击“编辑”。');
+  alert(isEnglishUi()
+    ? 'To edit an image, first click "Edit" on one of the result images in the chat transcript.'
+    : '编辑图片请先在聊天流中的某张结果图上点击“编辑”。');
 }
 
 function openMaterialSearchFromChat() {
@@ -5097,19 +5154,54 @@ function localizeSettingsSurface(currentLanguage, settingsStrings, state) {
   const languageSection = sections[0];
   const chatSection = sections[1];
   const imageSection = sections[2];
+  const advancedTab = document.getElementById('sc-adv');
+
+  const setNavLabel = (id, label) => {
+    const node = document.getElementById(id);
+    if (!node || !node.lastChild) return;
+    node.lastChild.textContent = ' ' + label;
+  };
+
+  setNavLabel('snav-provider', currentLanguage === 'en-US' ? 'Providers & models' : '??? & ??');
+  setNavLabel('snav-appear', currentLanguage === 'en-US' ? 'Appearance' : '??');
+  setNavLabel('snav-lic', 'License');
+  setNavLabel('snav-adv', currentLanguage === 'en-US' ? 'Advanced' : '??');
+
+  const settingsPageTitle = document.querySelector('#page-settings > div > div:first-child span');
+  if (settingsPageTitle) {
+    settingsPageTitle.textContent = currentLanguage === 'en-US' ? 'Settings' : '??';
+  }
+  const backToChat = document.querySelector('#page-settings > div > div:last-child');
+  if (backToChat && backToChat.lastChild) {
+    backToChat.lastChild.textContent = currentLanguage === 'en-US' ? ' Back to chat' : ' ????';
+  }
 
   if (languageSection) {
+    if (advancedTab && !advancedTab.contains(languageSection)) {
+      languageSection.style.margin = '0 0 16px 0';
+      const resetCard = advancedTab.querySelector('div[style*="border:1px solid #fee2e2"]');
+      advancedTab.insertBefore(languageSection, resetCard || null);
+    }
     const title = languageSection.querySelector('div[style*="font-size:16px;font-weight:700"]');
     const desc = languageSection.querySelector('div[style*="font-size:12px;color:#71717a"]');
     if (title) title.textContent = settingsStrings.interfaceLanguageTitle;
     if (desc) desc.textContent = settingsStrings.interfaceLanguageDescription;
   }
 
+  const providerHeader = document.querySelector('#sc-provider > div > span');
+  if (providerHeader) providerHeader.textContent = currentLanguage === 'en-US' ? 'Providers & models' : '??? & ??';
+  const appearanceHeader = document.querySelector('#sc-appear > div:first-child');
+  if (appearanceHeader) appearanceHeader.textContent = currentLanguage === 'en-US' ? 'Appearance' : '??';
+  const advancedHeader = document.querySelector('#sc-adv > div:first-child');
+  if (advancedHeader) advancedHeader.textContent = currentLanguage === 'en-US' ? 'Advanced' : '??';
+  const licenseHeader = document.querySelector('#sc-lic > div:first-child');
+  if (licenseHeader) licenseHeader.textContent = 'License';
+
   if (chatSection) {
     const addProviderBtn = chatSection.querySelector('button[onclick="showAddProvider()"]');
     if (addProviderBtn) addProviderBtn.textContent = settingsStrings.addProvider;
-    const title = addProviderBtn?.parentElement?.querySelector('div[style*="font-size:17px;font-weight:700"]');
-    const desc = addProviderBtn?.parentElement?.querySelector('div[style*="font-size:12px;color:#71717a;margin-top:4px"]');
+    const title = addProviderBtn && addProviderBtn.parentElement ? addProviderBtn.parentElement.querySelector('div[style*="font-size:17px;font-weight:700"]') : null;
+    const desc = addProviderBtn && addProviderBtn.parentElement ? addProviderBtn.parentElement.querySelector('div[style*="font-size:12px;color:#71717a;margin-top:4px"]') : null;
     if (title) title.textContent = settingsStrings.chatModelsTitle;
     if (desc) desc.textContent = settingsStrings.chatModelsDescription;
     if (state.providers.length === 0) {
@@ -5123,7 +5215,7 @@ function localizeSettingsSurface(currentLanguage, settingsStrings, state) {
       button.textContent = settingsStrings.use;
     });
     chatSection.querySelectorAll('.badge-green').forEach(badge => {
-      if (badge.textContent?.includes('??') || badge.textContent?.includes('Current')) {
+      if (badge.textContent && !/Key/i.test(badge.textContent)) {
         badge.textContent = settingsStrings.currentInUse;
       }
     });
@@ -5132,24 +5224,24 @@ function localizeSettingsSurface(currentLanguage, settingsStrings, state) {
   const providerFormTitle = document.getElementById('provider-form-title');
   if (providerFormTitle) providerFormTitle.textContent = settingsStrings.addProviderFormTitle;
   const newProvPreset = document.getElementById('new-prov-preset');
-  if (newProvPreset?.previousElementSibling) newProvPreset.previousElementSibling.textContent = settingsStrings.providerType;
+  if (newProvPreset && newProvPreset.previousElementSibling) newProvPreset.previousElementSibling.textContent = settingsStrings.providerType;
   const newProvAlias = document.getElementById('new-prov-alias');
-  if (newProvAlias?.previousElementSibling) newProvAlias.previousElementSibling.textContent = settingsStrings.providerAlias;
+  if (newProvAlias && newProvAlias.previousElementSibling) newProvAlias.previousElementSibling.textContent = settingsStrings.providerAlias;
   if (newProvAlias) newProvAlias.placeholder = settingsStrings.providerAliasPlaceholder;
   const newProvModel = document.getElementById('new-prov-model');
-  if (newProvModel?.previousElementSibling) newProvModel.previousElementSibling.textContent = settingsStrings.providerModel;
+  if (newProvModel && newProvModel.previousElementSibling) newProvModel.previousElementSibling.textContent = settingsStrings.providerModel;
   const newProvUrl = document.getElementById('new-prov-url');
-  if (newProvUrl?.previousElementSibling) newProvUrl.previousElementSibling.textContent = settingsStrings.apiEndpointUrl;
+  if (newProvUrl && newProvUrl.previousElementSibling) newProvUrl.previousElementSibling.textContent = settingsStrings.apiEndpointUrl;
   const newProvKey = document.getElementById('new-prov-key');
-  if (newProvKey?.previousElementSibling) newProvKey.previousElementSibling.textContent = settingsStrings.apiKey;
+  if (newProvKey && newProvKey.previousElementSibling) newProvKey.previousElementSibling.textContent = settingsStrings.apiKey;
   const providerSaveBtn = document.getElementById('provider-form-save-btn');
   if (providerSaveBtn) providerSaveBtn.textContent = settingsStrings.save;
 
   if (imageSection) {
     const addImageBtn = imageSection.querySelector('button[onclick="showAddImageModelForm()"]');
     if (addImageBtn) addImageBtn.textContent = settingsStrings.addImageModel;
-    const title = addImageBtn?.parentElement?.querySelector('div[style*="font-size:17px;font-weight:700"]');
-    const desc = addImageBtn?.parentElement?.querySelector('div[style*="font-size:12px;color:#a07458;margin-top:4px"]');
+    const title = addImageBtn && addImageBtn.parentElement ? addImageBtn.parentElement.querySelector('div[style*="font-size:17px;font-weight:700"]') : null;
+    const desc = addImageBtn && addImageBtn.parentElement ? addImageBtn.parentElement.querySelector('div[style*="font-size:12px;color:#a07458;margin-top:4px"]') : null;
     if (title) title.textContent = settingsStrings.imageModelsTitle;
     if (desc) desc.textContent = settingsStrings.imageModelsDescription;
     imageSection.querySelectorAll('button[onclick^="editImageModelConfig("]').forEach(button => {
@@ -5162,30 +5254,47 @@ function localizeSettingsSurface(currentLanguage, settingsStrings, state) {
       badge.textContent = settingsStrings.currentInUse;
     });
     imageSection.querySelectorAll('.badge-green').forEach(badge => {
-      if (badge.textContent?.includes('Key') || badge.textContent?.includes('??') || badge.textContent?.includes('saved')) {
+      if (badge.textContent && /Key|??|saved/i.test(badge.textContent)) {
         badge.textContent = settingsStrings.imageModelKeySaved;
       }
     });
     imageSection.querySelectorAll('.badge-orange').forEach(badge => {
-      if (badge.textContent?.includes('Key') || badge.textContent?.includes('??') || badge.textContent?.includes('No key')) {
+      if (badge.textContent && /Key|??|No key/i.test(badge.textContent)) {
         badge.textContent = settingsStrings.imageModelKeyMissing;
       }
     });
   }
 
   const imageBaseUrl = document.getElementById('settings-image-baseurl');
-  if (imageBaseUrl?.previousElementSibling) imageBaseUrl.previousElementSibling.textContent = settingsStrings.imageModelEndpoint;
+  if (imageBaseUrl && imageBaseUrl.previousElementSibling) imageBaseUrl.previousElementSibling.textContent = settingsStrings.imageModelEndpoint;
   const imageModel = document.getElementById('settings-image-model');
-  if (imageModel?.previousElementSibling) imageModel.previousElementSibling.textContent = settingsStrings.imageModelName;
+  if (imageModel && imageModel.previousElementSibling) imageModel.previousElementSibling.textContent = settingsStrings.imageModelName;
   const imageAuthMode = document.getElementById('settings-image-authmode');
-  if (imageAuthMode?.previousElementSibling) imageAuthMode.previousElementSibling.textContent = settingsStrings.authMode;
+  if (imageAuthMode && imageAuthMode.previousElementSibling) imageAuthMode.previousElementSibling.textContent = settingsStrings.authMode;
   const imageResponseFormat = document.getElementById('settings-image-responseformat');
-  if (imageResponseFormat?.previousElementSibling) imageResponseFormat.previousElementSibling.textContent = settingsStrings.responseFormat;
+  if (imageResponseFormat && imageResponseFormat.previousElementSibling) imageResponseFormat.previousElementSibling.textContent = settingsStrings.responseFormat;
   const imageApiKey = document.getElementById('settings-image-apikey');
-  if (imageApiKey?.previousElementSibling) imageApiKey.previousElementSibling.textContent = settingsStrings.apiKey;
+  if (imageApiKey && imageApiKey.previousElementSibling) imageApiKey.previousElementSibling.textContent = settingsStrings.apiKey;
   if (imageApiKey) imageApiKey.placeholder = settingsStrings.imageModelApiKeyPlaceholder;
   const imageEditorButtons = document.querySelectorAll('#settings-image-editor .btn-secondary');
   if (imageEditorButtons[0]) imageEditorButtons[0].textContent = editingImageModelId ? settingsStrings.imageModelSaveChanges : settingsStrings.imageModelSave;
+
+  const resetCard = document.querySelector('#sc-adv div[style*="border:1px solid #fee2e2"]');
+  if (resetCard) {
+    const resetTitle = resetCard.querySelector('div[style*="font-size:13px;font-weight:600"]');
+    const resetDesc = resetCard.querySelector('div[style*="font-size:12px;color:#71717a"]');
+    const resetBtn = resetCard.querySelector('button');
+    if (resetTitle) resetTitle.textContent = currentLanguage === 'en-US' ? 'Reset configuration' : '????';
+    if (resetDesc) resetDesc.textContent = currentLanguage === 'en-US'
+      ? 'Clear provider configuration and onboarding state. Conversation history is not affected.'
+      : '?? Provider ??? onboarding ??????????????';
+    if (resetBtn) resetBtn.textContent = currentLanguage === 'en-US' ? 'Reset configuration' : '????';
+  }
+
+  const licenseLabel = document.querySelector('#sc-lic div[style*="font-size:12px;color:#71717a;margin-bottom:5px"]');
+  if (licenseLabel) licenseLabel.textContent = currentLanguage === 'en-US' ? 'Activation key' : '???';
+  const licenseButton = document.querySelector('#sc-lic .btn-red');
+  if (licenseButton) licenseButton.textContent = currentLanguage === 'en-US' ? 'Activate' : '??';
 
   const licWrap = document.getElementById('lic-status-wrap');
   if (licWrap) {
@@ -5759,6 +5868,7 @@ function rejectApproval() {
 function renderMcpServers(servers) {
   const list = document.getElementById('mcp-list');
   const empty = document.getElementById('mcp-empty');
+  const strings = getMcpStrings();
   if (!servers || !servers.length) {
     list.innerHTML = '';
     empty.style.display = '';
@@ -5768,10 +5878,10 @@ function renderMcpServers(servers) {
   list.innerHTML = servers.map(s => {
     const badgeCls = s.state === 'connected' ? 'badge-green' : s.state === 'needs-auth' ? 'badge-yellow' : 'badge-orange';
     const stateText = s.state === 'connected'
-      ? `已连接 (${s.toolCount || 0} 工具)`
+      ? strings.connected(s.toolCount || 0)
       : s.state === 'needs-auth'
-        ? '需要认证'
-        : '错误';
+        ? strings.auth
+        : strings.error;
     return `<div class="list-row" style="flex-direction:column;align-items:stretch;gap:4px">
       <div style="display:flex;align-items:center;gap:8px">
         <div style="flex:1"><div style="font-size:13px;font-weight:600">${escapeHtml(s.name || '')}</div>

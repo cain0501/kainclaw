@@ -26,6 +26,7 @@
   - Electron now has a dedicated parity-test entrypoint for AskUserQuestion: `/debug ask-user-question [single|multi]` triggers the real tool path inside the desktop shell, so multi-question behavior can be regression-tested without waiting for a product feature to emit the right tool call.
   - Electron now also persists a desktop-shell UI language setting and localizes Electron-owned approval / AskUserQuestion dialog copy between Simplified Chinese and English. The new persistence key uses the `kainclaw.*` namespace.
   - The current bilingual scope also covers the Electron `/freeze` prompt, `/debug ask-user-question [single|multi]` prompt payloads, and the most visible settings-page language/model/image-model labels. Full renderer-wide settings-page i18n is still not closed.
+  - The Electron language selector now sits under the Advanced settings section, and the bilingual shell surface also covers MCP-page workspace copy plus the host-side image-edit guidance alert.
   - Installed-skills runtime parity is now broadly usable, but not fully closed: Electron now has a working `AskUserQuestion` compatibility modal, yet the broader official skill UX/setup/product-surface parity still remains open.
   - Current automated baseline after this slice: `154` test files, `1147` tests passed.
 
