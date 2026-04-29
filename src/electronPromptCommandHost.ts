@@ -19,6 +19,12 @@ import type { ProviderRuntimeOptions } from "./thinkingEffort/types";
 import type { EffortLevel } from "./thinkingEffort/types";
 import type { ProfileStore } from "./userModel/profileStore";
 import type { HookDefinition } from "./hooksRegistry";
+import {
+  buildDebugAskUserQuestionInput,
+  getElectronDebugCommandDescription,
+  normalizeAppLanguage,
+  type AppLanguage,
+} from "./electronUiLanguage";
 
 type RuntimeLike = {
   getToolContext?(mode?: string): unknown;
@@ -53,8 +59,7 @@ const UNSUPPORTED_ELECTRON_PROMPT_COMMANDS = new Set([
 const ELECTRON_ONLY_PROMPT_COMMANDS: RegisteredPromptSlashCommand[] = [
   {
     name: "/debug",
-    description:
-      "Run Electron-only debug helpers such as AskUserQuestion parity test flows.",
+    description: getElectronDebugCommandDescription("en-US"),
     stage: "local",
   },
 ];
@@ -75,6 +80,7 @@ const SUPPORTED_ELECTRON_PROMPT_COMMANDS = new Set([
 async function buildElectronPromptCommandHelp(options: {
   args: string;
   workspaceRoot: string;
+  currentLanguage: AppLanguage;
 }): Promise<string> {
   const normalizedArgs = (() => {
     const trimmed = options.args.trim().toLowerCase();
@@ -86,7 +92,10 @@ async function buildElectronPromptCommandHelp(options: {
   const installedSkills = await loadInstalledSkills(options.workspaceRoot);
   const helpCommands = [
     ...listRegisteredPromptSlashCommands(),
-    ...ELECTRON_ONLY_PROMPT_COMMANDS,
+    ...ELECTRON_ONLY_PROMPT_COMMANDS.map(command => ({
+      ...command,
+      description: getElectronDebugCommandDescription(options.currentLanguage),
+    })),
   ];
 
   if (normalizedArgs) {
@@ -150,83 +159,19 @@ async function buildElectronPromptCommandHelp(options: {
   return lines.join("\n");
 }
 
-function buildUnsupportedElectronPromptCommandReply(commandName: string): string {
-  return `${commandName} is not yet wired into the Electron desktop shell. Use the VS Code host for this capability for now.`;
-}
-
-function buildDebugAskUserQuestionInput(variant: "single" | "multi"): Record<string, unknown> {
-  if (variant === "multi") {
-    return {
-      title: "AskUserQuestion Multi-Step Debug",
-      questions: [
-        {
-          header: "Approach",
-          question: "How should I continue this parity task?",
-          options: [
-            {
-              label: "Keep current plan",
-              description: "Stay on the current implementation path.",
-              preview:
-                "Preview:\n- continue renderer parity work\n- avoid widening shared runtime scope",
-            },
-            {
-              label: "Re-scope first",
-              description: "Tighten scope before continuing.",
-              preview:
-                "Preview:\n- stop after cleanup\n- defer broader product-surface work",
-            },
-          ],
-        },
-        {
-          header: "Checks",
-          question: "Which follow-up checks do you want?",
-          multiSelect: true,
-          options: [
-            {
-              label: "Manual Electron test",
-              description: "Run the desktop shell manually again.",
-            },
-            {
-              label: "Build/Test",
-              description: "Run automated verification.",
-            },
-            {
-              label: "Doc sync",
-              description: "Update handoff and parity notes.",
-            },
-          ],
-        },
-      ],
-    };
-  }
-
-  return {
-    title: "AskUserQuestion Single-Step Debug",
-    questions: [
-      {
-        header: "Freeze Dir",
-        question:
-          "Which directory should I restrict edits to? Files outside this path will be blocked from editing.",
-        options: [
-          {
-            label: "Current workspace",
-            description: "Use the active workspace root.",
-            preview: "Preview:\n- writes stay inside the current workspace",
-          },
-          {
-            label: "Parent project",
-            description: "Use the parent project directory.",
-            preview: "Preview:\n- allows edits across sibling folders under the parent project",
-          },
-        ],
-      },
-    ],
-  };
+function buildUnsupportedElectronPromptCommandReply(
+  commandName: string,
+  language: AppLanguage,
+): string {
+  return language === "en-US"
+    ? `${commandName} is not yet wired into the Electron desktop shell. Use the VS Code host for this capability for now.`
+    : `${commandName} 还没有接进 Electron 桌面壳。当前请先使用 VS Code 宿主来完成这个能力。`;
 }
 
 async function tryHandleElectronDebugPromptCommand(options: {
   parsedCommand: ReturnType<typeof parsePromptSlashCommand>;
   runtime: RuntimeLike;
+  currentLanguage: AppLanguage;
 }): Promise<string | null> {
   if (!options.parsedCommand || options.parsedCommand.name !== "/debug") {
     return null;
@@ -234,17 +179,26 @@ async function tryHandleElectronDebugPromptCommand(options: {
 
   const trimmedArgs = options.parsedCommand.args.trim();
   if (!trimmedArgs) {
-    return [
-      "Electron debug commands:",
-      "- /debug ask-user-question",
-      "- /debug ask-user-question single",
-      "- /debug ask-user-question multi",
-    ].join("\n");
+    return options.currentLanguage === "en-US"
+      ? [
+          "Electron debug commands:",
+          "- /debug ask-user-question",
+          "- /debug ask-user-question single",
+          "- /debug ask-user-question multi",
+        ].join("\n")
+      : [
+          "Electron 调试命令：",
+          "- /debug ask-user-question",
+          "- /debug ask-user-question single",
+          "- /debug ask-user-question multi",
+        ].join("\n");
   }
 
   const [debugTarget, debugVariantRaw] = trimmedArgs.split(/\s+/, 2);
   if (debugTarget?.toLowerCase() !== "ask-user-question") {
-    return `Unknown Electron debug command "${trimmedArgs}". Use /debug to list available debug commands.`;
+    return options.currentLanguage === "en-US"
+      ? `Unknown Electron debug command "${trimmedArgs}". Use /debug to list available debug commands.`
+      : `未知的 Electron 调试命令“${trimmedArgs}”。请使用 /debug 查看可用调试命令。`;
   }
 
   const variant =
@@ -255,17 +209,21 @@ async function tryHandleElectronDebugPromptCommand(options: {
     debugVariantRaw.trim().toLowerCase() !== "single" &&
     debugVariantRaw.trim().toLowerCase() !== "multi"
   ) {
-    return "Usage: `/debug ask-user-question [single|multi]`";
+    return options.currentLanguage === "en-US"
+      ? "Usage: `/debug ask-user-question [single|multi]`"
+      : "用法：`/debug ask-user-question [single|multi]`";
   }
 
   const toolContext = options.runtime.getToolContext?.("main");
   if (!toolContext) {
-    return "AskUserQuestion debug flow is unavailable because the Electron tool context is not ready.";
+    return options.currentLanguage === "en-US"
+      ? "AskUserQuestion debug flow is unavailable because the Electron tool context is not ready."
+      : "AskUserQuestion 调试流程暂时不可用，因为 Electron 的工具上下文还没有准备好。";
   }
 
   const result = await executeTool(
     "AskUserQuestion",
-    buildDebugAskUserQuestionInput(variant),
+    buildDebugAskUserQuestionInput(options.currentLanguage, variant),
     toolContext as any,
   );
   return result.content;
@@ -289,6 +247,7 @@ export async function handleElectronPromptCommand(options: {
   config: AdapterProviderConfig;
   workspaceRoot: string;
   envMap: Record<string, string>;
+  currentLanguage?: AppLanguage | string;
   runtime: RuntimeLike;
   tools: ToolDefinition[];
   currentEffortLevel: EffortLevel | undefined;
@@ -348,6 +307,7 @@ export async function handleElectronPromptCommand(options: {
   registerSessionInstalledSkillHooks?: (hooks: HookDefinition[]) => HookDefinition[];
   profileStore?: ProfileStore;
 }): Promise<ElectronPromptCommandResult> {
+  const currentLanguage = normalizeAppLanguage(options.currentLanguage);
   const parsedCommand = parsePromptSlashCommand(options.prompt);
   if (!parsedCommand) {
     return { kind: "continue" };
@@ -364,6 +324,7 @@ export async function handleElectronPromptCommand(options: {
       reply: await buildElectronPromptCommandHelp({
         args: parsedCommand.args,
         workspaceRoot: options.workspaceRoot,
+        currentLanguage,
       }),
     };
   }
@@ -371,6 +332,7 @@ export async function handleElectronPromptCommand(options: {
   const debugReply = await tryHandleElectronDebugPromptCommand({
     parsedCommand,
     runtime: options.runtime,
+    currentLanguage,
   });
   if (debugReply) {
     return { kind: "reply", reply: debugReply };
@@ -394,7 +356,7 @@ export async function handleElectronPromptCommand(options: {
   if (UNSUPPORTED_ELECTRON_PROMPT_COMMANDS.has(parsedCommand.name)) {
     return {
       kind: "reply",
-      reply: buildUnsupportedElectronPromptCommandReply(parsedCommand.name),
+      reply: buildUnsupportedElectronPromptCommandReply(parsedCommand.name, currentLanguage),
     };
   }
 

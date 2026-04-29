@@ -935,7 +935,45 @@ let appState = {
   mcpServers: [],
   licenseActivated: false,
   workspaceInfo: null,
+  uiLanguage: 'zh-CN',
+  dialogStrings: null,
 };
+
+const DEFAULT_DIALOG_STRINGS = {
+  needConfirmation: '需要确认',
+  cancel: '取消',
+  reject: '拒绝',
+  confirmExecute: '确认执行',
+  otherLabel: '其他',
+  otherDescription: '输入自定义答案。',
+  customAnswerPlaceholder: '自定义答案',
+  optionalNote: '可选备注',
+  notePlaceholder: '给 Claude 的补充说明',
+  reviewTitle: '检查你的答案',
+  notAnsweredYet: '尚未作答',
+  answerAllBeforeSubmit: '请先完成所有问题后再提交。',
+  answerCurrentBeforeContinue: '请先回答当前问题再继续。',
+  submitAnswers: '提交答案',
+  reviewAnswers: '检查答案',
+  nextQuestion: '下一题',
+  submitChip: '提交',
+  noteLabel: '备注：',
+};
+
+let currentDialogStrings = { ...DEFAULT_DIALOG_STRINGS };
+
+function applyUiLanguageState(language, dialogStrings) {
+  appState.uiLanguage = language || appState.uiLanguage || 'zh-CN';
+  currentDialogStrings = {
+    ...DEFAULT_DIALOG_STRINGS,
+    ...(dialogStrings || {}),
+  };
+  document.documentElement.lang = appState.uiLanguage === 'en-US' ? 'en' : 'zh-CN';
+}
+
+function dialogText(key) {
+  return currentDialogStrings[key] || DEFAULT_DIALOG_STRINGS[key] || '';
+}
 
 let currentPendingQuestionRequest = null;
 let currentPendingQuestionIndex = 0;
@@ -1065,6 +1103,7 @@ function handleMessage(msg) {
         alert('已导出：' + msg.path);
       break;
     case 'settings:data':
+      applyUiLanguageState(msg.language, msg.dialogStrings);
       renderSettings(msg);
       break;
     case 'approval:pending':
@@ -1261,6 +1300,7 @@ function applyState(state) {
   appState.onboardingDone = state.onboardingDone;
   appState.pendingApproval = state.pendingApproval || null;
   appState.mcpServers = state.mcpServers || [];
+  applyUiLanguageState(state.uiLanguage, state.dialogStrings);
   appState.workspaceInfo = state.workspaceInfo || {
     selectedRoot: state.workspaceRoot || '',
     effectiveRoot: state.workspaceRoot || '',
@@ -4838,6 +4878,7 @@ function renderSettings(data) {
   settingsProviders = providers;
   const activeId = data.activeId;
   const licenseActivated = data.licenseActivated;
+  const currentLanguage = data.language || appState.uiLanguage || 'zh-CN';
   settingsImageModels = data.imageModels || [];
   currentActiveImageModelId = data.activeImageModelId || null;
   const imageConfig = data.imageConfig || {};
@@ -4922,6 +4963,16 @@ function renderSettings(data) {
   const editingImageModelHasKey = imageFormSource ? !!imageFormSource.hasKey : false;
 
   container.innerHTML = `
+    <section style="margin-bottom:18px;border:1px solid #e4e4e7;border-radius:16px;background:#fff;padding:16px 18px">
+      <div style="font-size:16px;font-weight:700;color:#18181b">${currentLanguage === 'en-US' ? 'Interface language' : '界面语言'}</div>
+      <div style="font-size:12px;color:#71717a;margin-top:4px">${currentLanguage === 'en-US' ? 'Electron dialogs and host-owned prompts follow this language.' : 'Electron 对话框和宿主提示会跟随这个语言。'}</div>
+      <div style="margin-top:12px;max-width:280px">
+        <select id="settings-language-select" onchange="saveUiLanguage(this.value)" style="width:100%;border:1px solid #e4e4e7;border-radius:10px;padding:9px 12px;font-size:13px;outline:none;font-family:inherit;color:#18181b;background:#fff">
+          <option value="zh-CN"${currentLanguage === 'zh-CN' ? ' selected' : ''}>简体中文</option>
+          <option value="en-US"${currentLanguage === 'en-US' ? ' selected' : ''}>English</option>
+        </select>
+      </div>
+    </section>
     <section style="display:flex;flex-direction:column;gap:14px">
       <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:16px;padding:2px 0 4px">
         <div>
@@ -5042,6 +5093,10 @@ function saveSettingsImageConfig() {
   document.getElementById('settings-image-apikey').value = '';
   settingsImageEditorOpen = false;
   editingImageModelId = null;
+}
+
+function saveUiLanguage(language) {
+  send({ type: 'settings:setLanguage', language });
 }
 
 function showAddImageModelForm() {
@@ -5338,7 +5393,7 @@ function renderPendingQuestionNavigation(approval, hideSubmitTab) {
 
   const submitChip = hideSubmitTab
     ? ''
-    : `<button type="button" onclick="goPendingQuestionIndex(${approval.questions.length})" style="border:1px solid ${currentPendingQuestionIndex === approval.questions.length ? '#E84040' : '#d4d4d8'};background:${currentPendingQuestionIndex === approval.questions.length ? '#fff5f5' : '#fff'};color:${currentPendingQuestionIndex === approval.questions.length ? '#E84040' : '#52525b'};border-radius:999px;padding:5px 10px;font-size:11px;font-weight:600;cursor:pointer">✓ Submit</button>`;
+    : `<button type="button" onclick="goPendingQuestionIndex(${approval.questions.length})" style="border:1px solid ${currentPendingQuestionIndex === approval.questions.length ? '#E84040' : '#d4d4d8'};background:${currentPendingQuestionIndex === approval.questions.length ? '#fff5f5' : '#fff'};color:${currentPendingQuestionIndex === approval.questions.length ? '#E84040' : '#52525b'};border-radius:999px;padding:5px 10px;font-size:11px;font-weight:600;cursor:pointer">✓ ${escapeHtml(dialogText('submitChip'))}</button>`;
 
   return `<div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:12px">${chips}${submitChip}</div>`;
 }
@@ -5350,17 +5405,17 @@ function renderPendingQuestionReviewHtml(approval) {
     return `<div style="border:1px solid #e4e4e7;border-radius:8px;padding:10px 12px;margin-bottom:8px;background:#fafafa">
       <div style="font-size:11px;font-weight:700;color:#E84040;margin-bottom:4px">${escapeHtml(question.header || `Q${questionIndex + 1}`)}</div>
       <div style="font-size:12px;font-weight:600;color:#18181b;line-height:1.5;margin-bottom:4px">${escapeHtml(question.question)}</div>
-      <div style="font-size:12px;color:${answer ? '#18181b' : '#b91c1c'}">${answer ? escapeHtml(answer) : 'Not answered yet'}</div>
-      ${note ? `<div style="margin-top:6px;font-size:11px;color:#71717a;white-space:pre-wrap"><strong>Note:</strong> ${escapeHtml(note)}</div>` : ''}
+      <div style="font-size:12px;color:${answer ? '#18181b' : '#b91c1c'}">${answer ? escapeHtml(answer) : escapeHtml(dialogText('notAnsweredYet'))}</div>
+      ${note ? `<div style="margin-top:6px;font-size:11px;color:#71717a;white-space:pre-wrap"><strong>${escapeHtml(dialogText('noteLabel'))}</strong> ${escapeHtml(note)}</div>` : ''}
     </div>`;
   }).join('');
 
   const warning = approval.questions.every((_, questionIndex) => isPendingQuestionAnswered(questionIndex))
     ? ''
-    : `<div style="margin-bottom:8px;font-size:12px;color:#b91c1c">Please answer all questions before submitting.</div>`;
+    : `<div style="margin-bottom:8px;font-size:12px;color:#b91c1c">${escapeHtml(dialogText('answerAllBeforeSubmit'))}</div>`;
 
   return `${renderPendingQuestionNavigation(approval, false)}
-    <div style="font-size:13px;font-weight:600;color:#18181b;margin-bottom:8px">Review your answers</div>
+    <div style="font-size:13px;font-weight:600;color:#18181b;margin-bottom:8px">${escapeHtml(dialogText('reviewTitle'))}</div>
     ${warning}
     ${rows}`;
 }
@@ -5411,16 +5466,16 @@ function renderQuestionApprovalHtml(approval) {
         <div style="display:flex;gap:8px;align-items:flex-start">
           <input id="${otherId}" type="${optionType}" name="${optionName}" value="__other__" ${otherChecked ? 'checked' : ''} onchange="handlePendingQuestionInputChange()" style="margin-top:2px">
           <div style="flex:1">
-            <div style="font-size:12px;font-weight:600;color:#18181b">Other</div>
-            <div style="font-size:11px;color:#71717a;line-height:1.5;margin-top:2px">Type a custom answer.</div>
-            <input id="${otherId}-text" type="text" placeholder="Custom answer" value="${escapeHtml(getPendingQuestionOtherText(questionIndex))}" oninput="updatePendingQuestionOtherText(${questionIndex}, this.value)" style="width:100%;margin-top:8px;border:1px solid #e4e4e7;border-radius:6px;padding:8px 10px;font-size:12px;font-family:inherit">
+            <div style="font-size:12px;font-weight:600;color:#18181b">${escapeHtml(dialogText('otherLabel'))}</div>
+            <div style="font-size:11px;color:#71717a;line-height:1.5;margin-top:2px">${escapeHtml(dialogText('otherDescription'))}</div>
+            <input id="${otherId}-text" type="text" placeholder="${escapeHtml(dialogText('customAnswerPlaceholder'))}" value="${escapeHtml(getPendingQuestionOtherText(questionIndex))}" oninput="updatePendingQuestionOtherText(${questionIndex}, this.value)" style="width:100%;margin-top:8px;border:1px solid #e4e4e7;border-radius:6px;padding:8px 10px;font-size:12px;font-family:inherit">
           </div>
         </div>
       </label>
       ${selectedPreview ? `<div style="margin-top:8px;padding:8px 10px;border:1px solid #e4e4e7;border-radius:8px;background:#fafafa;font-size:11px;color:#52525b;white-space:pre-wrap">${escapeHtml(selectedPreview)}</div>` : ''}
       <div style="margin-top:8px">
-        <div style="font-size:11px;color:#71717a;margin-bottom:4px">Optional note</div>
-        <textarea id="${optionName}-notes" placeholder="Add context for Claude" oninput="updatePendingQuestionNotes(${questionIndex}, this.value)" style="width:100%;min-height:70px;border:1px solid #e4e4e7;border-radius:8px;padding:8px 10px;font-size:12px;line-height:1.5;font-family:inherit;resize:vertical">${escapeHtml(getPendingQuestionNote(questionIndex))}</textarea>
+        <div style="font-size:11px;color:#71717a;margin-bottom:4px">${escapeHtml(dialogText('optionalNote'))}</div>
+        <textarea id="${optionName}-notes" placeholder="${escapeHtml(dialogText('notePlaceholder'))}" oninput="updatePendingQuestionNotes(${questionIndex}, this.value)" style="width:100%;min-height:70px;border:1px solid #e4e4e7;border-radius:8px;padding:8px 10px;font-size:12px;line-height:1.5;font-family:inherit;resize:vertical">${escapeHtml(getPendingQuestionNote(questionIndex))}</textarea>
       </div>
     </div>`;
 }
@@ -5481,7 +5536,7 @@ function renderApproval(approval) {
     return;
   }
 
-  document.getElementById('approval-title').textContent = approval.title || 'Need confirmation';
+  document.getElementById('approval-title').textContent = approval.title || dialogText('needConfirmation');
   document.getElementById('approval-summary').textContent = approval.summary || '';
 
   if (approval.kind === 'question') {
@@ -5490,16 +5545,16 @@ function renderApproval(approval) {
     diffEl.style.display = 'none';
     previewEl.style.display = 'none';
     questionEl.style.display = '';
-    cancelBtn.textContent = 'Cancel';
+    cancelBtn.textContent = dialogText('cancel');
     const hideSubmitTab = getPendingQuestionHideSubmitTab(approval);
     if (!hideSubmitTab && currentPendingQuestionIndex === approval.questions.length) {
-      confirmBtn.textContent = 'Submit answers';
+      confirmBtn.textContent = dialogText('submitAnswers');
     } else if (hideSubmitTab && currentPendingQuestionIndex === approval.questions.length - 1) {
-      confirmBtn.textContent = 'Submit answers';
+      confirmBtn.textContent = dialogText('submitAnswers');
     } else if (currentPendingQuestionIndex === approval.questions.length - 1) {
-      confirmBtn.textContent = 'Review answers';
+      confirmBtn.textContent = dialogText('reviewAnswers');
     } else {
-      confirmBtn.textContent = 'Next question';
+      confirmBtn.textContent = dialogText('nextQuestion');
     }
     questionEl.innerHTML = renderQuestionApprovalHtml(approval);
   } else {
@@ -5510,6 +5565,8 @@ function renderApproval(approval) {
     questionEl.innerHTML = '';
     cancelBtn.textContent = '拒绝';
     confirmBtn.textContent = '确认执行';
+    cancelBtn.textContent = dialogText('reject');
+    confirmBtn.textContent = dialogText('confirmExecute');
     if (approval.diff) {
       diffContent.textContent = approval.diff;
       diffEl.style.display = '';
@@ -5537,7 +5594,7 @@ function approveApproval() {
     if (isReviewStep) {
       const reviewResponse = collectPendingQuestionResponse();
       if (!reviewResponse) {
-        alert('Please answer all questions before submitting.');
+        alert(dialogText('answerAllBeforeSubmit'));
         return;
       }
       send({ type: 'submitPendingQuestion', ...reviewResponse });
@@ -5545,7 +5602,7 @@ function approveApproval() {
     }
 
     if (!isPendingQuestionAnswered(currentPendingQuestionIndex)) {
-      alert('Please answer the current question before continuing.');
+      alert(dialogText('answerCurrentBeforeContinue'));
       return;
     }
 
@@ -5554,7 +5611,7 @@ function approveApproval() {
     if (hideSubmitTab && isLastQuestion) {
       const finalResponse = collectPendingQuestionResponse();
       if (!finalResponse) {
-        alert('Please answer all questions before submitting.');
+        alert(dialogText('answerAllBeforeSubmit'));
         return;
       }
       send({ type: 'submitPendingQuestion', ...finalResponse });

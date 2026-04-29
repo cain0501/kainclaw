@@ -4,6 +4,7 @@ import {
   createSettingsPanelActions,
   createSettingsPanelActionsFactory,
 } from "./settingsPanelHost";
+import type { AppLanguage } from "./electronUiLanguage";
 
 class FakeSettingsStore {
   providers: any[] = [];
@@ -18,6 +19,7 @@ class FakeSettingsStore {
   onboardingDone = false;
   licenseActivated = false;
   showThinkingSummaries = true;
+  language: AppLanguage = "zh-CN";
 
   getProviders() {
     return [...this.providers];
@@ -125,6 +127,14 @@ class FakeSettingsStore {
 
   async setShowThinkingSummaries(enabled: boolean) {
     this.showThinkingSummaries = enabled;
+  }
+
+  getLanguage(): AppLanguage {
+    return this.language;
+  }
+
+  async setLanguage(language: string) {
+    this.language = language;
   }
 
   async setLicenseActivated(activated: boolean) {
@@ -286,6 +296,9 @@ describe("settingsPanelHost", () => {
     await actions.setShowThinkingSummaries(false);
     expect(settings.getShowThinkingSummaries()).toBe(false);
     expect(postState).toHaveBeenCalled();
+
+    await actions.setLanguage("en-US");
+    expect(settings.getLanguage()).toBe("en-US");
 
     await actions.setActiveProvider("p1");
     expect(settings.getActiveProviderId()).toBe("p1");

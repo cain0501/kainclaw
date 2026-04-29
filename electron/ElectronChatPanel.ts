@@ -25,6 +25,10 @@ import {
   deleteSettingsProvider,
   loadSettingsPanelData,
 } from "../src/settingsHost";
+import {
+  buildFreezeQuestionCopy,
+  getElectronDialogStrings,
+} from "../src/electronUiLanguage";
 import { normalizeWebviewAttachments } from "../src/attachmentHandler";
 import type {
   NormalizedMessage,
@@ -597,6 +601,7 @@ export class ElectronChatPanel {
     if (type === "settings:load") { await this.loadSettings(); return; }
     if (type === "settings:close") { await this.postState(); return; }
     if (type === "settings:setActive") { await this.setActiveProvider(String(message.id ?? "")); return; }
+    if (type === "settings:setLanguage") { await this.setLanguage(String(message.language ?? "")); return; }
     if (type === "settings:saveProvider") { await this.saveProvider(message.meta, String(message.apiKey ?? "")); return; }
     if (type === "settings:deleteProvider") { await this.deleteProvider(String(message.id ?? "")); return; }
     if (type === "license:activate") { await this.activateLicense(String(message.key ?? "")); return; }
@@ -988,7 +993,11 @@ export class ElectronChatPanel {
 
   private async loadSettings(): Promise<void> {
     const data = await loadSettingsPanelData(this.settings);
-    this.sendToRenderer({ type: "settings:data", ...data });
+    this.sendToRenderer({
+      type: "settings:data",
+      ...data,
+      dialogStrings: getElectronDialogStrings(data.language),
+    });
   }
 
   private async validateKey(provider: string, apiKey: string, baseUrl?: string, model?: string): Promise<void> {
@@ -1021,6 +1030,12 @@ export class ElectronChatPanel {
 
   private async setActiveProvider(id: string): Promise<void> {
     await this.settings.setActiveProviderId(id);
+    await this.loadSettings();
+    await this.postState();
+  }
+
+  private async setLanguage(language: string): Promise<void> {
+    await this.settings.setLanguage(language);
     await this.loadSettings();
     await this.postState();
   }
@@ -2070,6 +2085,7 @@ export class ElectronChatPanel {
         config,
         workspaceRoot,
         envMap,
+        currentLanguage: this.settings.getLanguage(),
         runtime: promptRuntime,
         tools: allTools,
         runtimeOptions,
@@ -2594,23 +2610,22 @@ export class ElectronChatPanel {
           const workspaceLabel = path.basename(options.workspaceRoot) || options.workspaceRoot;
           const parentRoot = path.dirname(options.workspaceRoot);
           const parentLabel = path.basename(parentRoot) || parentRoot;
+          const freezeQuestionCopy = buildFreezeQuestionCopy(this.settings.getLanguage(), {
+            workspaceRoot: options.workspaceRoot,
+            parentRoot,
+            workspaceLabel,
+            parentLabel,
+          });
           const questionResponse = await this.requestUserQuestion({
             kind: "question",
-            title: "Freeze Directory",
+            title: freezeQuestionCopy.title,
             questions: [
               {
-                header: "Freeze Dir",
-                question:
-                  "Which directory should I restrict edits to? Files outside this path will be blocked from editing.",
+                header: freezeQuestionCopy.header,
+                question: freezeQuestionCopy.question,
                 options: [
-                  {
-                    label: workspaceLabel,
-                    description: `Current workspace directory: ${options.workspaceRoot}`,
-                  },
-                  {
-                    label: parentLabel,
-                    description: `Parent project directory: ${parentRoot}`,
-                  },
+                  freezeQuestionCopy.workspaceOption,
+                  freezeQuestionCopy.parentOption,
                 ],
               },
             ],
@@ -2618,7 +2633,7 @@ export class ElectronChatPanel {
           if (!questionResponse) {
             await this.appendAssistantMessageToSession(options.sessionId, {
               role: "assistant",
-              content: "Freeze setup cancelled.",
+              content: freezeQuestionCopy.cancelledMessage,
               timestamp: Date.now(),
             });
             return true;
@@ -2626,7 +2641,7 @@ export class ElectronChatPanel {
 
           const selected =
             questionResponse.answers[
-              "Which directory should I restrict edits to? Files outside this path will be blocked from editing."
+              freezeQuestionCopy.question
             ]?.trim() ?? "";
           const rawPath =
             selected === workspaceLabel
@@ -3395,6 +3410,7 @@ export class ElectronChatPanel {
     const sessionBusy = !!activeRequest || backgroundBusy;
 
     const onboardingDone = this.settings.isOnboardingDone();
+    const uiLanguage = this.settings.getLanguage();
     const providerMeta = this.settings.getActiveProviderMeta();
     const providerLabel = providerMeta
       ? `${providerMeta.type} / ${providerMeta.model ?? "default"}`
@@ -3424,6 +3440,8 @@ export class ElectronChatPanel {
       fastModeLabel: "",
       fastModeConnected: false,
       showThinkingSummaries: this.settings.getShowThinkingSummaries(),
+      uiLanguage,
+      dialogStrings: getElectronDialogStrings(uiLanguage),
       planMode: { active: false, planFilePath: null },
       pendingApproval: this.getPendingInteraction(),
       onboardingDone,

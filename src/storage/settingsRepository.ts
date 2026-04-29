@@ -2,6 +2,7 @@ import type { IHostAdapter } from "../platform/IHostAdapter";
 import type { ProviderConfig } from "../agent/providers/IProviderAdapter";
 import type { ImageAuthMode } from "../imageGeneration/openAIImageClient";
 import type { EffortLevel } from "../thinkingEffort/types";
+import { normalizeAppLanguage, type AppLanguage } from "../electronUiLanguage";
 
 /**
  * Settings storage contract (Spec §6.2.1 + §6.2.2):
@@ -24,6 +25,7 @@ const KEYS = {
   FAST_MODE: "cain.fastMode",
   SHOW_THINKING_SUMMARIES: "cain.showThinkingSummaries",
   WORKSPACE_ROOT: "cain.workspaceRoot",
+  UI_LANGUAGE: "kainclaw.uiLanguage",
 } as const;
 
 function normalizeProviderAlias(value: string): string {
@@ -538,6 +540,14 @@ export class SettingsRepository {
 
   async setShowThinkingSummaries(enabled: boolean): Promise<void> {
     await this.host.setState(KEYS.SHOW_THINKING_SUMMARIES, enabled);
+  }
+
+  getLanguage(): AppLanguage {
+    return normalizeAppLanguage(this.host.getState<string>(KEYS.UI_LANGUAGE));
+  }
+
+  async setLanguage(language: string): Promise<void> {
+    await this.host.setState(KEYS.UI_LANGUAGE, normalizeAppLanguage(language));
   }
 
   getWorkspaceRoot(): string | undefined {

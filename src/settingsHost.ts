@@ -7,6 +7,7 @@ import type {
   ImagePromptHistoryEntry,
   ProviderMeta,
 } from "./storage/settingsRepository";
+import type { AppLanguage } from "./electronUiLanguage";
 
 type SettingsStore = {
   getProviders(): ProviderMeta[];
@@ -34,6 +35,7 @@ type SettingsStore = {
   isLicenseActivated(): boolean;
   setOnboardingDone(done: boolean): Promise<void>;
   getShowThinkingSummaries(): boolean;
+  getLanguage(): AppLanguage;
 };
 
 export async function validateOnboardingProviderKey(options: {
@@ -86,6 +88,7 @@ export async function loadSettingsPanelData(settings: SettingsStore): Promise<{
   activeId: string | undefined;
   licenseActivated: boolean;
   showThinkingSummaries: boolean;
+  language: AppLanguage;
   imageModels: Array<ImageModelMeta & { hasKey: boolean }>;
   activeImageModelId: string | undefined;
   imageConfig?: ImageConfig;
@@ -113,6 +116,7 @@ export async function loadSettingsPanelData(settings: SettingsStore): Promise<{
     activeId: settings.getActiveProviderId(),
     licenseActivated: settings.isLicenseActivated(),
     showThinkingSummaries: settings.getShowThinkingSummaries(),
+    language: settings.getLanguage(),
     imageModels: imageModelsWithKeyStatus,
     activeImageModelId: settings.getActiveImageModelId(),
     imageConfig: settings.getImageConfig(),

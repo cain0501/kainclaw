@@ -30,6 +30,7 @@ describe("electronPromptCommandHost", () => {
       config: providerConfig,
       workspaceRoot: "E:\\repo",
       envMap: {},
+      currentLanguage: "en-US",
       runtime: {},
       tools: [],
       currentEffortLevel: "high",
@@ -70,6 +71,7 @@ describe("electronPromptCommandHost", () => {
       config: providerConfig,
       workspaceRoot: "E:\\repo",
       envMap: {},
+      currentLanguage: "en-US",
       runtime: {
         getToolContext: () => toolContext,
       },
@@ -105,6 +107,61 @@ describe("electronPromptCommandHost", () => {
           expect.objectContaining({
             header: "Checks",
             question: "Which follow-up checks do you want?",
+            multiSelect: true,
+          }),
+        ],
+      }),
+      toolContext,
+    );
+  });
+
+  it("localizes the Electron AskUserQuestion debug payload when Chinese is selected", async () => {
+    const executeToolSpy = vi.spyOn(toolRuntime, "executeTool").mockResolvedValue({
+      summary: "Collected answers for 2 question(s)",
+      content: '用户已回答你的问题："我应该如何继续这个对齐任务？"="保持当前方案"。',
+    } as Awaited<ReturnType<typeof toolRuntime.executeTool>>);
+
+    const toolContext = { workspaceRoot: "E:\\repo" };
+    const result = await handleElectronPromptCommand({
+      prompt: "/debug ask-user-question multi",
+      config: providerConfig,
+      workspaceRoot: "E:\\repo",
+      envMap: {},
+      currentLanguage: "zh-CN",
+      runtime: {
+        getToolContext: () => toolContext,
+      },
+      tools: [],
+      currentEffortLevel: "high",
+      setEffortLevel: async () => undefined,
+      currentFastMode: false,
+      setFastMode: async () => undefined,
+      setActiveProviderModel: async () => undefined,
+      refreshWorkspaceStatus: () => undefined,
+      runtimeOptions: {},
+      handleCompactCommand: async () => false,
+      handleReviewCommand: async () => false,
+      handleUltrareviewCommand: async () => false,
+      handleUltraverifyCommand: async () => false,
+      handleVerificationCommand: async () => false,
+    });
+
+    expect(result).toEqual({
+      kind: "reply",
+      reply: '用户已回答你的问题："我应该如何继续这个对齐任务？"="保持当前方案"。',
+    });
+    expect(executeToolSpy).toHaveBeenCalledWith(
+      "AskUserQuestion",
+      expect.objectContaining({
+        title: "AskUserQuestion 多题调试",
+        questions: [
+          expect.objectContaining({
+            header: "方案",
+            question: "我应该如何继续这个对齐任务？",
+          }),
+          expect.objectContaining({
+            header: "检查项",
+            question: "你希望做哪些后续检查？",
             multiSelect: true,
           }),
         ],
@@ -245,6 +302,7 @@ SKILL_OK: $ARGUMENTS
       config: providerConfig,
       workspaceRoot: "E:\\repo",
       envMap: {},
+      currentLanguage: "en-US",
       runtime: {},
       tools: [],
       currentEffortLevel: "high",

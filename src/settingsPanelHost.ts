@@ -5,6 +5,7 @@ import type {
   ImagePromptHistoryEntry,
   ProviderMeta,
 } from "./storage/settingsRepository";
+import type { AppLanguage } from "./electronUiLanguage";
 import {
   completeOnboardingProvider,
   deleteSettingsProvider,
@@ -39,7 +40,9 @@ type SettingsStore = {
   isLicenseActivated(): boolean;
   setOnboardingDone(done: boolean): Promise<void>;
   getShowThinkingSummaries(): boolean;
+  getLanguage(): AppLanguage;
   setShowThinkingSummaries(enabled: boolean): Promise<void>;
+  setLanguage(language: string): Promise<void>;
   setLicenseActivated(activated: boolean): Promise<void>;
 };
 
@@ -55,6 +58,7 @@ export type SettingsPanelActions = {
   saveSettingsProvider: (meta: ProviderMeta, apiKey?: string) => Promise<void>;
   deleteSettingsProvider: (id: string) => Promise<void>;
   setShowThinkingSummaries: (enabled: unknown) => Promise<void>;
+  setLanguage: (language: string) => Promise<void>;
   setActiveProvider: (id: string) => Promise<void>;
   closeSettings: () => void;
   activateLicense: (rawKey: string) => Promise<void>;
@@ -137,6 +141,11 @@ export function createSettingsPanelActions(options: {
     },
     setShowThinkingSummaries: async enabled => {
       await options.settings.setShowThinkingSummaries(enabled !== false);
+      await loadSettings();
+      options.postState();
+    },
+    setLanguage: async language => {
+      await options.settings.setLanguage(language);
       await loadSettings();
       options.postState();
     },

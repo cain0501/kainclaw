@@ -6,6 +6,7 @@ import type {
   ImagePromptHistoryEntry,
   ProviderMeta,
 } from "./storage/settingsRepository";
+import type { AppLanguage } from "./electronUiLanguage";
 import {
   completeOnboardingProvider,
   deleteSettingsProvider,
@@ -27,6 +28,7 @@ class FakeSettingsStore {
   onboardingDone = false;
   licenseActivated = false;
   showThinkingSummaries = true;
+  language: AppLanguage = "zh-CN";
 
   getProviders(): ProviderMeta[] {
     return [...this.providers];
@@ -130,6 +132,10 @@ class FakeSettingsStore {
 
   getShowThinkingSummaries(): boolean {
     return this.showThinkingSummaries;
+  }
+
+  getLanguage(): AppLanguage {
+    return this.language;
   }
 }
 
@@ -237,6 +243,7 @@ describe("settingsHost", () => {
       activeId: "provider-2",
       licenseActivated: true,
       showThinkingSummaries: false,
+      language: "zh-CN",
       imageConfig: {
         id: "image-model-1",
         baseUrl: "https://example.com/v1",

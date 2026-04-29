@@ -1773,13 +1773,13 @@ Freeze skill body.
       kind: "question",
     });
     expect(afterFreezePrompt.pendingApproval?.questions?.[0]?.question).toContain(
-      "Which directory should I restrict edits to?",
+      "要将编辑限制在哪个目录内？",
     );
 
     await harness.panel.handleMessage({
       type: "submitPendingQuestion",
       answers: {
-        "Which directory should I restrict edits to? Files outside this path will be blocked from editing.": allowedDir,
+        "要将编辑限制在哪个目录内？该路径之外的文件将被禁止编辑。": allowedDir,
       },
     });
     await freezeRequest;
