@@ -21,6 +21,41 @@ export type ElectronDialogStrings = {
   noteLabel: string;
 };
 
+export type ElectronSettingsStrings = {
+  interfaceLanguageTitle: string;
+  interfaceLanguageDescription: string;
+  chatModelsTitle: string;
+  chatModelsDescription: string;
+  addProvider: string;
+  noChatModels: string;
+  currentInUse: string;
+  edit: string;
+  use: string;
+  addProviderFormTitle: string;
+  providerType: string;
+  providerAlias: string;
+  providerAliasPlaceholder: string;
+  providerModel: string;
+  apiEndpointUrl: string;
+  apiKey: string;
+  save: string;
+  imageModelsTitle: string;
+  imageModelsDescription: string;
+  addImageModel: string;
+  imageModelKeySaved: string;
+  imageModelKeyMissing: string;
+  imageModelEndpoint: string;
+  imageModelName: string;
+  authMode: string;
+  responseFormat: string;
+  imageModelApiKeyPlaceholder: string;
+  imageModelSave: string;
+  imageModelSaveChanges: string;
+  authModeHint: string;
+  licenseActivated: string;
+  licenseInactive: string;
+};
+
 const ELECTRON_DIALOG_STRINGS: Record<AppLanguage, ElectronDialogStrings> = {
   "zh-CN": {
     needConfirmation: "需要确认",
@@ -31,7 +66,7 @@ const ELECTRON_DIALOG_STRINGS: Record<AppLanguage, ElectronDialogStrings> = {
     otherDescription: "输入自定义答案。",
     customAnswerPlaceholder: "自定义答案",
     optionalNote: "可选备注",
-    notePlaceholder: "给 Claude 的补充说明",
+    notePlaceholder: "给 KainClaw 的补充说明",
     reviewTitle: "检查你的答案",
     notAnsweredYet: "尚未作答",
     answerAllBeforeSubmit: "请先完成所有问题后再提交。",
@@ -51,7 +86,7 @@ const ELECTRON_DIALOG_STRINGS: Record<AppLanguage, ElectronDialogStrings> = {
     otherDescription: "Type a custom answer.",
     customAnswerPlaceholder: "Custom answer",
     optionalNote: "Optional note",
-    notePlaceholder: "Add context for Claude",
+    notePlaceholder: "Add context for KainClaw",
     reviewTitle: "Review your answers",
     notAnsweredYet: "Not answered yet",
     answerAllBeforeSubmit: "Please answer all questions before submitting.",
@@ -74,6 +109,81 @@ export function normalizeAppLanguage(value?: string): AppLanguage {
 
 export function getElectronDialogStrings(language?: string): ElectronDialogStrings {
   return ELECTRON_DIALOG_STRINGS[normalizeAppLanguage(language)];
+}
+
+const ELECTRON_SETTINGS_STRINGS: Record<AppLanguage, ElectronSettingsStrings> = {
+  "zh-CN": {
+    interfaceLanguageTitle: "界面语言",
+    interfaceLanguageDescription: "Electron 对话框和宿主提示会跟随这个语言。",
+    chatModelsTitle: "聊天模型",
+    chatModelsDescription: "用于对话、代码、MCP、Agent 等主流程。",
+    addProvider: "+ 添加提供商",
+    noChatModels: "尚未配置聊天模型。先添加 Claude、GPT、DeepSeek 等日常对话模型。",
+    currentInUse: "当前使用",
+    edit: "编辑",
+    use: "使用",
+    addProviderFormTitle: "添加新提供商",
+    providerType: "类型",
+    providerAlias: "别名",
+    providerAliasPlaceholder: "我的提供商",
+    providerModel: "模型",
+    apiEndpointUrl: "API 端点 URL",
+    apiKey: "API Key",
+    save: "保存",
+    imageModelsTitle: "图像模型",
+    imageModelsDescription: "用于 Image Lab 读取当前使用中的图像模型配置。",
+    addImageModel: "+ 添加图像模型",
+    imageModelKeySaved: "Key 已保存",
+    imageModelKeyMissing: "未配置 Key",
+    imageModelEndpoint: "接口地址",
+    imageModelName: "图像模型",
+    authMode: "鉴权方式",
+    responseFormat: "返回格式",
+    imageModelApiKeyPlaceholder: "填写 API 密钥",
+    imageModelSave: "保存图像模型",
+    imageModelSaveChanges: "保存修改",
+    authModeHint: "鉴权方式说明：大多数官方接口选 Bearer，部分中转站选 Raw。",
+    licenseActivated: "已激活 / Pro",
+    licenseInactive: "尚未激活 License",
+  },
+  "en-US": {
+    interfaceLanguageTitle: "Interface language",
+    interfaceLanguageDescription: "Electron dialogs and host-owned prompts follow this language.",
+    chatModelsTitle: "Chat models",
+    chatModelsDescription: "Used for chat, coding, MCP, agents, and the main workflow.",
+    addProvider: "+ Add provider",
+    noChatModels: "No chat model is configured yet. Add Claude, GPT, DeepSeek, or another daily-use chat model first.",
+    currentInUse: "Current",
+    edit: "Edit",
+    use: "Use",
+    addProviderFormTitle: "Add provider",
+    providerType: "Type",
+    providerAlias: "Alias",
+    providerAliasPlaceholder: "My provider",
+    providerModel: "Model",
+    apiEndpointUrl: "API endpoint URL",
+    apiKey: "API key",
+    save: "Save",
+    imageModelsTitle: "Image models",
+    imageModelsDescription: "Used by Image Lab to read the currently active image model configuration.",
+    addImageModel: "+ Add image model",
+    imageModelKeySaved: "Key saved",
+    imageModelKeyMissing: "No key",
+    imageModelEndpoint: "Endpoint",
+    imageModelName: "Image model",
+    authMode: "Auth mode",
+    responseFormat: "Response format",
+    imageModelApiKeyPlaceholder: "Enter API key",
+    imageModelSave: "Save image model",
+    imageModelSaveChanges: "Save changes",
+    authModeHint: "Auth mode hint: most official endpoints use Bearer, while some relay endpoints require Raw.",
+    licenseActivated: "Activated / Pro",
+    licenseInactive: "License not activated",
+  },
+};
+
+export function getElectronSettingsStrings(language?: string): ElectronSettingsStrings {
+  return ELECTRON_SETTINGS_STRINGS[normalizeAppLanguage(language)];
 }
 
 export function getElectronDebugCommandDescription(language?: string): string {

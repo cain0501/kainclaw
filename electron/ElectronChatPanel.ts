@@ -28,6 +28,7 @@ import {
 import {
   buildFreezeQuestionCopy,
   getElectronDialogStrings,
+  getElectronSettingsStrings,
 } from "../src/electronUiLanguage";
 import { normalizeWebviewAttachments } from "../src/attachmentHandler";
 import type {
@@ -997,6 +998,7 @@ export class ElectronChatPanel {
       type: "settings:data",
       ...data,
       dialogStrings: getElectronDialogStrings(data.language),
+      settingsStrings: getElectronSettingsStrings(data.language),
     });
   }
 

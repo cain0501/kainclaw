@@ -4879,6 +4879,7 @@ function renderSettings(data) {
   const activeId = data.activeId;
   const licenseActivated = data.licenseActivated;
   const currentLanguage = data.language || appState.uiLanguage || 'zh-CN';
+  const settingsStrings = data.settingsStrings || {};
   settingsImageModels = data.imageModels || [];
   currentActiveImageModelId = data.activeImageModelId || null;
   const imageConfig = data.imageConfig || {};
@@ -5077,6 +5078,121 @@ function renderSettings(data) {
     licWrap.innerHTML = '<div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:9px;padding:14px 16px"><div style="display:flex;align-items:center;gap:7px"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#16a34a" stroke-width="2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg><span style="font-size:13px;font-weight:600;color:#16a34a">已激活 / Pro</span></div></div>';
   } else {
   licWrap.innerHTML = '<div style="background:#fff7ed;border:1px solid #fed7aa;border-radius:9px;padding:12px 16px;font-size:13px;color:#92400e">尚未激活 License</div>';
+  }
+
+  localizeSettingsSurface(currentLanguage, settingsStrings, {
+    providers,
+    activeId,
+    imageModels: settingsImageModels,
+    activeImageModelId: currentActiveImageModelId,
+    licenseActivated,
+  });
+}
+
+function localizeSettingsSurface(currentLanguage, settingsStrings, state) {
+  const container = document.getElementById('providers-list');
+  if (!container) return;
+
+  const sections = container.querySelectorAll(':scope > section');
+  const languageSection = sections[0];
+  const chatSection = sections[1];
+  const imageSection = sections[2];
+
+  if (languageSection) {
+    const title = languageSection.querySelector('div[style*="font-size:16px;font-weight:700"]');
+    const desc = languageSection.querySelector('div[style*="font-size:12px;color:#71717a"]');
+    if (title) title.textContent = settingsStrings.interfaceLanguageTitle;
+    if (desc) desc.textContent = settingsStrings.interfaceLanguageDescription;
+  }
+
+  if (chatSection) {
+    const addProviderBtn = chatSection.querySelector('button[onclick="showAddProvider()"]');
+    if (addProviderBtn) addProviderBtn.textContent = settingsStrings.addProvider;
+    const title = addProviderBtn?.parentElement?.querySelector('div[style*="font-size:17px;font-weight:700"]');
+    const desc = addProviderBtn?.parentElement?.querySelector('div[style*="font-size:12px;color:#71717a;margin-top:4px"]');
+    if (title) title.textContent = settingsStrings.chatModelsTitle;
+    if (desc) desc.textContent = settingsStrings.chatModelsDescription;
+    if (state.providers.length === 0) {
+      const emptyCard = chatSection.querySelector('div[style*="border:1px dashed #d4d4d8"]');
+      if (emptyCard) emptyCard.textContent = settingsStrings.noChatModels;
+    }
+    chatSection.querySelectorAll('button[onclick^="editProvider("]').forEach(button => {
+      button.textContent = settingsStrings.edit;
+    });
+    chatSection.querySelectorAll('button[onclick^="setActiveProvider("]').forEach(button => {
+      button.textContent = settingsStrings.use;
+    });
+    chatSection.querySelectorAll('.badge-green').forEach(badge => {
+      if (badge.textContent?.includes('??') || badge.textContent?.includes('Current')) {
+        badge.textContent = settingsStrings.currentInUse;
+      }
+    });
+  }
+
+  const providerFormTitle = document.getElementById('provider-form-title');
+  if (providerFormTitle) providerFormTitle.textContent = settingsStrings.addProviderFormTitle;
+  const newProvPreset = document.getElementById('new-prov-preset');
+  if (newProvPreset?.previousElementSibling) newProvPreset.previousElementSibling.textContent = settingsStrings.providerType;
+  const newProvAlias = document.getElementById('new-prov-alias');
+  if (newProvAlias?.previousElementSibling) newProvAlias.previousElementSibling.textContent = settingsStrings.providerAlias;
+  if (newProvAlias) newProvAlias.placeholder = settingsStrings.providerAliasPlaceholder;
+  const newProvModel = document.getElementById('new-prov-model');
+  if (newProvModel?.previousElementSibling) newProvModel.previousElementSibling.textContent = settingsStrings.providerModel;
+  const newProvUrl = document.getElementById('new-prov-url');
+  if (newProvUrl?.previousElementSibling) newProvUrl.previousElementSibling.textContent = settingsStrings.apiEndpointUrl;
+  const newProvKey = document.getElementById('new-prov-key');
+  if (newProvKey?.previousElementSibling) newProvKey.previousElementSibling.textContent = settingsStrings.apiKey;
+  const providerSaveBtn = document.getElementById('provider-form-save-btn');
+  if (providerSaveBtn) providerSaveBtn.textContent = settingsStrings.save;
+
+  if (imageSection) {
+    const addImageBtn = imageSection.querySelector('button[onclick="showAddImageModelForm()"]');
+    if (addImageBtn) addImageBtn.textContent = settingsStrings.addImageModel;
+    const title = addImageBtn?.parentElement?.querySelector('div[style*="font-size:17px;font-weight:700"]');
+    const desc = addImageBtn?.parentElement?.querySelector('div[style*="font-size:12px;color:#a07458;margin-top:4px"]');
+    if (title) title.textContent = settingsStrings.imageModelsTitle;
+    if (desc) desc.textContent = settingsStrings.imageModelsDescription;
+    imageSection.querySelectorAll('button[onclick^="editImageModelConfig("]').forEach(button => {
+      button.textContent = settingsStrings.edit;
+    });
+    imageSection.querySelectorAll('button[onclick^="setActiveImageModelConfig("]').forEach(button => {
+      button.textContent = settingsStrings.use;
+    });
+    imageSection.querySelectorAll('.badge-blue').forEach(badge => {
+      badge.textContent = settingsStrings.currentInUse;
+    });
+    imageSection.querySelectorAll('.badge-green').forEach(badge => {
+      if (badge.textContent?.includes('Key') || badge.textContent?.includes('??') || badge.textContent?.includes('saved')) {
+        badge.textContent = settingsStrings.imageModelKeySaved;
+      }
+    });
+    imageSection.querySelectorAll('.badge-orange').forEach(badge => {
+      if (badge.textContent?.includes('Key') || badge.textContent?.includes('??') || badge.textContent?.includes('No key')) {
+        badge.textContent = settingsStrings.imageModelKeyMissing;
+      }
+    });
+  }
+
+  const imageBaseUrl = document.getElementById('settings-image-baseurl');
+  if (imageBaseUrl?.previousElementSibling) imageBaseUrl.previousElementSibling.textContent = settingsStrings.imageModelEndpoint;
+  const imageModel = document.getElementById('settings-image-model');
+  if (imageModel?.previousElementSibling) imageModel.previousElementSibling.textContent = settingsStrings.imageModelName;
+  const imageAuthMode = document.getElementById('settings-image-authmode');
+  if (imageAuthMode?.previousElementSibling) imageAuthMode.previousElementSibling.textContent = settingsStrings.authMode;
+  const imageResponseFormat = document.getElementById('settings-image-responseformat');
+  if (imageResponseFormat?.previousElementSibling) imageResponseFormat.previousElementSibling.textContent = settingsStrings.responseFormat;
+  const imageApiKey = document.getElementById('settings-image-apikey');
+  if (imageApiKey?.previousElementSibling) imageApiKey.previousElementSibling.textContent = settingsStrings.apiKey;
+  if (imageApiKey) imageApiKey.placeholder = settingsStrings.imageModelApiKeyPlaceholder;
+  const imageEditorButtons = document.querySelectorAll('#settings-image-editor .btn-secondary');
+  if (imageEditorButtons[0]) imageEditorButtons[0].textContent = editingImageModelId ? settingsStrings.imageModelSaveChanges : settingsStrings.imageModelSave;
+
+  const licWrap = document.getElementById('lic-status-wrap');
+  if (licWrap) {
+    const licenseText = licWrap.querySelector('span') || licWrap.querySelector('div');
+    if (licenseText) {
+      licenseText.textContent = state.licenseActivated ? settingsStrings.licenseActivated : settingsStrings.licenseInactive;
+    }
   }
 }
 
