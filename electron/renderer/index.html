@@ -5162,18 +5162,18 @@ function localizeSettingsSurface(currentLanguage, settingsStrings, state) {
     node.lastChild.textContent = ' ' + label;
   };
 
-  setNavLabel('snav-provider', currentLanguage === 'en-US' ? 'Providers & models' : '??? & ??');
-  setNavLabel('snav-appear', currentLanguage === 'en-US' ? 'Appearance' : '??');
+  setNavLabel('snav-provider', currentLanguage === 'en-US' ? 'Providers & models' : '提供商 & 模型');
+  setNavLabel('snav-appear', currentLanguage === 'en-US' ? 'Appearance' : '外观');
   setNavLabel('snav-lic', 'License');
-  setNavLabel('snav-adv', currentLanguage === 'en-US' ? 'Advanced' : '??');
+  setNavLabel('snav-adv', currentLanguage === 'en-US' ? 'Advanced' : '高级');
 
   const settingsPageTitle = document.querySelector('#page-settings > div > div:first-child span');
   if (settingsPageTitle) {
-    settingsPageTitle.textContent = currentLanguage === 'en-US' ? 'Settings' : '??';
+    settingsPageTitle.textContent = currentLanguage === 'en-US' ? 'Settings' : '设置';
   }
   const backToChat = document.querySelector('#page-settings > div > div:last-child');
   if (backToChat && backToChat.lastChild) {
-    backToChat.lastChild.textContent = currentLanguage === 'en-US' ? ' Back to chat' : ' ????';
+    backToChat.lastChild.textContent = currentLanguage === 'en-US' ? ' Back to chat' : ' 返回对话';
   }
 
   if (languageSection) {
@@ -5189,11 +5189,11 @@ function localizeSettingsSurface(currentLanguage, settingsStrings, state) {
   }
 
   const providerHeader = document.querySelector('#sc-provider > div > span');
-  if (providerHeader) providerHeader.textContent = currentLanguage === 'en-US' ? 'Providers & models' : '??? & ??';
+  if (providerHeader) providerHeader.textContent = currentLanguage === 'en-US' ? 'Providers & models' : '提供商 & 模型';
   const appearanceHeader = document.querySelector('#sc-appear > div:first-child');
-  if (appearanceHeader) appearanceHeader.textContent = currentLanguage === 'en-US' ? 'Appearance' : '??';
+  if (appearanceHeader) appearanceHeader.textContent = currentLanguage === 'en-US' ? 'Appearance' : '外观';
   const advancedHeader = document.querySelector('#sc-adv > div:first-child');
-  if (advancedHeader) advancedHeader.textContent = currentLanguage === 'en-US' ? 'Advanced' : '??';
+  if (advancedHeader) advancedHeader.textContent = currentLanguage === 'en-US' ? 'Advanced' : '高级';
   const licenseHeader = document.querySelector('#sc-lic > div:first-child');
   if (licenseHeader) licenseHeader.textContent = 'License';
 
@@ -5254,12 +5254,12 @@ function localizeSettingsSurface(currentLanguage, settingsStrings, state) {
       badge.textContent = settingsStrings.currentInUse;
     });
     imageSection.querySelectorAll('.badge-green').forEach(badge => {
-      if (badge.textContent && /Key|??|saved/i.test(badge.textContent)) {
+      if (badge.textContent && /Key|保存|saved/i.test(badge.textContent)) {
         badge.textContent = settingsStrings.imageModelKeySaved;
       }
     });
     imageSection.querySelectorAll('.badge-orange').forEach(badge => {
-      if (badge.textContent && /Key|??|No key/i.test(badge.textContent)) {
+      if (badge.textContent && /Key|配置|No key/i.test(badge.textContent)) {
         badge.textContent = settingsStrings.imageModelKeyMissing;
       }
     });
@@ -5284,17 +5284,17 @@ function localizeSettingsSurface(currentLanguage, settingsStrings, state) {
     const resetTitle = resetCard.querySelector('div[style*="font-size:13px;font-weight:600"]');
     const resetDesc = resetCard.querySelector('div[style*="font-size:12px;color:#71717a"]');
     const resetBtn = resetCard.querySelector('button');
-    if (resetTitle) resetTitle.textContent = currentLanguage === 'en-US' ? 'Reset configuration' : '????';
+    if (resetTitle) resetTitle.textContent = currentLanguage === 'en-US' ? 'Reset configuration' : '重置配置';
     if (resetDesc) resetDesc.textContent = currentLanguage === 'en-US'
       ? 'Clear provider configuration and onboarding state. Conversation history is not affected.'
-      : '?? Provider ??? onboarding ??????????????';
-    if (resetBtn) resetBtn.textContent = currentLanguage === 'en-US' ? 'Reset configuration' : '????';
+      : '清除 Provider 配置和 onboarding 状态。会话记录不会受到影响。';
+    if (resetBtn) resetBtn.textContent = currentLanguage === 'en-US' ? 'Reset configuration' : '重置配置';
   }
 
   const licenseLabel = document.querySelector('#sc-lic div[style*="font-size:12px;color:#71717a;margin-bottom:5px"]');
-  if (licenseLabel) licenseLabel.textContent = currentLanguage === 'en-US' ? 'Activation key' : '???';
+  if (licenseLabel) licenseLabel.textContent = currentLanguage === 'en-US' ? 'Activation key' : '激活码';
   const licenseButton = document.querySelector('#sc-lic .btn-red');
-  if (licenseButton) licenseButton.textContent = currentLanguage === 'en-US' ? 'Activate' : '??';
+  if (licenseButton) licenseButton.textContent = currentLanguage === 'en-US' ? 'Activate' : '激活';
 
   const licWrap = document.getElementById('lic-status-wrap');
   if (licWrap) {
