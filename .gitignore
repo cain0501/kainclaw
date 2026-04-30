@@ -31,3 +31,8 @@ dev-host.code-workspace
 *.log
 Thumbs.db
 .DS_Store
+
+# Beads / Dolt files (added by bd init)
+.dolt/
+*.db
+.beads-credential-key

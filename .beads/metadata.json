@@ -1,0 +1,7 @@
+{
+  "database": "dolt",
+  "backend": "dolt",
+  "dolt_mode": "embedded",
+  "dolt_database": "vscode_extension",
+  "project_id": "19770484-faae-4c64-ae2b-cf1a8d118b55"
+}
