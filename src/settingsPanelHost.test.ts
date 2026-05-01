@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 import {
   createSettingsPanelActions,
   createSettingsPanelActionsFactory,
+  createSettingsPanelControllerFactory,
 } from "./settingsPanelHost";
 import type { AppLanguage } from "./electronUiLanguage";
 
@@ -133,7 +134,7 @@ class FakeSettingsStore {
     return this.language;
   }
 
-  async setLanguage(language: string) {
+  async setLanguage(language: AppLanguage) {
     this.language = language;
   }
 
@@ -176,6 +177,63 @@ describe("settingsPanelHost", () => {
       postWebviewMessage,
       postState: () => undefined,
       logSession,
+      shouldRefreshSessionsList: () => true,
+      handleSessionsLoad,
+    });
+
+    await actions.activateLicense("good");
+
+    expect(settings.isLicenseActivated()).toBe(true);
+    expect(storeLicenseKey).toHaveBeenCalledWith("good");
+    expect(setLicenseFlags).toHaveBeenCalledWith({
+      sessionPersistence: true,
+      multiSession: true,
+      swarm: false,
+    });
+    expect(initializeCompanion).toHaveBeenCalled();
+    expect(logSession).toHaveBeenCalledWith("license-activated", {
+      flags: {
+        sessionPersistence: true,
+        multiSession: true,
+        swarm: false,
+      },
+    });
+    expect(handleSessionsLoad).toHaveBeenCalled();
+  });
+
+  it("builds a settings panel controller factory that wires host state at the edge", async () => {
+    const settings = new FakeSettingsStore();
+    const initializeCompanion = vi.fn(async () => undefined);
+    const storeLicenseKey = vi.fn(async () => undefined);
+    const setLicenseFlags = vi.fn();
+    const postWebviewMessage = vi.fn();
+    const logSession = vi.fn();
+    const handleSessionsLoad = vi.fn(async () => undefined);
+
+    const factory = createSettingsPanelControllerFactory({
+      settings,
+      refreshWorkspaceStatus: () => undefined,
+      initializeCompanion,
+      storeLicenseKey,
+      verifyLicense: rawKey =>
+        rawKey === "good"
+          ? {
+              valid: true,
+              flags: {
+                sessionPersistence: true,
+                multiSession: true,
+                swarm: false,
+              },
+              expiresAt: new Date("2026-12-31T00:00:00.000Z"),
+            }
+          : { valid: false, reason: "bad" },
+    });
+
+    const actions = factory({
+      postWebviewMessage,
+      postState: () => undefined,
+      logSession,
+      setLicenseFlags,
       shouldRefreshSessionsList: () => true,
       handleSessionsLoad,
     });

@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 import {
   applyReadySequenceAction,
   createReadySequenceController,
+  createReadySequenceControllerFactory,
   createReadySequenceRunner,
   createReadySequenceRunnerFactory,
   resolveReadySequenceAction,
@@ -278,6 +279,182 @@ describe("readySequenceHost", () => {
       "clearBuffers",
       "current:session-1",
       "messages:1",
+      "model:1",
+      "pending:yes",
+      "compact:yes",
+      "baseline:1",
+      "restoreSuccess:active:session-1:1",
+      "ready:E:\\repo:hash:E:\\repo:session-1",
+      "hydrate:E:\\repo",
+      "postState",
+      "refresh",
+    ]);
+  });
+
+  it("builds a ready sequence controller factory that encapsulates saved-session host wiring", async () => {
+    const calls: string[] = [];
+    let currentSessionId: string | undefined;
+    let baselineCount = 0;
+    let restoredModelConversation:
+      | Array<{ role: string; content: string }>
+      | undefined;
+    let restoredPendingPlanVerification:
+      | { planFilePath: string }
+      | undefined;
+    let restoredCompactBoundary:
+      | {
+          trigger: "manual" | "auto";
+          compactedAt: number;
+          preTokens: number;
+          postTokens: number;
+          messagesSummarized: number;
+          messagesKept: number;
+          preservedRecentMessages: boolean;
+        }
+      | undefined;
+    const sessionMessages: Array<{ role: "user" | "assistant"; content: string }> = [
+      { role: "assistant", content: "stale" },
+    ];
+    const savedSessionActivationBindings = {
+      clearConversationBuffers: () => {
+        sessionMessages.length = 0;
+        calls.push("clearBuffers");
+      },
+      setCurrentSessionId: (sessionId: string | undefined) => {
+        currentSessionId = sessionId;
+        calls.push(`current:${sessionId ?? "undefined"}`);
+      },
+      replaceSessionMessages: (
+        messages: Array<{ role: "user" | "assistant"; content: string }>,
+      ) => {
+        sessionMessages.push(...messages);
+      },
+      restoreModelConversation: (modelConversation: unknown) => {
+        restoredModelConversation = modelConversation as Array<{
+          role: string;
+          content: string;
+        }>;
+        calls.push(`model:${restoredModelConversation?.length ?? 0}`);
+      },
+      restorePendingPlanVerification: (pendingPlanVerification: unknown) => {
+        restoredPendingPlanVerification = pendingPlanVerification as {
+          planFilePath: string;
+        };
+        calls.push(`pending:${pendingPlanVerification ? "yes" : "no"}`);
+      },
+      restoreCompactBoundary: (compactBoundary: unknown) => {
+        restoredCompactBoundary = compactBoundary as {
+          trigger: "manual" | "auto";
+          compactedAt: number;
+          preTokens: number;
+          postTokens: number;
+          messagesSummarized: number;
+          messagesKept: number;
+          preservedRecentMessages: boolean;
+        };
+        calls.push(`compact:${compactBoundary ? "yes" : "no"}`);
+      },
+      markConversationBaseline: (count: number) => {
+        baselineCount = count;
+        calls.push(`baseline:${count}`);
+      },
+    };
+
+    const controllerFactory = createReadySequenceControllerFactory({
+      restoreLicenseFlags: async () => {
+        calls.push("restoreLicense");
+      },
+      initializeCompanion: async () => {
+        calls.push("initializeCompanion");
+      },
+      getOnboardingDone: () => true,
+      getSessionPersistenceEnabled: () => true,
+      getWorkspaceRoot: () => "E:\\repo",
+      getWorkspaceHash: workspaceRoot => `hash:${workspaceRoot ?? "none"}`,
+      getLastSessionId: () => "session-1",
+      readIndex: async () => ({ sessions: [] }),
+      loadMessages: async () => [{ role: "assistant", content: "restored" }],
+      loadRuntimeState: async () => ({
+        modelConversation: [{ role: "assistant", content: "model-restored" }],
+        pendingPlanVerification: {
+          planFilePath: "E:\\repo\\.omx\\plans\\test-spec.md",
+        },
+        compactBoundary: {
+          trigger: "manual",
+          compactedAt: 1,
+          preTokens: 200,
+          postTokens: 120,
+          messagesSummarized: 4,
+          messagesKept: 2,
+          preservedRecentMessages: true,
+        },
+      }),
+      savedSessionActivationBindings,
+      setActiveSessionId: async () => undefined,
+      postLicenseRequired: feature => {
+        calls.push(`license:${feature}`);
+      },
+      postState: () => {
+        calls.push("postState");
+      },
+      refreshWorkspaceStatus: () => {
+        calls.push("refresh");
+      },
+      ensureConversationWorktreeHydrated: async workspaceRoot => {
+        calls.push(`hydrate:${workspaceRoot}`);
+      },
+    });
+
+    const controller = controllerFactory({
+      showOnboarding: () => {
+        calls.push("onboarding");
+      },
+      logReady: details => {
+        calls.push(`ready:${details.workspaceRoot}:${details.workspaceHash}:${details.lastSessionId}`);
+      },
+      logRestoreMissed: details => {
+        calls.push(`restoreMissed:${details.workspaceHash}`);
+      },
+      logRestoreSkippedEmpty: details => {
+        calls.push(`restoreSkipped:${details.source}:${details.sessionId}`);
+      },
+      logRestoreSuccess: details => {
+        calls.push(`restoreSuccess:${details.source}:${details.sessionId}:${details.messageCount}`);
+      },
+      shouldRefreshSessionsList: () => false,
+      handleSessionsLoad: async () => {
+        calls.push("sessionsLoad");
+      },
+    });
+
+    await controller.ensureReadySequence();
+
+    expect(controller.isReady()).toBe(true);
+    expect(currentSessionId).toBe("session-1");
+    expect(sessionMessages).toEqual([
+      { role: "assistant", content: "restored" },
+    ]);
+    expect(restoredModelConversation).toEqual([
+      { role: "assistant", content: "model-restored" },
+    ]);
+    expect(restoredPendingPlanVerification).toEqual({
+      planFilePath: "E:\\repo\\.omx\\plans\\test-spec.md",
+    });
+    expect(restoredCompactBoundary).toEqual({
+      trigger: "manual",
+      compactedAt: 1,
+      preTokens: 200,
+      postTokens: 120,
+      messagesSummarized: 4,
+      messagesKept: 2,
+      preservedRecentMessages: true,
+    });
+    expect(baselineCount).toBe(1);
+    expect(calls).toEqual([
+      "restoreLicense",
+      "initializeCompanion",
+      "clearBuffers",
+      "current:session-1",
       "model:1",
       "pending:yes",
       "compact:yes",

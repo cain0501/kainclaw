@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 
 import {
+  createCompanionControllerFactory,
   createCompanionHostBindings,
   createCompanionHostBindingsFactory,
   initializeCompanionData,
@@ -180,5 +181,52 @@ describe("companionHost", () => {
     expect(postInit).toHaveBeenCalledWith(initializedCompanion);
     expect(postState).toHaveBeenCalledWith("thinking");
     expect(postMood).toHaveBeenCalledWith(2, companionData);
+  });
+
+  it("builds a companion controller factory around stable host bindings", async () => {
+    let companionData:
+      | {
+          species: "duck";
+          rarity: "common";
+          moodLevel: number;
+          bondLevel: number;
+          totalConversations: number;
+          lastActiveAt: number;
+        }
+      | undefined;
+    const persist = vi.fn(async (_value?: unknown) => undefined);
+    const postInit = vi.fn();
+    const postState = vi.fn();
+    const postMood = vi.fn();
+
+    const factory = createCompanionControllerFactory({
+      getMachineId: () => "machine-3",
+      hasLicense: () => true,
+      getStoredCompanion: () => undefined,
+      persistCompanionData: async next => {
+        await persist(next);
+      },
+      postCompanionInit: postInit,
+      postCompanionState: postState,
+      postCompanionMood: postMood,
+    });
+
+    const bindings = factory({
+      getCompanionData: () => companionData,
+      setCompanionData: next => {
+        companionData = next as typeof companionData;
+      },
+    });
+
+    await bindings.initializeCompanion();
+    const initializedCompanion = companionData;
+    bindings.postCompanionState("thinking");
+    await bindings.updateCompanionMood(4, true);
+
+    expect(companionData).toBeDefined();
+    expect(persist).toHaveBeenCalledTimes(2);
+    expect(postInit).toHaveBeenCalledWith(initializedCompanion);
+    expect(postState).toHaveBeenCalledWith("thinking");
+    expect(postMood).toHaveBeenCalledWith(4, companionData);
   });
 });

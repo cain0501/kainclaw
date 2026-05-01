@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 import {
   createSessionPanelActions,
   createSessionPanelActionsFactory,
+  createSessionPanelControllerFactory,
 } from "./sessionPanelHost";
 
 class FakeSessionStore {
@@ -84,6 +85,96 @@ class FakeSessionStore {
 }
 
 describe("sessionPanelHost", () => {
+  it("builds a reusable session panel controller factory around stable host bindings", async () => {
+    const sessions = new FakeSessionStore();
+    let currentSessionId: string | undefined = "session-0";
+    const calls: string[] = [];
+
+    const factory = createSessionPanelControllerFactory({
+      settings: {
+        setActiveSessionId: async id => {
+          calls.push(`active:${id}`);
+        },
+      },
+      sessions,
+      getPersistenceEnabled: () => true,
+      refreshWorkspaceStatus: () => {
+        calls.push("refresh");
+      },
+      savedSessionActivationBindings: {
+        clearConversationBuffers: () => {
+          calls.push("clearBuffers");
+        },
+        setCurrentSessionId: () => undefined,
+        replaceSessionMessages: messages => {
+          calls.push(`messages:${messages.length}`);
+        },
+        restoreModelConversation: messages => {
+          calls.push(`model:${messages?.length ?? 0}`);
+        },
+        restorePendingPlanVerification: state => {
+          calls.push(`pending:${state ? "yes" : "no"}`);
+        },
+        restoreCompactBoundary: state => {
+          calls.push(`compact:${state ? "yes" : "no"}`);
+        },
+        markConversationBaseline: () => undefined,
+      },
+      markConversationBaseline: count => {
+        calls.push(`baseline:${count}`);
+      },
+      showSaveDialog: async () => undefined,
+      writeFile: async () => undefined,
+      showInformationMessage: () => undefined,
+    });
+
+    const actions = factory({
+      workspaceRoot: "E:\\repo",
+      getCurrentSessionId: () => currentSessionId,
+      setCurrentSessionId: id => {
+        currentSessionId = id;
+        calls.push(`current:${id ?? "undefined"}`);
+      },
+      getPreviousSignature: () => "",
+      setSignature: () => undefined,
+      disposeSwarm: () => {
+        calls.push("disposeSwarm");
+      },
+      resetActiveRuntimeControllers: () => {
+        calls.push("resetRuntime");
+      },
+      resetPlanMode: () => {
+        calls.push("resetPlan");
+      },
+      clearCachedTools: () => {
+        calls.push("clearCache");
+      },
+      clearPendingPlanVerification: () => undefined,
+      setTransientConversationId: () => undefined,
+      resetAutoMemoryConversation: () => undefined,
+      ensureConversationWorktreeHydrated: async workspaceRoot => {
+        calls.push(`hydrate:${workspaceRoot}`);
+      },
+      shouldRefreshSessionsList: () => false,
+      postState: () => {
+        calls.push("postState");
+      },
+      publishSessions: () => undefined,
+      logSession: () => undefined,
+    });
+
+    await actions.switchSession("session-1");
+
+    expect(currentSessionId).toBe("session-1");
+    expect(calls).toContain("disposeSwarm");
+    expect(calls).toContain("clearBuffers");
+    expect(calls).toContain("messages:1");
+    expect(calls).toContain("model:1");
+    expect(calls).toContain("compact:no");
+    expect(calls).toContain("baseline:1");
+    expect(calls).toContain("active:session-1");
+  });
+
   it("builds a reusable session panel actions factory around stable host bindings", async () => {
     const sessions = new FakeSessionStore();
     let currentSessionId: string | undefined = "session-1";

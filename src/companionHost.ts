@@ -83,6 +83,28 @@ export type CompanionHostBindingFactory = (options: {
   setCompanionData: (companionData: CompanionData | undefined) => void;
 }) => CompanionHostBindings;
 
+export type CompanionControllerFactoryOptions = {
+  getMachineId: () => string;
+  hasLicense: () => boolean;
+  getStoredCompanion: () => CompanionData | undefined;
+  persistCompanionData: (
+    companionData: CompanionData | undefined,
+  ) => Promise<void>;
+  postCompanionInit: (companionData: CompanionData | undefined) => void;
+  postCompanionState: (state: CompanionState) => void;
+  postCompanionMood: (
+    delta: number,
+    companionData: CompanionData | undefined,
+  ) => void;
+};
+
+export type CompanionControllerFactoryState =
+  Parameters<CompanionHostBindingFactory>[0];
+
+export type CompanionControllerFactory = (
+  state: CompanionControllerFactoryState,
+) => CompanionHostBindings;
+
 export function createCompanionHostBindings(options: {
   getMachineId: () => string;
   hasLicense: () => boolean;
@@ -150,4 +172,19 @@ export function createCompanionHostBindingsFactory(options: {
       postCompanionState: options.postCompanionState,
       postCompanionMood: options.postCompanionMood,
     });
+}
+
+export function createCompanionControllerFactory(
+  options: CompanionControllerFactoryOptions,
+): CompanionControllerFactory {
+  return state =>
+    createCompanionHostBindingsFactory({
+      getMachineId: options.getMachineId,
+      hasLicense: options.hasLicense,
+      getStoredCompanion: options.getStoredCompanion,
+      persistCompanionData: options.persistCompanionData,
+      postCompanionInit: options.postCompanionInit,
+      postCompanionState: options.postCompanionState,
+      postCompanionMood: options.postCompanionMood,
+    })(state);
 }

@@ -57,8 +57,8 @@ import {
   runPromptRequestWithExtensionParts,
 } from "./promptRequestExtensionHost";
 import {
-  createReadySequenceController,
-  createReadySequenceRunnerFactory,
+  createReadySequenceControllerFactory,
+  type ReadySequenceController,
 } from "./readySequenceHost";
 import {
   createSavedSessionActivationBindingsFactory,
@@ -67,8 +67,7 @@ import {
   clearConversationHostState,
 } from "./sessionLifecycleHost";
 import {
-  createSessionPanelActions,
-  createSessionPanelActionsFactory,
+  createSessionPanelControllerFactory,
   type SessionPanelActions,
 } from "./sessionPanelHost";
 import {
@@ -136,7 +135,7 @@ import {
   type WorkspaceStatusController,
 } from "./workspaceStatusHost";
 import {
-  createSettingsPanelActionsFactory,
+  createSettingsPanelControllerFactory,
   type SettingsPanelActions,
 } from "./settingsPanelHost";
 import {
@@ -171,7 +170,7 @@ import {
 } from "./providerHost";
 import type { CompanionData } from "./companion/companionTypes";
 import {
-  createCompanionHostBindingsFactory,
+  createCompanionControllerFactory,
   type CompanionHostBindings,
   persistCompanionData as persistCompanionDataHost,
 } from "./companionHost";
@@ -274,16 +273,12 @@ class ChatSidebarProvider implements vscode.WebviewViewProvider, vscode.Disposab
   private readonly settingsPanelActions: SettingsPanelActions;
   private readonly backgroundCommandToolLaunchBindings: BackgroundCommandToolLaunchBindings;
   private readonly quickActionBindings: QuickActionBindings;
-  private readonly readySequenceController: ReturnType<
-    typeof createReadySequenceController
-  >;
+  private readonly readySequenceController: ReadySequenceController;
   private readonly workspaceRuntimeHost: WorkspaceRuntimeHost;
   private readonly workspaceStatusController: WorkspaceStatusController;
   private readonly disposeFastModeRuntimeListener: () => void;
   private readonly extensionPromptRequestPartsFactory:
     ExtensionPromptRequestPartsFactory;
-  private readonly sessionPanelActionsFactory:
-    ReturnType<typeof createSessionPanelActionsFactory>;
   private cachedToolsWorkspaceRoot: string | undefined;
   private readonly sessionInstalledSkillHooks = new Map<string, HookDefinition[]>();
   private sessionsPanelOpen = false;
@@ -481,6 +476,8 @@ class ChatSidebarProvider implements vscode.WebviewViewProvider, vscode.Disposab
       getPlanMode: () => this.planModeState,
       getPendingApproval: () => this.approvalHost.getPendingApproval() ?? null,
       getOnboardingDone: () => this.settings.isOnboardingDone(),
+      getMultiSessionEnabled: () =>
+        this.conversationFeatureBindings.isMultiSessionEnabled(),
     });
     const streamingStateBindingsFactory = createStreamingStateBindingsFactory({
       host: this.webviewStateHost,
@@ -671,7 +668,7 @@ class ChatSidebarProvider implements vscode.WebviewViewProvider, vscode.Disposab
       this.postState();
       this.workspaceStatusController.requestRefresh();
     });
-    this.sessionPanelActionsFactory = createSessionPanelActionsFactory({
+    const sessionPanelControllerFactory = createSessionPanelControllerFactory({
       settings: this.settings,
       sessions: this.sessions,
       getPersistenceEnabled: () =>
@@ -698,7 +695,7 @@ class ChatSidebarProvider implements vscode.WebviewViewProvider, vscode.Disposab
         void vscode.window.showInformationMessage(message);
       },
     });
-    this.sessionPanelActions = this.sessionPanelActionsFactory({
+    this.sessionPanelActions = sessionPanelControllerFactory({
       workspaceRoot: getPrimaryWorkspaceFolderPath(),
       getCurrentSessionId: () => this.currentSessionId,
       setCurrentSessionId: id => {
@@ -744,7 +741,7 @@ class ChatSidebarProvider implements vscode.WebviewViewProvider, vscode.Disposab
         this.logSession(event, details);
       },
     });
-    const companionBindingsFactory = createCompanionHostBindingsFactory({
+    const companionControllerFactory = createCompanionControllerFactory({
       getMachineId: () => vscode.env.machineId || os.hostname(),
       hasLicense: () => this.settings.isLicenseActivated() || !!this.licenseFlags,
       getStoredCompanion: () => this.host.getState<CompanionData>(COMPANION_STATE_KEY),
@@ -765,29 +762,29 @@ class ChatSidebarProvider implements vscode.WebviewViewProvider, vscode.Disposab
         this.webviewStateHost.postCompanionMood(delta, companionData);
       },
     });
-    this.companionBindings = companionBindingsFactory({
+    this.companionBindings = companionControllerFactory({
       getCompanionData: () => this.companionData,
       setCompanionData: companionData => {
         this.companionData = companionData;
       },
     });
-    const settingsPanelActionsFactory = createSettingsPanelActionsFactory({
+    const settingsPanelControllerFactory = createSettingsPanelControllerFactory({
       settings: this.settings,
       refreshWorkspaceStatus: this.workspaceStatusController.requestRefresh,
       initializeCompanion: () => this.companionBindings.initializeCompanion(),
       storeLicenseKey: rawKey => this.host.storeSecret("cain.licenseKey", rawKey),
-      setLicenseFlags: flags => {
-        this.licenseFlags = flags;
-      },
       verifyLicense,
     });
-    this.settingsPanelActions = settingsPanelActionsFactory({
+    this.settingsPanelActions = settingsPanelControllerFactory({
       postWebviewMessage: payload => {
         this.webviewView?.webview.postMessage(payload);
       },
       postState: () => this.postState(),
       logSession: (event, details) => {
         this.logSession(event, details);
+      },
+      setLicenseFlags: flags => {
+        this.licenseFlags = flags;
       },
       shouldRefreshSessionsList: () => this.shouldRefreshSessionsList(),
       handleSessionsLoad: this.sessionPanelActions.loadSessions,
@@ -831,7 +828,7 @@ class ChatSidebarProvider implements vscode.WebviewViewProvider, vscode.Disposab
         this.licenseFlags = flags;
       },
     });
-    const readySequenceRunner = createReadySequenceRunnerFactory({
+    const readySequenceControllerFactory = createReadySequenceControllerFactory({
       restoreLicenseFlags: () => this.licenseHostBindings.restoreLicenseFlags(),
       initializeCompanion: () => this.companionBindings.initializeCompanion(),
       getOnboardingDone: () => this.settings.isOnboardingDone(),
@@ -845,16 +842,20 @@ class ChatSidebarProvider implements vscode.WebviewViewProvider, vscode.Disposab
       loadRuntimeState: id => this.sessions.loadRuntimeState(id),
       savedSessionActivationBindings,
       setActiveSessionId: id => this.settings.setActiveSessionId(id),
+      postLicenseRequired: feature =>
+        this.licenseHostBindings.postLicenseRequired(feature),
+      postState: () => this.postState(),
+      refreshWorkspaceStatus: this.workspaceStatusController.requestRefresh,
+      ensureConversationWorktreeHydrated: nextWorkspaceRoot =>
+        this.conversationScopeBindings.ensureConversationWorktreeHydrated(nextWorkspaceRoot),
+    });
+    this.readySequenceController = readySequenceControllerFactory({
       showOnboarding: () => {
         this.webviewView?.webview.postMessage({ type: "showOnboarding" });
       },
       logReady: details => {
         this.logSession("ready", details);
       },
-      postLicenseRequired: feature =>
-        this.licenseHostBindings.postLicenseRequired(feature),
-      postState: () => this.postState(),
-      refreshWorkspaceStatus: this.workspaceStatusController.requestRefresh,
       logRestoreMissed: details => {
         this.logSession("restore-missed", details);
       },
@@ -864,13 +865,8 @@ class ChatSidebarProvider implements vscode.WebviewViewProvider, vscode.Disposab
       logRestoreSuccess: details => {
         this.logSession("restore-success", details);
       },
-      ensureConversationWorktreeHydrated: nextWorkspaceRoot =>
-        this.conversationScopeBindings.ensureConversationWorktreeHydrated(nextWorkspaceRoot),
       shouldRefreshSessionsList: () => this.shouldRefreshSessionsList(),
       handleSessionsLoad: this.sessionPanelActions.loadSessions,
-    });
-    this.readySequenceController = createReadySequenceController({
-      runReadySequence: readySequenceRunner,
     });
     this.extensionPromptRequestPartsFactory =
       createExtensionPromptRequestPartsFactory({

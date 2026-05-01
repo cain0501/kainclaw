@@ -72,6 +72,23 @@ export type SettingsPanelActionFactory = (options: {
   handleSessionsLoad: () => Promise<void>;
 }) => SettingsPanelActions;
 
+export type SettingsPanelControllerFactoryOptions = {
+  settings: SettingsStore;
+  refreshWorkspaceStatus: () => void;
+  initializeCompanion: () => Promise<void>;
+  storeLicenseKey: (rawKey: string) => Promise<void>;
+  verifyLicense: (rawKey: string) => LicenseResult;
+};
+
+export type SettingsPanelControllerFactoryState =
+  Parameters<SettingsPanelActionFactory>[0] & {
+    setLicenseFlags: (flags: LicenseFlags | undefined) => void;
+  };
+
+export type SettingsPanelControllerFactory = (
+  state: SettingsPanelControllerFactoryState,
+) => SettingsPanelActions;
+
 export function createSettingsPanelActions(options: {
   settings: SettingsStore;
   postWebviewMessage: (message: Record<string, unknown>) => void;
@@ -210,5 +227,25 @@ export function createSettingsPanelActionsFactory(options: {
       shouldRefreshSessionsList: state.shouldRefreshSessionsList,
       handleSessionsLoad: state.handleSessionsLoad,
       verifyLicense: options.verifyLicense,
+    });
+}
+
+export function createSettingsPanelControllerFactory(
+  options: SettingsPanelControllerFactoryOptions,
+): SettingsPanelControllerFactory {
+  return state =>
+    createSettingsPanelActionsFactory({
+      settings: options.settings,
+      refreshWorkspaceStatus: options.refreshWorkspaceStatus,
+      initializeCompanion: options.initializeCompanion,
+      storeLicenseKey: options.storeLicenseKey,
+      setLicenseFlags: state.setLicenseFlags,
+      verifyLicense: options.verifyLicense,
+    })({
+      postWebviewMessage: state.postWebviewMessage,
+      postState: state.postState,
+      logSession: state.logSession,
+      shouldRefreshSessionsList: state.shouldRefreshSessionsList,
+      handleSessionsLoad: state.handleSessionsLoad,
     });
 }

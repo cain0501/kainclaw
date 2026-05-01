@@ -20,6 +20,7 @@ type StatePayload = {
   };
   pendingApproval: unknown;
   onboardingDone: boolean;
+  multiSessionEnabled: boolean;
 };
 
 export function buildWebviewStatePayload(options: Omit<StatePayload, "type">): StatePayload {
@@ -133,6 +134,7 @@ export type WebviewStateBindingFactory = (options: {
   };
   getPendingApproval: () => unknown;
   getOnboardingDone: () => boolean;
+  getMultiSessionEnabled: () => boolean;
 }) => WebviewStateBindings;
 
 export function createStreamingStateBindings(options: {
@@ -186,6 +188,7 @@ export function createWebviewStateBindings(options: {
   };
   getPendingApproval: () => unknown;
   getOnboardingDone: () => boolean;
+  getMultiSessionEnabled: () => boolean;
 }): WebviewStateBindings {
   return {
     postState: () => {
@@ -211,6 +214,7 @@ export function createWebviewStateBindings(options: {
           },
           pendingApproval: options.getPendingApproval(),
           onboardingDone: options.getOnboardingDone(),
+          multiSessionEnabled: options.getMultiSessionEnabled(),
         });
       });
     },
@@ -236,5 +240,6 @@ export function createWebviewStateBindingsFactory(options: {
       getPlanMode: state.getPlanMode,
       getPendingApproval: state.getPendingApproval,
       getOnboardingDone: state.getOnboardingDone,
+      getMultiSessionEnabled: state.getMultiSessionEnabled,
     });
 }

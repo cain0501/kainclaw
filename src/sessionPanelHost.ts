@@ -74,6 +74,28 @@ export type SessionPanelActionFactory = (options: {
   logSession: (event: string, details: Record<string, unknown>) => void;
 }) => SessionPanelActions;
 
+export type SessionPanelControllerFactoryOptions = {
+  settings: SettingsStore;
+  sessions: SessionStore;
+  getPersistenceEnabled: () => boolean;
+  refreshWorkspaceStatus: () => void;
+  savedSessionActivationBindings: SavedSessionActivationBindings;
+  markConversationBaseline: (count: number) => void;
+  showSaveDialog: (input: {
+    defaultPath?: string;
+    title: string;
+  }) => Promise<string | undefined>;
+  writeFile: (targetPath: string, content: string) => Promise<void>;
+  showInformationMessage: (message: string) => void;
+};
+
+export type SessionPanelControllerFactoryState =
+  Parameters<SessionPanelActionFactory>[0];
+
+export type SessionPanelControllerFactory = (
+  state: SessionPanelControllerFactoryState,
+) => SessionPanelActions;
+
 export function createSessionPanelActions(options: {
   settings: SettingsStore;
   sessions: SessionStore;
@@ -329,4 +351,21 @@ export function createSessionPanelActionsFactory(options: {
       writeFile: options.writeFile,
       showInformationMessage: options.showInformationMessage,
     });
+}
+
+export function createSessionPanelControllerFactory(
+  options: SessionPanelControllerFactoryOptions,
+): SessionPanelControllerFactory {
+  return state =>
+    createSessionPanelActionsFactory({
+      settings: options.settings,
+      sessions: options.sessions,
+      getPersistenceEnabled: options.getPersistenceEnabled,
+      refreshWorkspaceStatus: options.refreshWorkspaceStatus,
+      savedSessionActivationBindings: options.savedSessionActivationBindings,
+      markConversationBaseline: options.markConversationBaseline,
+      showSaveDialog: options.showSaveDialog,
+      writeFile: options.writeFile,
+      showInformationMessage: options.showInformationMessage,
+    })(state);
 }

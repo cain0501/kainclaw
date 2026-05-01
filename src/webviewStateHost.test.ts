@@ -30,6 +30,7 @@ describe("webviewStateHost", () => {
         },
         pendingApproval: null,
         onboardingDone: true,
+        multiSessionEnabled: true,
       }),
     ).toEqual({
       type: "state",
@@ -50,6 +51,7 @@ describe("webviewStateHost", () => {
       },
       pendingApproval: null,
       onboardingDone: true,
+      multiSessionEnabled: true,
     });
   });
 
@@ -73,6 +75,7 @@ describe("webviewStateHost", () => {
         planMode: { active: false, planFilePath: null },
         pendingApproval: null,
         onboardingDone: true,
+        multiSessionEnabled: false,
       }),
     );
     host.requestStatePost(() =>
@@ -91,6 +94,7 @@ describe("webviewStateHost", () => {
         planMode: { active: false, planFilePath: null },
         pendingApproval: null,
         onboardingDone: true,
+        multiSessionEnabled: false,
       }),
     );
 
@@ -243,6 +247,7 @@ describe("webviewStateHost", () => {
       getPlanMode: () => ({ active: true, planFilePath: "plan.md" }),
       getPendingApproval: () => ({ kind: "tool" }),
       getOnboardingDone: () => true,
+      getMultiSessionEnabled: () => true,
     });
 
     bindings.postState();
@@ -269,6 +274,7 @@ describe("webviewStateHost", () => {
       },
       pendingApproval: { kind: "tool" },
       onboardingDone: true,
+      multiSessionEnabled: true,
     });
   });
 
@@ -290,6 +296,7 @@ describe("webviewStateHost", () => {
       getPlanMode: () => ({ active: true, planFilePath: "plan.md" }),
       getPendingApproval: () => ({ kind: "tool" }),
       getOnboardingDone: () => true,
+      getMultiSessionEnabled: () => true,
     });
 
     bindings.postState();
@@ -316,6 +323,7 @@ describe("webviewStateHost", () => {
       },
       pendingApproval: { kind: "tool" },
       onboardingDone: true,
+      multiSessionEnabled: true,
     });
   });
 });
