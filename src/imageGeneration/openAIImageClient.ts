@@ -33,6 +33,8 @@ type ImageGenerationApiResponse = {
   }>;
 };
 
+type JsonObject = Record<string, unknown>;
+
 const DEFAULT_OPENAI_BASE_URL = "https://api.openai.com/v1";
 const DEFAULT_IMAGE_MIME_TYPE = "image/png";
 const IMAGE_REQUEST_TIMEOUT_MS = 180_000;
@@ -94,6 +96,50 @@ export function buildImageGenerationUrl(baseUrl?: string): string {
   return buildImageEndpointUrl(baseUrl, "generations");
 }
 
+function buildFallbackImageEndpoint(
+  endpoint: string,
+  action: "generations" | "edits",
+): string | undefined {
+  try {
+    const url = new URL(endpoint);
+    const suffix = `/images/${action}`;
+    const normalizedPath = url.pathname.replace(/\/+$/, "");
+    if (normalizedPath !== suffix) {
+      return undefined;
+    }
+
+    return `${url.origin}/v1${suffix}`;
+  } catch {
+    return undefined;
+  }
+}
+
+function shouldRetryFallbackForErrorResponse(options: {
+  endpoint: string;
+  fallbackEndpoint: string | undefined;
+  status: number;
+  responseText: string;
+}): boolean {
+  return options.endpoint !== options.fallbackEndpoint && (
+    options.status === 404 ||
+    options.status === 405 ||
+    /invalid url/i.test(options.responseText)
+  );
+}
+
+function shouldRetryFallbackForHtmlSuccess(options: {
+  endpoint: string;
+  fallbackEndpoint: string | undefined;
+  contentType: string;
+  responseText: string;
+}): boolean {
+  const isHtmlSuccess =
+    /^text\/html\b/i.test(options.contentType) ||
+    /^<!doctype html|^<html[\s>]/i.test(options.responseText.trim());
+
+  return isHtmlSuccess && options.endpoint !== options.fallbackEndpoint;
+}
+
 function buildImageErrorMessage(status: number, bodyText: string): string {
   if (!bodyText) {
     return `Image request failed with HTTP ${status}.`;
@@ -133,12 +179,119 @@ function buildAuthorizationHeader(config: ImageGenerationProviderConfig): string
   return config.authMode === "raw" ? config.apiKey : `Bearer ${config.apiKey}`;
 }
 
-function normalizePayload(responseText: string): ImageGenerationApiResponse {
-  try {
-    return JSON.parse(responseText) as ImageGenerationApiResponse;
-  } catch {
-    throw new Error("Image provider returned an invalid JSON response.");
+function getResponseContentType(response: Response): string {
+  const headerGetter = response.headers?.get;
+  if (typeof headerGetter !== "function") {
+    return "";
   }
+
+  const value = headerGetter.call(response.headers, "content-type");
+  return typeof value === "string" ? value.toLowerCase() : "";
+}
+
+function toDataUrlImageResult(
+  arrayBuffer: ArrayBuffer,
+  mimeType: string,
+): GeneratedImageBatchResult {
+  return {
+    data: [{
+      src: `data:${mimeType || DEFAULT_IMAGE_MIME_TYPE};base64,${Buffer.from(arrayBuffer).toString("base64")}`,
+    }],
+  };
+}
+
+function tryParseDirectImageTextResponse(responseText: string): GeneratedImageBatchResult | undefined {
+  const trimmed = responseText.trim();
+  if (!trimmed) {
+    return undefined;
+  }
+
+  if (/^https?:\/\//i.test(trimmed) || /^data:image\//i.test(trimmed)) {
+    return {
+      data: [{ src: trimmed }],
+    };
+  }
+
+  return undefined;
+}
+
+function tryParseJsonObject(candidate: string): JsonObject | undefined {
+  try {
+    const parsed = JSON.parse(candidate) as unknown;
+    return parsed && typeof parsed === "object" ? parsed as JsonObject : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+function unwrapImagePayload(candidate: JsonObject): ImageGenerationApiResponse | undefined {
+  const directData = candidate.data;
+  if (Array.isArray(directData)) {
+    return candidate as ImageGenerationApiResponse;
+  }
+
+  const nestedKeys = ["result", "response", "output", "payload"];
+  for (const key of nestedKeys) {
+    const nested = candidate[key];
+    if (nested && typeof nested === "object" && !Array.isArray(nested)) {
+      const unwrapped = unwrapImagePayload(nested as JsonObject);
+      if (unwrapped) {
+        return {
+          created: typeof candidate.created === "number" ? candidate.created : unwrapped.created,
+          data: unwrapped.data,
+        };
+      }
+    }
+  }
+
+  return undefined;
+}
+
+function collectJsonCandidates(responseText: string): string[] {
+  const normalized = responseText.trim().replace(/^\uFEFF/, "");
+  const candidates = new Set<string>();
+  if (normalized) {
+    candidates.add(normalized);
+  }
+
+  const fencedMatch = normalized.match(/```(?:json)?\s*([\s\S]*?)```/i);
+  if (fencedMatch?.[1]?.trim()) {
+    candidates.add(fencedMatch[1].trim());
+  }
+
+  const sseCandidates = normalized
+    .split(/\r?\n/)
+    .map(line => line.trim())
+    .filter(line => line.startsWith("data:"))
+    .map(line => line.slice(5).trim())
+    .filter(line => line && line !== "[DONE]");
+  for (const candidate of sseCandidates) {
+    candidates.add(candidate);
+  }
+
+  const firstBrace = normalized.indexOf("{");
+  const lastBrace = normalized.lastIndexOf("}");
+  if (firstBrace !== -1 && lastBrace > firstBrace) {
+    candidates.add(normalized.slice(firstBrace, lastBrace + 1));
+  }
+
+  return [...candidates];
+}
+
+function normalizePayload(responseText: string): ImageGenerationApiResponse {
+  for (const candidate of collectJsonCandidates(responseText)) {
+    const parsed = tryParseJsonObject(candidate);
+    if (!parsed) {
+      continue;
+    }
+
+    const unwrapped = unwrapImagePayload(parsed);
+    if (unwrapped) {
+      return unwrapped;
+    }
+  }
+
+  throw new Error("Image provider returned an invalid JSON response.");
 }
 
 function toGeneratedImages(payload: ImageGenerationApiResponse): GeneratedImageBatchResult {
@@ -176,27 +329,78 @@ async function sendImageJsonRequest(options: {
   body: Record<string, unknown>;
   signal?: AbortSignal;
 }): Promise<GeneratedImageBatchResult> {
-  let response: Response;
-  try {
-    response = await fetch(options.endpoint, {
-      method: "POST",
-      headers: {
-        Authorization: buildAuthorizationHeader(options.config),
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify(options.body),
-      signal: createImageRequestSignal(options.signal),
-    });
-  } catch (error) {
-    throw toFriendlyImageRequestError(error);
+  const fallbackEndpoint = buildFallbackImageEndpoint(options.endpoint, "generations");
+  const endpoints = fallbackEndpoint
+    ? [options.endpoint, fallbackEndpoint]
+    : [options.endpoint];
+  let lastError: Error | undefined;
+
+  for (const endpoint of endpoints) {
+    let response: Response;
+    try {
+      response = await fetch(endpoint, {
+        method: "POST",
+        headers: {
+          Authorization: buildAuthorizationHeader(options.config),
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(options.body),
+        signal: createImageRequestSignal(options.signal),
+      });
+    } catch (error) {
+      throw toFriendlyImageRequestError(error);
+    }
+
+    if (!response.ok) {
+      const responseText = await response.text();
+      lastError = new Error(buildImageErrorMessage(response.status, responseText.trim()));
+      const canRetryFallback = shouldRetryFallbackForErrorResponse({
+        endpoint,
+        fallbackEndpoint,
+        status: response.status,
+        responseText,
+      });
+      if (canRetryFallback) {
+        continue;
+      }
+      throw lastError;
+    }
+
+    const contentType = getResponseContentType(response);
+    if (
+      contentType.startsWith("image/") ||
+      contentType.startsWith("application/octet-stream")
+    ) {
+      return toDataUrlImageResult(
+        await response.arrayBuffer(),
+        contentType.startsWith("image/") ? contentType : DEFAULT_IMAGE_MIME_TYPE,
+      );
+    }
+
+    const responseText = await response.text();
+    const directImage = tryParseDirectImageTextResponse(responseText);
+    if (directImage) {
+      return directImage;
+    }
+
+    if (shouldRetryFallbackForHtmlSuccess({
+      endpoint,
+      fallbackEndpoint,
+      contentType,
+      responseText,
+    })) {
+      lastError = new Error("Image provider returned an HTML page instead of an API payload.");
+      continue;
+    }
+
+    try {
+      return toGeneratedImages(normalizePayload(responseText));
+    } catch (error) {
+      throw error instanceof Error ? error : new Error(String(error));
+    }
   }
 
-  const responseText = await response.text();
-  if (!response.ok) {
-    throw new Error(buildImageErrorMessage(response.status, responseText.trim()));
-  }
-
-  return toGeneratedImages(normalizePayload(responseText));
+  throw lastError ?? new Error("Image request failed.");
 }
 
 async function collectRequestedImages(options: {
@@ -317,26 +521,78 @@ export async function editImages(options: {
         form.set("response_format", options.responseFormat);
       }
 
-      let response: Response;
-      try {
-        response = await fetch(buildImageEndpointUrl(options.config.baseUrl, "edits"), {
-          method: "POST",
-          headers: {
-            Authorization: buildAuthorizationHeader(options.config),
-          },
-          body: form,
-          signal: createImageRequestSignal(options.signal),
-        });
-      } catch (error) {
-        throw toFriendlyImageRequestError(error);
+      const primaryEndpoint = buildImageEndpointUrl(options.config.baseUrl, "edits");
+      const fallbackEndpoint = buildFallbackImageEndpoint(primaryEndpoint, "edits");
+      const endpoints = fallbackEndpoint
+        ? [primaryEndpoint, fallbackEndpoint]
+        : [primaryEndpoint];
+      let lastError: Error | undefined;
+
+      for (const endpoint of endpoints) {
+        let response: Response;
+        try {
+          response = await fetch(endpoint, {
+            method: "POST",
+            headers: {
+              Authorization: buildAuthorizationHeader(options.config),
+            },
+            body: form,
+            signal: createImageRequestSignal(options.signal),
+          });
+        } catch (error) {
+          throw toFriendlyImageRequestError(error);
+        }
+
+        if (!response.ok) {
+          const responseText = await response.text();
+          lastError = new Error(buildImageErrorMessage(response.status, responseText.trim()));
+          const canRetryFallback = shouldRetryFallbackForErrorResponse({
+            endpoint,
+            fallbackEndpoint,
+            status: response.status,
+            responseText,
+          });
+          if (canRetryFallback) {
+            continue;
+          }
+          throw lastError;
+        }
+
+        const contentType = getResponseContentType(response);
+        if (
+          contentType.startsWith("image/") ||
+          contentType.startsWith("application/octet-stream")
+        ) {
+          return toDataUrlImageResult(
+            await response.arrayBuffer(),
+            contentType.startsWith("image/") ? contentType : DEFAULT_IMAGE_MIME_TYPE,
+          );
+        }
+
+        const responseText = await response.text();
+        const directImage = tryParseDirectImageTextResponse(responseText);
+        if (directImage) {
+          return directImage;
+        }
+
+        if (shouldRetryFallbackForHtmlSuccess({
+          endpoint,
+          fallbackEndpoint,
+          contentType,
+          responseText,
+        })) {
+          lastError = new Error("Image provider returned an HTML page instead of an API payload.");
+          continue;
+        }
+
+        try {
+          return toGeneratedImages(normalizePayload(responseText));
+        } catch (error) {
+          throw error instanceof Error ? error : new Error(String(error));
+        }
       }
 
-      const responseText = await response.text();
-      if (!response.ok) {
-        throw new Error(buildImageErrorMessage(response.status, responseText.trim()));
-      }
-
-      return toGeneratedImages(normalizePayload(responseText));
+      throw lastError ?? new Error("Image request failed.");
     },
   });
 }

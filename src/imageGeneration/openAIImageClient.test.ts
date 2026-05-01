@@ -53,6 +53,225 @@ describe("openAIImageClient", () => {
     });
   });
 
+  it("accepts image payloads wrapped inside markdown json fences", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({
+        ok: true,
+        text: async () => [
+          "```json",
+          JSON.stringify({
+            created: 1,
+            data: [{ url: "https://example.com/fenced.png" }],
+          }),
+          "```",
+        ].join("\n"),
+      }),
+    );
+
+    await expect(
+      generateImages({
+        config: {
+          apiKey: "secret",
+          model: "gpt-image-2",
+          baseUrl: "https://example.com/v1",
+          authMode: "raw",
+        },
+        prompt: "draw a fenced cat",
+      }),
+    ).resolves.toEqual({
+      created: 1,
+      data: [{ src: "https://example.com/fenced.png", revisedPrompt: undefined }],
+    });
+  });
+
+  it("accepts image payloads returned as SSE-style data lines", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({
+        ok: true,
+        text: async () => [
+          "data: " + JSON.stringify({
+            created: 2,
+            data: [{ url: "https://example.com/sse.png" }],
+          }),
+          "",
+          "data: [DONE]",
+        ].join("\n"),
+      }),
+    );
+
+    await expect(
+      generateImages({
+        config: {
+          apiKey: "secret",
+          model: "gpt-image-2",
+        },
+        prompt: "draw an sse cat",
+      }),
+    ).resolves.toEqual({
+      created: 2,
+      data: [{ src: "https://example.com/sse.png", revisedPrompt: undefined }],
+    });
+  });
+
+  it("accepts nested image payload wrappers from compatible gateways", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({
+        ok: true,
+        text: async () =>
+          JSON.stringify({
+            result: {
+              created: 3,
+              data: [{ url: "https://example.com/nested.png" }],
+            },
+          }),
+      }),
+    );
+
+    await expect(
+      generateImages({
+        config: {
+          apiKey: "secret",
+          model: "gpt-image-2",
+        },
+        prompt: "draw a nested cat",
+      }),
+    ).resolves.toEqual({
+      created: 3,
+      data: [{ src: "https://example.com/nested.png", revisedPrompt: undefined }],
+    });
+  });
+
+  it("accepts direct image binary success bodies from compatible gateways", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({
+        ok: true,
+        headers: {
+          get: (name: string) => name.toLowerCase() === "content-type" ? "image/png" : null,
+        },
+        arrayBuffer: async () => Uint8Array.from([0xde, 0xad, 0xbe, 0xef]).buffer,
+      }),
+    );
+
+    await expect(
+      generateImages({
+        config: {
+          apiKey: "secret",
+          model: "gpt-image-2",
+        },
+        prompt: "draw a binary cat",
+      }),
+    ).resolves.toEqual({
+      data: [{ src: "data:image/png;base64,3q2+7w==", revisedPrompt: undefined }],
+    });
+  });
+
+  it("accepts direct image urls returned as plain text success bodies", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({
+        ok: true,
+        headers: {
+          get: () => "text/plain",
+        },
+        text: async () => "https://example.com/plain-url.png\n",
+      }),
+    );
+
+    await expect(
+      generateImages({
+        config: {
+          apiKey: "secret",
+          model: "gpt-image-2",
+        },
+        prompt: "draw a plain-url cat",
+      }),
+    ).resolves.toEqual({
+      data: [{ src: "https://example.com/plain-url.png", revisedPrompt: undefined }],
+    });
+  });
+
+  it("retries a /v1 image endpoint when a root-level compatible endpoint returns html", async () => {
+    const fetchSpy = vi.fn()
+      .mockResolvedValueOnce({
+        ok: true,
+        headers: {
+          get: (name: string) => name.toLowerCase() === "content-type" ? "text/html; charset=utf-8" : null,
+        },
+        text: async () => "<!doctype html><html><body>homepage</body></html>",
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        headers: {
+          get: (name: string) => name.toLowerCase() === "content-type" ? "application/json" : null,
+        },
+        text: async () =>
+          JSON.stringify({
+            created: 9,
+            data: [{ url: "https://example.com/v1-fallback.png" }],
+          }),
+      });
+    vi.stubGlobal("fetch", fetchSpy);
+
+    await expect(
+      generateImages({
+        config: {
+          apiKey: "secret",
+          model: "gpt-image-2",
+          baseUrl: "https://example.com",
+          authMode: "raw",
+        },
+        prompt: "draw a fallback cat",
+      }),
+    ).resolves.toEqual({
+      created: 9,
+      data: [{ src: "https://example.com/v1-fallback.png", revisedPrompt: undefined }],
+    });
+
+    expect(fetchSpy).toHaveBeenNthCalledWith(
+      1,
+      "https://example.com/images/generations",
+      expect.any(Object),
+    );
+    expect(fetchSpy).toHaveBeenNthCalledWith(
+      2,
+      "https://example.com/v1/images/generations",
+      expect.any(Object),
+    );
+  });
+
+  it("does not retry a fallback endpoint after a 200 success with an unparsable body", async () => {
+    const fetchSpy = vi.fn().mockResolvedValue({
+      ok: true,
+      headers: {
+        get: (name: string) => name.toLowerCase() === "content-type" ? "application/json" : null,
+      },
+      text: async () => "not-json-but-also-not-an-image",
+    });
+    vi.stubGlobal("fetch", fetchSpy);
+
+    await expect(
+      generateImages({
+        config: {
+          apiKey: "secret",
+          model: "gpt-image-2",
+          baseUrl: "https://example.com",
+          authMode: "raw",
+        },
+        prompt: "draw a parse-failure cat",
+      }),
+    ).rejects.toThrow("invalid JSON response");
+
+    expect(fetchSpy).toHaveBeenCalledTimes(1);
+    expect(fetchSpy).toHaveBeenCalledWith(
+      "https://example.com/images/generations",
+      expect.any(Object),
+    );
+  });
+
   it("tops up image batches when the provider ignores the requested count", async () => {
     const fetchSpy = vi.fn()
       .mockResolvedValueOnce({
@@ -180,6 +399,39 @@ describe("openAIImageClient", () => {
     const [, request] = fetchSpy.mock.calls[0]!;
     const formEntries = Array.from((request.body as FormData).entries());
     expect(formEntries.filter(([key]) => key === "image[]")).toHaveLength(2);
+  });
+
+  it("does not retry edit fallbacks after a 200 success with an unparsable body", async () => {
+    const fetchSpy = vi.fn().mockResolvedValue({
+      ok: true,
+      headers: {
+        get: (name: string) => name.toLowerCase() === "content-type" ? "application/json" : null,
+      },
+      text: async () => "not-json-but-also-not-an-image",
+    });
+    vi.stubGlobal("fetch", fetchSpy);
+
+    await expect(
+      editImages({
+        config: {
+          apiKey: "secret",
+          model: "gpt-image-2",
+          baseUrl: "https://example.com",
+        },
+        prompt: "turn this cat into a bronze statue",
+        images: [{
+          data: Buffer.from("hello"),
+          mimeType: "image/png",
+          name: "reference.png",
+        }],
+      }),
+    ).rejects.toThrow("invalid JSON response");
+
+    expect(fetchSpy).toHaveBeenCalledTimes(1);
+    expect(fetchSpy).toHaveBeenCalledWith(
+      "https://example.com/images/edits",
+      expect.any(Object),
+    );
   });
 
   it("supports aborting image requests with an external signal", async () => {
