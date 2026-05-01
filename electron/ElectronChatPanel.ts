@@ -28,6 +28,7 @@ import {
 import {
   buildFreezeQuestionCopy,
   getElectronDialogStrings,
+  getElectronShellStrings,
   getElectronSettingsStrings,
 } from "../src/electronUiLanguage";
 import { normalizeWebviewAttachments } from "../src/attachmentHandler";
@@ -118,7 +119,21 @@ import {
 import {
   searchPublicReferenceImages,
 } from "../src/imageGeneration/imageMaterialSearch";
-import { determineChatPromptIntent } from "../src/imageGeneration/chatPromptIntent";
+import {
+  determineChatPromptIntent,
+  type ChatPromptIntent,
+} from "../src/imageGeneration/chatPromptIntent";
+import {
+  INTENT_ROUTER_SYSTEM_PROMPT,
+  routeIntentWithLLM,
+} from "../src/imageGeneration/llmIntentRouter";
+import { detectArtifact } from "../src/artifacts/artifactDetector";
+import {
+  buildDeriveArtifactPrompt,
+  providerSupportsArtifactDerivation,
+} from "../src/artifacts/deriveArtifact";
+import { augmentArtifactPrompt } from "../src/artifacts/artifactPromptAugmenter";
+import { InMemoryArtifactRegistry } from "../src/artifacts/artifactRegistry";
 import { resolveImageBatchPlan } from "../src/imageGeneration/imagePromptBatching";
 import { resolveRequestedImageSize } from "../src/imageGeneration/imagePromptSizing";
 import type { DesktopRuntimeServices } from "../src/platform/desktopRuntimeServices";
@@ -257,6 +272,7 @@ export class ElectronChatPanel {
   private readonly browserRuntime: BrowserRuntime;
   private readonly cachedWorkspaceResolutions = new Map<string, ResolvedWorkspaceRoot>();
   private readonly sessionInstalledSkillHooks = new Map<string, HookDefinition[]>();
+  private readonly artifactRegistries = new Map<string, InMemoryArtifactRegistry>();
   private pendingQuestion: PendingQuestionState | undefined;
   private sessionMessageWriteQueue: Promise<void> = Promise.resolve();
   private backgroundTaskNotificationTimer: NodeJS.Timeout | undefined;
@@ -460,9 +476,9 @@ export class ElectronChatPanel {
   private async restoreCurrentSessionRuntimeState(
     sessionId: string,
   ): Promise<void> {
-    this.restoreModelConversationFromRuntime(
-      await this.loadSessionRuntimeState(sessionId),
-    );
+    const runtimeState = await this.loadSessionRuntimeState(sessionId);
+    this.restoreArtifactRegistryFromSessionMessages(sessionId, runtimeState);
+    this.restoreModelConversationFromRuntime(runtimeState);
   }
 
   private async saveCurrentSessionRuntimeState(sessionId: string): Promise<void> {
@@ -482,6 +498,15 @@ export class ElectronChatPanel {
       nextRuntimeState.compactBoundary = this.compactBoundary;
     } else {
       delete nextRuntimeState.compactBoundary;
+    }
+
+    const artifactRegistry = this.artifactRegistries.get(sessionId);
+    if (artifactRegistry && artifactRegistry.artifacts.length > 0) {
+      nextRuntimeState.artifactPanel = {
+        activeArtifactId: artifactRegistry.activeArtifactId,
+      };
+    } else {
+      delete nextRuntimeState.artifactPanel;
     }
 
     await this.sessions.saveRuntimeState(sessionId, nextRuntimeState);
@@ -731,6 +756,14 @@ export class ElectronChatPanel {
       await this.runChatImageJob(message);
       return;
     }
+    if (type === "artifact:dismiss") {
+      if (this.currentSessionId) {
+        this.getArtifactRegistry(this.currentSessionId).dismiss();
+        await this.saveCurrentSessionRuntimeState(this.currentSessionId);
+      }
+      await this.postState();
+      return;
+    }
     if (type === "abort") {
       const activeRequest = this.currentSessionId
         ? this.inFlightRequests.get(this.currentSessionId)
@@ -788,7 +821,11 @@ export class ElectronChatPanel {
       if (existingSession) {
         id = existingSession.id;
       } else {
-        const session = await this.sessions.createSession(randomUUID(), "electron");
+        const session = await this.sessions.createSession(
+          randomUUID(),
+          "electron",
+          this.getDefaultSessionTitle(),
+        );
         id = session.id;
       }
       await this.settings.setActiveSessionId(id);
@@ -849,6 +886,7 @@ export class ElectronChatPanel {
     const session = await this.sessions.createSession(
       randomUUID(),
       getWorkspaceHash(workspaceRoot),
+      this.getDefaultSessionTitle(),
     );
     await this.sessions.saveRuntimeState(session.id, { workspaceRoot });
     await this.switchSession(session.id);
@@ -948,6 +986,7 @@ export class ElectronChatPanel {
       this.currentSessionId === id || this.settings.getActiveSessionId() === id;
 
     await this.sessions.deleteSession(id);
+    this.artifactRegistries.delete(id);
     clearSessionInstalledSkillHooks(this.sessionInstalledSkillHooks, id);
     if (this.currentSessionId === id) {
       this.pendingQuestion = undefined;
@@ -998,6 +1037,7 @@ export class ElectronChatPanel {
       type: "settings:data",
       ...data,
       dialogStrings: getElectronDialogStrings(data.language),
+      shellStrings: getElectronShellStrings(data.language),
       settingsStrings: getElectronSettingsStrings(data.language),
     });
   }
@@ -1858,6 +1898,7 @@ export class ElectronChatPanel {
     await this.imageGalleryStore.clear();
     await this.host.deleteSecret("cain.licenseKey");
     clearAllSessionInstalledSkillHooks(this.sessionInstalledSkillHooks);
+    this.artifactRegistries.clear();
     this.pendingQuestion = undefined;
     this.sessionMessages = [];
     this.modelConversationMessages = [];
@@ -1904,6 +1945,7 @@ export class ElectronChatPanel {
     const session = await this.sessions.createSession(
       randomUUID(),
       getWorkspaceHash(workspaceRoot),
+      this.getDefaultSessionTitle(),
     );
     await this.sessions.saveRuntimeState(session.id, { workspaceRoot });
     this.currentSessionId = session.id;
@@ -1931,13 +1973,49 @@ export class ElectronChatPanel {
       return;
     }
 
+    const explicitIntent =
+      intentOverride === "image_generate" || intentOverride === "chat"
+        ? intentOverride
+        : undefined;
+    if (explicitIntent === "image_generate") {
+      await this.runChatImageJob({
+        prompt: trimmedPrompt,
+        referenceImages: attachments,
+      });
+      return;
+    }
+    if (explicitIntent === "chat") {
+      await this.sendPrompt(trimmedPrompt, attachments);
+      return;
+    }
+
     const latestGeneratedImage = this.getLatestGeneratedImageFromCurrentSession();
-    const intent = determineChatPromptIntent({
-      prompt: trimmedPrompt,
-      explicitIntent: intentOverride === "image_generate" ? "image_generate" : undefined,
-      hasAttachments,
-      hasRecentGeneratedImageContext: !!latestGeneratedImage,
-    });
+    let intent: ChatPromptIntent;
+    try {
+      const workspaceRoot = this.getSelectedWorkspaceRoot();
+      const { config, envMap } = await resolveProviderConfig(
+        this.settings,
+        workspaceRoot,
+      );
+      const routerAdapter = this.createProviderForSystemPrompt(
+        config,
+        workspaceRoot,
+        envMap,
+        INTENT_ROUTER_SYSTEM_PROMPT + ELECTRON_SHELL_PROMPT_NOTE,
+      );
+      intent = await routeIntentWithLLM({
+        prompt: trimmedPrompt,
+        hasAttachments,
+        hasRecentGeneratedImageContext: !!latestGeneratedImage,
+        provider: routerAdapter,
+      });
+    } catch {
+      intent = determineChatPromptIntent({
+        prompt: trimmedPrompt,
+        hasAttachments,
+        hasRecentGeneratedImageContext: !!latestGeneratedImage,
+      });
+    }
 
     if (intent === "image_generate") {
       await this.runChatImageJob({
@@ -1956,10 +2034,46 @@ export class ElectronChatPanel {
       return;
     }
 
+    if (intent === "derive_artifact") {
+      const artifactAttachments = await this.buildImplicitArtifactReferenceAttachments(
+        attachments,
+      );
+      if (!artifactAttachments.length) {
+        await this.appendRouteErrorMessage(
+          "请先上传一张设计图，或先生成一张图片，再让我把它做成可点击的 HTML 原型。",
+        );
+        return;
+      }
+
+      try {
+        const workspaceRoot = this.getSelectedWorkspaceRoot();
+        const { config } = await resolveProviderConfig(this.settings, workspaceRoot);
+        if (!providerSupportsArtifactDerivation(config)) {
+          await this.appendRouteErrorMessage(
+            "当前聊天模型不支持图片理解。请先切换到支持视觉输入的聊天模型，再把设计图转换成 HTML 原型。",
+          );
+          return;
+        }
+      } catch {
+        // Let the normal prompt pipeline surface provider configuration errors.
+      }
+
+      await this.sendPrompt(trimmedPrompt, artifactAttachments, {
+        modelPrompt: buildDeriveArtifactPrompt(trimmedPrompt),
+      });
+      return;
+    }
+
     await this.sendPrompt(trimmedPrompt, attachments);
   }
 
-  private async sendPrompt(prompt: string, attachments?: WebviewAttachment[]): Promise<void> {
+  private async sendPrompt(
+    prompt: string,
+    attachments?: WebviewAttachment[],
+    options?: {
+      modelPrompt?: string;
+    },
+  ): Promise<void> {
     if (!prompt.trim()) return;
     await this.ensureSession();
 
@@ -2244,7 +2358,7 @@ export class ElectronChatPanel {
           return;
         }
 
-      let effectivePrompt = prompt;
+      let effectivePrompt = options?.modelPrompt?.trim() || prompt;
       let effectivePromptAttachments = normalizedAttachments;
       if (commandResult.effectivePrompt) {
         effectivePrompt = commandResult.effectivePrompt;
@@ -2318,6 +2432,8 @@ export class ElectronChatPanel {
           );
         }
       }
+
+      effectivePrompt = augmentArtifactPrompt(effectivePrompt);
 
       const modelUserMessage: PersistedConversationMessage = {
         role: "user",
@@ -2482,11 +2598,22 @@ export class ElectronChatPanel {
         );
       }
       await this.appendAssistantMessageToSession(requestSessionId, assistantMessage);
+      const detectedArtifact = this.detectArtifactFromSessionMessage(
+        requestSessionId,
+        assistantMessage,
+        this.sessionMessages.length - 1,
+      );
       this.modelConversationMessages = [
         ...requestModelConversation,
         { role: "assistant", content: finalText },
       ];
+      if (detectedArtifact) {
+        this.getArtifactRegistry(requestSessionId).push(detectedArtifact);
+      }
       await this.saveCurrentSessionRuntimeState(requestSessionId);
+      if (detectedArtifact) {
+        await this.postState();
+      }
     } catch (err) {
       if (abortController.signal.aborted) return;
       const errorMessage: ChatMessage = {
@@ -2520,6 +2647,69 @@ export class ElectronChatPanel {
 
   private getConversationKey(): string {
     return this.currentSessionId ?? "electron";
+  }
+
+  private getArtifactRegistry(sessionId: string): InMemoryArtifactRegistry {
+    let registry = this.artifactRegistries.get(sessionId);
+    if (!registry) {
+      registry = new InMemoryArtifactRegistry();
+      this.artifactRegistries.set(sessionId, registry);
+    }
+
+    return registry;
+  }
+
+  private buildArtifactRecordId(
+    sessionId: string,
+    message: ChatMessage,
+    index: number,
+  ): string {
+    const stablePart =
+      typeof message.timestamp === "number" ? String(message.timestamp) : `index-${index}`;
+    return `artifact-${sessionId}-${stablePart}`;
+  }
+
+  private detectArtifactFromSessionMessage(
+    sessionId: string,
+    message: ChatMessage,
+    index: number,
+  ) {
+    return detectArtifact(message.content, {
+      id: this.buildArtifactRecordId(sessionId, message, index),
+      now: message.timestamp,
+      sourceMessageId: this.buildArtifactRecordId(sessionId, message, index),
+    });
+  }
+
+  private restoreArtifactRegistryFromSessionMessages(
+    sessionId: string,
+    runtimeState: SessionRuntimeState,
+  ): void {
+    const registry = new InMemoryArtifactRegistry();
+
+    this.sessionMessages.forEach((message, index) => {
+      if (message.role !== "assistant") {
+        return;
+      }
+
+      const artifact = this.detectArtifactFromSessionMessage(sessionId, message, index);
+      if (artifact) {
+        registry.push(artifact);
+      }
+    });
+
+    if (registry.artifacts.length === 0) {
+      this.artifactRegistries.delete(sessionId);
+      return;
+    }
+
+    if (runtimeState.artifactPanel?.activeArtifactId === null) {
+      registry.dismiss();
+    } else if (typeof runtimeState.artifactPanel?.activeArtifactId === "string") {
+      registry.setActive(runtimeState.artifactPanel.activeArtifactId);
+    }
+
+    this.artifactRegistries.set(sessionId, registry);
   }
 
   private getPendingInteraction(): unknown {
@@ -3241,6 +3431,44 @@ export class ElectronChatPanel {
     return referenceImages;
   }
 
+  private async buildImplicitArtifactReferenceAttachments(
+    attachments?: WebviewAttachment[],
+  ): Promise<WebviewAttachment[]> {
+    if (attachments?.length) {
+      return attachments.map(attachment => ({
+        dataUrl: attachment.dataUrl,
+        mimeType: attachment.mimeType,
+        name: attachment.name,
+      }));
+    }
+
+    const latestGeneratedImage = this.getLatestGeneratedImageFromCurrentSession();
+    if (!latestGeneratedImage) {
+      return [];
+    }
+
+    const referenceImage = await this.buildReferenceImagePayloadFromSource(
+      latestGeneratedImage.src,
+      `artifact-${latestGeneratedImage.id}.png`,
+    );
+
+    return [referenceImage];
+  }
+
+  private async appendRouteErrorMessage(content: string): Promise<void> {
+    await this.ensureSession();
+    if (!this.currentSessionId) {
+      return;
+    }
+
+    await this.appendAssistantMessageToSession(this.currentSessionId, {
+      role: "assistant",
+      content,
+      kind: "error",
+      timestamp: Date.now(),
+    });
+  }
+
   private async buildReferenceImagePayloadFromSource(
     source: string,
     name: string,
@@ -3413,11 +3641,15 @@ export class ElectronChatPanel {
 
     const onboardingDone = this.settings.isOnboardingDone();
     const uiLanguage = this.settings.getLanguage();
+    const shellStrings = getElectronShellStrings(uiLanguage);
     const providerMeta = this.settings.getActiveProviderMeta();
     const providerLabel = providerMeta
       ? `${providerMeta.type} / ${providerMeta.model ?? "default"}`
       : "未配置";
 
+    const localizedProviderLabel = providerMeta
+      ? providerLabel
+      : shellStrings.providerLabelUnset;
     const workspaceRoot = workspaceInfo.selectedRoot;
 
     let mcpServers: unknown[] = [];
@@ -3427,11 +3659,16 @@ export class ElectronChatPanel {
       // ignore – MCP not configured
     }
 
+    const currentArtifactRegistry = this.currentSessionId
+      ? (this.artifactRegistries.get(this.currentSessionId) ?? null)
+      : null;
+    const activeArtifact = currentArtifactRegistry?.activeArtifact ?? null;
+
     this.sendToRenderer({
       type: "state",
       isBusy: sessionBusy,
       activeRequestKind: activeRequest?.kind ?? (backgroundBusy ? "background" : null),
-      providerLabel,
+      providerLabel: localizedProviderLabel,
       mcpServers,
       desktopRuntime: this.buildDesktopRuntimeState(),
       liveActivities: [],
@@ -3444,12 +3681,22 @@ export class ElectronChatPanel {
       showThinkingSummaries: this.settings.getShowThinkingSummaries(),
       uiLanguage,
       dialogStrings: getElectronDialogStrings(uiLanguage),
+      shellStrings,
       planMode: { active: false, planFilePath: null },
       pendingApproval: this.getPendingInteraction(),
       onboardingDone,
+      artifactState: {
+        activeArtifact,
+        activeArtifactId: activeArtifact?.id ?? null,
+        artifactCount: currentArtifactRegistry?.artifacts.length ?? 0,
+      },
       workspaceRoot,
       workspaceInfo,
     });
+  }
+
+  private getDefaultSessionTitle(): string {
+    return getElectronShellStrings(this.settings.getLanguage()).defaultSessionTitle;
   }
 
   private buildDesktopRuntimeState(): {

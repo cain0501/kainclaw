@@ -9,6 +9,28 @@
 body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-serif;background:#FAFAFA;color:#18181b;font-size:14px;padding-top:32px}
 .page{display:none;width:100vw;height:calc(100vh - 32px);overflow:hidden}
 .page.active{display:flex}
+.chat-main{flex:1;display:flex;flex-direction:column;overflow:hidden;background:#fff;min-width:0}
+.chat-workspace{flex:1;display:flex;min-height:0;min-width:0;position:relative}
+.chat-column{flex:1;display:flex;flex-direction:column;overflow:hidden;min-width:0}
+.artifacts-resizer{width:8px;cursor:col-resize;display:flex;align-items:center;justify-content:center;flex-shrink:0;background:transparent;position:relative}
+.artifacts-resizer::before{content:'';width:2px;height:56px;border-radius:999px;background:#d4d4d8;transition:background .15s}
+.artifacts-resizer:hover::before,.artifacts-resizer.dragging::before{background:#E84040}
+.artifacts-resizer.hidden{display:none}
+.artifacts-panel{width:45%;min-width:360px;max-width:960px;border-left:1px solid #e4e4e7;background:#fafafa;display:flex;flex-direction:column;flex-shrink:0}
+.artifacts-panel.hidden{display:none}
+.artifacts-panel__header{display:flex;align-items:center;gap:10px;padding:12px 14px;border-bottom:1px solid #e4e4e7;background:#fff;flex-shrink:0}
+.artifacts-panel__title{font-size:14px;font-weight:600;color:#18181b;flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.artifacts-panel__type-badge{display:inline-flex;align-items:center;padding:3px 8px;border-radius:999px;background:#f4f4f5;color:#52525b;font-size:11px;font-weight:600;text-transform:uppercase}
+.artifacts-panel__content{flex:1;min-height:0;overflow:auto;padding:14px}
+.artifacts-panel__frame{width:100%;height:100%;min-height:420px;border:none;border-radius:12px;background:#fff;box-shadow:0 1px 2px rgba(0,0,0,.04)}
+.artifacts-panel__code{margin:0;background:#18181b;color:#e4e4e7;padding:14px 16px;border-radius:12px;font-family:'SF Mono',Consolas,'Roboto Mono',monospace;font-size:12px;line-height:1.65;white-space:pre-wrap;word-break:break-word}
+.artifacts-panel__placeholder{display:flex;align-items:center;justify-content:center;min-height:160px;padding:16px;border:1px dashed #d4d4d8;border-radius:12px;background:#fff;color:#71717a;font-size:13px;text-align:center;line-height:1.7}
+.artifacts-panel__toast{display:none;margin:0 14px 10px;padding:9px 12px;border-radius:10px;background:#fff7ed;border:1px solid #fed7aa;color:#c2410c;font-size:12px;line-height:1.6}
+.artifacts-panel__toast.show{display:block}
+@media (max-width: 959px){
+  .artifacts-resizer{display:none !important}
+  .artifacts-panel{position:absolute;top:44px;right:0;bottom:0;left:0;z-index:20;width:auto;min-width:0;max-width:none;box-shadow:-12px 0 32px rgba(0,0,0,.12)}
+}
 
 ::-webkit-scrollbar{width:4px}::-webkit-scrollbar-thumb{background:#e4e4e7;border-radius:2px}
 
@@ -150,6 +172,16 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-seri
 .msg-bubble th{background:#e4e4e7;font-weight:700}
 .msg-bubble a{color:#2563eb;text-decoration:none}
 .msg-bubble a:hover{text-decoration:underline}
+.msg-bubble.thinking-card{max-width:100%;padding:12px 13px;border-radius:14px;border:1px solid #eadfd2;background:linear-gradient(180deg,rgba(232,64,64,.08) 0%,rgba(255,255,255,.96) 100%)}
+.thinking-card-collapsed{padding:8px 13px}
+.thinking-summary-toggle{width:100%;padding:0;border:none;background:transparent;color:inherit;text-align:left;cursor:pointer}
+.thinking-summary-toggle:focus-visible{outline:1px solid rgba(232,64,64,.45);outline-offset:3px;border-radius:8px}
+.thinking-head{display:flex;align-items:center;justify-content:space-between;gap:10px}
+.thinking-title{font-size:12px;font-weight:700;color:#E84040}
+.thinking-chevron{font-size:10px;opacity:.6;flex-shrink:0;transition:transform .15s}
+.thinking-card-collapsed .thinking-chevron{transform:rotate(0deg)}
+.thinking-card-expanded .thinking-chevron{transform:rotate(90deg)}
+.thinking-summary-body{margin-top:10px}
 .verify-report{display:flex;flex-direction:column;gap:7px}
 .verify-check-title{font-size:13px;font-weight:700;color:#18181b;margin-top:2px}
 .verify-label{font-size:12px;font-weight:600;color:#3f3f46;margin-top:2px}
@@ -348,94 +380,113 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-seri
   </div>
 
   <!-- Main -->
-  <div style="flex:1;display:flex;flex-direction:column;overflow:hidden;background:#fff">
+  <div class="chat-main">
     <div style="height:44px;border-bottom:1px solid #e4e4e7;display:flex;align-items:center;padding:0 14px;gap:8px;flex-shrink:0">
         <span id="chat-title" style="font-size:14px;font-weight:600;flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">新对话</span>
       <button class="btn-ghost" title="导出当前会话" onclick="exportCurrentSession()">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
       </button>
+      <button class="btn-ghost" title="清空对话" onclick="clearChat()">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M8 6V4a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v2"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg>
+      </button>
       <button class="btn-ghost" title="重命名当前会话" onclick="renameCurrentSession()">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4 12.5-12.5z"/></svg>
       </button>
     </div>
-
-    <div id="messages" style="flex:1;overflow-y:auto;padding:20px 20px 12px;display:flex;flex-direction:column;gap:16px">
-      <div id="empty-state" style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;color:#a1a1aa;padding:40px 0">
-        <div class="klogo" style="width:44px;height:44px;font-size:20px;border-radius:10px;opacity:.5">K</div>
-          <div style="font-size:14px;font-weight:500">有什么可以帮你的？</div>
-          <div style="font-size:12px;text-align:center;max-width:200px;line-height:1.6">输入问题或粘贴代码开始对话</div>
-      </div>
-    </div>
-
-    <!-- Attachment preview -->
-    <div id="att-preview" class="att-wrap" style="display:none;padding:0 14px 6px"></div>
-
-    <div style="padding:10px 14px 12px;border-top:1px solid #e4e4e7;flex-shrink:0">
-      <div id="chat-image-mode-banner" style="display:none;align-items:center;justify-content:space-between;gap:10px;padding:8px 10px;margin-bottom:8px;border:1px solid #eadfd2;border-radius:12px;background:#fff8f3">
-        <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
-          <span id="chat-image-mode-badge" class="badge-orange">图片生成</span>
-          <span id="chat-image-mode-copy" style="font-size:12px;color:#7a6656">当前输入将按图片任务处理。</span>
-        </div>
-        <button class="btn-secondary" onclick="resetChatImageComposer()">退出图片模式</button>
-      </div>
-      <div id="composer-status" style="display:none;font-size:12px;color:#a1a1aa;line-height:1.6;margin:0 0 8px 2px">AI正在回复...</div>
-      <div class="textarea-box" style="margin-bottom:8px">
-          <textarea id="prompt-input" rows="2" placeholder="给 KainClaw 发消息... (/ 打开命令)"
-          style="max-height:120px"
-          onkeydown="handleInputKey(event)"
-          oninput="autoResize(this)"></textarea>
-        <div style="display:flex;align-items:center;gap:5px;margin-top:6px">
-          <button class="btn-ghost" style="width:26px;height:26px" title="上传图片" onclick="triggerFileInput()">
-            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg>
-          </button>
-          <input id="file-input" type="file" accept="image/*" multiple style="display:none" onchange="handleFileSelect(event)">
-          <div style="width:1px;height:14px;background:#e4e4e7;margin:0 2px"></div>
-          <div class="chip" id="chip-plan" onclick="toggleChip('chip-plan')" style="display:none">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="9" y1="9" x2="15" y2="9"/><line x1="9" y1="12" x2="15" y2="12"/><line x1="9" y1="15" x2="12" y2="15"/></svg>
-            Plan
+    <div class="chat-workspace">
+      <div class="chat-column">
+        <div id="messages" style="flex:1;overflow-y:auto;padding:20px 20px 12px;display:flex;flex-direction:column;gap:16px">
+          <div id="empty-state" style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;color:#a1a1aa;padding:40px 0">
+            <div class="klogo" style="width:44px;height:44px;font-size:20px;border-radius:10px;opacity:.5">K</div>
+              <div style="font-size:14px;font-weight:500">有什么可以帮你的？</div>
+              <div style="font-size:12px;text-align:center;max-width:200px;line-height:1.6">输入问题或粘贴代码开始对话</div>
           </div>
-          <div class="chip" id="chip-fast" onclick="toggleChip('chip-fast')" style="display:none">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
-            Fast
+        </div>
+
+        <!-- Attachment preview -->
+        <div id="att-preview" class="att-wrap" style="display:none;padding:0 14px 6px"></div>
+
+        <div style="padding:10px 14px 12px;border-top:1px solid #e4e4e7;flex-shrink:0">
+          <div id="chat-image-mode-banner" style="display:none;align-items:center;justify-content:space-between;gap:10px;padding:8px 10px;margin-bottom:8px;border:1px solid #eadfd2;border-radius:12px;background:#fff8f3">
+            <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+              <span id="chat-image-mode-badge" class="badge-orange">图片生成</span>
+              <span id="chat-image-mode-copy" style="font-size:12px;color:#7a6656">当前输入将按图片任务处理。</span>
+            </div>
+            <button class="btn-secondary" onclick="resetChatImageComposer()">退出图片模式</button>
           </div>
-          <div class="chip" id="chip-effort" onclick="cycleEffort()" style="display:none">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
-            <span id="elabel">Balanced</span>
+          <div id="composer-status" style="display:none;font-size:12px;color:#a1a1aa;line-height:1.6;margin:0 0 8px 2px">AI正在回复...</div>
+          <div class="textarea-box" style="margin-bottom:8px">
+              <textarea id="prompt-input" rows="2" placeholder="给 KainClaw 发消息... (/ 打开命令)"
+              style="max-height:120px"
+              onkeydown="handleInputKey(event)"
+              oninput="autoResize(this)"></textarea>
+            <div style="display:flex;align-items:center;gap:5px;margin-top:6px">
+              <button class="btn-ghost" style="width:26px;height:26px" title="上传图片" onclick="triggerFileInput()">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg>
+              </button>
+              <input id="file-input" type="file" accept="image/*" multiple style="display:none" onchange="handleFileSelect(event)">
+              <div style="width:1px;height:14px;background:#e4e4e7;margin:0 2px"></div>
+              <div class="chip" id="chip-plan" onclick="toggleChip('chip-plan')" style="display:none">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="9" y1="9" x2="15" y2="9"/><line x1="9" y1="12" x2="15" y2="12"/><line x1="9" y1="15" x2="12" y2="15"/></svg>
+                Plan
+              </div>
+              <div class="chip" id="chip-fast" onclick="toggleChip('chip-fast')" style="display:none">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
+                Fast
+              </div>
+              <div class="chip" id="chip-effort" onclick="cycleEffort()" style="display:none">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+                <span id="elabel">Balanced</span>
+              </div>
+              <div style="flex:1"></div>
+              <button id="send-btn" style="width:30px;height:30px;background:#E84040;border:none;border-radius:7px;cursor:pointer;display:flex;align-items:center;justify-content:center;color:#fff" onclick="sendPrompt()">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor"><path d="M2 21l21-9L2 3v7l15 2-15 2v7z"/></svg>
+              </button>
+              <button id="stop-btn" style="display:none;width:30px;height:30px;background:#3f3f46;border:none;border-radius:7px;cursor:pointer;display:none;align-items:center;justify-content:center;color:#fff" onclick="stopGeneration()">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><rect x="4" y="4" width="16" height="16" rx="2"/></svg>
+              </button>
+            </div>
           </div>
-          <div style="flex:1"></div>
-          <button id="send-btn" style="width:30px;height:30px;background:#E84040;border:none;border-radius:7px;cursor:pointer;display:flex;align-items:center;justify-content:center;color:#fff" onclick="sendPrompt()">
-            <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor"><path d="M2 21l21-9L2 3v7l15 2-15 2v7z"/></svg>
+          <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:8px">
+            <button id="chat-action-image" class="btn-secondary" onclick="activateChatImageComposer()">生成图片</button>
+            <button id="chat-action-edit-image" class="btn-secondary" onclick="showEditImageHint()">编辑图片</button>
+            <button id="chat-action-library" class="btn-secondary" onclick="openPromptLibraryFromChat()">提示词库</button>
+    <button id="chat-action-search" class="btn-secondary" onclick="openMaterialSearchFromChat()">找参考图</button>
+          </div>
+          <div style="display:flex;align-items:center;gap:7px;flex-wrap:wrap">
+            <div style="display:inline-flex;align-items:center;gap:5px;padding:3px 8px;border-radius:6px;border:1px solid #e4e4e7;background:#fff;font-size:12px;font-weight:500">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#E84040" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14"/><path d="M4.93 4.93a10 10 0 0 0 0 14.14"/></svg>
+              <span id="provider-label">加载中...</span>
+            </div>
+            <div id="workspace-badge" onclick="pickWorkspace()" title="点击选择工作区文件夹" style="display:inline-flex;align-items:center;gap:5px;padding:3px 8px;border-radius:6px;border:1px dashed #d4d4d8;background:#fafafa;font-size:12px;cursor:pointer;max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" onmouseover="this.style.borderColor='#E84040'" onmouseout="this.style.borderColor='#d4d4d8'">
+              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#a1a1aa" stroke-width="2"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
+              <span id="workspace-label" style="color:#a1a1aa">选择工作区</span>
+            </div>
+            <div style="flex:1"></div>
+            <span id="license-badge" style="font-size:12px;color:#16a34a;display:none">已激活</span>
+          </div>
+          <div id="workspace-meta" style="display:none;margin-top:8px;padding:10px 12px;border-radius:10px;background:#fafafa;border:1px solid #f1f1f3">
+            <div id="workspace-status-line" style="font-size:12px;font-weight:600;color:#18181b"></div>
+            <div id="workspace-selected-line" style="font-size:11px;color:#52525b;margin-top:4px;word-break:break-all"></div>
+            <div id="workspace-effective-line" style="font-size:11px;color:#52525b;margin-top:4px;word-break:break-all"></div>
+            <div id="workspace-detail-line" style="font-size:11px;color:#71717a;margin-top:6px;line-height:1.5;display:none"></div>
+            <div id="workspace-candidates" style="display:none;flex-wrap:wrap;gap:6px;margin-top:8px"></div>
+          </div>
+        </div>
+      </div>
+      <div id="artifacts-resizer" class="artifacts-resizer hidden" aria-hidden="true"></div>
+      <aside id="artifacts-panel" class="artifacts-panel hidden" aria-live="polite">
+        <div class="artifacts-panel__header">
+          <span id="artifacts-panel-title" class="artifacts-panel__title">Artifacts</span>
+          <span id="artifacts-panel-type" class="artifacts-panel__type-badge"></span>
+          <button id="artifacts-panel-deep-edit" class="btn-secondary" style="display:none" onclick="handleArtifactDeepEdit()">进入 Deep Design</button>
+          <button class="btn-ghost" title="关闭产物面板" onclick="dismissArtifactPanel()">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
           </button>
-          <button id="stop-btn" style="display:none;width:30px;height:30px;background:#3f3f46;border:none;border-radius:7px;cursor:pointer;display:none;align-items:center;justify-content:center;color:#fff" onclick="stopGeneration()">
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><rect x="4" y="4" width="16" height="16" rx="2"/></svg>
-          </button>
         </div>
-      </div>
-      <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:8px">
-        <button id="chat-action-image" class="btn-secondary" onclick="activateChatImageComposer()">生成图片</button>
-        <button id="chat-action-edit-image" class="btn-secondary" onclick="showEditImageHint()">编辑图片</button>
-        <button id="chat-action-library" class="btn-secondary" onclick="openPromptLibraryFromChat()">提示词库</button>
-<button id="chat-action-search" class="btn-secondary" onclick="openMaterialSearchFromChat()">找参考图</button>
-      </div>
-      <div style="display:flex;align-items:center;gap:7px;flex-wrap:wrap">
-        <div style="display:inline-flex;align-items:center;gap:5px;padding:3px 8px;border-radius:6px;border:1px solid #e4e4e7;background:#fff;font-size:12px;font-weight:500">
-          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#E84040" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14"/><path d="M4.93 4.93a10 10 0 0 0 0 14.14"/></svg>
-          <span id="provider-label">加载中...</span>
-        </div>
-        <div id="workspace-badge" onclick="pickWorkspace()" title="点击选择工作区文件夹" style="display:inline-flex;align-items:center;gap:5px;padding:3px 8px;border-radius:6px;border:1px dashed #d4d4d8;background:#fafafa;font-size:12px;cursor:pointer;max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" onmouseover="this.style.borderColor='#E84040'" onmouseout="this.style.borderColor='#d4d4d8'">
-          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#a1a1aa" stroke-width="2"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
-          <span id="workspace-label" style="color:#a1a1aa">选择工作区</span>
-        </div>
-        <div style="flex:1"></div>
-        <span id="license-badge" style="font-size:12px;color:#16a34a;display:none">已激活</span>
-      </div>
-      <div id="workspace-meta" style="display:none;margin-top:8px;padding:10px 12px;border-radius:10px;background:#fafafa;border:1px solid #f1f1f3">
-        <div id="workspace-status-line" style="font-size:12px;font-weight:600;color:#18181b"></div>
-        <div id="workspace-selected-line" style="font-size:11px;color:#52525b;margin-top:4px;word-break:break-all"></div>
-        <div id="workspace-effective-line" style="font-size:11px;color:#52525b;margin-top:4px;word-break:break-all"></div>
-        <div id="workspace-detail-line" style="font-size:11px;color:#71717a;margin-top:6px;line-height:1.5;display:none"></div>
-        <div id="workspace-candidates" style="display:none;flex-wrap:wrap;gap:6px;margin-top:8px"></div>
-      </div>
+        <div id="artifacts-panel-toast" class="artifacts-panel__toast"></div>
+        <div id="artifacts-panel-content" class="artifacts-panel__content"></div>
+      </aside>
     </div>
   </div>
 </div>
@@ -593,6 +644,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-seri
     <!-- Advanced tab -->
     <div id="sc-adv" style="display:none;padding:16px 20px">
       <div style="font-size:15px;font-weight:600;margin-bottom:16px">高级</div>
+      <div id="settings-language-card-slot" style="margin-bottom:16px"></div>
       <div style="border:1px solid #fee2e2;border-radius:10px;padding:16px;background:#fff5f5;max-width:420px">
         <div style="font-size:13px;font-weight:600;color:#b91c1c;margin-bottom:6px">重置配置</div>
           <div style="font-size:12px;color:#71717a;margin-bottom:14px;line-height:1.6">清除所有 Provider 配置和 onboarding 状态，下次打开将重新进入配置向导。会话记录不会受影响。</div>
@@ -923,6 +975,21 @@ function send(payload) {
   vscode.postMessage(payload);
 }
 
+window.addEventListener('mousemove', event => {
+  if (!artifactResizeActive) return;
+  resizeArtifactPanelFromClientX(event.clientX);
+});
+
+window.addEventListener('mouseup', () => {
+  if (!artifactResizeActive) return;
+  finishArtifactResize();
+});
+
+window.addEventListener('mouseleave', () => {
+  if (!artifactResizeActive) return;
+  finishArtifactResize();
+});
+
 // App State
 let appState = {
   isBusy: false,
@@ -937,7 +1004,17 @@ let appState = {
   workspaceInfo: null,
   uiLanguage: 'zh-CN',
   dialogStrings: null,
+  shellStrings: null,
+  artifactState: {
+    activeArtifact: null,
+    activeArtifactId: null,
+    artifactCount: 0,
+  },
 };
+const expandedThinkingSummaries = new Set();
+let artifactToastTimer = null;
+let artifactPanelWidth = null;
+let artifactResizeActive = false;
 
 const DEFAULT_DIALOG_STRINGS = {
   needConfirmation: '需要确认',
@@ -961,23 +1038,312 @@ const DEFAULT_DIALOG_STRINGS = {
 };
 
 let currentDialogStrings = { ...DEFAULT_DIALOG_STRINGS };
+const DEFAULT_SHELL_STRINGS = {
+  surfaceTextMap: {},
+  defaultSessionTitle: 'New chat',
+  sessionSectionTitle: 'Sessions',
+  noSessions: 'No sessions yet',
+  newSessionTooltip: 'New chat',
+  renameSessionTitle: 'Rename session',
+  renameSessionDescription: 'Update the current session title. Blank input will not be saved.',
+  renameSessionPlaceholder: 'Enter a new session title',
+  exportSessionTitle: 'Export current session',
+  deleteSessionTitle: 'Delete session',
+  deleteSessionConfirm: 'Delete this session?',
+  exportSessionAlertPrefix: 'Exported: ',
+  workspaceSectionTitle: 'Workspace',
+  settingsLabel: 'Settings',
+  emptyStateTitle: 'How can I help?',
+  emptyStateDescription: 'Ask a question or paste code to start chatting',
+  composerPlaceholder: 'Message KainClaw... (/ for commands)',
+  composerBusyPlaceholder: 'AI is replying...',
+  composerBackgroundPlaceholder: 'AI is working in the background...',
+  composerImagePlaceholder: 'Creating images...',
+  composerBusyStatus: 'AI is replying...',
+  composerBackgroundStatus: 'AI is processing a background task. Results will appear automatically.',
+  backgroundTaskBubble: 'AI is handling a background task and will return the result automatically.',
+  imageModeBadge: 'Image generation',
+  imageModeCopy: 'Your next input will be handled as an image task. You can also upload reference images.',
+  imageModeCopyWithReferences: 'Your next input will be handled as an image task with {count} reference image(s).',
+  imageModeActivate: 'Generate image',
+  imageModeActive: 'Image mode on',
+  imageModeExit: 'Exit image mode',
+  imageModePromptPlaceholder: 'Describe the image you want to generate...',
+  actionGenerateImage: 'Generate image',
+  actionEditImage: 'Edit image',
+  actionPromptLibrary: 'Prompt library',
+  actionReferenceImages: 'Find references',
+  providerLabelLoading: 'Loading...',
+  providerLabelUnset: 'Not configured',
+  workspaceBadgePick: 'Choose workspace',
+  workspaceBadgeTitlePick: 'Click to choose a workspace folder',
+  workspaceTooltipCurrent: 'Current workspace: {path}',
+  workspaceTooltipSelected: 'Selected folder: {path}',
+  workspaceTooltipDetail: 'Note: {detail}',
+  workspaceStatusGitRepo: 'Git repository',
+  workspaceStatusPathMissing: 'Workspace path is missing',
+  workspaceStatusNotGit: 'The current folder is not a Git repository',
+  workspaceStatusAmbiguous: 'Multiple candidate repositories detected',
+  workspaceStatusUnset: 'Workspace not set',
+  workspaceLineCurrent: 'Current folder',
+  workspaceLineEffective: 'Effective folder',
+  workspaceNotSet: 'Not set',
+  licenseActivatedBadge: 'Activated',
+  editImageHint: 'To edit an image, first click "Edit" on one of the result images in the chat transcript.',
+  toolRunningPrefix: 'Running:',
+  thinkingSummaryTitle: 'Thought summary',
+  generatedImageEdit: 'Edit',
+  generatedImageDownload: 'Download',
+  imagePendingIntroGenerate: 'Creating images...',
+  imagePendingIntroEdit: 'Applying your image edit request...',
+  imagePendingBadgeGenerate: 'generate',
+  imagePendingBadgeEdit: 'edit',
+  imagePendingCountUnit: 'images',
+  imagePendingCreating: 'Generating',
+  imagePendingPromptFallback: 'KainClaw is preparing the image task and waiting for the result.',
+  imagePendingLoaderTitleGenerate: 'Creating image',
+  imagePendingLoaderTitleEdit: 'Editing image',
+  imagePendingLoaderSubtitle: 'Rendering in progress, please wait',
+  imagePendingLoaderSubtitleWithModel: '{model} rendering in progress, please wait',
+};
+let currentShellStrings = { ...DEFAULT_SHELL_STRINGS };
 
-function applyUiLanguageState(language, dialogStrings) {
+requestAnimationFrame(() => {
+  document.getElementById('artifacts-resizer')?.addEventListener('mousedown', startArtifactResize);
+});
+
+function applyUiLanguageState(language, dialogStrings, shellStrings) {
   appState.uiLanguage = language || appState.uiLanguage || 'zh-CN';
   currentDialogStrings = {
     ...DEFAULT_DIALOG_STRINGS,
     ...(dialogStrings || {}),
   };
+  currentShellStrings = {
+    ...DEFAULT_SHELL_STRINGS,
+    ...(shellStrings || {}),
+  };
   document.documentElement.lang = appState.uiLanguage === 'en-US' ? 'en' : 'zh-CN';
   localizeMcpSurface();
+  localizeChatSurface();
+  localizeSecondarySurfaces();
 }
 
 function dialogText(key) {
   return currentDialogStrings[key] || DEFAULT_DIALOG_STRINGS[key] || '';
 }
 
+function shellText(key) {
+  return currentShellStrings[key] || DEFAULT_SHELL_STRINGS[key] || '';
+}
+
+function formatShellText(key, replacements) {
+  let value = shellText(key);
+  Object.entries(replacements || {}).forEach(([token, replacement]) => {
+    value = value.replaceAll(`{${token}}`, String(replacement ?? ''));
+  });
+  return value;
+}
+
 function isEnglishUi() {
   return appState.uiLanguage === 'en-US';
+}
+
+function isDefaultSessionTitle(title) {
+  const normalized = String(title || '').trim();
+  return !normalized || normalized === '新对话' || normalized === 'New chat';
+}
+
+function displaySessionTitle(title) {
+  return isDefaultSessionTitle(title) ? shellText('defaultSessionTitle') : title;
+}
+
+function localizeChatSurface() {
+  const newSessionBtn = document.querySelector('#page-chat button[onclick="newSession()"]');
+  if (newSessionBtn) newSessionBtn.title = shellText('newSessionTooltip');
+
+  const workspaceSectionTitle = document.querySelector('#page-chat div[style*="padding:8px 10px 4px;border-top:1px solid #e4e4e7"] > div:first-child');
+  if (workspaceSectionTitle) workspaceSectionTitle.textContent = shellText('workspaceSectionTitle');
+
+  const settingsLink = document.querySelector('#page-chat div[onclick="openSettings()"]');
+  if (settingsLink && settingsLink.lastChild) settingsLink.lastChild.textContent = shellText('settingsLabel');
+
+  const exportCurrentBtn = document.querySelector('#page-chat button[onclick="exportCurrentSession()"]');
+  if (exportCurrentBtn) exportCurrentBtn.title = shellText('exportSessionTitle');
+
+  const renameCurrentBtn = document.querySelector('#page-chat button[onclick="renameCurrentSession()"]');
+  if (renameCurrentBtn) renameCurrentBtn.title = shellText('renameSessionTitle');
+
+  const emptyState = document.getElementById('empty-state');
+  if (emptyState) {
+    const blocks = emptyState.querySelectorAll(':scope > div');
+    if (blocks[1]) blocks[1].textContent = shellText('emptyStateTitle');
+    if (blocks[2]) blocks[2].textContent = shellText('emptyStateDescription');
+  }
+
+  const imageModeBadge = document.getElementById('chat-image-mode-badge');
+  if (imageModeBadge) imageModeBadge.textContent = shellText('imageModeBadge');
+
+  const imageModeExitBtn = document.querySelector('#chat-image-mode-banner button[onclick="resetChatImageComposer()"]');
+  if (imageModeExitBtn) imageModeExitBtn.textContent = shellText('imageModeExit');
+
+  const generateImageBtn = document.getElementById('chat-action-image');
+  if (generateImageBtn && chatComposerState.intent !== 'image') generateImageBtn.textContent = shellText('actionGenerateImage');
+  const editImageBtn = document.getElementById('chat-action-edit-image');
+  if (editImageBtn) editImageBtn.textContent = shellText('actionEditImage');
+  const libraryBtn = document.getElementById('chat-action-library');
+  if (libraryBtn) libraryBtn.textContent = shellText('actionPromptLibrary');
+  const searchBtn = document.getElementById('chat-action-search');
+  if (searchBtn) searchBtn.textContent = shellText('actionReferenceImages');
+
+  const licenseBadge = document.getElementById('license-badge');
+  if (licenseBadge) licenseBadge.textContent = shellText('licenseActivatedBadge');
+
+  const renameOverlay = document.getElementById('rename-session-overlay');
+  if (renameOverlay) {
+    const textBlocks = renameOverlay.querySelectorAll(':scope > div > div');
+    if (textBlocks[0]) textBlocks[0].textContent = shellText('renameSessionTitle');
+    if (textBlocks[1]) textBlocks[1].textContent = shellText('renameSessionDescription');
+    const renameInput = document.getElementById('rename-session-input');
+    if (renameInput) renameInput.placeholder = shellText('renameSessionPlaceholder');
+    const actionButtons = renameOverlay.querySelectorAll(':scope button');
+    if (actionButtons[0]) actionButtons[0].textContent = dialogText('cancel');
+    if (actionButtons[1]) actionButtons[1].textContent = shellText('renameSessionTitle').includes('Rename') ? 'Save' : '保存';
+  }
+
+  renderSessions(currentSessions, currentActiveSessionId);
+  renderWorkspaceState(appState.workspaceInfo);
+  updateChatComposerUi();
+}
+
+let secondarySurfaceLocalizationObserverReady = false;
+let secondarySurfaceLocalizationScheduled = false;
+
+function localizeSurfaceTextTree(root) {
+  if (!root) return;
+  const map = currentShellStrings.surfaceTextMap || {};
+  const replaceExactText = value => {
+    const raw = String(value || '');
+    const trimmed = raw.trim();
+    const dynamicPatterns = isEnglishUi()
+      ? [
+          [/^当前会把目标图作为第一张参考图，另外附带 (\d+) 张额外参考图。$/, (_, count) => `The target image will be used as the first reference image, with ${count} extra reference image(s).`],
+          [/^当前共有 (\d+) 张参考图。系统会按顺序一起作为编辑参考，你也可以继续追加新的参考图。$/, (_, count) => `There are currently ${count} reference image(s). KainClaw will use them in order for editing, and you can keep adding more.`],
+          [/^已加入 (\d+) 张参考图；最多保留 4 张，另外 (\d+) 张未加入。$/, (_, kept, skipped) => `Added ${kept} reference image(s). Up to 4 are kept, and ${skipped} more were skipped.`],
+          [/^已加入 (\d+) 张参考图，现在可按多图参考继续改图。$/, (_, count) => `Added ${count} reference image(s). You can continue editing with multi-image references now.`],
+          [/^当前共 (\d+) 条提示词，已收藏 (\d+) 条。$/, (_, total, favorites) => `${total} prompt(s) total, ${favorites} favorite(s).`],
+          [/^全部提示词 (\d+)$/, (_, count) => `All prompts ${count}`],
+          [/^我的喜欢 (\d+)$/, (_, count) => `Favorites ${count}`],
+          [/^参考图 (\d+) 张$/, (_, count) => `${count} reference image(s)`],
+          [/^已带入 (\d+) 张目标\/参考图$/, (_, count) => `${count} target/reference image(s) attached`],
+          [/^已填入提示词：(.+)$/, (_, label) => `Prompt inserted: ${label}`],
+          [/^已把素材关键词加入 Prompt：(.+)$/, (_, keyword) => `Added material keyword to the prompt: ${keyword}`],
+          [/^已把 (.+) 加入当前图片任务。$/, (_, label) => `Added ${label} to the current image task.`],
+          [/^已返回当前图片任务，你可以直接继续生成或编辑。$/, () => `Returned to the current image task. You can continue generating or editing.`],
+          [/^正在根据当前图片任务整理搜索方向。这里只会先准备当前任务和检索词，不会自动开始搜索。$/, () => `Preparing search directions from the current image task. This only prepares the current task and queries; it does not start searching automatically.`],
+          [/^正在根据当前检索词查找可加入的素材图片...$/, () => `Searching for reference images from the current queries...`],
+          [/^正在生成建议检索词...$/, () => `Generating suggested search queries...`],
+          [/^正在生成 #(\d+)$/, (_, index) => `Generating #${index}`],
+        ]
+      : [
+          [/^The target image will be used as the first reference image, with (\d+) extra reference image\(s\)\.$/, (_, count) => `当前会把目标图作为第一张参考图，另外附带 ${count} 张额外参考图。`],
+          [/^There are currently (\d+) reference image\(s\)\. KainClaw will use them in order for editing, and you can keep adding more\.$/, (_, count) => `当前共有 ${count} 张参考图。系统会按顺序一起作为编辑参考，你也可以继续追加新的参考图。`],
+          [/^Added (\d+) reference image\(s\)\. Up to 4 are kept, and (\d+) more were skipped\.$/, (_, kept, skipped) => `已加入 ${kept} 张参考图；最多保留 4 张，另外 ${skipped} 张未加入。`],
+          [/^Added (\d+) reference image\(s\)\. You can continue editing with multi-image references now\.$/, (_, count) => `已加入 ${count} 张参考图，现在可按多图参考继续改图。`],
+          [/^(\d+) prompt\(s\) total, (\d+) favorite\(s\)\.$/, (_, total, favorites) => `当前共 ${total} 条提示词，已收藏 ${favorites} 条。`],
+          [/^All prompts (\d+)$/, (_, count) => `全部提示词 ${count}`],
+          [/^Favorites (\d+)$/, (_, count) => `我的喜欢 ${count}`],
+          [/^(\d+) reference image\(s\)$/, (_, count) => `参考图 ${count} 张`],
+          [/^(\d+) target\/reference image\(s\) attached$/, (_, count) => `已带入 ${count} 张目标/参考图`],
+          [/^Prompt inserted: (.+)$/, (_, label) => `已填入提示词：${label}`],
+          [/^Added material keyword to the prompt: (.+)$/, (_, keyword) => `已把素材关键词加入 Prompt：${keyword}`],
+          [/^Added (.+) to the current image task\.$/, (_, label) => `已把 ${label} 加入当前图片任务。`],
+          [/^Returned to the current image task\. You can continue generating or editing\.$/, () => `已返回当前图片任务，你可以直接继续生成或编辑。`],
+          [/^Preparing search directions from the current image task\. This only prepares the current task and queries; it does not start searching automatically\.$/, () => `正在根据当前图片任务整理搜索方向。这里只会先准备当前任务和检索词，不会自动开始搜索。`],
+          [/^Searching for reference images from the current queries\.\.\.$/, () => `正在根据当前检索词查找可加入的素材图片...`],
+          [/^Generating suggested search queries\.\.\.$/, () => `正在生成建议检索词...`],
+          [/^Generating #(\d+)$/, (_, index) => `正在生成 #${index}`],
+        ];
+
+    for (const [pattern, replacement] of dynamicPatterns) {
+      if (pattern.test(trimmed)) {
+        return raw.replace(trimmed, trimmed.replace(pattern, replacement));
+      }
+    }
+    if (!trimmed || !Object.prototype.hasOwnProperty.call(map, trimmed)) {
+      return raw;
+    }
+    return raw.replace(trimmed, map[trimmed]);
+  };
+
+  const treeWalker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, {
+    acceptNode(node) {
+      const parentTag = node.parentElement?.tagName;
+      if (parentTag === 'TEXTAREA' || parentTag === 'INPUT') {
+        return NodeFilter.FILTER_REJECT;
+      }
+      return NodeFilter.FILTER_ACCEPT;
+    },
+  });
+
+  let node = treeWalker.nextNode();
+  while (node) {
+    const nextValue = replaceExactText(node.nodeValue);
+    if (nextValue !== node.nodeValue) {
+      node.nodeValue = nextValue;
+    }
+    node = treeWalker.nextNode();
+  }
+
+  root.querySelectorAll('*').forEach(element => {
+    ['title', 'placeholder', 'aria-label'].forEach(attribute => {
+      const currentValue = element.getAttribute(attribute);
+      if (!currentValue) return;
+      const nextValue = replaceExactText(currentValue);
+      if (nextValue !== currentValue) {
+        element.setAttribute(attribute, nextValue);
+      }
+    });
+  });
+}
+
+function localizeSecondarySurfaces() {
+  [
+    document.getElementById('page-onboarding'),
+    document.getElementById('page-images'),
+    document.getElementById('product-drawer-overlay'),
+    document.getElementById('chat-image-editor-overlay'),
+  ].forEach(localizeSurfaceTextTree);
+}
+
+function scheduleSecondarySurfaceLocalization() {
+  if (secondarySurfaceLocalizationScheduled) return;
+  secondarySurfaceLocalizationScheduled = true;
+  queueMicrotask(() => {
+    secondarySurfaceLocalizationScheduled = false;
+    localizeSecondarySurfaces();
+  });
+}
+
+function ensureSecondarySurfaceLocalizationObserver() {
+  if (secondarySurfaceLocalizationObserverReady) return;
+  secondarySurfaceLocalizationObserverReady = true;
+  const observer = new MutationObserver(() => {
+    scheduleSecondarySurfaceLocalization();
+  });
+  [
+    document.getElementById('page-onboarding'),
+    document.getElementById('page-images'),
+    document.getElementById('product-drawer-overlay'),
+    document.getElementById('chat-image-editor-overlay'),
+  ].filter(Boolean).forEach(root => {
+    observer.observe(root, {
+      childList: true,
+      subtree: true,
+      characterData: true,
+      attributes: true,
+      attributeFilter: ['title', 'placeholder', 'aria-label'],
+    });
+  });
 }
 
 function getMcpStrings() {
@@ -1129,6 +1495,7 @@ let promptLibraryInference = {
 // Init
 document.addEventListener('DOMContentLoaded', () => {
   resetOnboardingProviderSelection();
+  ensureSecondarySurfaceLocalizationObserver();
   send({ type: 'ready' });
   document.getElementById('prompt-input').addEventListener('paste', handlePaste);
   updateChatComposerUi();
@@ -1155,10 +1522,10 @@ function handleMessage(msg) {
     case 'hideSessions':
       break;
     case 'sessions:exported':
-        alert('已导出：' + msg.path);
+        alert(shellText('exportSessionAlertPrefix') + msg.path);
       break;
     case 'settings:data':
-      applyUiLanguageState(msg.language, msg.dialogStrings);
+      applyUiLanguageState(msg.language, msg.dialogStrings, msg.shellStrings);
       renderSettings(msg);
       break;
     case 'approval:pending':
@@ -1180,7 +1547,7 @@ function handleMessage(msg) {
         const ti = document.createElement('div');
         ti.id = 'tool-indicator';
         ti.style.cssText = 'font-size:11px;color:#a1a1aa;padding:4px 0;display:flex;align-items:center;gap:5px';
-        ti.innerHTML = `<div class="spinner"></div> 正在执行: ${escapeHtml(String(msg.toolName || ''))}`;
+        ti.innerHTML = `<div class="spinner"></div> ${escapeHtml(shellText('toolRunningPrefix'))} ${escapeHtml(String(msg.toolName || ''))}`;
         document.getElementById('messages')?.appendChild(ti);
       }
       break;
@@ -1344,18 +1711,30 @@ function handleMessage(msg) {
 }
 
 function applyState(state) {
+  const previousMessages = Array.isArray(appState.messages) ? appState.messages : [];
+  const nextMessages = Array.isArray(state.messages) ? state.messages : [];
+  if (didMessageListReset(previousMessages, nextMessages)) {
+    clearExpandedThinkingSummaries();
+  }
+
   appState.isBusy = state.isBusy;
   appState.activeRequestKind = state.activeRequestKind || null;
   if (!appState.isBusy || appState.activeRequestKind !== 'image') {
     chatPendingImageRequest = null;
   }
-  appState.messages = state.messages || [];
+  appState.messages = nextMessages;
   appState.streamingText = state.streamingText || '';
   appState.providerLabel = state.providerLabel || '未配置';
   appState.onboardingDone = state.onboardingDone;
   appState.pendingApproval = state.pendingApproval || null;
   appState.mcpServers = state.mcpServers || [];
-  applyUiLanguageState(state.uiLanguage, state.dialogStrings);
+  appState.artifactState = state.artifactState || {
+    activeArtifact: null,
+    activeArtifactId: null,
+    artifactCount: 0,
+  };
+  applyUiLanguageState(state.uiLanguage, state.dialogStrings, state.shellStrings);
+  appState.providerLabel = state.providerLabel || shellText('providerLabelUnset');
   appState.workspaceInfo = state.workspaceInfo || {
     selectedRoot: state.workspaceRoot || '',
     effectiveRoot: state.workspaceRoot || '',
@@ -1376,14 +1755,19 @@ function applyState(state) {
     send({ type: 'sessions:load' });
   }
 
-  document.getElementById('provider-label').textContent = state.providerLabel || '未配置';
+  document.getElementById('provider-label').textContent = appState.providerLabel;
   renderWorkspaceState(appState.workspaceInfo);
 
   renderMessages();
+  renderArtifactPanel();
   updateBusyUi();
   renderApproval(state.pendingApproval);
   renderMcpServers(state.mcpServers);
 }
+
+window.addEventListener('resize', () => {
+  applyArtifactPanelWidth();
+});
 
 function getWorkspaceStatusMeta(workspaceInfo) {
   switch (workspaceInfo?.kind) {
@@ -1788,11 +2172,233 @@ function updateBusyUi() {
   }
 }
 
+function hideArtifactToast() {
+  const toast = document.getElementById('artifacts-panel-toast');
+  if (!toast) return;
+  toast.classList.remove('show');
+  toast.textContent = '';
+  if (artifactToastTimer) {
+    clearTimeout(artifactToastTimer);
+    artifactToastTimer = null;
+  }
+}
+
+function showArtifactToast(message) {
+  const toast = document.getElementById('artifacts-panel-toast');
+  if (!toast) return;
+  toast.textContent = message;
+  toast.classList.add('show');
+  if (artifactToastTimer) clearTimeout(artifactToastTimer);
+  artifactToastTimer = setTimeout(() => {
+    toast.classList.remove('show');
+    artifactToastTimer = null;
+  }, 2400);
+}
+
+function buildHtmlArtifactSrcdoc(content) {
+  return content || '';
+}
+
+function buildSvgArtifactSrcdoc(content) {
+  return `<!DOCTYPE html><html><body style="margin:0;padding:0;background:#fff;">${content || ''}</body></html>`;
+}
+
+function buildMermaidArtifactSrcdoc(content) {
+  return `<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <script src="https://cdn.jsdelivr.net/npm/mermaid/dist/mermaid.min.js"><\/script>
+  <style>
+    body { margin: 0; padding: 16px; background: #fff; color: #18181b; }
+    .mermaid { display: flex; justify-content: center; }
+  </style>
+</head>
+<body>
+  <div class="mermaid">${escapeHtml(content || '')}</div>
+  <script>mermaid.initialize({ startOnLoad: true, theme: 'default' });<\/script>
+</body>
+</html>`;
+}
+
+function dismissArtifactPanel() {
+  send({ type: 'artifact:dismiss' });
+}
+
+function handleArtifactDeepEdit() {
+  showArtifactToast('Deep Design 功能即将推出');
+}
+
+function clampArtifactPanelWidth(nextWidth) {
+  const workspace = document.querySelector('.chat-workspace');
+  if (!workspace) {
+    return nextWidth;
+  }
+
+  const workspaceWidth = workspace.getBoundingClientRect().width || 0;
+  const minWidth = 360;
+  const maxWidth = Math.max(minWidth, Math.min(960, workspaceWidth - 320));
+  return Math.max(minWidth, Math.min(maxWidth, nextWidth));
+}
+
+function applyArtifactPanelWidth() {
+  const panel = document.getElementById('artifacts-panel');
+  if (!panel) return;
+  if (window.innerWidth < 960) {
+    panel.style.width = '';
+    return;
+  }
+
+  if (typeof artifactPanelWidth === 'number') {
+    panel.style.width = `${clampArtifactPanelWidth(artifactPanelWidth)}px`;
+  } else {
+    panel.style.width = '';
+  }
+}
+
+function finishArtifactResize() {
+  artifactResizeActive = false;
+  const resizer = document.getElementById('artifacts-resizer');
+  resizer?.classList.remove('dragging');
+  document.body.style.userSelect = '';
+  document.body.style.cursor = '';
+}
+
+function resizeArtifactPanelFromClientX(clientX) {
+  const workspace = document.querySelector('.chat-workspace');
+  if (!workspace) return;
+  const rect = workspace.getBoundingClientRect();
+  artifactPanelWidth = clampArtifactPanelWidth(rect.right - clientX);
+  applyArtifactPanelWidth();
+}
+
+function startArtifactResize(event) {
+  if (window.innerWidth < 960) return;
+  artifactResizeActive = true;
+  const resizer = document.getElementById('artifacts-resizer');
+  resizer?.classList.add('dragging');
+  document.body.style.userSelect = 'none';
+  document.body.style.cursor = 'col-resize';
+  resizeArtifactPanelFromClientX(event.clientX);
+}
+
+function renderArtifactPanel() {
+  const panel = document.getElementById('artifacts-panel');
+  const resizer = document.getElementById('artifacts-resizer');
+  const title = document.getElementById('artifacts-panel-title');
+  const typeBadge = document.getElementById('artifacts-panel-type');
+  const content = document.getElementById('artifacts-panel-content');
+  const deepEditBtn = document.getElementById('artifacts-panel-deep-edit');
+  const artifact = appState.artifactState?.activeArtifact || null;
+
+  if (!panel || !resizer || !title || !typeBadge || !content || !deepEditBtn) {
+    return;
+  }
+
+  content.innerHTML = '';
+  hideArtifactToast();
+
+  if (!artifact) {
+    panel.classList.add('hidden');
+    resizer.classList.add('hidden');
+    typeBadge.textContent = '';
+    deepEditBtn.style.display = 'none';
+    title.textContent = 'Artifacts';
+    return;
+  }
+
+  panel.classList.remove('hidden');
+  resizer.classList.remove('hidden');
+  applyArtifactPanelWidth();
+  title.textContent = artifact.title || 'Artifact';
+  typeBadge.textContent = String(artifact.type || '').toUpperCase();
+  deepEditBtn.style.display = artifact.type === 'html' ? 'inline-flex' : 'none';
+
+  if (artifact.type === 'code') {
+    const pre = document.createElement('pre');
+    pre.className = 'artifacts-panel__code';
+    const code = document.createElement('code');
+    code.textContent = artifact.content || '';
+    pre.appendChild(code);
+    content.appendChild(pre);
+    return;
+  }
+
+  if (artifact.type === 'html' || artifact.type === 'svg' || artifact.type === 'mermaid') {
+    const frame = document.createElement('iframe');
+    frame.className = 'artifacts-panel__frame';
+    frame.setAttribute('sandbox', 'allow-scripts');
+    frame.loading = 'lazy';
+    frame.referrerPolicy = 'no-referrer';
+    frame.srcdoc = artifact.type === 'html'
+      ? buildHtmlArtifactSrcdoc(artifact.content)
+      : artifact.type === 'svg'
+        ? buildSvgArtifactSrcdoc(artifact.content)
+        : buildMermaidArtifactSrcdoc(artifact.content);
+    content.appendChild(frame);
+    return;
+  }
+
+  const fallback = document.createElement('div');
+  fallback.className = 'artifacts-panel__placeholder';
+  fallback.textContent = '当前产物类型暂不支持面板渲染。';
+  content.appendChild(fallback);
+}
+
 // Message Rendering
 let _emptyStateEl = null;
 function getEmptyState() {
   if (!_emptyStateEl) _emptyStateEl = document.getElementById('empty-state');
   return _emptyStateEl;
+}
+
+function clearExpandedThinkingSummaries() {
+  expandedThinkingSummaries.clear();
+}
+
+function getThinkingSummaryToggleId(messageIndex) {
+  return `thinking-summary-${messageIndex}`;
+}
+
+function toggleThinkingSummary(messageIndex) {
+  const toggleId = getThinkingSummaryToggleId(messageIndex);
+  if (expandedThinkingSummaries.has(toggleId)) {
+    expandedThinkingSummaries.delete(toggleId);
+  } else {
+    expandedThinkingSummaries.add(toggleId);
+  }
+  renderMessages();
+}
+
+function getMessageIdentity(message) {
+  return [
+    message?.role || '',
+    message?.kind || '',
+    String(message?.content || ''),
+  ].join('::');
+}
+
+function didMessageListReset(previousMessages, nextMessages) {
+  if (!Array.isArray(previousMessages) || previousMessages.length === 0) {
+    return false;
+  }
+
+  if (!Array.isArray(nextMessages) || nextMessages.length === 0) {
+    return true;
+  }
+
+  if (nextMessages.length < previousMessages.length) {
+    return true;
+  }
+
+  const compareCount = Math.min(2, previousMessages.length, nextMessages.length);
+  for (let index = 0; index < compareCount; index += 1) {
+    if (getMessageIdentity(previousMessages[index]) !== getMessageIdentity(nextMessages[index])) {
+      return true;
+    }
+  }
+
+  return false;
 }
 
 function renderMessages() {
@@ -1916,6 +2522,7 @@ function renderChatImagePendingBlock() {
 
 function renderMessage(m, messageIndex) {
   const isUser = m.role === 'user';
+  const isThinking = m.kind === 'thinking';
   const isError = m.kind === 'error';
   const cls = isError ? 'error' : (isUser ? 'user' : 'assistant');
   const rawContent = m.content || '';
@@ -1949,8 +2556,8 @@ function renderMessage(m, messageIndex) {
             <span class="${image.source === 'edit' ? 'badge-blue' : image.source === 'variant' ? 'badge-purple' : 'badge-green'}">${image.source || 'generate'}</span>
           </div>
           <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
-            <button class="btn-secondary" onclick="openChatImageEditor(${messageIndex}, ${imageIndex})">编辑</button>
-            <a class="btn-secondary" href="${image.src}" download="kainclaw-chat-image-${image.id || imageIndex}.png" style="text-decoration:none;text-align:center">下载</a>
+            <button class="btn-secondary" onclick="openChatImageEditor(${messageIndex}, ${imageIndex})">${escapeHtml(shellText('generatedImageEdit'))}</button>
+            <a class="btn-secondary" href="${image.src}" download="kainclaw-chat-image-${image.id || imageIndex}.png" style="text-decoration:none;text-align:center">${escapeHtml(shellText('generatedImageDownload'))}</a>
           </div>
         </div>
       </div>
@@ -1959,6 +2566,23 @@ function renderMessage(m, messageIndex) {
 
   if (isUser) {
     return `<div class="msg-wrap user">${attHtml}<div class="msg-bubble user">${content}</div></div>`;
+  }
+  if (isThinking) {
+    const toggleId = getThinkingSummaryToggleId(messageIndex);
+    const expanded = expandedThinkingSummaries.has(toggleId);
+    const collapseClass = expanded ? 'thinking-card-expanded' : 'thinking-card-collapsed';
+    return `<div class="msg-wrap">
+      <div class="klogo" style="flex-shrink:0;margin-top:2px">K</div>
+      <div style="flex:1;min-width:0">
+        <div class="msg-bubble assistant thinking-card ${collapseClass}">
+          <button class="thinking-head thinking-summary-toggle" type="button" onclick="toggleThinkingSummary(${messageIndex})">
+            <div class="thinking-title">${escapeHtml(shellText('thinkingSummaryTitle'))}</div>
+            <div class="thinking-chevron">▶</div>
+          </button>
+          ${expanded ? `<div class="thinking-summary-body">${content}</div>` : ''}
+        </div>
+      </div>
+    </div>`;
   }
   return `<div class="msg-wrap">
     <div class="klogo" style="flex-shrink:0;margin-top:2px">K</div>
@@ -2484,7 +3108,7 @@ function renderInlineMarkdown(text) {
 }
 
 function escapeHtml(s) {
-  return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g, '&#39;');
 }
 
 // Sessions
@@ -2580,7 +3204,7 @@ function exportCurrentSession() {
 }
 
 function deleteSession(id) {
-  if (!confirm('删除这条会话？')) return;
+  if (!confirm(shellText('deleteSessionConfirm'))) return;
   send({ type: 'sessions:delete', id });
   send({ type: 'sessions:load' });
 }
@@ -2994,6 +3618,364 @@ function showEditImageHint() {
   alert(isEnglishUi()
     ? 'To edit an image, first click "Edit" on one of the result images in the chat transcript.'
     : '编辑图片请先在聊天流中的某张结果图上点击“编辑”。');
+}
+
+function renderSessions(sessions, activeId) {
+  currentSessions = sessions || [];
+  currentActiveSessionId = activeId || null;
+  const container = document.getElementById('sessions-list');
+  if (!container) return;
+
+  if (!sessions.length) {
+    container.innerHTML = `<div style="font-size:11px;font-weight:600;color:#a1a1aa;padding:6px 6px 3px;letter-spacing:.05em;text-transform:uppercase">${escapeHtml(shellText('sessionSectionTitle'))}</div><div style="font-size:12px;color:#a1a1aa;padding:8px 8px">${escapeHtml(shellText('noSessions'))}</div>`;
+    document.getElementById('chat-title').textContent = shellText('defaultSessionTitle');
+    return;
+  }
+
+  let html = `<div style="font-size:11px;font-weight:600;color:#a1a1aa;padding:6px 6px 3px;letter-spacing:.05em;text-transform:uppercase">${escapeHtml(shellText('sessionSectionTitle'))}</div>`;
+  for (const session of sessions) {
+    const active = session.id === activeId;
+    const displayTitle = displaySessionTitle(session.title || '');
+    html += `<div class="sess-item${active ? ' active' : ''}" onclick="switchSession('${session.id}')">
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="flex-shrink:0"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+      <span class="sess-item-title">${escapeHtml(displayTitle)}</span>
+      <div class="sess-actions">
+        <button class="sess-action" title="${escapeHtml(shellText('renameSessionTitle'))}" onclick="event.stopPropagation();renameSession('${session.id}', '${encodeURIComponent(session.title || '')}')">
+          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4 12.5-12.5z"/></svg>
+        </button>
+        <button class="sess-action" title="${escapeHtml(shellText('exportSessionTitle'))}" onclick="event.stopPropagation();exportSession('${session.id}')">
+          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+        </button>
+        <button class="sess-action" title="${escapeHtml(shellText('deleteSessionTitle'))}" onclick="event.stopPropagation();deleteSession('${session.id}')">
+          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/></svg>
+        </button>
+      </div>
+    </div>`;
+  }
+  container.innerHTML = html;
+
+  const sessionItems = container.querySelectorAll('.sess-item');
+  sessionItems.forEach((item, index) => {
+    const session = sessions[index];
+    const renameButton = item.querySelector('.sess-action');
+    if (!session || !renameButton) return;
+    renameButton.removeAttribute('onclick');
+    renameButton.setAttribute('type', 'button');
+    renameButton.setAttribute('title', shellText('renameSessionTitle'));
+    renameButton.addEventListener('click', event => {
+      event.stopPropagation();
+      renameSession(session.id, session.title || '');
+    });
+  });
+
+  const activeSession = sessions.find(session => session.id === activeId);
+  document.getElementById('chat-title').textContent = activeSession
+    ? displaySessionTitle(activeSession.title || '')
+    : shellText('defaultSessionTitle');
+}
+
+function getWorkspaceStatusMeta(workspaceInfo) {
+  switch (workspaceInfo?.kind) {
+    case 'direct_git_root':
+    case 'inside_git_repo':
+    case 'nested_git_root':
+      return { label: shellText('workspaceStatusGitRepo'), shortLabel: '', color: '#166534' };
+    case 'missing':
+      return { label: shellText('workspaceStatusPathMissing'), shortLabel: '', color: '#b45309' };
+    case 'non_git_workspace':
+      return { label: shellText('workspaceStatusNotGit'), shortLabel: '', color: '#b45309' };
+    case 'ambiguous_nested_git_roots':
+      return { label: shellText('workspaceStatusAmbiguous'), shortLabel: '', color: '#b91c1c' };
+    case 'unset':
+    default:
+      return { label: shellText('workspaceStatusUnset'), shortLabel: '', color: '#a1a1aa' };
+  }
+}
+
+function formatWorkspaceLine(label, value) {
+  return `${label}: ${value || shellText('workspaceNotSet')}`;
+}
+
+function renderWorkspaceState(workspaceInfo) {
+  const info = workspaceInfo || {
+    selectedRoot: '',
+    effectiveRoot: '',
+    gitRoot: null,
+    kind: 'unset',
+    detail: '',
+    candidates: [],
+  };
+  const statusMeta = getWorkspaceStatusMeta(info);
+  const showAlert = shouldShowWorkspaceAlert(info);
+  const effectiveRoot = info.effectiveRoot || '';
+  const selectedRoot = info.selectedRoot || '';
+  const displayRoot = selectedRoot || effectiveRoot;
+  const badgeLabel = displayRoot
+    ? (statusMeta.shortLabel
+        ? `${statusMeta.shortLabel} ${getPathLeaf(displayRoot)}`
+        : getPathLeaf(displayRoot))
+    : shellText('workspaceBadgePick');
+
+  const wsBadge = document.getElementById('workspace-badge');
+  const wsLabel = document.getElementById('workspace-label');
+  if (wsBadge) {
+    wsBadge.style.borderColor = showAlert ? statusMeta.color : '#d4d4d8';
+    wsBadge.title = [
+      displayRoot ? formatShellText('workspaceTooltipCurrent', { path: displayRoot }) : shellText('workspaceBadgeTitlePick'),
+      selectedRoot && selectedRoot !== effectiveRoot ? formatShellText('workspaceTooltipSelected', { path: selectedRoot }) : '',
+      showAlert && info.detail ? formatShellText('workspaceTooltipDetail', { detail: info.detail }) : '',
+    ].filter(Boolean).join('\n');
+  }
+  if (wsLabel) {
+    wsLabel.textContent = badgeLabel;
+    wsLabel.style.color = effectiveRoot ? (showAlert ? statusMeta.color : '#18181b') : '#a1a1aa';
+  }
+
+  const workspaceMeta = document.getElementById('workspace-meta');
+  if (workspaceMeta) workspaceMeta.style.display = showAlert ? 'block' : 'none';
+  const workspaceStatusLine = document.getElementById('workspace-status-line');
+  if (workspaceStatusLine) {
+    workspaceStatusLine.textContent = showAlert ? statusMeta.label : '';
+    workspaceStatusLine.style.color = statusMeta.color;
+  }
+  const workspaceSelectedLine = document.getElementById('workspace-selected-line');
+  if (workspaceSelectedLine) {
+    workspaceSelectedLine.textContent = showAlert ? formatWorkspaceLine(shellText('workspaceLineCurrent'), selectedRoot) : '';
+  }
+  const workspaceEffectiveLine = document.getElementById('workspace-effective-line');
+  if (workspaceEffectiveLine) {
+    workspaceEffectiveLine.textContent = showAlert ? formatWorkspaceLine(shellText('workspaceLineEffective'), effectiveRoot) : '';
+  }
+  const workspaceDetailLine = document.getElementById('workspace-detail-line');
+  if (workspaceDetailLine) {
+    if (showAlert && info.detail) {
+      workspaceDetailLine.style.display = 'block';
+      workspaceDetailLine.textContent = info.detail;
+    } else {
+      workspaceDetailLine.style.display = 'none';
+      workspaceDetailLine.textContent = '';
+    }
+  }
+  renderWorkspaceCandidates('workspace-candidates', info);
+
+  const mcpWsPath = document.getElementById('mcp-workspace-path');
+  if (mcpWsPath) mcpWsPath.textContent = displayRoot || shellText('workspaceNotSet');
+  const mcpWorkspaceMeta = document.getElementById('mcp-workspace-meta');
+  if (mcpWorkspaceMeta) mcpWorkspaceMeta.style.display = showAlert ? 'block' : 'none';
+  const mcpWorkspaceStatus = document.getElementById('mcp-workspace-status');
+  if (mcpWorkspaceStatus) {
+    mcpWorkspaceStatus.textContent = showAlert ? statusMeta.label : '';
+    mcpWorkspaceStatus.style.color = statusMeta.color;
+  }
+  const mcpWorkspaceSelected = document.getElementById('mcp-workspace-selected');
+  if (mcpWorkspaceSelected) {
+    mcpWorkspaceSelected.textContent = showAlert ? formatWorkspaceLine(shellText('workspaceLineCurrent'), selectedRoot) : '';
+  }
+  const mcpWorkspaceEffective = document.getElementById('mcp-workspace-effective');
+  if (mcpWorkspaceEffective) {
+    mcpWorkspaceEffective.textContent = showAlert ? formatWorkspaceLine(shellText('workspaceLineEffective'), effectiveRoot) : '';
+  }
+  const mcpWorkspaceDetail = document.getElementById('mcp-workspace-detail');
+  if (mcpWorkspaceDetail) {
+    if (showAlert && info.detail) {
+      mcpWorkspaceDetail.style.display = 'block';
+      mcpWorkspaceDetail.textContent = info.detail;
+    } else {
+      mcpWorkspaceDetail.style.display = 'none';
+      mcpWorkspaceDetail.textContent = '';
+    }
+  }
+  renderWorkspaceCandidates('mcp-workspace-candidates', info);
+}
+
+function updateBusyUi() {
+  const sendBtn = document.getElementById('send-btn');
+  const stopBtn = document.getElementById('stop-btn');
+  const input = document.getElementById('prompt-input');
+  const composerStatus = document.getElementById('composer-status');
+  const isImagePending = !!chatPendingImageRequest || appState.activeRequestKind === 'image';
+  const isBackgroundPending = appState.activeRequestKind === 'background';
+  if (appState.isBusy) {
+    if (isBackgroundPending) {
+      sendBtn.style.display = 'flex';
+      stopBtn.style.display = 'none';
+      sendBtn.disabled = true;
+      sendBtn.style.opacity = '0.45';
+      sendBtn.style.cursor = 'not-allowed';
+      input.placeholder = shellText('composerBackgroundPlaceholder');
+      composerStatus.style.display = 'block';
+      composerStatus.textContent = shellText('composerBackgroundStatus');
+    } else {
+      sendBtn.style.display = 'none';
+      stopBtn.style.display = 'flex';
+      sendBtn.disabled = false;
+      sendBtn.style.opacity = '1';
+      sendBtn.style.cursor = 'pointer';
+      input.placeholder = isImagePending ? shellText('composerImagePlaceholder') : shellText('composerBusyPlaceholder');
+      composerStatus.style.display = isImagePending ? 'none' : 'block';
+      composerStatus.textContent = shellText('composerBusyStatus');
+    }
+  } else {
+    sendBtn.style.display = 'flex';
+    stopBtn.style.display = 'none';
+    sendBtn.disabled = false;
+    sendBtn.style.opacity = '1';
+    sendBtn.style.cursor = 'pointer';
+    composerStatus.style.display = 'none';
+    updateChatComposerUi();
+  }
+}
+
+function renderMessages() {
+  const container = document.getElementById('messages');
+  const emptyState = getEmptyState();
+  const msgs = appState.messages || [];
+  const streaming = appState.streamingText;
+  const busy = appState.isBusy;
+  const isEmpty = msgs.length === 0 && !streaming;
+
+  if (emptyState && emptyState.parentNode) emptyState.remove();
+
+  if (isEmpty) {
+    container.innerHTML = '';
+    if (emptyState) {
+      emptyState.style.display = 'flex';
+      container.appendChild(emptyState);
+    }
+    return;
+  }
+
+  let html = '';
+  for (let i = 0; i < msgs.length; i += 1) {
+    html += renderMessage(msgs[i], i);
+  }
+  if (busy && streaming) {
+    html += `<div class="msg-wrap">
+      <div class="klogo" style="flex-shrink:0;margin-top:2px">K</div>
+      <div class="msg-bubble assistant msg-streaming">${escapeHtml(streaming).replace(/\n/g,'<br>')}</div>
+    </div>`;
+  } else if (busy && !streaming && (chatPendingImageRequest || appState.activeRequestKind === 'image')) {
+    html += renderChatImagePendingBlock();
+  } else if (busy && !streaming && appState.activeRequestKind === 'background') {
+    html += `<div class="msg-wrap">
+      <div class="klogo" style="flex-shrink:0;margin-top:2px">K</div>
+      <div class="msg-bubble assistant" style="padding:12px 16px;display:flex;align-items:center;gap:10px">
+        <div class="spinner"></div>
+        <div style="font-size:13px;color:#3f3f46">${escapeHtml(shellText('backgroundTaskBubble'))}</div>
+      </div>
+    </div>`;
+  } else if (busy && !streaming) {
+    html += `<div class="msg-wrap">
+      <div class="klogo" style="flex-shrink:0;margin-top:2px">K</div>
+      <div class="msg-bubble assistant" style="padding:12px 16px"><div class="typing-dots"><span></span><span></span><span></span></div></div>
+    </div>`;
+  }
+
+  const wasAtBottom = container.scrollHeight - container.scrollTop <= container.clientHeight + 40;
+  container.innerHTML = html;
+  if (emptyState) {
+    emptyState.style.display = 'none';
+    container.appendChild(emptyState);
+  }
+  if (wasAtBottom) container.scrollTop = container.scrollHeight;
+}
+
+function renderChatImagePendingBlock() {
+  const prompt = chatPendingImageRequest?.prompt || '';
+  const referenceCount = Number(chatPendingImageRequest?.referenceCount || 0);
+  const batchCount = Math.max(1, Math.min(8, Number(chatPendingImageRequest?.batchCount || 1)));
+  const modelLabel = String(chatPendingImageRequest?.modelLabel || '').trim();
+  const loaderSubtitle = modelLabel
+    ? formatShellText('imagePendingLoaderSubtitleWithModel', { model: modelLabel })
+    : shellText('imagePendingLoaderSubtitle');
+  const introText = referenceCount > 0
+    ? shellText('imagePendingIntroEdit')
+    : shellText('imagePendingIntroGenerate');
+  const promptFallback = shellText('imagePendingPromptFallback');
+  const batchBadge = referenceCount > 0 ? shellText('imagePendingBadgeEdit') : shellText('imagePendingBadgeGenerate');
+  const loaderTitle = referenceCount > 0 ? shellText('imagePendingLoaderTitleEdit') : shellText('imagePendingLoaderTitleGenerate');
+
+  return `<div class="msg-wrap">
+    <div class="klogo" style="flex-shrink:0;margin-top:2px">K</div>
+    <div style="flex:1;min-width:0">
+      <div class="msg-bubble assistant" style="padding:12px 12px 14px">
+        <div style="font-size:13px;color:#5f4f43;line-height:1.7;margin-bottom:10px">${escapeHtml(introText)}</div>
+        <div style="display:grid;grid-template-columns:minmax(0,1fr);gap:12px;max-width:min(70%, 520px)">
+          <section class="imglab-loading-batch" style="background:rgba(255,255,255,.72);border:1px solid #eadfd2;border-radius:20px;padding:14px 14px 16px">
+            <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin-bottom:12px">
+              <div style="min-width:0">
+                <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+                  <span class="${referenceCount > 0 ? 'badge-blue' : 'badge-green'}">${escapeHtml(batchBadge)}</span>
+                  <span style="font-size:12px;font-weight:700;color:#5f4f43">${batchCount} ${escapeHtml(shellText('imagePendingCountUnit'))}</span>
+                  <span style="font-size:11px;color:#8a68ff;font-weight:700;letter-spacing:.03em">${escapeHtml(shellText('imagePendingCreating'))}</span>
+                </div>
+                <div style="font-size:12px;color:#8b7969;line-height:1.6;margin-top:6px">${prompt ? escapeHtml(prompt).slice(0, 120) : escapeHtml(promptFallback)}</div>
+              </div>
+            </div>
+            <div class="imglab-loading-card" style="border:1px solid #eadfd2;border-radius:18px;overflow:hidden;box-shadow:0 12px 24px rgba(77,49,24,.07)">
+              <div class="imglab-loading-media">
+                <div class="imglab-loader-stage">
+                  <div class="imglab-loader-grid" aria-hidden="true">
+                    <span class="imglab-loader-square s1"></span>
+                    <span class="imglab-loader-square alt s2"></span>
+                    <span class="imglab-loader-square s3"></span>
+                    <span class="imglab-loader-square alt s4"></span>
+                    <span class="imglab-loader-square s5"></span>
+                    <span class="imglab-loader-square alt s6"></span>
+                    <span class="imglab-loader-square s7"></span>
+                    <span class="imglab-loader-square alt s8"></span>
+                    <span class="imglab-loader-square s9"></span>
+                  </div>
+                  <div class="imglab-loader-copy">
+                    <div class="imglab-loader-title">${escapeHtml(loaderTitle)}</div>
+                    <div class="imglab-loader-subtitle">${escapeHtml(loaderSubtitle)}</div>
+                  </div>
+                </div>
+              </div>
+              <div style="padding:12px 12px 10px">
+                <div style="display:flex;flex-direction:column;gap:8px;min-height:58px">
+                  <div class="imglab-loading-line long"></div>
+                  <div class="imglab-loading-line medium"></div>
+                  <div class="imglab-loading-line short"></div>
+                </div>
+                <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:10px">
+                  <div class="imglab-loading-line tall"></div>
+                  <div class="imglab-loading-line tall"></div>
+                </div>
+              </div>
+            </div>
+          </section>
+        </div>
+      </div>
+    </div>
+  </div>`;
+}
+
+function updateChatComposerUi() {
+  const banner = document.getElementById('chat-image-mode-banner');
+  const copy = document.getElementById('chat-image-mode-copy');
+  const input = document.getElementById('prompt-input');
+  const imageButton = document.getElementById('chat-action-image');
+
+  if (chatComposerState.intent === 'image') {
+    banner.style.display = 'flex';
+    copy.textContent = pendingAttachments.length > 0
+      ? formatShellText('imageModeCopyWithReferences', { count: pendingAttachments.length })
+      : shellText('imageModeCopy');
+    input.placeholder = shellText('imageModePromptPlaceholder');
+    imageButton.textContent = shellText('imageModeActive');
+    imageButton.className = 'btn-red';
+    return;
+  }
+
+  banner.style.display = 'none';
+  input.placeholder = shellText('composerPlaceholder');
+  imageButton.textContent = shellText('imageModeActivate');
+  imageButton.className = 'btn-secondary';
+}
+
+function showEditImageHint() {
+  alert(shellText('editImageHint'));
 }
 
 function openMaterialSearchFromChat() {
@@ -5021,7 +6003,7 @@ function renderSettings(data) {
   const editingImageModelHasKey = imageFormSource ? !!imageFormSource.hasKey : false;
 
   container.innerHTML = `
-    <section style="margin-bottom:18px;border:1px solid #e4e4e7;border-radius:16px;background:#fff;padding:16px 18px">
+    <section data-settings-language-card="true" style="margin-bottom:18px;border:1px solid #e4e4e7;border-radius:16px;background:#fff;padding:16px 18px">
       <div style="font-size:16px;font-weight:700;color:#18181b">${currentLanguage === 'en-US' ? 'Interface language' : '界面语言'}</div>
       <div style="font-size:12px;color:#71717a;margin-top:4px">${currentLanguage === 'en-US' ? 'Electron dialogs and host-owned prompts follow this language.' : 'Electron 对话框和宿主提示会跟随这个语言。'}</div>
       <div style="margin-top:12px;max-width:280px">
@@ -5155,6 +6137,7 @@ function localizeSettingsSurface(currentLanguage, settingsStrings, state) {
   const chatSection = sections[1];
   const imageSection = sections[2];
   const advancedTab = document.getElementById('sc-adv');
+  const languageCardSlot = document.getElementById('settings-language-card-slot');
 
   const setNavLabel = (id, label) => {
     const node = document.getElementById(id);
@@ -5177,7 +6160,10 @@ function localizeSettingsSurface(currentLanguage, settingsStrings, state) {
   }
 
   if (languageSection) {
-    if (advancedTab && !advancedTab.contains(languageSection)) {
+    if (languageCardSlot) {
+      languageSection.style.margin = '0';
+      languageCardSlot.replaceChildren(languageSection);
+    } else if (advancedTab && !advancedTab.contains(languageSection)) {
       languageSection.style.margin = '0 0 16px 0';
       const resetCard = advancedTab.querySelector('div[style*="border:1px solid #fee2e2"]');
       advancedTab.insertBefore(languageSection, resetCard || null);
@@ -5192,7 +6178,7 @@ function localizeSettingsSurface(currentLanguage, settingsStrings, state) {
   if (providerHeader) providerHeader.textContent = currentLanguage === 'en-US' ? 'Providers & models' : '提供商 & 模型';
   const appearanceHeader = document.querySelector('#sc-appear > div:first-child');
   if (appearanceHeader) appearanceHeader.textContent = currentLanguage === 'en-US' ? 'Appearance' : '外观';
-  const advancedHeader = document.querySelector('#sc-adv > div:first-child');
+  const advancedHeader = document.querySelector('#sc-adv > div[style*="font-size:15px;font-weight:600"]');
   if (advancedHeader) advancedHeader.textContent = currentLanguage === 'en-US' ? 'Advanced' : '高级';
   const licenseHeader = document.querySelector('#sc-lic > div:first-child');
   if (licenseHeader) licenseHeader.textContent = 'License';

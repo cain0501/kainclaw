@@ -307,6 +307,26 @@ export function getSidebarHtml(webviewNonce: string, duckSpriteUri: string, webv
         gap: 10px;
       }
 
+      .thinking-summary-toggle {
+        width: 100%;
+        padding: 0;
+        border: none;
+        background: transparent;
+        color: inherit;
+        text-align: left;
+        cursor: pointer;
+      }
+
+      .thinking-summary-toggle:focus-visible {
+        outline: 1px solid color-mix(in srgb, var(--brand) 48%, transparent);
+        outline-offset: 3px;
+        border-radius: 8px;
+      }
+
+      .thinking-summary-body {
+        margin-top: 10px;
+      }
+
       .thinking-title {
         font-size: 12px;
         font-weight: 700;
@@ -1494,6 +1514,7 @@ export function getSidebarHtml(webviewNonce: string, duckSpriteUri: string, webv
         pendingApproval: null,
         streamingText: "",
         showThinkingSummaries: true,
+        multiSessionEnabled: false,
         planMode: {
           active: false,
           planFilePath: null
@@ -1502,11 +1523,13 @@ export function getSidebarHtml(webviewNonce: string, duckSpriteUri: string, webv
       const sessionsState = {
         sessions: [],
         activeId: null,
-        loaded: false
+        loaded: false,
+        requested: false
       };
       const workerGroups = [];
       const workerGroupByWorkerId = new Map();
       const expandedWorkers = new Set();
+      const expandedThinkingSummaries = new Set();
       let activeWorkerGroupId = null;
       let nextWorkerGroupSequence = 1;
       const RARITY_LABEL = { common:"普通", uncommon:"非普通", rare:"稀有", epic:"史诗", legendary:"传奇", shiny:"✨Shiny" };
@@ -2113,6 +2136,21 @@ export function getSidebarHtml(webviewNonce: string, duckSpriteUri: string, webv
         document.getElementById("sessionTabMore")?.addEventListener("click", showSessions);
       }
 
+      function requestSessionsPreload() {
+        if (
+          !state.ready ||
+          !state.onboardingDone ||
+          !state.multiSessionEnabled ||
+          sessionsState.loaded ||
+          sessionsState.requested
+        ) {
+          return;
+        }
+
+        sessionsState.requested = true;
+        vscode.postMessage({ type: "sessions:load" });
+      }
+
       function renderActivityCard(entries, title, subtitle) {
         if (!entries || entries.length === 0) {
           return "";
@@ -2406,6 +2444,40 @@ export function getSidebarHtml(webviewNonce: string, duckSpriteUri: string, webv
         return groupsByAnchor;
       }
 
+      function clearExpandedThinkingSummaries() {
+        expandedThinkingSummaries.clear();
+      }
+
+      function getThinkingSummaryToggleId(messageIndex) {
+        return "thinking-summary-" + String(messageIndex);
+      }
+
+      function renderThinkingSummaryCard(message, messageIndex) {
+        const toggleId = getThinkingSummaryToggleId(messageIndex);
+        const expanded = expandedThinkingSummaries.has(toggleId);
+        const collapseClass = expanded
+          ? "thinking-card-expanded"
+          : "thinking-card-collapsed";
+        let body = "";
+
+        try {
+          body = renderMessageContent(message.content);
+        } catch (_error) {
+          body = '<p class="md-paragraph">' + escapeHtml(message.content) + "</p>";
+        }
+
+        return '<div class="message assistant thinking-summary thinking-card ' + collapseClass + '">' +
+          '<button class="thinking-head thinking-summary-toggle" type="button" data-thinking-toggle="' +
+          escapeHtml(toggleId) + '">' +
+          '<div class="thinking-title">思考摘要</div>' +
+          '<div class="thinking-chevron">▶</div>' +
+          "</button>" +
+          (expanded
+            ? '<div class="message-body thinking-summary-body">' + body + "</div>"
+            : "") +
+          "</div>";
+      }
+
       function pinWorkerGroupsToLastUserMessage(messages, activities) {
         if (workerGroups.length === 0) return;
         let lastUserIndex = -1;
@@ -2432,9 +2504,13 @@ export function getSidebarHtml(webviewNonce: string, duckSpriteUri: string, webv
         const nextMessages = Array.isArray(message.messages) ? message.messages : state.messages;
         const previousMessages = Array.isArray(state.messages) ? state.messages : [];
 
-        if (didConversationReset(previousMessages, nextMessages) ||
-            hasNewUserMessage(previousMessages, nextMessages)) {
+        const conversationReset = didConversationReset(previousMessages, nextMessages);
+
+        if (conversationReset || hasNewUserMessage(previousMessages, nextMessages)) {
           resetWorkerGroups();
+          if (conversationReset) {
+            clearExpandedThinkingSummaries();
+          }
           clearStreamingText();
         }
 
@@ -2472,6 +2548,15 @@ export function getSidebarHtml(webviewNonce: string, duckSpriteUri: string, webv
             planFilePath: message.planMode.planFilePath || null
           };
         }
+        if ("multiSessionEnabled" in message) {
+          state.multiSessionEnabled = message.multiSessionEnabled === true;
+          if (!state.multiSessionEnabled) {
+            sessionsState.sessions = [];
+            sessionsState.activeId = null;
+            sessionsState.loaded = false;
+            sessionsState.requested = false;
+          }
+        }
 
         // 执行完成时：把 Worker 卡片从 tail 钉到对应的 user 消息之后，持久留在对话流
         // 注意：必须在 lastRunActivities 更新之后调用，否则 pin 时拿到的是旧值
@@ -2483,6 +2568,7 @@ export function getSidebarHtml(webviewNonce: string, duckSpriteUri: string, webv
         }
 
         state.pendingApproval = "pendingApproval" in message ? message.pendingApproval || null : state.pendingApproval;
+        requestSessionsPreload();
         render();
       }
 
@@ -2600,7 +2686,11 @@ export function getSidebarHtml(webviewNonce: string, duckSpriteUri: string, webv
         return "message " + message.role;
       }
 
-      function renderMessageCard(message) {
+      function renderMessageCard(message, messageIndex) {
+        if (message.kind === "thinking") {
+          return renderThinkingSummaryCard(message, messageIndex);
+        }
+
         const className = getMessageClassName(message);
         let body = "";
 
@@ -2610,11 +2700,7 @@ export function getSidebarHtml(webviewNonce: string, duckSpriteUri: string, webv
           body = '<p class="md-paragraph">' + escapeHtml(message.content) + "</p>";
         }
 
-        const kicker = message.kind === "thinking"
-          ? '<div class="thinking-summary-kicker">Thinking summary</div>'
-          : "";
-
-        return '<div class="' + className + '">' + kicker + '<div class="message-body">' + body + "</div></div>";
+        return '<div class="' + className + '"><div class="message-body">' + body + "</div></div>";
       }
 
       function renderMessagesLegacy(options = {}) {
@@ -2625,7 +2711,7 @@ export function getSidebarHtml(webviewNonce: string, duckSpriteUri: string, webv
         messagesEl.innerHTML = state.messages
           .map((message, index) => {
             const workerHtml = (workerGroupsByAnchor.get(String(index)) || []).join("");
-            return renderMessageCard(message) + workerHtml;
+            return renderMessageCard(message, index) + workerHtml;
           })
           .join("");
 
@@ -2696,7 +2782,7 @@ export function getSidebarHtml(webviewNonce: string, duckSpriteUri: string, webv
             const completedActivityBeforeMessage = completedActivityHtml && index === lastAssistantIndex
               ? completedActivityHtml
               : "";
-            return completedActivityBeforeMessage + renderMessageCard(message) + workerHtml;
+            return completedActivityBeforeMessage + renderMessageCard(message, index) + workerHtml;
           })
           .join("");
 
@@ -2924,6 +3010,23 @@ export function getSidebarHtml(webviewNonce: string, duckSpriteUri: string, webv
           return;
         }
 
+        const thinkingToggle = target.closest("[data-thinking-toggle]");
+        if (thinkingToggle) {
+          const toggleId = thinkingToggle.getAttribute("data-thinking-toggle");
+          if (!toggleId) {
+            return;
+          }
+
+          if (expandedThinkingSummaries.has(toggleId)) {
+            expandedThinkingSummaries.delete(toggleId);
+          } else {
+            expandedThinkingSummaries.add(toggleId);
+          }
+
+          renderMessages({ scroll: false });
+          return;
+        }
+
         const toggleButton = target.closest("[data-worker-toggle]");
 
         if (!toggleButton) {
@@ -2971,6 +3074,7 @@ export function getSidebarHtml(webviewNonce: string, duckSpriteUri: string, webv
           updateStreamingBubble(state.streamingText, true);
         } else if (message.type === "clear") {
           resetWorkerGroups();
+          clearExpandedThinkingSummaries();
           clearStreamingText();
           render();
         } else if (message.type === "swarm:workerUpdate") {
@@ -3162,12 +3266,33 @@ export function getSidebarHtml(webviewNonce: string, duckSpriteUri: string, webv
 
       function showSessions() {
         sessionsEl.style.display = "block";
+        if (state.multiSessionEnabled) {
+          sessionsState.requested = true;
+        }
         vscode.postMessage({ type: "sessions:load" });
       }
 
       function hideSessions() {
         sessionsEl.style.display = "none";
         vscode.postMessage({ type: "sessions:close" });
+      }
+
+      function promptRenameSession(sessionId, currentTitle) {
+        const nextTitle = window.prompt("重命名会话", currentTitle || "");
+        if (typeof nextTitle !== "string") {
+          return;
+        }
+
+        const trimmedTitle = nextTitle.trim();
+        if (!trimmedTitle || trimmedTitle === currentTitle) {
+          return;
+        }
+
+        vscode.postMessage({
+          type: "sessions:rename",
+          id: sessionId,
+          title: trimmedTitle,
+        });
       }
 
       function renderSessionsList(sessions, activeId) {
@@ -3194,7 +3319,10 @@ export function getSidebarHtml(webviewNonce: string, duckSpriteUri: string, webv
           '<button class="secondary" id="sessions-close" type="button">✕ 关闭</button>' +
           '</div>' +
           '<div style="font-size:12px;opacity:0.7;line-height:1.6;margin-bottom:14px;">这里按会话分组显示。继续在同一会话里聊天时，会更新这条记录的时间、预览和消息条数；点 <code>+ 新建对话</code> 才会新增一条历史项。</div>' +
-          '<button id="sessions-new" type="button" class="secondary" style="width:100%;margin-bottom:12px;border-radius:10px;padding:10px;">+ 新建对话</button>' +
+          '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px;">' +
+          '<button id="sessions-new" type="button" class="secondary" style="border-radius:10px;padding:10px;">+ 新建对话</button>' +
+          '<button id="sessions-rename-current" type="button" class="secondary" style="border-radius:10px;padding:10px;">重命名当前会话</button>' +
+          '</div>' +
           sessions.map(s => {
             const isActive = s.id === activeId;
             const date = new Date(s.updatedAt).toLocaleString("zh-CN", { month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit" });
@@ -3220,6 +3348,13 @@ export function getSidebarHtml(webviewNonce: string, duckSpriteUri: string, webv
 
         document.getElementById("sessions-close")?.addEventListener("click", hideSessions);
         document.getElementById("sessions-new")?.addEventListener("click", () => { vscode.postMessage({ type: "sessions:new" }); hideSessions(); });
+        document.getElementById("sessions-rename-current")?.addEventListener("click", () => {
+          const currentSession = sessions.find(session => session.id === activeId);
+          if (!currentSession) {
+            return;
+          }
+          promptRenameSession(currentSession.id, currentSession.title || "");
+        });
 
         sessionsEl.querySelectorAll("[data-switch-session]").forEach(el => {
           el.addEventListener("click", () => {
@@ -3271,7 +3406,7 @@ export function getSidebarHtml(webviewNonce: string, duckSpriteUri: string, webv
           '</div>' +
 
           // Provider 列表
-          '<div style="font-size:12px;font-weight:600;opacity:0.7;letter-spacing:0.06em;margin-bottom:10px;">API PROVIDERS</div>' +
+          '<div style="font-size:12px;font-weight:600;opacity:0.7;letter-spacing:0.06em;margin-bottom:10px;">API 提供商</div>' +
           (providers.length === 0 ? '<div style="font-size:12px;opacity:0.6;margin-bottom:12px;">暂无配置，点击下方添加。</div>' : '') +
           providers.map(p =>
             '<div style="padding:12px 14px;border-radius:12px;border:1px solid ' +
@@ -3293,12 +3428,12 @@ export function getSidebarHtml(webviewNonce: string, duckSpriteUri: string, webv
 
           '<button id="settings-add-provider" type="button" class="secondary" style="margin-top:4px;width:100%;border-radius:10px;padding:10px;">+ 添加 Provider</button>' +
 
-          '<div style="font-size:12px;font-weight:600;opacity:0.7;letter-spacing:0.06em;margin-top:24px;margin-bottom:10px;">THINKING</div>' +
+          '<div style="font-size:12px;font-weight:600;opacity:0.7;letter-spacing:0.06em;margin-top:24px;margin-bottom:10px;">思考摘要</div>' +
           '<div style="padding:12px 14px;border-radius:12px;border:1px solid var(--vscode-panel-border);font-size:12px;">' +
           '<label style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;cursor:pointer;">' +
           '<div>' +
-          '<div style="font-size:13px;font-weight:600;">Show thinking summaries</div>' +
-          '<div style="opacity:0.7;margin-top:4px;line-height:1.5;">Control whether provider-supplied thinking summaries are shown and persisted for session playback. They remain excluded from model-visible history.</div>' +
+          '<div style="font-size:13px;font-weight:600;">显示思考摘要</div>' +
+          '<div style="opacity:0.7;margin-top:4px;line-height:1.5;">控制是否显示并持久化模型返回的思考摘要，用于当前会话回放。它们仍然不会进入模型可见历史。</div>' +
           '</div>' +
           '<input id="settings-thinking-toggle" type="checkbox"' + (showThinkingSummaries ? " checked" : "") + ' style="margin-top:2px;" />' +
           '</label>' +

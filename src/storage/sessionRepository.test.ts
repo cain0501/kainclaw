@@ -192,6 +192,26 @@ describe("SessionRepository appendMessages", () => {
     });
   });
 
+  it("round-trips artifact panel state through runtime state files", async () => {
+    const storageRoot = await fs.mkdtemp(path.join(os.tmpdir(), "cain-session-repo-"));
+    tempDirs.push(storageRoot);
+    const repository = createRepository(storageRoot);
+
+    await repository.saveRuntimeState("session-artifact-panel", {
+      artifactPanel: {
+        activeArtifactId: null,
+      },
+    });
+
+    await expect(
+      repository.loadRuntimeState("session-artifact-panel"),
+    ).resolves.toEqual({
+      artifactPanel: {
+        activeArtifactId: null,
+      },
+    });
+  });
+
   it("round-trips compact boundary metadata through runtime state files", async () => {
     const storageRoot = await fs.mkdtemp(path.join(os.tmpdir(), "cain-session-repo-"));
     tempDirs.push(storageRoot);

@@ -19,6 +19,7 @@ import {
   runImageLabRequest,
 } from "../src/imageGeneration/imageLabRuntime";
 import { searchPublicReferenceImages } from "../src/imageGeneration/imageMaterialSearch";
+import { normalizeWebviewAttachments } from "../src/attachmentHandler";
 import type { IHostAdapter } from "../src/platform/IHostAdapter";
 import type { DesktopRuntimeServices } from "../src/platform/desktopRuntimeServices";
 import type { LocalBridgeRuntimeStatus } from "../src/platform/localBridgeRuntime";
@@ -218,6 +219,15 @@ function createDeferred<T>() {
   return { promise, resolve, reject };
 }
 
+function getLastRendererPayloadOfType<T extends { type?: string }>(
+  rendererPayloads: unknown[],
+  type: string,
+): T | undefined {
+  return [...rendererPayloads]
+    .reverse()
+    .find(payload => (payload as { type?: string }).type === type) as T | undefined;
+}
+
 describe("ElectronChatPanel session lifecycle", () => {
   const tempDirs: string[] = [];
 
@@ -390,6 +400,120 @@ describe("ElectronChatPanel session lifecycle", () => {
     expect(messages[messages.length - 1]?.content).toBe("我已经读取到 1 个用户。");
   });
 
+  it("detects html artifacts, allows dismissing the panel, and reopens it on the next artifact", async () => {
+    const harness = await createHarness();
+    tempDirs.push(harness.storagePath);
+
+    await harness.settings.setOnboardingDone(true);
+    await harness.panel.handleMessage({ type: "ready" });
+
+    vi.mocked(resolveProviderConfig).mockResolvedValue({
+      config: {
+        type: "anthropic",
+        apiKey: "test-key",
+        model: "claude-sonnet-4-6",
+      },
+      envMap: {},
+    });
+    vi.mocked(buildProviderAdapter).mockReturnValue({} as never);
+    vi.mocked(handleElectronPromptCommand).mockResolvedValue({ kind: "continue" });
+    vi.mocked(runAgent)
+      .mockResolvedValueOnce(`<!DOCTYPE html>
+<html>
+  <head><title>Landing One</title></head>
+  <body><main>one</main></body>
+</html>`)
+      .mockResolvedValueOnce(`<!DOCTYPE html>
+<html>
+  <head><title>Landing Two</title></head>
+  <body><main>two</main></body>
+</html>`);
+
+    await harness.panel.handleMessage({
+      type: "sendPrompt",
+      prompt: "给我一个落地页原型",
+    });
+
+    const firstState = getLastRendererPayloadOfType<{
+      artifactState?: {
+        activeArtifact?: { type: string; title: string };
+        activeArtifactId?: string | null;
+        artifactCount?: number;
+      };
+      type?: string;
+    }>(harness.rendererPayloads, "state");
+    expect(firstState?.artifactState?.activeArtifact).toMatchObject({
+      type: "html",
+      title: "Landing One",
+    });
+    expect(firstState?.artifactState?.artifactCount).toBe(1);
+    expect(firstState?.artifactState?.activeArtifactId).toBeTruthy();
+
+    await harness.panel.handleMessage({ type: "artifact:dismiss" });
+
+    const dismissedState = getLastRendererPayloadOfType<{
+      artifactState?: {
+        activeArtifact: unknown;
+        activeArtifactId?: string | null;
+      };
+      type?: string;
+    }>(harness.rendererPayloads, "state");
+    expect(dismissedState?.artifactState?.activeArtifact).toBeNull();
+    expect(dismissedState?.artifactState?.activeArtifactId).toBeNull();
+
+    await harness.panel.handleMessage({
+      type: "sendPrompt",
+      prompt: "再来一个新原型",
+    });
+
+    const reopenedState = getLastRendererPayloadOfType<{
+      artifactState?: {
+        activeArtifact?: { title: string };
+        artifactCount?: number;
+      };
+      type?: string;
+    }>(harness.rendererPayloads, "state");
+    expect(reopenedState?.artifactState?.activeArtifact).toMatchObject({
+      title: "Landing Two",
+    });
+    expect(reopenedState?.artifactState?.artifactCount).toBe(2);
+  });
+
+  it("keeps pure text replies out of artifact state", async () => {
+    const harness = await createHarness();
+    tempDirs.push(harness.storagePath);
+
+    await harness.settings.setOnboardingDone(true);
+    await harness.panel.handleMessage({ type: "ready" });
+
+    vi.mocked(resolveProviderConfig).mockResolvedValue({
+      config: {
+        type: "anthropic",
+        apiKey: "test-key",
+        model: "claude-sonnet-4-6",
+      },
+      envMap: {},
+    });
+    vi.mocked(buildProviderAdapter).mockReturnValue({} as never);
+    vi.mocked(handleElectronPromptCommand).mockResolvedValue({ kind: "continue" });
+    vi.mocked(runAgent).mockResolvedValue("这是普通文字回复，不是 artifact。");
+
+    await harness.panel.handleMessage({
+      type: "sendPrompt",
+      prompt: "帮我总结一下",
+    });
+
+    const state = getLastRendererPayloadOfType<{
+      artifactState?: {
+        activeArtifact: unknown;
+        artifactCount?: number;
+      };
+      type?: string;
+    }>(harness.rendererPayloads, "state");
+    expect(state?.artifactState?.activeArtifact).toBeNull();
+    expect(state?.artifactState?.artifactCount).toBe(0);
+  });
+
   it("allows different sessions to run requests concurrently", async () => {
     const harness = await createHarness();
     tempDirs.push(harness.storagePath);
@@ -482,6 +606,230 @@ describe("ElectronChatPanel session lifecycle", () => {
       "message for B",
       "reply for B",
     ]);
+  });
+
+  it("keeps artifact state isolated per session across clearChat, ready, and session switches", async () => {
+    const harness = await createHarness();
+    tempDirs.push(harness.storagePath);
+
+    await harness.settings.setOnboardingDone(true);
+    await harness.panel.handleMessage({ type: "ready" });
+
+    vi.mocked(resolveProviderConfig).mockResolvedValue({
+      config: {
+        type: "anthropic",
+        apiKey: "test-key",
+        model: "claude-sonnet-4-6",
+      },
+      envMap: {},
+    });
+    vi.mocked(buildProviderAdapter).mockReturnValue({} as never);
+    vi.mocked(handleElectronPromptCommand).mockResolvedValue({ kind: "continue" });
+    vi.mocked(runAgent).mockResolvedValue(`<!DOCTYPE html>
+<html>
+  <head><title>Session A Artifact</title></head>
+  <body><main>A</main></body>
+</html>`);
+
+    await harness.panel.handleMessage({
+      type: "sendPrompt",
+      prompt: "为 A 生成原型",
+    });
+
+    const artifactSessionId = harness.settings.getActiveSessionId();
+    expect(artifactSessionId).toBeTruthy();
+
+    const blankSession = await harness.sessions.createSession("session-bare", "electron", "Bare");
+    await harness.sessions.appendMessages(blankSession.id, [
+      { role: "assistant", content: "plain session" },
+    ]);
+
+    await harness.panel.handleMessage({ type: "clearChat" });
+    const clearedSessionId = harness.settings.getActiveSessionId();
+    expect(clearedSessionId).toBeTruthy();
+    expect(clearedSessionId).not.toBe(artifactSessionId);
+
+    const clearedState = getLastRendererPayloadOfType<{
+      artifactState?: { activeArtifact: unknown };
+      type?: string;
+    }>(harness.rendererPayloads, "state");
+    expect(clearedState?.artifactState?.activeArtifact).toBeNull();
+
+    await harness.panel.handleMessage({ type: "sessions:switch", id: artifactSessionId! });
+
+    const restoredState = getLastRendererPayloadOfType<{
+      artifactState?: { activeArtifact?: { title: string } };
+      type?: string;
+    }>(harness.rendererPayloads, "state");
+    expect(restoredState?.artifactState?.activeArtifact).toMatchObject({
+      title: "Session A Artifact",
+    });
+
+    await harness.panel.handleMessage({ type: "ready" });
+
+    const readyState = getLastRendererPayloadOfType<{
+      artifactState?: { activeArtifact?: { title: string } };
+      type?: string;
+    }>(harness.rendererPayloads, "state");
+    expect(readyState?.artifactState?.activeArtifact).toMatchObject({
+      title: "Session A Artifact",
+    });
+
+    await harness.panel.handleMessage({ type: "sessions:switch", id: blankSession.id });
+
+    const blankState = getLastRendererPayloadOfType<{
+      artifactState?: { activeArtifact: unknown };
+      type?: string;
+    }>(harness.rendererPayloads, "state");
+    expect(blankState?.artifactState?.activeArtifact).toBeNull();
+  });
+
+  it("attaches artifacts to the originating session even if the user switches away before completion", async () => {
+    const harness = await createHarness();
+    tempDirs.push(harness.storagePath);
+
+    await harness.settings.setOnboardingDone(true);
+
+    const sessionA = await harness.sessions.createSession("session-artifact-a", "electron", "A");
+    await harness.sessions.appendMessages(sessionA.id, [
+      { role: "assistant", content: "artifact origin" },
+    ]);
+    const sessionB = await harness.sessions.createSession("session-artifact-b", "electron", "B");
+    await harness.sessions.appendMessages(sessionB.id, [
+      { role: "assistant", content: "no artifact here" },
+    ]);
+
+    await harness.settings.setActiveSessionId(sessionA.id);
+    await harness.panel.handleMessage({ type: "ready" });
+
+    vi.mocked(resolveProviderConfig).mockResolvedValue({
+      config: {
+        type: "anthropic",
+        apiKey: "test-key",
+        model: "claude-sonnet-4-6",
+      },
+      envMap: {},
+    });
+    vi.mocked(buildProviderAdapter).mockReturnValue({} as never);
+    vi.mocked(handleElectronPromptCommand).mockResolvedValue({ kind: "continue" });
+
+    const artifactReply = createDeferred<string>();
+    vi.mocked(runAgent).mockImplementation(async () => artifactReply.promise);
+
+    const sendPromise = harness.panel.handleMessage({
+      type: "sendPrompt",
+      prompt: "为 A 生成一个 html 原型",
+    });
+
+    await vi.waitFor(() => {
+      expect(runAgent).toHaveBeenCalledTimes(1);
+    });
+
+    await harness.panel.handleMessage({ type: "sessions:switch", id: sessionB.id });
+
+    artifactReply.resolve(`<!DOCTYPE html>
+<html>
+  <head><title>Deferred Artifact</title></head>
+  <body><main>artifact</main></body>
+</html>`);
+    await sendPromise;
+
+    const switchedState = getLastRendererPayloadOfType<{
+      artifactState?: { activeArtifact: unknown };
+      messages?: Array<{ content: string }>;
+      type?: string;
+    }>(harness.rendererPayloads, "state");
+    expect(switchedState?.artifactState?.activeArtifact).toBeNull();
+    expect(switchedState?.messages?.map(message => message.content)).toEqual([
+      "no artifact here",
+    ]);
+
+    await harness.panel.handleMessage({ type: "sessions:switch", id: sessionA.id });
+
+    const restoredState = getLastRendererPayloadOfType<{
+      artifactState?: { activeArtifact?: { title: string } };
+      type?: string;
+    }>(harness.rendererPayloads, "state");
+    expect(restoredState?.artifactState?.activeArtifact).toMatchObject({
+      title: "Deferred Artifact",
+    });
+  });
+
+  it("rebuilds artifact state after recreating the panel and preserves dismiss state", async () => {
+    const harness = await createHarness();
+    tempDirs.push(harness.storagePath);
+
+    await harness.settings.setOnboardingDone(true);
+    await harness.panel.handleMessage({ type: "ready" });
+
+    vi.mocked(resolveProviderConfig).mockResolvedValue({
+      config: {
+        type: "anthropic",
+        apiKey: "test-key",
+        model: "claude-sonnet-4-6",
+      },
+      envMap: {},
+    });
+    vi.mocked(buildProviderAdapter).mockReturnValue({} as never);
+    vi.mocked(handleElectronPromptCommand).mockResolvedValue({ kind: "continue" });
+    vi.mocked(runAgent).mockResolvedValue(`<!DOCTYPE html>
+<html>
+  <head><title>Reloaded Artifact</title></head>
+  <body><main>artifact</main></body>
+</html>`);
+
+    await harness.panel.handleMessage({
+      type: "sendPrompt",
+      prompt: "给我一个落地页原型",
+    });
+
+    const firstReloadPayloads: unknown[] = [];
+    const firstReloadPanel = new ElectronChatPanel(
+      harness.sessions,
+      harness.settings,
+      harness.host as unknown as ConstructorParameters<typeof ElectronChatPanel>[2],
+      payload => {
+        firstReloadPayloads.push(payload);
+      },
+    );
+    await firstReloadPanel.handleMessage({ type: "ready" });
+
+    const restoredActiveState = getLastRendererPayloadOfType<{
+      artifactState?: {
+        activeArtifact?: { title: string };
+        artifactCount?: number;
+      };
+      type?: string;
+    }>(firstReloadPayloads, "state");
+    expect(restoredActiveState?.artifactState?.activeArtifact).toMatchObject({
+      title: "Reloaded Artifact",
+    });
+    expect(restoredActiveState?.artifactState?.artifactCount).toBe(1);
+
+    await firstReloadPanel.handleMessage({ type: "artifact:dismiss" });
+
+    const secondReloadPayloads: unknown[] = [];
+    const secondReloadPanel = new ElectronChatPanel(
+      harness.sessions,
+      harness.settings,
+      harness.host as unknown as ConstructorParameters<typeof ElectronChatPanel>[2],
+      payload => {
+        secondReloadPayloads.push(payload);
+      },
+    );
+    await secondReloadPanel.handleMessage({ type: "ready" });
+
+    const dismissedState = getLastRendererPayloadOfType<{
+      artifactState?: {
+        activeArtifact: unknown;
+        activeArtifactId?: string | null;
+        artifactCount?: number;
+      };
+      type?: string;
+    }>(secondReloadPayloads, "state");
+    expect(dismissedState?.artifactState?.activeArtifact).toBeNull();
+    expect(dismissedState?.artifactState?.activeArtifactId).toBeNull();
+    expect(dismissedState?.artifactState?.artifactCount).toBe(1);
   });
 
   it("does not flash old-session messages into the newly selected session while the switch is still loading", async () => {
@@ -1479,6 +1827,340 @@ describe("ElectronChatPanel session lifecycle", () => {
     }));
   });
 
+  it("uses the LLM intent router result for non-explicit prompt routing", async () => {
+    const harness = await createHarness();
+    tempDirs.push(harness.storagePath);
+
+    await harness.settings.setOnboardingDone(true);
+    await harness.settings.saveImageConfig({
+      id: "image-model-1",
+      baseUrl: "https://example.com/v1",
+      model: "gpt-image-2",
+      authMode: "raw",
+      size: "1024x1024",
+      batchCount: 1,
+      responseFormat: "url",
+    });
+    await harness.settings.storeImageModelApiKey("image-model-1", "image-secret");
+
+    vi.mocked(resolveProviderConfig).mockResolvedValue({
+      config: {
+        type: "anthropic",
+        apiKey: "test-key",
+        model: "claude-sonnet-4-6",
+      },
+      envMap: {},
+    });
+    vi.mocked(buildProviderAdapter).mockReturnValueOnce({
+      runStep: vi.fn().mockResolvedValue({
+        text: '{"intent":"image_generate"}',
+        toolCalls: [],
+        done: true,
+      }),
+    } as never);
+    vi.mocked(runImageLabRequest).mockResolvedValue([
+      {
+        id: "img-router-1",
+        batchId: "batch-router-1",
+        src: "https://example.com/generated-router-1.png",
+        prompt: "请帮我处理一下",
+        createdAt: Date.now(),
+        source: "generate",
+      },
+    ] as never);
+
+    await harness.panel.handleMessage({
+      type: "sendPrompt",
+      prompt: "请帮我处理一下",
+    });
+
+    expect(vi.mocked(buildProviderAdapter)).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: "anthropic",
+      }),
+      "",
+      expect.stringContaining("intent classifier"),
+      {},
+    );
+    expect(vi.mocked(runImageLabRequest)).toHaveBeenCalledWith(expect.objectContaining({
+      prompt: "请帮我处理一下",
+    }));
+    expect(vi.mocked(runAgent)).not.toHaveBeenCalled();
+  });
+
+  it("routes prompt_rewrite intents through the normal chat pipeline", async () => {
+    const harness = await createHarness();
+    tempDirs.push(harness.storagePath);
+
+    await harness.settings.setOnboardingDone(true);
+    vi.mocked(resolveProviderConfig).mockResolvedValue({
+      config: {
+        type: "anthropic",
+        apiKey: "test-key",
+        model: "claude-sonnet-4-6",
+      },
+      envMap: {},
+    });
+    vi.mocked(buildProviderAdapter)
+      .mockReturnValueOnce({
+        runStep: vi.fn().mockResolvedValue({
+          text: '{"intent":"prompt_rewrite"}',
+          toolCalls: [],
+          done: true,
+        }),
+      } as never)
+      .mockReturnValueOnce({} as never);
+    vi.mocked(handleElectronPromptCommand).mockResolvedValue({ kind: "continue" });
+    vi.mocked(runAgent).mockResolvedValue("这里是一版优化后的提示词。");
+
+    await harness.panel.handleMessage({
+      type: "sendPrompt",
+      prompt: "根据以上提示词，把你说的归茶这一理念重写一份",
+    });
+
+    expect(vi.mocked(runImageLabRequest)).not.toHaveBeenCalled();
+    expect(vi.mocked(runAgent)).toHaveBeenCalledTimes(1);
+    expect(vi.mocked(buildProviderAdapter)).toHaveBeenCalled();
+  });
+
+  it("keeps html artifact prompts out of the image generation pipeline", async () => {
+    const harness = await createHarness();
+    tempDirs.push(harness.storagePath);
+
+    await harness.settings.setOnboardingDone(true);
+    vi.mocked(resolveProviderConfig).mockResolvedValue({
+      config: {
+        type: "anthropic",
+        apiKey: "test-key",
+        model: "claude-sonnet-4-6",
+      },
+      envMap: {},
+    });
+    vi.mocked(buildProviderAdapter).mockReturnValueOnce({
+      runStep: vi.fn().mockResolvedValue({
+        text: '{"intent":"chat"}',
+        toolCalls: [],
+        done: true,
+      }),
+    } as never);
+    vi.mocked(handleElectronPromptCommand).mockResolvedValue({ kind: "continue" });
+    vi.mocked(runAgent).mockResolvedValue(`<!DOCTYPE html>
+<html>
+  <head><title>Artifact Prototype</title></head>
+  <body><main>Hello</main></body>
+</html>`);
+
+    await harness.panel.handleMessage({
+      type: "sendPrompt",
+      prompt: "请只输出一个完整的 HTML 单文件页面原型，不要解释，不要加 markdown 代码块。第一行必须是 <!DOCTYPE html>",
+    });
+
+    expect(vi.mocked(runImageLabRequest)).not.toHaveBeenCalled();
+    expect(vi.mocked(runAgent)).toHaveBeenCalledTimes(1);
+    const state = getLastRendererPayloadOfType<{
+      artifactState?: { activeArtifact?: { title: string; type: string } };
+      type?: string;
+    }>(harness.rendererPayloads, "state");
+    expect(state?.artifactState?.activeArtifact).toMatchObject({
+      type: "html",
+      title: "Artifact Prototype",
+    });
+  });
+
+  it("keeps natural-language html prototype requests out of the image generation pipeline", async () => {
+    const harness = await createHarness();
+    tempDirs.push(harness.storagePath);
+
+    await harness.settings.setOnboardingDone(true);
+    vi.mocked(resolveProviderConfig).mockResolvedValue({
+      config: {
+        type: "anthropic",
+        apiKey: "test-key",
+        model: "claude-sonnet-4-6",
+      },
+      envMap: {},
+    });
+    vi.mocked(buildProviderAdapter).mockReturnValueOnce({
+      runStep: vi.fn().mockResolvedValue({
+        text: '{"intent":"chat"}',
+        toolCalls: [],
+        done: true,
+      }),
+    } as never);
+    vi.mocked(handleElectronPromptCommand).mockResolvedValue({ kind: "continue" });
+    vi.mocked(runAgent).mockResolvedValue(`<!DOCTYPE html>
+<html>
+  <head><title>Lens / 光影档案</title></head>
+  <body><main>Portfolio</main></body>
+</html>`);
+
+    await harness.panel.handleMessage({
+      type: "sendPrompt",
+      prompt: "做一个摄影师个人作品集首页原型，暗色背景，大图瀑布流，顶部极简导航，名字叫 Lens / 光影档案。",
+    });
+
+    expect(vi.mocked(runImageLabRequest)).not.toHaveBeenCalled();
+    expect(vi.mocked(runAgent)).toHaveBeenCalledTimes(1);
+  });
+
+  it("keeps svg artifact requests out of the image generation pipeline", async () => {
+    const harness = await createHarness();
+    tempDirs.push(harness.storagePath);
+
+    await harness.settings.setOnboardingDone(true);
+    vi.mocked(resolveProviderConfig).mockResolvedValue({
+      config: {
+        type: "anthropic",
+        apiKey: "test-key",
+        model: "claude-sonnet-4-6",
+      },
+      envMap: {},
+    });
+    vi.mocked(buildProviderAdapter).mockReturnValueOnce({
+      runStep: vi.fn().mockResolvedValue({
+        text: '{"intent":"chat"}',
+        toolCalls: [],
+        done: true,
+      }),
+    } as never);
+    vi.mocked(handleElectronPromptCommand).mockResolvedValue({ kind: "continue" });
+    vi.mocked(runAgent).mockResolvedValue(`<svg xmlns="http://www.w3.org/2000/svg"><rect width="10" height="10"/></svg>`);
+
+    await harness.panel.handleMessage({
+      type: "sendPrompt",
+      prompt: "请直接输出一个完整 SVG 饼图，显示 Q1-Q4 销售占比，不要解释",
+    });
+
+    expect(vi.mocked(runImageLabRequest)).not.toHaveBeenCalled();
+    expect(vi.mocked(runAgent)).toHaveBeenCalledTimes(1);
+    const state = getLastRendererPayloadOfType<{
+      artifactState?: { activeArtifact?: { type: string } };
+      type?: string;
+    }>(harness.rendererPayloads, "state");
+    expect(state?.artifactState?.activeArtifact).toMatchObject({ type: "svg" });
+  });
+
+  it("keeps mermaid artifact requests out of the image generation pipeline", async () => {
+    const harness = await createHarness();
+    tempDirs.push(harness.storagePath);
+
+    await harness.settings.setOnboardingDone(true);
+    vi.mocked(resolveProviderConfig).mockResolvedValue({
+      config: {
+        type: "anthropic",
+        apiKey: "test-key",
+        model: "claude-sonnet-4-6",
+      },
+      envMap: {},
+    });
+    vi.mocked(buildProviderAdapter).mockReturnValueOnce({
+      runStep: vi.fn().mockResolvedValue({
+        text: '{"intent":"chat"}',
+        toolCalls: [],
+        done: true,
+      }),
+    } as never);
+    vi.mocked(handleElectronPromptCommand).mockResolvedValue({ kind: "continue" });
+    vi.mocked(runAgent).mockResolvedValue("```mermaid\ngraph TD\n  A[需求] --> B[设计]\n```");
+
+    await harness.panel.handleMessage({
+      type: "sendPrompt",
+      prompt: "请直接输出 mermaid 流程图代码块，描述用户注册到激活的完整流程",
+    });
+
+    expect(vi.mocked(runImageLabRequest)).not.toHaveBeenCalled();
+    expect(vi.mocked(runAgent)).toHaveBeenCalledTimes(1);
+    const state = getLastRendererPayloadOfType<{
+      artifactState?: { activeArtifact?: { type: string } };
+      type?: string;
+    }>(harness.rendererPayloads, "state");
+    expect(state?.artifactState?.activeArtifact).toMatchObject({ type: "mermaid" });
+  });
+
+  it("keeps explicit image generation requests on the image pipeline", async () => {
+    const harness = await createHarness();
+    tempDirs.push(harness.storagePath);
+
+    await harness.settings.setOnboardingDone(true);
+    await harness.settings.saveImageConfig({
+      id: "image-model-1",
+      baseUrl: "https://example.com/v1",
+      model: "gpt-image-2",
+      authMode: "raw",
+      size: "1024x1024",
+      batchCount: 1,
+      responseFormat: "url",
+    });
+    await harness.settings.storeImageModelApiKey("image-model-1", "image-secret");
+    vi.mocked(resolveProviderConfig).mockResolvedValue({
+      config: {
+        type: "anthropic",
+        apiKey: "test-key",
+        model: "claude-sonnet-4-6",
+      },
+      envMap: {},
+    });
+    vi.mocked(buildProviderAdapter).mockReturnValueOnce({
+      runStep: vi.fn().mockResolvedValue({
+        text: '{"intent":"image_generate"}',
+        toolCalls: [],
+        done: true,
+      }),
+    } as never);
+    vi.mocked(runImageLabRequest).mockResolvedValue([
+      {
+        id: "img-direct-1",
+        batchId: "batch-direct-1",
+        src: "https://example.com/generated-direct-1.png",
+        prompt: "按这版直接生成一张图",
+        createdAt: Date.now(),
+        source: "generate",
+      },
+    ] as never);
+
+    await harness.panel.handleMessage({
+      type: "sendPrompt",
+      prompt: "按这版直接生成一张图",
+    });
+
+    expect(vi.mocked(runImageLabRequest)).toHaveBeenCalledTimes(1);
+    expect(vi.mocked(runAgent)).not.toHaveBeenCalled();
+  });
+
+  it("augments html artifact prompts before sending them to the model", async () => {
+    const harness = await createHarness();
+    tempDirs.push(harness.storagePath);
+
+    await harness.settings.setOnboardingDone(true);
+    vi.mocked(resolveProviderConfig).mockResolvedValue({
+      config: {
+        type: "anthropic",
+        apiKey: "test-key",
+        model: "claude-sonnet-4-6",
+      },
+      envMap: {},
+    });
+    vi.mocked(buildProviderAdapter).mockReturnValue({} as never);
+    vi.mocked(handleElectronPromptCommand).mockResolvedValue({ kind: "continue" });
+
+    let capturedPrompt = "";
+    vi.mocked(runAgent).mockImplementation(async history => {
+      capturedPrompt = String(history[history.length - 1]?.content || "");
+      return "<!DOCTYPE html><html><head><title>Prompt Contract</title></head><body></body></html>";
+    });
+
+    await harness.panel.handleMessage({
+      type: "sendPrompt",
+      prompt: "请输出一个完整的 HTML 单文件页面原型，做一个可点击交互原型",
+    });
+
+    expect(capturedPrompt).toContain("[Internal artifact output contract]");
+    expect(capturedPrompt).toContain("The very first line must be <!DOCTYPE html>.");
+    expect(capturedPrompt).toContain("Do not use reveal animations.");
+    expect(capturedPrompt).toContain("clickable prototype");
+    expect(capturedPrompt).toContain("vanilla JavaScript");
+  });
+
   it("derives image size from the user's requested ratio or dimensions", async () => {
     const harness = await createHarness();
     tempDirs.push(harness.storagePath);
@@ -1635,6 +2317,21 @@ describe("ElectronChatPanel session lifecycle", () => {
     await harness.settings.setActiveSessionId(session.id);
     await harness.panel.handleMessage({ type: "ready" });
 
+    vi.mocked(resolveProviderConfig).mockResolvedValue({
+      config: {
+        type: "anthropic",
+        apiKey: "test-key",
+        model: "claude-sonnet-4-6",
+      },
+      envMap: {},
+    });
+    vi.mocked(buildProviderAdapter).mockReturnValueOnce({
+      runStep: vi.fn().mockResolvedValue({
+        text: '{"intent":"image_edit"}',
+        toolCalls: [],
+        done: true,
+      }),
+    } as never);
     vi.mocked(runImageLabRequest).mockResolvedValue([
       {
         id: "img-edit-1",
@@ -3007,5 +3704,179 @@ Freeze skill body.
 
     expect(lastStatePayload.isBusy).toBe(true);
     expect(lastStatePayload.activeRequestKind).toBe("background");
+  });
+
+  it("emits localized shell strings and English default session titles when uiLanguage is en-US", async () => {
+    const harness = await createHarness();
+    tempDirs.push(harness.storagePath);
+
+    await harness.settings.setOnboardingDone(true);
+    await harness.settings.setLanguage("en-US");
+
+    await harness.panel.handleMessage({ type: "ready" });
+
+    const lastStatePayload = [...harness.rendererPayloads]
+      .reverse()
+      .find(payload => (payload as { type?: string }).type === "state") as {
+        uiLanguage: string;
+        shellStrings: {
+          defaultSessionTitle: string;
+          composerPlaceholder: string;
+          surfaceTextMap: Record<string, string>;
+        };
+      };
+
+    expect(lastStatePayload.uiLanguage).toBe("en-US");
+    expect(lastStatePayload.shellStrings.defaultSessionTitle).toBe("New chat");
+    expect(lastStatePayload.shellStrings.composerPlaceholder).toContain("Message KainClaw");
+    expect(lastStatePayload.shellStrings.surfaceTextMap["提示词库"]).toBe("Prompt library");
+
+    const index = await harness.sessions.readIndex();
+    expect(index.sessions[0]?.title).toBe("New chat");
+  });
+  it("routes derive_artifact intents through the artifact pipeline with recent image context", async () => {
+    const harness = await createHarness();
+    tempDirs.push(harness.storagePath);
+
+    await harness.settings.setOnboardingDone(true);
+    const session = await harness.sessions.createSession(
+      "session-derive-artifact",
+      "electron",
+      "Artifact",
+    );
+    await harness.sessions.appendMessages(session.id, [
+      {
+        role: "assistant",
+        content: "existing generated image",
+        generatedImages: [{
+          id: "img-existing-1",
+          src: "data:image/png;base64,aGVsbG8=",
+          source: "generate",
+          prompt: "draw a product landing page",
+        }],
+      },
+    ]);
+    await harness.settings.setActiveSessionId(session.id);
+    await harness.panel.handleMessage({ type: "ready" });
+
+    vi.mocked(resolveProviderConfig).mockResolvedValue({
+      config: {
+        type: "anthropic",
+        apiKey: "test-key",
+        model: "claude-sonnet-4-6",
+      },
+      envMap: {},
+    });
+    vi.mocked(buildProviderAdapter)
+      .mockReturnValueOnce({
+        runStep: vi.fn().mockResolvedValue({
+          text: '{"intent":"derive_artifact"}',
+          toolCalls: [],
+          done: true,
+        }),
+      } as never)
+      .mockReturnValueOnce({} as never);
+    vi.mocked(normalizeWebviewAttachments).mockImplementation(attachments =>
+      attachments?.map(attachment => ({
+        data: attachment.dataUrl.split(",")[1] ?? "",
+        mimeType: attachment.mimeType,
+      })) ?? [],
+    );
+    vi.mocked(handleElectronPromptCommand).mockResolvedValue({ kind: "continue" });
+    vi.mocked(runAgent).mockResolvedValue(`<!DOCTYPE html>
+<html>
+  <head><title>Derived Prototype</title></head>
+  <body><main>Prototype</main></body>
+</html>`);
+
+    await harness.panel.handleMessage({
+      type: "sendPrompt",
+      prompt: "Turn this design into a clickable HTML prototype",
+    });
+
+    expect(vi.mocked(runImageLabRequest)).not.toHaveBeenCalled();
+    expect(vi.mocked(runAgent)).toHaveBeenCalledTimes(1);
+    const history = vi.mocked(runAgent).mock.calls[0]?.[0] as Array<{
+      role: string;
+      content: string;
+      attachments?: Array<{ data: string; mimeType: string }>;
+    }>;
+    expect(history.at(-1)).toMatchObject({
+      role: "user",
+      attachments: [
+        expect.objectContaining({
+          mimeType: "image/png",
+        }),
+      ],
+    });
+    expect(history.at(-1)?.content).toContain("Use the attached image as the visual source of truth.");
+
+    const state = getLastRendererPayloadOfType<{
+      type: "state";
+      artifactState?: {
+        activeArtifact?: {
+          type: string;
+          title: string;
+        };
+      };
+    }>(harness.rendererPayloads, "state");
+    expect(state?.artifactState?.activeArtifact).toMatchObject({
+      type: "html",
+      title: "Derived Prototype",
+    });
+  });
+
+  it("surfaces a clear error when derive_artifact is requested with a non-vision provider", async () => {
+    const harness = await createHarness();
+    tempDirs.push(harness.storagePath);
+
+    await harness.settings.setOnboardingDone(true);
+    const session = await harness.sessions.createSession(
+      "session-derive-artifact-cli",
+      "electron",
+      "Artifact",
+    );
+    await harness.sessions.appendMessages(session.id, [
+      {
+        role: "assistant",
+        content: "existing generated image",
+        generatedImages: [{
+          id: "img-existing-1",
+          src: "data:image/png;base64,aGVsbG8=",
+          source: "generate",
+          prompt: "draw a product landing page",
+        }],
+      },
+    ]);
+    await harness.settings.setActiveSessionId(session.id);
+    await harness.panel.handleMessage({ type: "ready" });
+
+    vi.mocked(resolveProviderConfig).mockResolvedValue({
+      config: {
+        type: "claude-cli",
+        model: "claude-sonnet-4-6",
+      },
+      envMap: {},
+    });
+    vi.mocked(buildProviderAdapter).mockReturnValueOnce({
+      runStep: vi.fn().mockResolvedValue({
+        text: '{"intent":"derive_artifact"}',
+        toolCalls: [],
+        done: true,
+      }),
+    } as never);
+
+    await harness.panel.handleMessage({
+      type: "sendPrompt",
+      prompt: "Turn this design into a clickable HTML prototype",
+    });
+
+    expect(vi.mocked(runAgent)).not.toHaveBeenCalled();
+    const messages = await harness.sessions.loadMessages(session.id);
+    expect(messages.at(-1)).toMatchObject({
+      role: "assistant",
+      kind: "error",
+    });
+    expect(messages.at(-1)?.content).toContain("不支持图片理解");
   });
 });

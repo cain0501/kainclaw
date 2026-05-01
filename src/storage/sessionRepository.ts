@@ -66,10 +66,15 @@ export type CompactBoundarySessionState = {
   transcriptPath?: string;
 };
 
+export type ArtifactPanelSessionState = {
+  activeArtifactId: string | null;
+};
+
 export type SessionRuntimeState = {
   pendingPlanVerification?: PendingPlanVerificationSessionState;
   modelConversation?: PersistedConversationMessage[];
   compactBoundary?: CompactBoundarySessionState;
+  artifactPanel?: ArtifactPanelSessionState;
   workspaceRoot?: string;
 };
 
@@ -449,6 +454,15 @@ export class SessionRepository {
         ...(typeof parsed.workspaceRoot === "string"
           ? { workspaceRoot: parsed.workspaceRoot }
           : {}),
+        ...(parsed.artifactPanel &&
+        (parsed.artifactPanel.activeArtifactId === null ||
+          typeof parsed.artifactPanel.activeArtifactId === "string")
+          ? {
+              artifactPanel: {
+                activeArtifactId: parsed.artifactPanel.activeArtifactId,
+              },
+            }
+          : {}),
         ...(modelConversation && modelConversation.length > 0
           ? { modelConversation }
           : {}),
@@ -489,6 +503,15 @@ export class SessionRepository {
             },
           }
         : {}),
+      ...(state.artifactPanel &&
+      (state.artifactPanel.activeArtifactId === null ||
+        typeof state.artifactPanel.activeArtifactId === "string")
+        ? {
+            artifactPanel: {
+              activeArtifactId: state.artifactPanel.activeArtifactId,
+            },
+          }
+        : {}),
       ...(Array.isArray(state.modelConversation) && state.modelConversation.length > 0
         ? {
             modelConversation: state.modelConversation.map(message => ({
@@ -512,6 +535,7 @@ export class SessionRepository {
       !normalizedState.pendingPlanVerification &&
       !normalizedState.modelConversation &&
       !normalizedState.compactBoundary &&
+      !normalizedState.artifactPanel &&
       typeof normalizedState.workspaceRoot !== "string"
     ) {
       try {
