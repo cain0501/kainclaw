@@ -1,138 +1,11 @@
 # Claude Handoff / Claude 交接说明
 
-## 当前覆盖说明 / Current Override - 2026-04-28
+## 快速摘要（2026-05-02）
 
-- 2026-04-28 installed-skills parity increment:
-  - Primary installed-skill roots are now `~/.kainclaw/skills` and `.kainclaw/skills`, with `~/.claude/skills` and `.claude/skills` kept as compatibility roots.
-  - KainClaw now exposes a working installer MVP through `/skills list`, `/skills install <source>`, and `/skills remove <skill-id>`, and those writes stay on the primary KainClaw roots instead of the Claude compatibility roots.
-  - Installed-skill prompt execution now covers argument substitution, `allowed-tools`, model/effort overrides, `context=fork`, and shell metadata.
-  - Installed-skill shell expansion now supports the Claude-style `!` / ` ```! ` patterns through the existing PowerShell-backed execution path; `shell: bash` is rejected explicitly instead of silently falling back.
-  - Installed-skill hooks now support prompt / command / http / agent definitions, tool-event matcher filtering, and session-scoped persistence for the active conversation.
-  - The Electron desktop shell now also preserves those installed-skill hooks across follow-up prompts in the same conversation, instead of dropping them after the initial slash-command invocation.
-  - The Electron desktop shell now also carries installed-skill slash rewrites through to the real prompt execution path, instead of letting `/<installed-skill>` invocations fall back into plain chat after discovery succeeded.
-  - Installed-skill slash execution is now carried end-to-end by a unified `installedSkillExecution` object, so prompt preparation and flow control no longer have to keep separate per-field copies of tool/model/effort/context metadata.
-  - KainClaw now exposes a model-visible installed-skill registry in the workspace system prompt and a `SkillTool` for installed skills whose runtime semantics can already be represented safely on the model-side path.
-  - The model-side `SkillTool` path now also enforces installed-skill `allowed-tools` by narrowing the visible tool payload for the rest of the current model turn after the skill is loaded.
-  - The model-side `SkillTool` path now also supports safe `context=fork` installed skills by running them in an isolated recursive agent turn and returning the fork result back to the parent model as the tool result.
-  - Model-visible installed skills can now also register their hooks through the shared session hook store, and those hooks take effect both later in the same model run and on subsequent prompts in the same conversation.
-  - Model-visible installed skills can now also apply per-skill `model` / `effort` overrides: inline skills rebuild the active provider for the rest of the current run, while forked skills apply their overrides only inside the isolated fork.
-  - Model-visible installed skills now also honor agent-hook-specific `agentModel` overrides by rebuilding the hook sub-run provider only for that hook execution.
-  - Installed command hooks now preserve `skillRoot`, accept Claude-style matcher aliases (`Bash`, `Edit`, `Write`) against KainClaw tool names, pass the official stdin/environment payload into hook scripts, and honor the official `permissionDecision` contract for `ask` / `deny`.
-  - Electron now also exposes a minimal `AskUserQuestion` modal flow for installed skills. The desktop shell can collect multiple-choice answers, an Other/custom answer path, and optional user notes instead of forcing every interactive skill to fall back to plain chat.
-  - Electron now also has a targeted official-skill compatibility lane for `freeze` / `unfreeze`, and manual Electron checks now confirm `freeze` allow/write, deny/write, and `/unfreeze` recovery all work end-to-end on the desktop shell.
-  - The `freeze` compatibility lane now uses that `AskUserQuestion` modal instead of a free-form chat reply, which brings the Electron UX materially closer to the official Claude flow even though it is not yet pixel-identical.
-  - The Electron renderer approval overlay now keeps only the question-aware approval path active; the older duplicate approval helpers are retired so `AskUserQuestion` no longer depends on last-definition-wins behavior inside `electron/renderer/index.html`.
-  - Electron transcript polish also improved slightly: `Tool Use` now renders the tool name as a badge-style chip instead of plain inline code, so the visual hierarchy matches `Tool Result` more closely without implying a success/error state.
-  - The Electron AskUserQuestion modal now keeps per-question draft state in the renderer and moves through questions step-by-step instead of dumping the whole questionnaire into one long form.
-  - Multi-question AskUserQuestion flows now expose question navigation chips plus a final review/submit step in Electron, which is materially closer to Claude's question-navigation + submit model than the previous flat modal.
-  - The Electron AskUserQuestion modal now also preserves custom Other answers, optional notes, and single-select previews across navigation and includes those annotations in the final tool response payload.
-  - Electron now also exposes a shell-only debug entrypoint for AskUserQuestion parity checks: `/debug ask-user-question [single|multi]` runs through the real tool callback path and gives QA a stable way to trigger one-question or multi-question flows without relying on a specific installed skill or DevTools injection.
-  - Electron now persists a UI language setting and switches Electron-owned approval / AskUserQuestion dialog copy between Simplified Chinese and English. The setting is selectable from the desktop shell settings page and the new storage key uses the `kainclaw.*` namespace instead of introducing another `cain.*` key.
-  - The first bilingual slice also extends beyond the raw dialog buttons: the Electron `/freeze` question prompt, `/debug ask-user-question [single|multi]` prompt payloads, and the top-level settings-page language/model/image-model labels now follow the selected language as well.
-  - The language selector now lives under the Electron settings "Advanced" section instead of the provider section, and the bilingual shell surface also covers high-frequency MCP-page copy plus the host-side image-edit guidance alert.
-  - Manual Electron checks now also confirm the official `careful` skill can warn, require explicit confirmation, and then allow the single confirmed destructive command attempt through to the real PowerShell execution path.
-  - The installed-skills runtime mainline is now usable in Electron, but true official-skill UX parity is still open: the Electron `AskUserQuestion` modal is now functional, yet it is still a minimal compatibility surface rather than a full Claude-equivalent interaction stack.
-  - Current automated baseline after this slice: `154` test files, `1147` tests passed.
-
-- 本批 Claude parity 收口后的验证基线：
-  - `npm test`
-  - `npm run check`
-  - `npm run build`
-  - `npm run build:electron`
-  - `npm run check:electron`
-  - `152` 个测试文件
-  - `1121` 个测试通过
-- 最近几组 `extension.ts` 宿主减债也已同步收口：
-  - `extensionPromptRequestParts`
-  - `sessionPanelActions`
-  - `readySequenceRunner`
-  - `settingsPanelActions`
-  - `companionBindings`
-  - `quickActionBindings`
-  - `licenseHostBindings`
-  - `workspaceStatusController`
-  - `webviewStateBindings / streamingStateBindings`
-  - `savedSessionActivationBindings`
-  - 这些都只是在 KainClaw 的 VS Code / Electron 宿主装配层继续下沉，不改 Claude 覆盖的 runtime / prompt / tool / session 语义
-- 本轮新增收口项（本地 detached hosted review 适配）：
-  - `/ultrareview` 已接进 VS Code 与 Electron 的 prompt command 链路。
-  - 当前行为仍按 Claude `/ultrareview` + `RemoteAgentTask` 生命周期设计，但由于本仓没有 CCR / cloud backend，传输层适配为 detached `Claude CLI` review worker。
-  - hosted review 现在会立即返回 task id / output path，并在完成后通过 background notification 回流完整 findings，不再只给截断预览。
-  - detached hosted review 已接入 stop 路径；但真正的 cloud remote session parity 仍未完成。
-- 本轮新增收口项（hosted verification parity）：
-  - `/ultraverify` 已按 Claude hosted verification / `RemoteAgentTask` 用户语义接进 Electron，本地传输层仍是 detached `Claude CLI` verification worker。
-  - 启动后会先回显 task id / output path，聊天区保持 waiting / background 状态，完成后自动回流完整 verification report 与 `VERDICT`。
-  - 用户在运行中手动 stop 时，会进入 stopped / cancelled 路径，而不是把任务误判为自然完成。
-- 本轮新增收口项（provider runtime identity + tool assembly parity）：
-  - 身份层固定为 `我是 KainClaw，一个多功能的AI助手。`，当前 provider / model 信息由宿主注入 runtime identity note，不再让模型自由脑补自己是 Claude / GPT / DeepSeek。
-  - `claude-cli` 按高可信度说明；官方 `Anthropic / OpenAI` 按当前配置的 provider + model 说明；`openai-compatible` / 第三方 gateway 会显式提示“当前配置如此，但真实上游模型可能被代理覆盖”。
-  - 第三方 `Anthropic` / `DeepSeek` 路径的工具池已按 Claude `src/cli/print.ts` 的 `uniqBy(name)` 逻辑去重，避免严格上游因重复工具名直接报 `Tool names must be unique.`。
-- 用户硬规则已收口并写入项目记忆与主文档：
-  - 只要本地 Claude 源码已经实现某个功能、行为、工作流、工具链、renderer 路径或 session 生命周期，实施和调试都必须先读取 Claude 源码，并按它的端到端链路复刻 baseline。
-  - 不允许先靠本地猜测、规避式 workaround、提示词补丁或平行自研实现去“试错”，再事后回头对齐源码。
-  - 只有 Claude 源码没有覆盖的能力，才按 KainClaw 自己的标准独立设计和实现。
-- 本批新增收口项（`79a8f82`、`022c0ef`）：
-  - `79a8f82`：LSP formatter malformed 响应防御、`normalizeLspOperation`（documentSymbol/workspaceSymbol 官方单数名）、provider unavailable 与空结果区分、`getBuiltInToolDefinitions({ lspAvailable })` 替换静态 `toolDefinitions`、ToolSearch 搜索合同按 Claude ToolSearchTool 源码收口。
-  - `022c0ef`：Word Add-in 写回能力——`documentEditor.ts`（replaceSelection / Track Changes）、`commentHandler.ts`（批注读取与 AI 处理）、taskpane 三标签页（问答 / 编辑 / 批注）、manifest.xml VersionOverrides 功能区按钮、webpack + tsconfig 打包骨架。（2026-04-27，Claude）
-- 本批已同步的收口项覆盖 `890510a..00076dc`，不只包含最后一次 `TaskOutput` 修复：
-  - `890510a`：同步 Claude 源码优先规则、handoff、gap analysis、source-reference 与编码约束。
-  - `b95c258`：Electron Markdown / `/verify` report 渲染按 Claude `marked.lexer()` token 模型重建，并 vendor `marked` 运行时。
-  - `d235163`：`/verify` 增加 concrete target gate、问候/空范围 `PARTIAL`、工作区项目证据兜底、语言跟随、diff/provenance/report fence 处理。
-  - `d1fc143`：background task / toolRuntime 对齐 Claude shell task 语义，包括 `local_bash`、Claude-style id、`TaskGet` / `TaskOutput` 输入合同、`TaskStop` 缺失/不支持行为、非交互 UTF-8 PowerShell 输出。
-  - `fcea9f4`：compact/session lifecycle 对齐，保留可见 transcript，把模型侧 compact 历史放进 sidecar runtime state，并持久化 workspace / compact metadata。
-  - `00076dc`：`TaskOutput` 阻塞等待传递 `ToolContext.abortSignal`，用户取消后不继续挂住 task wait。
-- 本地后续 Claude parity 收口项也已登记到本文档：
-  - `TaskStop` 对 adapter-backed `remote_agent` 会记录 Claude-style `killed` 终态；缺少 remote stop pathway 时仍拒绝，不伪造停止成功。
-  - LSP file-backed 操作按 Claude `LSPTool.validateInput` 做入口预检：缺失文件、非普通文件、超过 10MB 直接失败；UNC 路径跳过本地 `stat` probe。
-  - `workspaceSymbols` 允许省略或传空查询，并向 VS Code provider 转发 `query: ""`，不再被本地 schema 误拦截。
-  - LSP provider availability：VS Code provider 返回 `undefined` 时按 Claude 的 no-server/no-provider 状态返回，不再混成空结果；没有 LSP runtime 时不再暴露 `LSP` 工具。
-  - LSP operation naming：工具入口已接受 Claude 官方单数名 `documentSymbol` / `workspaceSymbol`，并在 KainClaw 适配层归一化到现有内部 runtime 操作 `documentSymbols` / `workspaceSymbols`。
-  - LSP provider response hardening：对 provider 返回缺失 URI、range、location、call target 的 malformed 结果做过滤或 `<unknown location>` 降级，避免 gitignored 过滤和 formatter 直接崩溃。
-  - ToolSearchTool：按 Claude `ToolSearchTool` 搜索合同补齐 `select:ToolA,ToolB`、裸工具名精确选择、`mcp__server` 前缀、`+required optional` 必选词搜索，以及 `max_results` 输入别名。
-  - Task tool aliases：按 Claude `TaskOutputTool` / `TaskStopTool` 源码补齐 deprecated aliases，`AgentOutputTool` / `BashOutputTool` 归一到 `TaskOutput`，`KillShell` 归一到 `TaskStop`；ToolSearch 也会把这些旧名解析到 canonical 工具。
-  - MCP transport parity：按 Claude MCP 源码补齐 `type: "http"`（Streamable HTTP）与 `type: "sse"`（SSE）配置语义；SSE 不再误走 Streamable HTTP；未知远端 transport（如 `ws`）会被忽略；远端认证失败归类为 `needs-auth`。
-  - MCP auth/resource parity：`needs-auth` 远端 server 会暴露 Claude-style `mcp__<server>__authenticate` placeholder；当前本地 OAuth browser flow 仍未接线，placeholder 返回可执行的 KainClaw 配置指引。`ReadMcpResourceTool` 访问已连接但不支持 resources 的 server 时返回明确“不支持 resources”，不会把 server 标记失败。
-  - MCP result/name parity：`isError: true` 的 MCP tool result 会抛工具错误，不再当作成功输出，也不会把 server connection 标记失败；`toolResult`、`structuredContent`、`content[]` 按 Claude 优先级格式化。MCP 对外工具名已使用 Claude-compatible `normalizeNameForMCP` 安全化，内部调用仍保留原始 server/tool 名，resource read 可用 normalized server name 映射回原配置名。
-  - MCP 本轮定向验证：`npm test -- --run src/mcpRuntime.test.ts src/mcpRuntime.helpers.test.ts`（25 tests passed）、`npm test -- --run src/toolRuntime.test.ts`（90 tests passed）、`npm run check`、`npm run build`、`git diff --check -- src/mcpRuntime.ts src/mcpRuntime.test.ts src/mcpRuntime.helpers.test.ts`。
-  - MCP remote OAuth parity：按 Claude `OAuthClientProvider + localhost callback + PKCE` 链路补齐远端 `http` / `sse` MCP browser OAuth；VS Code 与 Electron host 都已接入 `openExternal`、token/client/discovery state 持久化，以及 auth 后工具缓存失效。`oauth.xaa` 仍明确未支持。
-  - MCP prompt command parity：按 Claude `fetchCommandsForClient()` 语义补齐 `mcp__<server>__<prompt>` prompt command 暴露、`/mcp prompts` 检视，以及 prompt command 展开后继续进入正常模型回合；不再把 Claude prompt surface 误做成另一套本地工具。
-  - MCP invocation hardening：执行层已兼容模型常见的 MCP 工具名变形，例如把 `mcp__notion__authenticate` 写成 `mcp_notion_authenticate`，或把 `notion-get-users` 写成 `notion_get_users`，统一归一化回 canonical 工具名执行。
-  - Electron transcript parity：按 Claude `tool_use / tool_result` 可见性补回 Electron transcript。用户现在能直接看到真实 MCP 工具名、输入参数和原始 tool result，不再只剩 assistant 事后猜测原因。
-  - 手测证据：Notion MCP 在 Electron 中已完成一次真实 browser OAuth 回环（`localhost:3118/callback`），`/mcp` 显示 `connected`，`/mcp call mcp__notion__notion-get-users {"page_size":5}` 返回真实用户列表；自然语言路径也已能展示真实 `tool_use / tool_result`，不再盲猜。
-- 强实现规则已经生效：
-  - 如果本地 Claude Code 源码已经包含目标功能、行为、工作流、prompt contract、renderer 行为、tool/runtime 路径或 session 生命周期，必须先读取该源码，并把源码逻辑作为实现 baseline 复刻。
-  - KainClaw 自研标准只用于 Claude 源码没有覆盖的能力，或用于 Claude-compatible baseline 之上的薄适配层。
-- Electron Markdown 渲染已重新按 Claude 源码对齐：
-  - `E:\claudecodejingiang\src\components\Markdown.tsx`
-  - `E:\claudecodejingiang\src\utils\markdown.ts`
-  - 渲染器主路径现在使用 `marked.lexer()` 的块级 token 解析，不再把自研 regex/line parser 作为主逻辑。
-  - 原始 HTML 仍然会被转义；Electron 仍保持 `sandbox: true` 和 `nodeIntegration: false`。
-- `/verify` 报告渲染不再依赖 Markdown 代码围栏是否完整：
-  - 通过 `### Check:`、`Command run:`、`Output observed:`、`Result:`、`VERDICT:` 这些必需标签识别报告。
-  - `Command run` 和 `Output observed` 会作为结构化原始文本解析，并通过转义后的 `<pre><code>` 渲染。
-  - README 输出、嵌套代码围栏、四反引号围栏都会保持字面量显示，不再打断报告结构。
-- `marked` 现在是 Electron renderer 的运行时依赖；`npm run build:electron` 会把 `node_modules/marked/lib/marked.umd.js` 复制到 `dist-electron/electron/renderer/vendor/marked.umd.js`。
-- `TaskOutput` 阻塞等待后台任务输出时，已经按 Claude `TaskOutputTool` 生命周期把 `ToolContext.abortSignal` 传入 task wait；用户取消后不会继续挂住后台输出等待。
-- `TaskStop` 的 remote stop 语义已经更接近 Claude：adapter-backed remote task 停止后进入 `killed`，无 stop 通道的 remote task 仍明确报不支持。
-- LSP runtime 已补齐 Claude-style 文件预检、`workspaceSymbols` 空查询转发、provider unavailable 返回、无 runtime 时的工具暴露过滤、`documentSymbol` / `workspaceSymbol` 官方单数操作名入口，以及 malformed provider response 防御；更深 server lifecycle / plugin-backed provider discovery parity 仍可继续收口。
-- ToolSearchTool 已按 Claude `ToolSearchTool` 源码搜索合同收口：支持 `select:` 多选、裸工具名、`mcp__server` 前缀、`+required` 必选词与 `max_results`；KainClaw 侧只保留当前可用工具与 MCP 动态工具聚合的适配层。
-- Task 工具旧名兼容已按 Claude 源码收口：`KillShell`、`AgentOutputTool`、`BashOutputTool` 不再报 unknown tool，而是进入对应 canonical Task handler；`TaskOutput` 仍保持 Claude 官方 `task_id` 输入合同，不接受 `shell_id`。
-- Electron 桌面壳已把这些斜杠命令接回真实的 `src/` host/runtime 路径：
-  - `/todo`
-  - `/compact`
-  - `/review`
-  - `/verify`
-- Electron 的 workspace 与 git inspection 语义已经拆开：
-  - 选中的 workspace 仍然是用户选中的目录。
-  - `/review` 和 `/verify` 会单独解析 git 上下文，只作为 inspection repo context 使用。
-  - inspection repo 会在 provider/runtime/MCP tool 构建之前完成解析。
-  - `workspace:set` 现在支持清空回 `unset`。
-- Electron 面向用户的 review/verify 文案已经收口：
-  - `Review task saved as ...`、`TaskOutput`、`task_id` 这类内部 follow-up 文本不再展示给终端用户。
-  - workspace badge 直接显示目录名，不再显示 `需确认` 这类技术状态标签。
-  - 非 Git 目录不再在 workspace 区域常驻显示 “not a git repo” 警告。
-
-更新时间：2026-04-27
+- 主工作目录：`E:\claudecodejingiang\vscode-extension`
+- 当前任务：`bd ready` 查看（以 beads 实时结果为准）
+- 最后验证基线：161 个测试文件，1254 个测试通过（2026-05-02）
+- Sprint 变更详情见 `git log`；本文只维护"当前状态"，不积累流水账
 
 ## 当前状态总览
 
@@ -173,7 +46,8 @@
   - Prompt Library 抽屉
   - 找参考图抽屉
   - 图片编辑相关弹层
-- Electron 现在应被准确描述为“真实可用的桌面验证壳”，不能对外表述成完整 Windows 客户端。
+- Electron 现在应被准确描述为"真实可用的桌面验证壳"，不能对外表述成完整 Windows 客户端。
+- Electron chat-shell 已通过 `shellStrings`（`src/electronUiLanguage.ts`）完整支持中英文切换：session chrome、empty state、composer、workspace badge、session title，以及 onboarding / Image Lab / Prompt Library / material search / 图片编辑器等二级页面。
 
 ### Slash commands
 
@@ -203,7 +77,7 @@
   - 如果当前目录本身是 git 仓库，就直接使用它
   - 如果当前目录是父目录且能唯一识别出嵌套 repo，则只在 inspection 流程里使用那个 repo root
   - 如果无法识别唯一 repo，则在聊天消息里明确提示 degraded mode
-- 普通非 Git 目录不会再在 workspace 区域常驻显示“当前目录不是 Git 仓库”。
+- 普通非 Git 目录不会再在 workspace 区域常驻显示"当前目录不是 Git 仓库"。
 - workspace badge 现在只显示目录名，不再显示 `需确认` 之类的技术态标签。
 
 ### 图片主链
@@ -240,7 +114,7 @@
 
 ## 找参考图当前状态
 
-- 用户侧统一入口是“找参考图”，不再用旧的其它命名。
+- 用户侧统一入口是"找参考图"，不再用旧的其它命名。
 - 当前链路是显式两段式：
   - 先根据当前图像任务整理建议检索词
   - 再由用户确认或修改后主动开始搜索
@@ -352,7 +226,7 @@
 
 ## 已知非阻塞尾项
 
-- 删除最后一个 provider 时，聊天区仍可能提示“未找到 Provider 配置”。
+- 删除最后一个 provider 时，聊天区仍可能提示"未找到 Provider 配置"。
 - `supabase` MCP 当前仍可能出现 `Connection closed`。
 
 ## 当前关键风险
@@ -360,15 +234,26 @@
 - `src/extension.ts` 仍是高风险宿主入口，虽然已经抽出大量 host/helper，但总控逻辑依旧偏厚。
 - `electron/renderer/index.html` 当前仍是单文件验证壳，不应继续堆新的核心产品逻辑。
 - `electron/ElectronChatPanel.ts` 仍是桌面壳总控，不应继续承载新的 runtime 级业务逻辑。
-- 当前“找参考图”虽然已切到更符合中国大陆用户环境的搜索链，但仍是过渡态，不是最终资料搜索编排层。
+- 当前"找参考图"虽然已切到更符合中国大陆用户环境的搜索链，但仍是过渡态，不是最终资料搜索编排层。
 - `DesktopRuntimeServices` 里真正接上的 runtime 仍然太少，桌面真闭环还没建完。
 
 ## 下一优先级
 
-1. 继续把 `extension.ts` 的宿主总控往 host / runtime / adapter 下沉
-2. 继续收桌面壳真实可用子集，不虚报未接好的能力
-3. 继续收 `/review`、`/verify`、task/tool 链路的 parity 边界
-4. 继续维持三份主文档写成“当前状态”，不回到流水账
+1. 继续把 `extension.ts` 的宿主总控往 host / runtime / adapter 下沉（`bd show vscode-extension-f4v`）
+2. 继续收 MCP oauth.xaa + refresh/discovery edge cases（`bd show vscode-extension-2tf`）
+3. 继续收 Tasks hosted/detached remote background task parity（`bd show vscode-extension-7w2`）
+4. 继续维持三份主文档写成"当前状态"，不回到流水账
+
+## 被压缩的 Sprint 记录（2026-04-28）
+
+以下内容已压缩。变更细节请查 `git log`；关键能力现状在上方各状态节。
+
+- installed-skills parity increment（2026-04-28）：技能根目录、安装器 MVP、执行路径、hooks、模型侧 SkillTool、AskUserQuestion modal、freeze/careful、bilingual i18n
+- 已完成下沉的 extension.ts 宿主 helpers：extensionPromptRequestParts、sessionPanelActions、readySequenceRunner、settingsPanelActions、companionBindings、quickActionBindings、licenseHostBindings、workspaceStatusController、webviewStateBindings、savedSessionActivationBindings
+- 已收口的 Claude parity 项：Markdown renderer（marked.lexer）、/verify report 渲染、Tasks/toolRuntime、Compact lifecycle、TaskStop remote、LSP、ToolSearchTool、Task aliases、MCP transport/auth/OAuth/prompts、Electron transcript、provider identity、工具去重
+- Electron chat-shell i18n（2026-04-30）：`shellStrings` 覆盖 session chrome、empty state、composer、workspace badge、session title 及二级页面
+
+---
 
 ## 相关规格与参考路径
 
