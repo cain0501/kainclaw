@@ -85,7 +85,7 @@ async function readConfig(configPath: string): Promise<BackgroundReviewWorkerCon
 async function writeState(
   statePath: string,
   state: {
-    status: "running" | "completed" | "failed" | "cancelled";
+    status: "running" | "completed" | "failed" | "cancelled" | "killed";
     result?: string;
     error?: string;
   },
@@ -141,7 +141,7 @@ async function runDetachedReview(configPath: string): Promise<void> {
   await writeState(config.statePath, { status: "running" });
 
   const finalize = async (
-    status: "completed" | "failed" | "cancelled",
+    status: "completed" | "failed" | "cancelled" | "killed",
     details: {
       result?: string;
       error?: string;
@@ -213,11 +213,10 @@ async function runDetachedReview(configPath: string): Promise<void> {
     if (await wasCancelled(config.cancelPath)) {
       await appendLifecycleMessage(
         config.outputPath,
-        "\n[cancelled] Cancelled by TaskStop.\n",
+        "\n[killed] Stopped by TaskStop.\n",
       );
-      await finalize("cancelled", {
-        result: "Cancelled by TaskStop.",
-        error: "Cancelled by TaskStop.",
+      await finalize("killed", {
+        result: "Stopped by TaskStop.",
       });
       return;
     }
@@ -234,11 +233,10 @@ async function runDetachedReview(configPath: string): Promise<void> {
     if (cancelled || abortController.signal.aborted) {
       await appendLifecycleMessage(
         config.outputPath,
-        "\n[cancelled] Cancelled by TaskStop.\n",
+        "\n[killed] Stopped by TaskStop.\n",
       );
-      await finalize("cancelled", {
-        result: "Cancelled by TaskStop.",
-        error: "Cancelled by TaskStop.",
+      await finalize("killed", {
+        result: "Stopped by TaskStop.",
       });
       return;
     }

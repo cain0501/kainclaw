@@ -473,6 +473,61 @@ describe("PersistentTaskRuntimeStore background tasks", () => {
     expect(task && isBackgroundTaskLostAfterRestart(task)).toBe(false);
   });
 
+  it("refreshes detached remote tasks to killed when the worker records a TaskStop shutdown", async () => {
+    const storageRoot = await fs.mkdtemp(path.join(os.tmpdir(), "cain-task-runtime-detached-"));
+    tempDirs.push(storageRoot);
+    const store = new PersistentTaskRuntimeStore(storageRoot);
+    const runtime = store.getConversationRuntime(
+      "E:\\claudecodejingiang\\vscode-extension",
+      "remote-detached-killed",
+    );
+    const detachedDir = path.join(storageRoot, "remote-detached-killed");
+    const statePath = path.join(detachedDir, "state.json");
+    const outputPath = path.join(detachedDir, "output.log");
+    const cancelPath = path.join(detachedDir, "cancel.flag");
+
+    await fs.mkdir(detachedDir, { recursive: true });
+    await fs.writeFile(
+      statePath,
+      JSON.stringify({
+        status: "killed",
+        updatedAt: Date.now(),
+        result: "Stopped by TaskStop.",
+      }, null, 2),
+      "utf8",
+    );
+    await fs.writeFile(outputPath, "[killed] Stopped by TaskStop.\n", "utf8");
+
+    await runtime.registerBackgroundTask({
+      id: "remote-detached-killed",
+      taskType: "remote_agent",
+      status: "running",
+      description: "remote review task",
+      command: "Review PR #42 remotely",
+      metadata: {
+        remoteTaskType: "claude_cli_review",
+        sessionId: "sess-detached-killed",
+        detached: {
+          mode: "detached",
+          statePath,
+          outputPath,
+          cancelPath,
+        },
+      },
+      output: "Started remote review",
+    });
+
+    const task = await runtime.getBackgroundTask("remote-detached-killed");
+
+    expect(task).toMatchObject({
+      id: "remote-detached-killed",
+      taskType: "remote_agent",
+      status: "killed",
+      result: "Stopped by TaskStop.",
+    });
+    expect(task?.output).toContain("[killed] Stopped by TaskStop.");
+  });
+
   it("persists background task notified state and supports marking tasks as notified", async () => {
     const storageRoot = await fs.mkdtemp(path.join(os.tmpdir(), "cain-task-runtime-notified-"));
     tempDirs.push(storageRoot);

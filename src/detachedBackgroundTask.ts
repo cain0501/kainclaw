@@ -8,7 +8,7 @@ export type DetachedBackgroundTaskMetadata = {
 };
 
 export type DetachedBackgroundTaskState = {
-  status: "running" | "completed" | "failed" | "cancelled";
+  status: "running" | "completed" | "failed" | "cancelled" | "killed";
   updatedAt: number;
   runnerPid?: number;
   childPid?: number;
@@ -76,7 +76,8 @@ export function parseDetachedBackgroundTaskState(
     rawStatus !== "running" &&
     rawStatus !== "completed" &&
     rawStatus !== "failed" &&
-    rawStatus !== "cancelled"
+    rawStatus !== "cancelled" &&
+    rawStatus !== "killed"
   ) {
     return null;
   }
