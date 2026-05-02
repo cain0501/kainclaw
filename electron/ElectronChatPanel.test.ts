@@ -479,6 +479,51 @@ describe("ElectronChatPanel session lifecycle", () => {
     expect(reopenedState?.artifactState?.artifactCount).toBe(2);
   });
 
+  it("opens the active html artifact in KainClaw Design", async () => {
+    const harness = await createHarness();
+    tempDirs.push(harness.storagePath);
+
+    await harness.settings.setOnboardingDone(true);
+    await harness.panel.handleMessage({ type: "ready" });
+
+    vi.mocked(resolveProviderConfig).mockResolvedValue({
+      config: {
+        type: "anthropic",
+        apiKey: "test-key",
+        model: "claude-sonnet-4-6",
+      },
+      envMap: {},
+    });
+    vi.mocked(buildProviderAdapter).mockReturnValue({} as never);
+    vi.mocked(handleElectronPromptCommand).mockResolvedValue({ kind: "continue" });
+    vi.mocked(runAgent).mockResolvedValue(`<!DOCTYPE html>
+<html>
+  <head><title>Design Bridge</title></head>
+  <body><main>bridge</main></body>
+</html>`);
+
+    await harness.panel.handleMessage({
+      type: "sendPrompt",
+      prompt: "给我一个落地页原型",
+    });
+
+    await harness.panel.handleMessage({ type: "artifact:openKainClawDesign" });
+
+    const designOpenPayload = getLastRendererPayloadOfType<{
+      type: "kainclawDesign:open";
+      artifactId?: string;
+      title?: string;
+      html?: string;
+    }>(harness.rendererPayloads, "kainclawDesign:open");
+
+    expect(designOpenPayload).toMatchObject({
+      type: "kainclawDesign:open",
+      title: "Design Bridge",
+      html: expect.stringContaining("<!DOCTYPE html>"),
+    });
+    expect(designOpenPayload?.artifactId).toBeTruthy();
+  });
+
   it("keeps pure text replies out of artifact state", async () => {
     const harness = await createHarness();
     tempDirs.push(harness.storagePath);

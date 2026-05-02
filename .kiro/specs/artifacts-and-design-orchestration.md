@@ -58,10 +58,10 @@
 - 导出 Canva / PDF / PPTX / HTML / Claude Code bundle
 
 **与 Artifacts 的关系**：
-- **完全独立**，两者互不相通
-- 没有"Open in Claude Design"跳转按钮
-- 用户必须手动切换，内容需要重新输入
-- **这是 Claude 自身产品的一个空白**
+- UI 入口独立，没有"Open in Claude Design"跳转按钮，用户必须手动切换
+- 但两者通过 postMessage 实现 iframe↔宿主的状态同步（见 §5 缺口 2 协议规格）
+- 这套协议已被逆向还原（来源：`make-tweakable.md`，Trystan-SA/claude-design-system-prompt）
+- **KainClaw 的缺失在于 UI 跳转入口和 HTML 内容传递机制，不是协议本身**
 
 ---
 
@@ -89,9 +89,9 @@ KainClaw：调用 GPT Image 2，生成网站设计图片
 用户："帮我把这个设计图片做成可以点击的产品原型"
 
 KainClaw：右侧弹出 Artifacts 窗口，展示 HTML+CSS+JS 交互式原型
-          原型右上角出现【进入 Deep Design】按钮
+          原型右上角出现【进入 KainClaw Design】按钮
 
-用户：点击【进入 Deep Design】
+用户：点击【进入 KainClaw Design】
 
 KainClaw：进入 KainClaw Design 页面，带入当前 HTML，进行 slider 微调和二次创作
 ```
@@ -107,75 +107,83 @@ KainClaw：进入 KainClaw Design 页面，带入当前 HTML，进行 slider 微
 | 设置角色 | `chat` | LLM 文字 | ✅ 已有 |
 | AskUserQuestion | `clarify_requirements` + Tool Use | Tool 执行 | ✅ 已有 |
 | 输出设计简报 | `chat` | LLM 文字 | ✅ 已有 |
-| 优化提示词 | `prompt_rewrite` | LLM 文字 | ❌ 路由器缺失，当前会误判为 `image_generate` |
+| 优化提示词 | `prompt_rewrite` | LLM 文字 | ✅ 已实现 |
 | 生成图片 | `image_generate` | GPT Image 2 | ✅ 已有 |
-| 图片→交互原型 | `derive_artifact` | 视觉模型 → HTML 生成 + Artifacts 面板 | ❌ 完全缺失 |
-| Deep Design 入口 | UI 桥接 | kainclaw-design.md Design Lab | ❌ 标注为 V2，需提前 |
+| 图片→交互原型 | `derive_artifact` | 视觉模型 → HTML 生成 + Artifacts 面板 | ✅ 已实现 |
+| KainClaw Design 入口 | UI 桥接 | kainclaw-design.md Design Lab | ❌ 提升至 V1，与 Artifacts 面板同批实现 |
 
 ---
 
 ## 五、发现的三个技术缺口
 
-### 缺口 1：`prompt_rewrite` 意图缺失（高优先级）
+### ~~缺口 1~~（已实现）：`prompt_rewrite` 意图
 
-**问题**：用户说"帮我优化这个提示词"，即使消息里充满"海报"、"设计"等词，当前正则路由仍会判为 `image_generate`，直接出图。
+**状态**：✅ 已实现。`prompt_rewrite` 意图已加入路由器，`chatPromptIntent.ts` 和 `llmIntentRouter.ts` 均已支持，强规则"元任务优先于执行任务"已生效。
 
-**根因**：`chatPromptIntent.ts` 只有三类：`chat / image_generate / image_edit`，没有"元任务优先于执行任务"的概念。
+### ~~缺口 2~~（已实现）：Artifacts 渲染面板
 
-**已有讨论**：`img-intent-llm-router.md`（v2）已讨论用 LLM 做路由，但 `prompt_rewrite` 还未加入 intent 列表。
+**状态**：✅ 已实现（yd5.3）。右侧 Artifacts 面板已存在，iframe sandbox 渲染、产物类型触发判断均已实现。
 
-**需要做的**：在 `img-intent-llm-router.md` 的 system prompt 里增加第四个意图：
+**yd5.5 背景说明（KainClaw Design bridge 所需上下文）**：
+
+DOM 层已知问题：`index.html` 中 `<aside #artifacts-panel>` 嵌套在 `.chat-column`（`overflow:hidden`）内，面板被裁切不可见。修复方式：把 `.chat-column` 的 `</div>` 移到 `<aside>` 标签之前，使两者成为 `.chat-workspace` 的平级 flex 子节点。
+
+**Tweak 面板 postMessage 协议规格**（来源：逆向还原 Claude Design，Trystan-SA/claude-design-system-prompt）：
+
 ```
-prompt_rewrite（优化/重写提示词或设计 brief）
-  适用：用户说"优化提示词"、"重写 brief"、"改写一下"
-  强规则：即使消息里充满图片相关词汇，只要动作是"写/改/优化文字"，就选这个
-  不出图，输出文字
-```
+// iframe → 宿主：注册监听后立即发送，宿主收到后在 toolbar 显示 Tweaks 按钮
+window.parent.postMessage({type: '__edit_mode_available'}, '*')
 
-### 缺口 2：Artifacts 渲染面板（高优先级）
+// 宿主 → iframe：用户点击 Tweaks 按钮时发送
+{type: '__activate_edit_mode'}
 
-**问题**：整个产品没有右侧 Artifacts 面板的概念。当前图片生成结果显示在对话流里，HTML 产物更没有专门的预览窗口。
+// 宿主 → iframe：用户关闭 Tweaks 时发送
+{type: '__deactivate_edit_mode'}
 
-**需要做的**：
-- 新建 Artifacts 渲染组件（iframe sandbox）
-- 触发时机：当 LLM 产出 HTML / SVG / 可渲染代码时，自动在右侧展示
-- 支持基础交互：可点击、可滚动、实时预览
-- 触发判断：基于产物类型，不走 LLM（HTML → 显示；Markdown/代码 → 不显示）
-
-### 缺口 3：`derive_artifact` 执行链（高优先级）
-
-**问题**："帮我把这张图做成可以点击的原型"——这是一个全新的动作，当前没有任何支撑。
-
-**技术链路**：
-```
-用户说"做成原型"
-  ↓
-路由器识别 → derive_artifact
-  ↓
-从对话上下文获取最近生成的图片（active_object = generated_image）
-  ↓
-把图片传给视觉理解模型 + 提示词："根据这张图生成对应的 HTML+CSS+JS 交互原型"
-  ↓
-LLM 生成 HTML 代码
-  ↓
-渲染到 Artifacts 面板（iframe）
-  ↓
-右上角显示【进入 Deep Design】按钮
+// iframe → 宿主：用户修改某个 tweak 时发送，宿主将 edits 写回 HTML 文件
+{type: '__edit_mode_set_keys', edits: {primaryColor: '#FF6600', fontSize: 16}}
 ```
 
-这个动作依赖：
-- Artifacts 面板存在（缺口 2）
-- 视觉模型能处理图片输入（现有 provider 已支持）
-- 路由器增加 `derive_artifact` 意图
+**注意顺序**：必须先注册 `message` 监听器，再发送 `__edit_mode_available`，否则宿主的 activate 消息在监听器存在前就到达，toggle 静默失效。
 
-### 缺口 4：Deep Design 入口桥接（中优先级）
+**CSS 变量模式（slider 驱动 live 更新，无需重新生成）**：
 
-**问题**：`kainclaw-design.md` 的 Design Lab 和 Artifacts 之间没有桥接。用户点击【进入 Deep Design】后没有着陆页面，也没有内容传递机制。
+```css
+:root {
+  --tweak-primary: #0066CC;
+  --tweak-font: "Inter", sans-serif;
+  --tweak-density: 16px;
+}
+```
+```js
+// slider onChange
+document.documentElement.style.setProperty('--tweak-primary', newColor);
+```
+
+**持久化模式（改动跨刷新保留）**：
+
+```js
+const TWEAK_DEFAULTS = /*EDITMODE-BEGIN*/{
+  "primaryColor": "#D97757",
+  "dark": false
+}/*EDITMODE-END*/;
+```
+宿主匹配 `/*EDITMODE-BEGIN*/.../*EDITMODE-END*/` 范围，将 edits 合并后写回 HTML 文件，必须是合法 JSON（双引号键名）。
+
+**控件数量建议**：3–8 个控件为合理范围。关闭 Tweaks 后设计必须完全看不到面板（no tweak chrome visible）。
+
+### ~~缺口 3~~（已实现）：`derive_artifact` 执行链
+
+**状态**：✅ 已实现。路由器已识别 `derive_artifact` 意图，图片→HTML 原型的执行链已打通，视觉模型 image attachment 调用已确认可用。
+
+### 缺口 4：KainClaw Design 入口桥接（中优先级）
+
+**问题**：`kainclaw-design.md` 的 Design Lab 和 Artifacts 之间没有桥接。用户点击【进入 KainClaw Design】后没有着陆页面，也没有内容传递机制。
 
 **现状**：`kainclaw-design.md` Section 15.3 预留了 V2 反向联动接口，但当前 V1 没有"Artifacts → Design Lab"的正向跳转。
 
 **需要做的**：
-- 在 Artifacts 面板右上角加【进入 Deep Design】按钮（仅 HTML 类 Artifact 显示）
+- 在 Artifacts 面板右上角加【进入 KainClaw Design】按钮（仅 HTML 类 Artifact 显示）
 - 点击时：把当前 HTML 字符串传给 Design Lab，打开 `page-design` 页面
 - Design Lab 用传入的 HTML 作为初始版本，进入 slider 微调流程
 - 这应该从 V2 提升到 V1 一并实现
@@ -186,7 +194,7 @@ LLM 生成 HTML 代码
 
 不需要 LLM 判断，用产物类型直接决定：
 
-| 产物类型 | 显示 Deep Edit？ | 原因 |
+| 产物类型 | 显示【进入 KainClaw Design】？ | 原因 |
 |---|---|---|
 | HTML（原型、仪表板、营销页） | ✅ 是 | slider 调参价值高 |
 | SVG + 可视化图表 | ⚠️ 可选 | 颜色/大小有价值，结构不适合 |
@@ -200,20 +208,27 @@ LLM 生成 HTML 代码
 
 | 现有文档 | 关系 |
 |---|---|
-| `img-intent-llm-router.md`（v2） | 需要补充 `prompt_rewrite` 和 `derive_artifact` 两个意图 |
-| `kainclaw-design.md` | Design Lab 核心逻辑复用，入口从独立面板改为 Artifacts 桥接，Deep Design 桥接从 V2 提至 V1 |
-| `v1-product-spec.md` | 需要检查 Artifacts 面板是否在 V1 范围内 |
+| `kainclaw-design.md` | Design Lab 核心逻辑复用，入口从独立面板改为 Artifacts 桥接，KainClaw Design 桥接已提升至 V1 |
+| `v1-product-spec.md` | 需要确认 Artifacts 面板渲染和 KainClaw Design 桥接是否已纳入 V1 范围 |
 
 ---
 
 ## 八、请 Codex 评审的问题
 
-1. **`derive_artifact` 的视觉模型调用**：把生成的图片传给 LLM 生成 HTML 原型，当前 provider 层（`IProviderAdapter`）是否支持？image attachment 传入 `runStep` 的能力是否已经具备（参考 `imagePromptInference.ts` 的 vision 调用路径）？
+1. **Artifacts 面板的渲染方案**：在 Electron 环境下，iframe sandbox 的安全隔离方案是否可行？需要哪些 IPC 扩展？当前 `ElectronChatPanel.ts` 的消息渲染架构能否支持插入一个右侧面板？
 
-2. **Artifacts 面板的渲染方案**：在 Electron 环境下，iframe sandbox 的安全隔离方案是否可行？需要哪些 IPC 扩展？当前 `ElectronChatPanel.ts` 的消息渲染架构能否支持插入一个右侧面板？
+2. **整体实现顺序建议**：缺口 2（Artifacts 面板）和缺口 4（KainClaw Design 桥接）有依赖关系，建议实现顺序是什么？
 
-3. **`prompt_rewrite` 意图**：直接加进 `img-intent-llm-router.md` v2 的 system prompt 即可，还是需要额外的处理分支？当前 `runChatImageJob` / `sendPrompt` 分支结构能否直接容纳第四条路径？
+3. **范围风险**：Artifacts 面板 + KainClaw Design 桥接，估算涉及文件数量是否超过 AGENTS.md 的 8 文件警戒线？如果超出，建议如何拆分成多个独立 PR？
 
-4. **整体实现顺序建议**：从你的视角看，缺口 1/2/3/4 的推荐实现顺序是什么？有没有依赖关系需要先解决？
+---
 
-5. **范围风险**：这次引入 Artifacts 面板 + derive_artifact + Deep Design 桥接，估算涉及文件数量是否超过 AGENTS.md 的 8 文件警戒线？如果超出，建议如何拆分成多个独立 PR？
+## 九、已完成项同步
+
+| 编号 | 内容 | 状态 |
+|---|---|---|
+| yd5.1 | intent router（LLM 意图路由） | ✅ 已完成 |
+| yd5.2 | artifact model（产物数据模型） | ✅ 已完成 |
+| yd5.3 | artifacts panel（渲染面板） | ✅ 已完成 |
+| yd5.4 | derive_artifact（图片→HTML 原型执行链） | ✅ 已完成 |
+| yd5.5 | KainClaw Design bridge（入口桥接） | 🔄 进行中 |

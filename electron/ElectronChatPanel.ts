@@ -764,6 +764,10 @@ export class ElectronChatPanel {
       await this.postState();
       return;
     }
+    if (type === "artifact:openKainClawDesign") {
+      this.openActiveArtifactInKainClawDesign();
+      return;
+    }
     if (type === "abort") {
       const activeRequest = this.currentSessionId
         ? this.inFlightRequests.get(this.currentSessionId)
@@ -2714,6 +2718,33 @@ export class ElectronChatPanel {
 
   private getPendingInteraction(): unknown {
     return this.pendingQuestion?.request ?? this.host.getPendingApproval();
+  }
+
+  private openActiveArtifactInKainClawDesign(): void {
+    if (!this.currentSessionId) {
+      this.sendToRenderer({
+        type: "kainclawDesign:error",
+        message: "当前还没有会话内容可供带入 KainClaw Design。",
+      });
+      return;
+    }
+
+    const activeArtifact =
+      this.artifactRegistries.get(this.currentSessionId)?.activeArtifact ?? null;
+    if (!activeArtifact || activeArtifact.type !== "html") {
+      this.sendToRenderer({
+        type: "kainclawDesign:error",
+        message: "请先选中一个 HTML Artifact，再进入 KainClaw Design。",
+      });
+      return;
+    }
+
+    this.sendToRenderer({
+      type: "kainclawDesign:open",
+      artifactId: activeArtifact.id,
+      title: activeArtifact.title,
+      html: activeArtifact.content,
+    });
   }
 
   private async requestUserQuestion(

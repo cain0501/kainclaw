@@ -32,4 +32,14 @@ describe("Electron renderer settings", () => {
     expect(html).toContain("shellText('sessionSectionTitle')");
     expect(html).toContain("shellText('composerPlaceholder')");
   });
+
+  it("includes the KainClaw Design bridge surface and artifact handoff wiring", async () => {
+    const rendererPath = path.join(__dirname, "renderer", "index.html");
+    const html = await readFile(rendererPath, "utf8");
+
+    expect(html).toContain('id="page-design"');
+    expect(html).toContain("artifact:openKainClawDesign");
+    expect(html).toContain("kainclawDesign:open");
+    expect(html).toContain("__edit_mode_available");
+  });
 });

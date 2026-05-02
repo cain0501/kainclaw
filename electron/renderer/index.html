@@ -479,7 +479,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-seri
         <div class="artifacts-panel__header">
           <span id="artifacts-panel-title" class="artifacts-panel__title">Artifacts</span>
           <span id="artifacts-panel-type" class="artifacts-panel__type-badge"></span>
-          <button id="artifacts-panel-deep-edit" class="btn-secondary" style="display:none" onclick="handleArtifactDeepEdit()">进入 Deep Design</button>
+          <button id="artifacts-panel-deep-edit" class="btn-secondary" style="display:none" onclick="handleArtifactDeepEdit()">进入 KainClaw Design</button>
           <button class="btn-ghost" title="关闭产物面板" onclick="dismissArtifactPanel()">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
           </button>
@@ -914,6 +914,36 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-seri
   </div>
 </div>
 
+<!-- DESIGN BRIDGE -->
+<div id="page-design" class="page" style="flex-direction:column;background:#f6f1ea">
+  <div class="ptop" style="background:rgba(255,255,255,.84);backdrop-filter:blur(12px)">
+    <div class="klogo">K</div>
+    <span class="ptop-title">KainClaw Design</span>
+    <div style="flex:1"></div>
+    <button id="design-tweaks-btn" class="btn-secondary" style="display:none" onclick="toggleDesignTweaks()">Tweaks</button>
+    <button class="btn-ghost" onclick="showPage('chat')">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+    </button>
+  </div>
+  <div style="flex:1;overflow:hidden;padding:18px;display:grid;grid-template-columns:minmax(280px,340px) minmax(0,1fr);gap:16px">
+    <div style="background:rgba(255,255,255,.9);border:1px solid #eadfd2;border-radius:22px;padding:18px;display:flex;flex-direction:column;gap:12px;box-shadow:0 18px 40px rgba(77,49,24,.08)">
+      <div style="font-size:22px;font-weight:700;letter-spacing:-.03em">KainClaw Design</div>
+      <div id="design-bridge-subtitle" style="font-size:12px;color:#8b7969;line-height:1.7">当前 HTML 已带入，可继续用 Tweaks 预览和微调。</div>
+      <div style="border:1px solid #eadfd2;border-radius:18px;background:#fff;padding:14px 16px">
+        <div id="design-source-label" style="font-size:12px;font-weight:700;color:#7b4a2e;letter-spacing:.04em;text-transform:uppercase;margin-bottom:8px">当前产物</div>
+        <div id="design-bridge-title" style="font-size:15px;font-weight:600;color:#18181b;line-height:1.5">未加载设计内容</div>
+        <div id="design-bridge-status" style="font-size:12px;color:#8b7969;line-height:1.6;margin-top:6px">先从 Artifacts 面板打开一个 HTML 原型，再进入 KainClaw Design。</div>
+      </div>
+      <div id="design-bridge-edits" style="display:none;border:1px dashed #eadfd2;border-radius:16px;background:#fcfaf7;padding:12px 14px;font-size:12px;color:#7a6656;line-height:1.7"></div>
+      <button id="design-back-btn" class="btn-secondary" onclick="showPage('chat')">返回聊天</button>
+    </div>
+    <div style="background:rgba(255,255,255,.92);border:1px solid #eadfd2;border-radius:22px;padding:18px;display:flex;flex-direction:column;min-height:0;box-shadow:0 18px 40px rgba(77,49,24,.08)">
+      <div id="design-bridge-empty" class="artifacts-panel__placeholder" style="flex:1;min-height:220px">先从 Artifacts 面板打开一个 HTML 原型，再进入 KainClaw Design。</div>
+      <iframe id="design-bridge-frame" class="artifacts-panel__frame" style="display:none;flex:1;min-height:0" sandbox="allow-scripts"></iframe>
+    </div>
+  </div>
+</div>
+
 <!-- APPROVAL OVERLAY -->
 <div id="approval-overlay" class="overlay" style="top:32px;left:220px">
   <div style="width:440px;background:#fff;border-radius:12px;box-shadow:0 16px 48px rgba(0,0,0,.18);overflow:hidden">
@@ -968,6 +998,10 @@ const vscode = window.acquireVsCodeApi();
 window.addEventListener('message', e => {
   const msg = e.data;
   if (!msg || !msg.type) return;
+  if (typeof msg.type === 'string' && msg.type.startsWith('__edit_mode_')) {
+    handleKainClawDesignFrameMessage(e);
+    return;
+  }
   handleMessage(msg);
 });
 
@@ -1015,6 +1049,16 @@ const expandedThinkingSummaries = new Set();
 let artifactToastTimer = null;
 let artifactPanelWidth = null;
 let artifactResizeActive = false;
+const designBridgeState = {
+  artifactId: null,
+  title: '',
+  html: '',
+  editModeAvailable: false,
+  editModeActive: false,
+  lastEdits: null,
+  renderToken: 0,
+};
+let designBridgeRenderedToken = 0;
 
 const DEFAULT_DIALOG_STRINGS = {
   needConfirmation: '需要确认',
@@ -1126,6 +1170,7 @@ function applyUiLanguageState(language, dialogStrings, shellStrings) {
   localizeMcpSurface();
   localizeChatSurface();
   localizeSecondarySurfaces();
+  renderDesignBridgePage();
 }
 
 function dialogText(key) {
@@ -1310,6 +1355,7 @@ function localizeSecondarySurfaces() {
   [
     document.getElementById('page-onboarding'),
     document.getElementById('page-images'),
+    document.getElementById('page-design'),
     document.getElementById('product-drawer-overlay'),
     document.getElementById('chat-image-editor-overlay'),
   ].forEach(localizeSurfaceTextTree);
@@ -1333,6 +1379,7 @@ function ensureSecondarySurfaceLocalizationObserver() {
   [
     document.getElementById('page-onboarding'),
     document.getElementById('page-images'),
+    document.getElementById('page-design'),
     document.getElementById('product-drawer-overlay'),
     document.getElementById('chat-image-editor-overlay'),
   ].filter(Boolean).forEach(root => {
@@ -1523,6 +1570,14 @@ function handleMessage(msg) {
       break;
     case 'sessions:exported':
         alert(shellText('exportSessionAlertPrefix') + msg.path);
+      break;
+    case 'kainclawDesign:open':
+      openKainClawDesignBridge(msg);
+      break;
+    case 'kainclawDesign:error':
+      showArtifactToast(msg.message || (isEnglishUi()
+        ? 'Unable to open KainClaw Design right now.'
+        : '当前无法打开 KainClaw Design。'));
       break;
     case 'settings:data':
       applyUiLanguageState(msg.language, msg.dialogStrings, msg.shellStrings);
@@ -1944,6 +1999,9 @@ function showPage(id) {
   document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
   const el = document.getElementById('page-' + id);
   if (el) el.classList.add('active');
+  if (id === 'design') {
+    renderDesignBridgePage();
+  }
   if (id === 'chat') {
     requestAnimationFrame(() => {
       const input = document.getElementById('prompt-input');
@@ -2226,7 +2284,144 @@ function dismissArtifactPanel() {
 }
 
 function handleArtifactDeepEdit() {
-  showArtifactToast('Deep Design 功能即将推出');
+  send({ type: 'artifact:openKainClawDesign' });
+}
+
+function isDesignBridgeFrameSource(source) {
+  const frame = document.getElementById('design-bridge-frame');
+  return !!frame?.contentWindow && source === frame.contentWindow;
+}
+
+function updateDesignTweaksButton() {
+  const tweaksBtn = document.getElementById('design-tweaks-btn');
+  if (!tweaksBtn) return;
+
+  if (!designBridgeState.html || !designBridgeState.editModeAvailable) {
+    tweaksBtn.style.display = 'none';
+    return;
+  }
+
+  tweaksBtn.style.display = 'inline-flex';
+  tweaksBtn.textContent = designBridgeState.editModeActive
+    ? (isEnglishUi() ? 'Hide Tweaks' : '关闭 Tweaks')
+    : 'Tweaks';
+}
+
+function renderDesignBridgePage() {
+  const titleEl = document.getElementById('design-bridge-title');
+  const statusEl = document.getElementById('design-bridge-status');
+  const subtitleEl = document.getElementById('design-bridge-subtitle');
+  const sourceLabelEl = document.getElementById('design-source-label');
+  const editsEl = document.getElementById('design-bridge-edits');
+  const emptyEl = document.getElementById('design-bridge-empty');
+  const frameEl = document.getElementById('design-bridge-frame');
+  const backBtn = document.getElementById('design-back-btn');
+
+  if (!titleEl || !statusEl || !subtitleEl || !sourceLabelEl || !editsEl || !emptyEl || !frameEl || !backBtn) {
+    return;
+  }
+
+  updateDesignTweaksButton();
+  backBtn.textContent = isEnglishUi() ? 'Back to chat' : '返回聊天';
+  sourceLabelEl.textContent = isEnglishUi() ? 'Current artifact' : '当前产物';
+
+  if (!designBridgeState.html) {
+    titleEl.textContent = isEnglishUi() ? 'No design loaded' : '未加载设计内容';
+    statusEl.textContent = isEnglishUi()
+      ? 'Open an HTML artifact from the Artifacts panel to enter KainClaw Design.'
+      : '先从 Artifacts 面板打开一个 HTML 原型，再进入 KainClaw Design。';
+    subtitleEl.textContent = isEnglishUi()
+      ? 'The bridge only loads the current HTML artifact and preview surface in this step.'
+      : '当前桥接只负责带入 HTML artifact，并打开预览工作台。';
+    editsEl.style.display = 'none';
+    editsEl.textContent = '';
+    emptyEl.style.display = 'flex';
+    emptyEl.textContent = statusEl.textContent;
+    frameEl.style.display = 'none';
+    frameEl.srcdoc = '';
+    designBridgeRenderedToken = 0;
+    return;
+  }
+
+  titleEl.textContent = designBridgeState.title || 'KainClaw Design';
+  statusEl.textContent = isEnglishUi()
+    ? 'Source artifact is now loaded into the KainClaw Design surface.'
+    : '当前 HTML 已带入 KainClaw Design，可继续预览并进入 Tweaks。';
+  subtitleEl.textContent = designBridgeState.editModeAvailable
+    ? (isEnglishUi()
+        ? 'This artifact exposed the tweak bridge. You can toggle Tweaks from the top bar.'
+        : '当前原型已暴露 tweak bridge，可从顶部按钮切换 Tweaks。')
+    : (isEnglishUi()
+        ? 'If the artifact posts __edit_mode_available, the Tweaks button will appear automatically.'
+        : '如果原型主动发送 __edit_mode_available，顶部会自动出现 Tweaks 按钮。');
+
+  if (designBridgeState.lastEdits && Object.keys(designBridgeState.lastEdits).length > 0) {
+    editsEl.style.display = 'block';
+    editsEl.textContent = isEnglishUi()
+      ? `Received tweak updates: ${JSON.stringify(designBridgeState.lastEdits)}`
+      : `已收到 Tweaks 更新：${JSON.stringify(designBridgeState.lastEdits)}`;
+  } else {
+    editsEl.style.display = 'none';
+    editsEl.textContent = '';
+  }
+
+  emptyEl.style.display = 'none';
+  frameEl.style.display = 'block';
+
+  if (designBridgeRenderedToken !== designBridgeState.renderToken) {
+    frameEl.srcdoc = buildHtmlArtifactSrcdoc(designBridgeState.html);
+    designBridgeRenderedToken = designBridgeState.renderToken;
+  }
+}
+
+function openKainClawDesignBridge(payload) {
+  designBridgeState.artifactId = payload.artifactId || null;
+  designBridgeState.title = payload.title || 'KainClaw Design';
+  designBridgeState.html = payload.html || '';
+  designBridgeState.editModeAvailable = false;
+  designBridgeState.editModeActive = false;
+  designBridgeState.lastEdits = null;
+  designBridgeState.renderToken = Date.now();
+  renderDesignBridgePage();
+  showPage('design');
+}
+
+function toggleDesignTweaks() {
+  if (!designBridgeState.editModeAvailable) {
+    return;
+  }
+
+  const frame = document.getElementById('design-bridge-frame');
+  const targetWindow = frame?.contentWindow;
+  if (!targetWindow) {
+    return;
+  }
+
+  const nextActive = !designBridgeState.editModeActive;
+  targetWindow.postMessage({
+    type: nextActive ? '__activate_edit_mode' : '__deactivate_edit_mode',
+  }, '*');
+  designBridgeState.editModeActive = nextActive;
+  updateDesignTweaksButton();
+}
+
+function handleKainClawDesignFrameMessage(event) {
+  if (!isDesignBridgeFrameSource(event.source)) {
+    return;
+  }
+
+  const payload = event.data || {};
+  if (payload.type === '__edit_mode_available') {
+    designBridgeState.editModeAvailable = true;
+    updateDesignTweaksButton();
+    renderDesignBridgePage();
+    return;
+  }
+
+  if (payload.type === '__edit_mode_set_keys' && payload.edits && typeof payload.edits === 'object') {
+    designBridgeState.lastEdits = payload.edits;
+    renderDesignBridgePage();
+  }
 }
 
 function clampArtifactPanelWidth(nextWidth) {
@@ -2312,6 +2507,9 @@ function renderArtifactPanel() {
   applyArtifactPanelWidth();
   title.textContent = artifact.title || 'Artifact';
   typeBadge.textContent = String(artifact.type || '').toUpperCase();
+  deepEditBtn.textContent = isEnglishUi()
+    ? 'Open KainClaw Design'
+    : '进入 KainClaw Design';
   deepEditBtn.style.display = artifact.type === 'html' ? 'inline-flex' : 'none';
 
   if (artifact.type === 'code') {
