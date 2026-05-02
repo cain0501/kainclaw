@@ -732,6 +732,9 @@ export class McpRuntime implements McpToolAdapter {
       if (config.kind === "stdio") {
         return this.describeMcpAuthentication(metadata.serverName, config);
       }
+      if (config.oauth?.xaa) {
+        return this.describeMcpAuthentication(metadata.serverName, config);
+      }
 
       await performMcpOAuthFlow({
         serverName: metadata.serverName,
@@ -914,6 +917,15 @@ export class McpRuntime implements McpToolAdapter {
         content:
           `Server "${serverName}" uses ${config.kind} transport which does not support OAuth from this tool. ` +
           "Configure authentication manually and reconnect the MCP server.",
+      };
+    }
+
+    if (config.oauth?.xaa) {
+      return {
+        summary: `MCP server ${serverName} requires XAA authentication`,
+        content:
+          `Server "${serverName}" uses XAA OAuth which is not wired in this host yet. ` +
+          "This authenticate tool cannot complete that flow today. Wait for XAA support instead of retrying the normal browser OAuth path.",
       };
     }
 

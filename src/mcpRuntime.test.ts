@@ -349,6 +349,45 @@ describe("McpRuntime config discovery cache", () => {
     expect(result.summary).toContain("requires authentication");
   });
 
+  it("describes XAA-backed auth placeholders without suggesting the normal OAuth path", async () => {
+    const workspaceRoot = await fs.mkdtemp(path.join(os.tmpdir(), "cain-mcp-runtime-auth-xaa-"));
+    tempDirs.push(workspaceRoot);
+    await fs.writeFile(
+      path.join(workspaceRoot, ".mcp.json"),
+      JSON.stringify({
+        mcpServers: {
+          secure: {
+            type: "http",
+            url: "https://secure.example.com/mcp",
+            oauth: {
+              xaa: true,
+            },
+          },
+        },
+      }),
+      "utf8",
+    );
+
+    const oauthHost = new FakeMcpOAuthHost();
+    const runtime = new McpRuntime(() => workspaceRoot, {}, oauthHost);
+    (runtime as any).ensureConnection = async () => {
+      throw new UnauthorizedError("OAuth required");
+    };
+
+    const tools = await runtime.getToolDefinitions();
+    expect(tools.map(tool => tool.name)).toContain("mcp__secure__authenticate");
+
+    const result = await runtime.executeTool(
+      "mcp__secure__authenticate",
+      {},
+      { workspaceRoot },
+    );
+
+    expect(result.summary).toContain("XAA authentication");
+    expect(result.content).toContain("not wired in this host yet");
+    expect(result.content).not.toContain("browser-based OAuth flow");
+  });
+
   it("skips reconnect probes when OAuth discovery exists but no token is stored", async () => {
     const workspaceRoot = await fs.mkdtemp(path.join(os.tmpdir(), "cain-mcp-runtime-needs-auth-cache-"));
     tempDirs.push(workspaceRoot);
