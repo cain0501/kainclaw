@@ -369,6 +369,10 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-seri
           <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg>
           Images
         </div>
+        <div onclick="openDesignHub()" style="display:flex;flex-direction:column;align-items:center;gap:3px;padding:7px 4px;border-radius:7px;cursor:pointer;font-size:11px;color:#52525b" onmouseover="this.style.background='#e4e4e7'" onmouseout="this.style.background='transparent'">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 20h16"/><path d="M6 16l6-12 6 12"/><path d="M8.5 11h7"/></svg>
+          设计
+        </div>
       </div>
     </div>
     <div style="padding:4px 10px 8px">
@@ -920,7 +924,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-seri
     <div class="klogo">K</div>
     <span class="ptop-title">KainClaw Design</span>
     <div style="flex:1"></div>
-    <button id="design-tweaks-btn" class="btn-secondary" style="display:none" onclick="toggleDesignTweaks()">Tweaks</button>
+    <button id="design-tweaks-btn" class="btn-secondary" onclick="toggleDesignTweaks()">Tweaks</button>
     <button class="btn-ghost" onclick="showPage('chat')">
       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
     </button>
@@ -929,17 +933,74 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-seri
     <div style="background:rgba(255,255,255,.9);border:1px solid #eadfd2;border-radius:22px;padding:18px;display:flex;flex-direction:column;gap:12px;box-shadow:0 18px 40px rgba(77,49,24,.08)">
       <div style="font-size:22px;font-weight:700;letter-spacing:-.03em">KainClaw Design</div>
       <div id="design-bridge-subtitle" style="font-size:12px;color:#8b7969;line-height:1.7">当前 HTML 已带入，可继续用 Tweaks 预览和微调。</div>
+      <div class="imglab-lib-editor" style="margin-bottom:0">
+        <div class="imglab-lib-field">
+          <label for="design-prompt-input">设计需求</label>
+          <textarea id="design-prompt-input" placeholder="例如：做一个高端 AI 产品官网首屏原型，偏信息建筑和极简编辑感。"></textarea>
+        </div>
+        <div class="imglab-lib-editor-grid">
+          <div class="imglab-lib-field">
+            <label for="design-output-type">输出类型</label>
+            <select id="design-output-type" class="imglab-lib-select">
+              <option value="prototype">Prototype</option>
+              <option value="slide">Slide</option>
+              <option value="infographic">Infographic</option>
+              <option value="animation">Animation</option>
+            </select>
+          </div>
+          <div class="imglab-lib-field">
+            <label for="design-style-input">风格提示</label>
+            <input id="design-style-input" type="text" placeholder="例如：minimal editorial / bold experimental" />
+          </div>
+        </div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap">
+          <button id="design-mode-edit-btn" class="btn-secondary" onclick="setDesignMode('edit')">&#32534;&#36753;&#24403;&#21069;&#39029;&#38754;</button>
+          <button id="design-mode-new-btn" class="btn-secondary" onclick="setDesignMode('new')">&#26032;&#24314;&#35774;&#35745;</button>
+        </div>
+      <div class="imglab-lib-actions">
+          <button id="design-generate-btn" class="btn-red" onclick="generateDesignWorkbench()">生成设计</button>
+        </div>
+        <div id="design-generate-status" style="font-size:12px;color:#8b7969;line-height:1.6"></div>
+        <div id="design-direction-panel" style="display:none;border:1px dashed #eadfd2;border-radius:16px;background:#fcfaf7;padding:12px 14px"></div>
+        <div id="design-reference-panel" style="border:1px solid #eadfd2;border-radius:16px;background:#fff;padding:12px 14px">
+          <div style="font-size:12px;font-weight:700;color:#7b4a2e;letter-spacing:.04em;text-transform:uppercase;margin-bottom:8px">设计参考图</div>
+          <div id="design-reference-meta" style="font-size:12px;color:#7a6656;line-height:1.6;margin-bottom:10px">当前未带参考图。你可以本地上传一张，或从 Image Lab 最近结果里选一张。</div>
+          <div id="design-reference-preview" style="display:none;margin-bottom:10px"></div>
+          <div style="display:flex;gap:8px;flex-wrap:wrap">
+            <input id="design-reference-input" type="file" accept="image/*" style="display:none" onchange="handleDesignReferenceUpload(event)" />
+            <button class="btn-secondary" onclick="document.getElementById('design-reference-input').click()">上传参考图</button>
+            <button class="btn-secondary" onclick="pickLatestImageLabResultForDesign()">从 Image Lab 选图</button>
+            <button class="btn-secondary" onclick="clearDesignReference()">清空参考图</button>
+          </div>
+        </div>
+      </div>
       <div style="border:1px solid #eadfd2;border-radius:18px;background:#fff;padding:14px 16px">
         <div id="design-source-label" style="font-size:12px;font-weight:700;color:#7b4a2e;letter-spacing:.04em;text-transform:uppercase;margin-bottom:8px">当前产物</div>
         <div id="design-bridge-title" style="font-size:15px;font-weight:600;color:#18181b;line-height:1.5">未加载设计内容</div>
         <div id="design-bridge-status" style="font-size:12px;color:#8b7969;line-height:1.6;margin-top:6px">先从 Artifacts 面板打开一个 HTML 原型，再进入 KainClaw Design。</div>
       </div>
       <div id="design-bridge-edits" style="display:none;border:1px dashed #eadfd2;border-radius:16px;background:#fcfaf7;padding:12px 14px;font-size:12px;color:#7a6656;line-height:1.7"></div>
+      <div id="design-sliders-panel" style="display:none;border:1px solid #eadfd2;border-radius:18px;background:#fff;padding:14px 16px;overflow:auto;max-height:320px"></div>
+      <div id="design-versions-panel" style="display:none;border:1px solid #eadfd2;border-radius:18px;background:#fff;padding:14px 16px;overflow:auto;max-height:240px"></div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <button id="design-export-html-btn" class="btn-secondary" onclick="exportDesignWorkbench('html')">导出 HTML</button>
+        <button id="design-export-pdf-btn" class="btn-secondary" onclick="exportDesignWorkbench('pdf')">导出 PDF</button>
+        <button id="design-export-pptx-btn" class="btn-secondary" onclick="exportDesignWorkbench('pptx')">导出 PPTX</button>
+      </div>
       <button id="design-back-btn" class="btn-secondary" onclick="showPage('chat')">返回聊天</button>
     </div>
     <div style="background:rgba(255,255,255,.92);border:1px solid #eadfd2;border-radius:22px;padding:18px;display:flex;flex-direction:column;min-height:0;box-shadow:0 18px 40px rgba(77,49,24,.08)">
       <div id="design-bridge-empty" class="artifacts-panel__placeholder" style="flex:1;min-height:220px">先从 Artifacts 面板打开一个 HTML 原型，再进入 KainClaw Design。</div>
       <iframe id="design-bridge-frame" class="artifacts-panel__frame" style="display:none;flex:1;min-height:0" sandbox="allow-scripts"></iframe>
+      <div id="design-patch-popover" style="display:none;margin-top:12px;border:1px solid #eadfd2;border-radius:16px;background:#fff7f0;padding:12px 14px">
+        <div id="design-patch-target" style="font-size:11px;font-weight:700;color:#7b4a2e;letter-spacing:.04em;text-transform:uppercase;margin-bottom:8px">未选中元素</div>
+        <textarea id="design-patch-comment" placeholder="例如：把这个标题改成渐变暖色，并保留现有布局节奏。" style="width:100%;min-height:88px;border:1px solid #eadfd2;border-radius:12px;padding:10px 12px;background:#fff;color:#2d1f14;font-family:inherit;resize:vertical;line-height:1.6"></textarea>
+        <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:10px">
+          <button id="design-image-lab-btn" class="btn-secondary" onclick="sendDesignImageNodeToImageLab()">去 Image Lab 生成图</button>
+          <button class="btn-secondary" onclick="cancelDesignPatchSelection()">取消</button>
+          <button id="design-patch-apply-btn" class="btn-red" onclick="applyDesignPatchRequest()">应用改写</button>
+        </div>
+      </div>
     </div>
   </div>
 </div>
@@ -1056,9 +1117,25 @@ const designBridgeState = {
   editModeAvailable: false,
   editModeActive: false,
   lastEdits: null,
+  mode: 'new',
   renderToken: 0,
+  prompt: '',
+  outputType: 'prototype',
+  style: '',
+  sliders: [],
+  sliderValues: {},
+  loading: false,
+  error: '',
+  selectedNode: null,
+  patchLoading: false,
+  versions: [],
+  versionId: null,
+  directionSuggestions: [],
+  suggestionVisible: false,
+  referenceImage: null,
 };
 let designBridgeRenderedToken = 0;
+let designBridgeFrameLoading = false;
 
 const DEFAULT_DIALOG_STRINGS = {
   needConfirmation: '需要确认',
@@ -1193,6 +1270,79 @@ function isEnglishUi() {
   return appState.uiLanguage === 'en-US';
 }
 
+function translateSurfaceText(value) {
+  const raw = String(value || '');
+  const trimmed = raw.trim();
+  const map = currentShellStrings.surfaceTextMap || {};
+  const dynamicPatterns = isEnglishUi()
+    ? [
+        [/^当前会把目标图作为第一张参考图，另外附带 (\d+) 张额外参考图。$/, (_, count) => `The target image will be used as the first reference image, with ${count} extra reference image(s).`],
+        [/^当前共有 (\d+) 张参考图。系统会按顺序一起作为编辑参考，你也可以继续追加新的参考图。$/, (_, count) => `There are currently ${count} reference image(s). KainClaw will use them in order for editing, and you can keep adding more.`],
+        [/^已加入 (\d+) 张参考图；最多保留 4 张，另外 (\d+) 张未加入。$/, (_, kept, skipped) => `Added ${kept} reference image(s). Up to 4 are kept, and ${skipped} more were skipped.`],
+        [/^已加入 (\d+) 张参考图，现在可按多图参考继续改图。$/, (_, count) => `Added ${count} reference image(s). You can continue editing with multi-image references now.`],
+        [/^当前共 (\d+) 条提示词，已收藏 (\d+) 条。$/, (_, total, favorites) => `${total} prompt(s) total, ${favorites} favorite(s).`],
+        [/^全部提示词 (\d+)$/, (_, count) => `All prompts ${count}`],
+        [/^我的喜欢 (\d+)$/, (_, count) => `Favorites ${count}`],
+        [/^参考图 (\d+) 张$/, (_, count) => `${count} reference image(s)`],
+        [/^已带入 (\d+) 张目标\/参考图$/, (_, count) => `${count} target/reference image(s) attached`],
+        [/^已填入提示词：(.+)$/, (_, label) => `Prompt inserted: ${label}`],
+        [/^已把素材关键词加入 Prompt：(.+)$/, (_, keyword) => `Added material keyword to the prompt: ${keyword}`],
+        [/^已把 (.+) 加入当前图片任务。$/, (_, label) => `Added ${label} to the current image task.`],
+        [/^已返回当前图片任务，你可以直接继续生成或编辑。$/, () => 'Returned to the current image task. You can continue generating or editing.'],
+        [/^正在根据当前图片任务整理搜索方向。这里只会先准备当前任务和检索词，不会自动开始搜索。$/, () => 'Preparing search directions from the current image task. This only prepares the current task and queries; it does not start searching automatically.'],
+        [/^正在根据当前检索词查找可加入的素材图片\.\.\.$/, () => 'Searching for reference images from the current queries...'],
+        [/^正在生成建议检索词\.\.\.$/, () => 'Generating suggested search queries...'],
+        [/^正在生成 #(\d+)$/, (_, index) => `Generating #${index}`],
+        [/^载入参考图失败：(.+)$/, (_, detail) => `Failed to load reference image: ${detail}`],
+        [/^设为参考图失败：(.+)$/, (_, detail) => `Failed to use as reference: ${detail}`],
+        [/^已移除参考图：第 (\d+) 张$/, (_, index) => `Removed reference image: #${index}`],
+        [/^已移除参考图：(.+)$/, (_, label) => `Removed reference image: ${label}`],
+        [/^已删除提示词：(.+)$/, (_, label) => `Deleted prompt: ${label}`],
+        [/^已收藏提示词：(.+)$/, (_, label) => `Favorited prompt: ${label}`],
+        [/^已取消收藏：(.+)$/, (_, label) => `Removed favorite: ${label}`],
+        [/^(\d+) 张$/, (_, count) => `${count} image${Number(count) === 1 ? '' : 's'}`],
+      ]
+    : [
+        [/^The target image will be used as the first reference image, with (\d+) extra reference image\(s\)\.$/, (_, count) => `当前会把目标图作为第一张参考图，另外附带 ${count} 张额外参考图。`],
+        [/^There are currently (\d+) reference image\(s\)\. KainClaw will use them in order for editing, and you can keep adding more\.$/, (_, count) => `当前共有 ${count} 张参考图。系统会按顺序一起作为编辑参考，你也可以继续追加新的参考图。`],
+        [/^Added (\d+) reference image\(s\)\. Up to 4 are kept, and (\d+) more were skipped\.$/, (_, kept, skipped) => `已加入 ${kept} 张参考图；最多保留 4 张，另外 ${skipped} 张未加入。`],
+        [/^Added (\d+) reference image\(s\)\. You can continue editing with multi-image references now\.$/, (_, count) => `已加入 ${count} 张参考图，现在可按多图参考继续改图。`],
+        [/^(\d+) prompt\(s\) total, (\d+) favorite\(s\)\.$/, (_, total, favorites) => `当前共 ${total} 条提示词，已收藏 ${favorites} 条。`],
+        [/^All prompts (\d+)$/, (_, count) => `全部提示词 ${count}`],
+        [/^Favorites (\d+)$/, (_, count) => `我的喜欢 ${count}`],
+        [/^(\d+) reference image\(s\)$/, (_, count) => `参考图 ${count} 张`],
+        [/^(\d+) target\/reference image\(s\) attached$/, (_, count) => `已带入 ${count} 张目标/参考图`],
+        [/^Prompt inserted: (.+)$/, (_, label) => `已填入提示词：${label}`],
+        [/^Added material keyword to the prompt: (.+)$/, (_, keyword) => `已把素材关键词加入 Prompt：${keyword}`],
+        [/^Added (.+) to the current image task\.$/, (_, label) => `已把 ${label} 加入当前图片任务。`],
+        [/^Returned to the current image task\. You can continue generating or editing\.$/, () => '已返回当前图片任务，你可以直接继续生成或编辑。'],
+        [/^Preparing search directions from the current image task\. This only prepares the current task and queries; it does not start searching automatically\.$/, () => '正在根据当前图片任务整理搜索方向。这里只会先准备当前任务和检索词，不会自动开始搜索。'],
+        [/^Searching for reference images from the current queries\.\.\.$/, () => '正在根据当前检索词查找可加入的素材图片...'],
+        [/^Generating suggested search queries\.\.\.$/, () => '正在生成建议检索词...'],
+        [/^Generating #(\d+)$/, (_, index) => `正在生成 #${index}`],
+        [/^Failed to load reference image: (.+)$/, (_, detail) => `载入参考图失败：${detail}`],
+        [/^Failed to use as reference: (.+)$/, (_, detail) => `设为参考图失败：${detail}`],
+        [/^Removed reference image: #(\d+)$/, (_, index) => `已移除参考图：第 ${index} 张`],
+        [/^Removed reference image: (.+)$/, (_, label) => `已移除参考图：${label}`],
+        [/^Deleted prompt: (.+)$/, (_, label) => `已删除提示词：${label}`],
+        [/^Favorited prompt: (.+)$/, (_, label) => `已收藏提示词：${label}`],
+        [/^Removed favorite: (.+)$/, (_, label) => `已取消收藏：${label}`],
+        [/^(\d+) images?$/, (_, count) => `${count} 张`],
+      ];
+
+  for (const [pattern, replacement] of dynamicPatterns) {
+    if (pattern.test(trimmed)) {
+      return raw.replace(trimmed, trimmed.replace(pattern, replacement));
+    }
+  }
+
+  if (!trimmed || !Object.prototype.hasOwnProperty.call(map, trimmed)) {
+    return raw;
+  }
+
+  return raw.replace(trimmed, map[trimmed]);
+}
+
 function isDefaultSessionTitle(title) {
   const normalized = String(title || '').trim();
   return !normalized || normalized === '新对话' || normalized === 'New chat';
@@ -1252,7 +1402,7 @@ function localizeChatSurface() {
     if (renameInput) renameInput.placeholder = shellText('renameSessionPlaceholder');
     const actionButtons = renameOverlay.querySelectorAll(':scope button');
     if (actionButtons[0]) actionButtons[0].textContent = dialogText('cancel');
-    if (actionButtons[1]) actionButtons[1].textContent = shellText('renameSessionTitle').includes('Rename') ? 'Save' : '保存';
+    if (actionButtons[1]) actionButtons[1].textContent = translateSurfaceText('保存');
   }
 
   renderSessions(currentSessions, currentActiveSessionId);
@@ -1351,13 +1501,24 @@ function localizeSurfaceTextTree(root) {
   });
 }
 
+function localizedAlert(message) {
+  alert(translateSurfaceText(message));
+}
+
+function localizedConfirm(message) {
+  return confirm(translateSurfaceText(message));
+}
+
 function localizeSecondarySurfaces() {
   [
     document.getElementById('page-onboarding'),
+    document.getElementById('page-settings'),
     document.getElementById('page-images'),
     document.getElementById('page-design'),
     document.getElementById('product-drawer-overlay'),
     document.getElementById('chat-image-editor-overlay'),
+    document.getElementById('win-controls'),
+    document.getElementById('artifacts-panel-deep-edit'),
   ].forEach(localizeSurfaceTextTree);
 }
 
@@ -1378,10 +1539,13 @@ function ensureSecondarySurfaceLocalizationObserver() {
   });
   [
     document.getElementById('page-onboarding'),
+    document.getElementById('page-settings'),
     document.getElementById('page-images'),
     document.getElementById('page-design'),
     document.getElementById('product-drawer-overlay'),
     document.getElementById('chat-image-editor-overlay'),
+    document.getElementById('win-controls'),
+    document.getElementById('artifacts-panel-deep-edit'),
   ].filter(Boolean).forEach(root => {
     observer.observe(root, {
       childList: true,
@@ -1575,9 +1739,73 @@ function handleMessage(msg) {
       openKainClawDesignBridge(msg);
       break;
     case 'kainclawDesign:error':
-      showArtifactToast(msg.message || (isEnglishUi()
-        ? 'Unable to open KainClaw Design right now.'
-        : '当前无法打开 KainClaw Design。'));
+      showArtifactToast(msg.message || '当前无法打开 KainClaw Design。');
+      designBridgeState.loading = false;
+      designBridgeState.error = String(msg.message || (isEnglishUi() ? 'Unable to load KainClaw Design.' : '当前无法打开 KainClaw Design。'));
+      renderDesignBridgePage();
+      break;
+    case 'design:progress':
+      designBridgeState.loading = true;
+      designBridgeState.error = '';
+      renderDesignBridgePage();
+      break;
+    case 'design:result':
+      designBridgeState.artifactId = null;
+      designBridgeState.title = msg.outputType
+        ? `KainClaw Design · ${msg.outputType}`
+        : 'KainClaw Design';
+      designBridgeState.html = String(msg.html || '');
+      designBridgeState.prompt = String(msg.prompt || designBridgeState.prompt || '');
+      designBridgeState.outputType = String(msg.outputType || designBridgeState.outputType || 'prototype');
+      designBridgeState.style = String(msg.style || designBridgeState.style || '');
+      designBridgeState.sliders = Array.isArray(msg.sliders) ? msg.sliders : [];
+      designBridgeState.sliderValues = Object.fromEntries(
+        designBridgeState.sliders.map(slider => [slider.id, slider.default]),
+      );
+      designBridgeState.loading = false;
+      designBridgeState.error = '';
+      designBridgeState.editModeAvailable = false;
+      designBridgeState.editModeActive = false;
+      designBridgeState.lastEdits = null;
+      designBridgeState.selectedNode = null;
+      designBridgeState.patchLoading = false;
+      designBridgeState.versionId = msg.versionId || null;
+      designBridgeState.renderToken = Date.now();
+      showDesignPage();
+      break;
+    case 'design:patchResult':
+      designBridgeState.html = String(msg.html || designBridgeState.html || '');
+      designBridgeState.patchLoading = false;
+      designBridgeState.selectedNode = null;
+      designBridgeState.error = '';
+      designBridgeState.versionId = msg.versionId || designBridgeState.versionId || null;
+      designBridgeState.renderToken = Date.now();
+      {
+        const commentInput = document.getElementById('design-patch-comment');
+        if (commentInput) commentInput.value = '';
+      }
+      renderDesignBridgePage();
+      break;
+    case 'design:versions':
+      designBridgeState.versions = Array.isArray(msg.versions) ? msg.versions : [];
+      renderDesignBridgePage();
+      break;
+    case 'design:directions':
+      designBridgeState.directionSuggestions = Array.isArray(msg.suggestions) ? msg.suggestions : [];
+      designBridgeState.suggestionVisible = designBridgeState.directionSuggestions.length > 0;
+      designBridgeState.loading = false;
+      showDesignPage();
+      break;
+    case 'design:exportDone':
+      designBridgeState.error = '';
+      showArtifactToast((isEnglishUi() ? 'Exported: ' : '已导出：') + String(msg.filePath || ''));
+      renderDesignBridgePage();
+      break;
+    case 'design:error':
+      designBridgeState.loading = false;
+      designBridgeState.patchLoading = false;
+      designBridgeState.error = String(msg.message || (isEnglishUi() ? 'Design generation failed.' : '设计生成失败。'));
+      renderDesignBridgePage();
       break;
     case 'settings:data':
       applyUiLanguageState(msg.language, msg.dialogStrings, msg.shellStrings);
@@ -2000,7 +2228,11 @@ function showPage(id) {
   const el = document.getElementById('page-' + id);
   if (el) el.classList.add('active');
   if (id === 'design') {
+    designBridgeRenderedToken = 0;
     renderDesignBridgePage();
+    loadDesignVersions();
+  } else {
+    designBridgeRenderedToken = 0;
   }
   if (id === 'chat') {
     requestAnimationFrame(() => {
@@ -2008,6 +2240,26 @@ function showPage(id) {
       input?.focus();
     });
   }
+}
+
+function showDesignPage() {
+  const designPage = document.getElementById('page-design');
+  if (!designPage) return;
+  if (!designPage.classList.contains('active')) {
+    showPage('design');
+    return;
+  }
+  renderDesignBridgePage();
+}
+
+function openDesignHub() {
+  designBridgeState.mode = designBridgeState.html ? 'edit' : 'new';
+  showDesignPage();
+}
+
+function setDesignMode(mode) {
+  designBridgeState.mode = mode === 'edit' ? 'edit' : 'new';
+  renderDesignBridgePage();
 }
 
 function resetOnboardingProviderSelection(providerId = 'anthropic') {
@@ -2244,7 +2496,7 @@ function hideArtifactToast() {
 function showArtifactToast(message) {
   const toast = document.getElementById('artifacts-panel-toast');
   if (!toast) return;
-  toast.textContent = message;
+  toast.textContent = translateSurfaceText(message);
   toast.classList.add('show');
   if (artifactToastTimer) clearTimeout(artifactToastTimer);
   artifactToastTimer = setTimeout(() => {
@@ -2255,6 +2507,80 @@ function showArtifactToast(message) {
 
 function buildHtmlArtifactSrcdoc(content) {
   return content || '';
+}
+
+function buildDesignPatchableSrcdoc(html) {
+  if (!html) return '';
+  const bridgeScript = `
+<script>
+(() => {
+  const MARK_ATTR = 'data-kc-selected';
+  function buildSelector(el) {
+    if (!(el instanceof Element)) return '';
+    const parts = [];
+    let current = el;
+    while (current && current.nodeType === 1 && current.tagName.toLowerCase() !== 'html') {
+      let part = current.tagName.toLowerCase();
+      if (current.id) {
+        part += '#' + current.id;
+        parts.unshift(part);
+        break;
+      }
+      if (current.classList.length) {
+        part += '.' + Array.from(current.classList).slice(0, 2).join('.');
+      }
+      parts.unshift(part);
+      current = current.parentElement;
+    }
+    return parts.join(' > ');
+  }
+  function clearMarks() {
+    document.querySelectorAll('[' + MARK_ATTR + '="true"]').forEach(node => {
+      node.removeAttribute(MARK_ATTR);
+      node.style.outline = '';
+      node.style.outlineOffset = '';
+    });
+  }
+  document.addEventListener('click', event => {
+    const el = event.target instanceof Element ? event.target.closest('body *') : null;
+    if (!el) return;
+    event.preventDefault();
+    event.stopPropagation();
+    clearMarks();
+    const selector = buildSelector(el);
+    el.setAttribute(MARK_ATTR, 'true');
+    el.style.outline = '2px dashed #2563eb';
+    el.style.outlineOffset = '2px';
+    parent.postMessage({
+      type: '__design_patch_target',
+      selector,
+      outerHTML: el.outerHTML,
+      text: (el.textContent || '').trim().slice(0, 120),
+      tagName: el.tagName.toLowerCase(),
+      alt: el.getAttribute('alt') || '',
+      ariaLabel: el.getAttribute('aria-label') || '',
+      title: el.getAttribute('title') || '',
+      src: el.getAttribute('src') || '',
+      role: el.getAttribute('role') || '',
+    }, '*');
+  }, true);
+  window.addEventListener('message', event => {
+    const payload = event.data || {};
+    if (payload.type !== '__kc_apply_slider_values' || !payload.values || typeof payload.values !== 'object') {
+      return;
+    }
+    const root = document.documentElement;
+    Object.entries(payload.values).forEach(([cssVar, value]) => {
+      if (!cssVar) return;
+      root.style.setProperty(String(cssVar), String(value));
+    });
+  });
+})();
+<\/script>`;
+  if (html.includes('</body>')) {
+    return html.replace('</body>', `${bridgeScript}</body>`);
+  }
+  return `${html}${bridgeScript}`;
 }
 
 function buildSvgArtifactSrcdoc(content) {
@@ -2284,6 +2610,7 @@ function dismissArtifactPanel() {
 }
 
 function handleArtifactDeepEdit() {
+  designBridgeRenderedToken = 0;
   send({ type: 'artifact:openKainClawDesign' });
 }
 
@@ -2296,14 +2623,17 @@ function updateDesignTweaksButton() {
   const tweaksBtn = document.getElementById('design-tweaks-btn');
   if (!tweaksBtn) return;
 
-  if (!designBridgeState.html || !designBridgeState.editModeAvailable) {
-    tweaksBtn.style.display = 'none';
-    return;
-  }
-
-  tweaksBtn.style.display = 'inline-flex';
+  tweaksBtn.style.display = designBridgeState.html ? 'inline-flex' : 'none';
+  tweaksBtn.disabled = !designBridgeState.editModeAvailable;
+  tweaksBtn.style.opacity = designBridgeState.editModeAvailable ? '1' : '.55';
+  tweaksBtn.style.cursor = designBridgeState.editModeAvailable ? 'pointer' : 'not-allowed';
+  tweaksBtn.title = !designBridgeState.html
+    ? ''
+    : designBridgeState.editModeAvailable
+      ? (isEnglishUi() ? 'Toggle tweak mode for this artifact' : '\u5207\u6362\u8fd9\u4e2a\u539f\u578b\u7684 Tweaks \u6a21\u5f0f')
+      : (isEnglishUi() ? 'This artifact does not expose tweak mode' : '\u8fd9\u4e2a\u539f\u578b\u6ca1\u6709\u63a5\u5165 Tweaks \u6a21\u5f0f');
   tweaksBtn.textContent = designBridgeState.editModeActive
-    ? (isEnglishUi() ? 'Hide Tweaks' : '关闭 Tweaks')
+    ? (isEnglishUi() ? 'Hide Tweaks' : '\u5173\u95ed Tweaks')
     : 'Tweaks';
 }
 
@@ -2316,14 +2646,66 @@ function renderDesignBridgePage() {
   const emptyEl = document.getElementById('design-bridge-empty');
   const frameEl = document.getElementById('design-bridge-frame');
   const backBtn = document.getElementById('design-back-btn');
+  const generateStatusEl = document.getElementById('design-generate-status');
+  const generateBtn = document.getElementById('design-generate-btn');
+  const editModeBtn = document.getElementById('design-mode-edit-btn');
+  const newModeBtn = document.getElementById('design-mode-new-btn');
+  const slidersPanel = document.getElementById('design-sliders-panel');
+  const promptInput = document.getElementById('design-prompt-input');
+  const outputTypeSelect = document.getElementById('design-output-type');
+  const styleInput = document.getElementById('design-style-input');
+  const patchPopover = document.getElementById('design-patch-popover');
+  const patchTarget = document.getElementById('design-patch-target');
+  const patchApplyBtn = document.getElementById('design-patch-apply-btn');
+  const imageLabBtn = document.getElementById('design-image-lab-btn');
+  const versionsPanel = document.getElementById('design-versions-panel');
+  const directionPanel = document.getElementById('design-direction-panel');
+  const referenceMeta = document.getElementById('design-reference-meta');
+  const referencePreview = document.getElementById('design-reference-preview');
 
-  if (!titleEl || !statusEl || !subtitleEl || !sourceLabelEl || !editsEl || !emptyEl || !frameEl || !backBtn) {
+  if (!titleEl || !statusEl || !subtitleEl || !sourceLabelEl || !editsEl || !emptyEl || !frameEl || !backBtn || !generateStatusEl || !generateBtn || !editModeBtn || !newModeBtn || !slidersPanel || !promptInput || !outputTypeSelect || !styleInput || !patchPopover || !patchTarget || !patchApplyBtn || !imageLabBtn || !versionsPanel || !directionPanel || !referenceMeta || !referencePreview) {
     return;
   }
 
   updateDesignTweaksButton();
   backBtn.textContent = isEnglishUi() ? 'Back to chat' : '返回聊天';
-  sourceLabelEl.textContent = isEnglishUi() ? 'Current artifact' : '当前产物';
+  sourceLabelEl.textContent = designBridgeState.prompt
+    ? (isEnglishUi() ? 'Current design run' : '当前设计结果')
+    : (isEnglishUi() ? 'Current artifact' : '当前产物');
+  promptInput.value = designBridgeState.prompt || '';
+  editModeBtn.classList.toggle('on', designBridgeState.mode === 'edit');
+  newModeBtn.classList.toggle('on', designBridgeState.mode === 'new');
+  editModeBtn.disabled = !designBridgeState.html;
+  editModeBtn.style.opacity = designBridgeState.html ? '1' : '.55';
+  editModeBtn.title = designBridgeState.html ? '' : (isEnglishUi() ? 'There is no current page to edit yet.' : '\u5f53\u524d\u8fd8\u6ca1\u6709\u9875\u9762\u53ef\u7f16\u8f91\u3002');
+  outputTypeSelect.value = designBridgeState.outputType || 'prototype';
+  styleInput.value = designBridgeState.style || '';
+  generateBtn.disabled = !!designBridgeState.loading;
+  generateBtn.textContent = designBridgeState.loading
+    ? (isEnglishUi() ? 'Generating...' : '生成中...')
+    : (isEnglishUi() ? 'Generate design' : '生成设计');
+  generateStatusEl.textContent = designBridgeState.error
+    ? designBridgeState.error
+    : designBridgeState.loading
+      ? (isEnglishUi() ? 'KainClaw Design is generating HTML and sliders...' : 'KainClaw Design 正在生成 HTML 与 sliders...')
+      : designBridgeState.prompt
+        ? (isEnglishUi() ? 'Design result is ready. Sliders apply locally.' : '设计结果已就绪，sliders 在本地即时生效。')
+        : (isEnglishUi() ? 'Generate a design or open an artifact into this surface.' : '你可以直接生成设计，或从 Artifacts 面板带入 HTML。');
+  generateStatusEl.style.color = designBridgeState.error ? '#b91c1c' : '#8b7969';
+  patchPopover.style.display = designBridgeState.selectedNode ? 'block' : 'none';
+  patchTarget.textContent = designBridgeState.selectedNode
+    ? `${isEnglishUi() ? 'Selected element' : '当前元素'} · ${designBridgeState.selectedNode.selector}`
+    : (isEnglishUi() ? 'No element selected' : '未选中元素');
+  imageLabBtn.style.display = String(designBridgeState.selectedNode?.tagName || '').toLowerCase() === 'img'
+    ? 'inline-flex'
+    : 'none';
+  patchApplyBtn.disabled = !!designBridgeState.patchLoading;
+  patchApplyBtn.textContent = designBridgeState.patchLoading
+    ? (isEnglishUi() ? 'Applying...' : '应用中...')
+    : (isEnglishUi() ? 'Apply patch' : '应用改写');
+  renderDesignVersionsPanel(versionsPanel);
+  renderDesignDirectionPanel(directionPanel);
+  renderDesignReferencePanel(referenceMeta, referencePreview);
 
   if (!designBridgeState.html) {
     titleEl.textContent = isEnglishUi() ? 'No design loaded' : '未加载设计内容';
@@ -2335,6 +2717,8 @@ function renderDesignBridgePage() {
       : '当前桥接只负责带入 HTML artifact，并打开预览工作台。';
     editsEl.style.display = 'none';
     editsEl.textContent = '';
+    slidersPanel.style.display = 'none';
+    slidersPanel.innerHTML = '';
     emptyEl.style.display = 'flex';
     emptyEl.textContent = statusEl.textContent;
     frameEl.style.display = 'none';
@@ -2347,7 +2731,9 @@ function renderDesignBridgePage() {
   statusEl.textContent = isEnglishUi()
     ? 'Source artifact is now loaded into the KainClaw Design surface.'
     : '当前 HTML 已带入 KainClaw Design，可继续预览并进入 Tweaks。';
-  subtitleEl.textContent = designBridgeState.editModeAvailable
+  subtitleEl.textContent = designBridgeState.mode === 'edit'
+    ? (isEnglishUi() ? 'Edit the current page in place, or switch to new design for a fresh direction.' : '\u9ed8\u8ba4\u662f\u5728\u5f53\u524d\u9875\u9762\u4e0a\u7ee7\u7eed\u7f16\u8f91\uff1b\u5982\u679c\u60f3\u91cd\u505a\u4e00\u7248\uff0c\u53ef\u4ee5\u5207\u5230\u65b0\u5efa\u8bbe\u8ba1\u3002')
+    : designBridgeState.editModeAvailable
     ? (isEnglishUi()
         ? 'This artifact exposed the tweak bridge. You can toggle Tweaks from the top bar.'
         : '当前原型已暴露 tweak bridge，可从顶部按钮切换 Tweaks。')
@@ -2365,29 +2751,509 @@ function renderDesignBridgePage() {
     editsEl.textContent = '';
   }
 
-  emptyEl.style.display = 'none';
-  frameEl.style.display = 'block';
+  renderDesignSlidersPanel(slidersPanel, frameEl);
 
   if (designBridgeRenderedToken !== designBridgeState.renderToken) {
-    frameEl.srcdoc = buildHtmlArtifactSrcdoc(designBridgeState.html);
+    const nextSrcdoc = buildDesignPatchableSrcdoc(designBridgeState.html);
+    // Show placeholder while new content loads — never reveal a blank iframe
+    designBridgeFrameLoading = true;
+    emptyEl.style.display = 'flex';
+    frameEl.style.display = 'none';
+    frameEl.onload = () => {
+      designBridgeFrameLoading = false;
+      emptyEl.style.display = 'none';
+      frameEl.style.display = 'block';
+      applyAllDesignSliderValues(frameEl);
+    };
+    const srcdocWithToken = `${nextSrcdoc}<!-- kc-render:${designBridgeState.renderToken} -->`;
+    frameEl.srcdoc = srcdocWithToken;
     designBridgeRenderedToken = designBridgeState.renderToken;
+    return;
   }
+
+  // Tokens match — only reveal iframe if it has finished loading
+  if (!designBridgeFrameLoading) {
+    emptyEl.style.display = 'none';
+    frameEl.style.display = 'block';
+  }
+  applyAllDesignSliderValues(frameEl);
+}
+
+function renderDesignReferencePanel(metaEl, previewEl) {
+  if (!designBridgeState.referenceImage) {
+    metaEl.textContent = isEnglishUi()
+      ? 'No reference image is attached. Upload one or pick the latest Image Lab result.'
+      : '当前未带参考图。你可以本地上传一张，或从 Image Lab 最近结果里选一张。';
+    previewEl.style.display = 'none';
+    previewEl.innerHTML = '';
+    return;
+  }
+
+  metaEl.textContent = isEnglishUi()
+    ? 'A reference image will be sent into the next Design generation.'
+    : '下一次 Design 生成会带上这张参考图。';
+  previewEl.style.display = 'block';
+  previewEl.innerHTML = `<img src="${designBridgeState.referenceImage.dataUrl}" alt="${escapeHtml(designBridgeState.referenceImage.name || 'reference')}" style="width:100%;max-height:180px;object-fit:cover;border-radius:12px;border:1px solid #eadfd2;background:#fff" />`;
+}
+
+function renderDesignDirectionPanel(panel) {
+  const suggestions = Array.isArray(designBridgeState.directionSuggestions)
+    ? designBridgeState.directionSuggestions
+    : [];
+  if (!designBridgeState.suggestionVisible || suggestions.length === 0) {
+    panel.style.display = 'none';
+    panel.innerHTML = '';
+    return;
+  }
+
+  panel.style.display = 'block';
+  panel.innerHTML = [
+    `<div style="font-size:12px;font-weight:700;color:#7b4a2e;letter-spacing:.04em;text-transform:uppercase;margin-bottom:8px">${isEnglishUi() ? 'Choose a direction' : '先选一个方向'}</div>`,
+    `<div style="font-size:12px;color:#7a6656;line-height:1.6;margin-bottom:10px">${isEnglishUi() ? 'Your request is still broad. Pick one visual direction to continue.' : '你的需求还比较宽，先选一个视觉方向再继续。'}</div>`,
+    ...suggestions.map(suggestion => `
+      <button class="btn-secondary" style="display:flex;width:100%;justify-content:flex-start;gap:10px;margin-bottom:8px;padding:10px 12px" onclick="chooseDesignDirection('${suggestion.id}')">
+        <span style="width:36px;height:36px;border-radius:10px;display:inline-block;flex-shrink:0;background:${escapeHtml(suggestion.preview?.value || 'linear-gradient(135deg,#ddd,#bbb)')}"></span>
+        <span style="display:flex;flex-direction:column;align-items:flex-start;min-width:0">
+          <span style="font-size:12px;font-weight:600;color:#2d1f14">${escapeHtml(suggestion.label)}</span>
+          <span style="font-size:11px;color:#7a6656;line-height:1.5;text-align:left">${escapeHtml(suggestion.summary)}</span>
+        </span>
+      </button>
+    `),
+    `<button class="btn-secondary" style="width:100%;justify-content:center" onclick="skipDesignDirectionSuggestions()">${isEnglishUi() ? 'Skip and keep describing' : '直接描述，跳过风格选择'}</button>`,
+  ].join('');
+}
+
+function renderDesignVersionsPanel(panel) {
+  const versions = Array.isArray(designBridgeState.versions) ? designBridgeState.versions : [];
+  if (!versions.length) {
+    panel.style.display = 'none';
+    panel.innerHTML = '';
+    return;
+  }
+
+  panel.style.display = 'block';
+  panel.innerHTML = [
+    `<div style="font-size:12px;font-weight:700;color:#7b4a2e;letter-spacing:.04em;text-transform:uppercase;margin-bottom:10px">${isEnglishUi() ? 'Recent versions' : '最近版本'}</div>`,
+    ...versions.map(version => {
+      const active = version.id === designBridgeState.versionId;
+      const time = new Date(version.createdAt).toLocaleTimeString(isEnglishUi() ? 'en-US' : 'zh-CN', { hour: '2-digit', minute: '2-digit' });
+      const label = version.prompt
+        ? String(version.prompt).slice(0, 28)
+        : (isEnglishUi() ? 'Untitled version' : '未命名版本');
+      return `<button class="btn-secondary" style="width:100%;justify-content:space-between;margin-bottom:8px;border-color:${active ? '#E84040' : '#d4d4d8'};background:${active ? '#fff5f5' : '#fff'}" onclick="restoreDesignVersion('${version.id}')">
+        <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:180px">${escapeHtml(label)}</span>
+        <span style="font-size:11px;color:#8b7969">${escapeHtml(time)}</span>
+      </button>`;
+    }),
+  ].join('');
+}
+
+function renderDesignSlidersPanel(panel, frameEl) {
+  const sliders = Array.isArray(designBridgeState.sliders) ? designBridgeState.sliders : [];
+  if (!sliders.length) {
+    panel.style.display = 'none';
+    panel.innerHTML = '';
+    return;
+  }
+
+  panel.style.display = 'block';
+  panel.innerHTML = [
+    `<div style="font-size:12px;font-weight:700;color:#7b4a2e;letter-spacing:.04em;text-transform:uppercase;margin-bottom:10px">${isEnglishUi() ? 'Design sliders' : '设计 sliders'}</div>`,
+    ...sliders.map(slider => {
+      const currentValue = designBridgeState.sliderValues[slider.id] ?? slider.default;
+      if (slider.type === 'color') {
+        return `<label style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:12px">
+          <span style="font-size:12px;color:#5f4f43">${escapeHtml(slider.label)}</span>
+          <input type="color" value="${escapeHtml(String(currentValue))}" onchange="applyDesignSliderValue('${escapeHtml(slider.id)}', this.value)" />
+        </label>`;
+      }
+
+      if (slider.type === 'range') {
+        return `<div style="margin-bottom:12px">
+          <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:6px">
+            <span style="font-size:12px;color:#5f4f43">${escapeHtml(slider.label)}</span>
+            <span style="font-size:11px;color:#8b7969">${escapeHtml(String(currentValue))}${escapeHtml(slider.unit || '')}</span>
+          </div>
+          <input type="range" min="${slider.min}" max="${slider.max}" value="${Number(currentValue)}" oninput="applyDesignSliderValue('${escapeHtml(slider.id)}', this.value)" style="width:100%" />
+        </div>`;
+      }
+
+      return `<label style="display:block;margin-bottom:12px">
+        <div style="font-size:12px;color:#5f4f43;margin-bottom:6px">${escapeHtml(slider.label)}</div>
+        <select class="imglab-lib-select" onchange="applyDesignSliderValue('${escapeHtml(slider.id)}', this.value)">
+          ${slider.options.map(option => `<option value="${escapeHtml(option)}"${String(currentValue) === option ? ' selected' : ''}>${escapeHtml(option)}</option>`).join('')}
+        </select>
+      </label>`;
+    }),
+  ].join('');
+
+  applyAllDesignSliderValues(frameEl);
+}
+
+function applyAllDesignSliderValues(frameEl) {
+  const targetWindow = frameEl?.contentWindow;
+  if (!targetWindow) return;
+  const sliders = Array.isArray(designBridgeState.sliders) ? designBridgeState.sliders : [];
+  const values = {};
+  sliders.forEach(slider => {
+    const currentValue = designBridgeState.sliderValues[slider.id] ?? slider.default;
+    const finalValue = slider.type === 'range'
+      ? `${currentValue}${slider.unit || ''}`
+      : String(currentValue);
+    values[slider.cssVar] = finalValue;
+  });
+  targetWindow.postMessage({
+    type: '__kc_apply_slider_values',
+    values,
+  }, '*');
+}
+
+function applyDesignSliderValue(sliderId, nextValue) {
+  const slider = (designBridgeState.sliders || []).find(candidate => candidate.id === sliderId);
+  if (!slider) return;
+  designBridgeState.sliderValues[sliderId] = slider.type === 'range' ? Number(nextValue) : nextValue;
+  const frameEl = document.getElementById('design-bridge-frame');
+  applyAllDesignSliderValues(frameEl);
+  renderDesignBridgePage();
+}
+
+function generateDesignWorkbench() {
+  const promptInput = document.getElementById('design-prompt-input');
+  const outputTypeSelect = document.getElementById('design-output-type');
+  const styleInput = document.getElementById('design-style-input');
+  const prompt = promptInput?.value?.trim() || '';
+  if (!prompt) {
+    designBridgeState.error = isEnglishUi() ? 'Enter a design request first.' : '\u8bf7\u5148\u8f93\u5165\u8bbe\u8ba1\u9700\u6c42\u3002';
+    renderDesignBridgePage();
+    return;
+  }
+
+  designBridgeState.prompt = prompt;
+  designBridgeState.outputType = outputTypeSelect?.value || 'prototype';
+  designBridgeState.style = styleInput?.value?.trim() || '';
+  designBridgeState.loading = true;
+  designBridgeState.error = '';
+  designBridgeState.suggestionVisible = false;
+  renderDesignBridgePage();
+
+  if (designBridgeState.mode === 'edit' && designBridgeState.html) {
+    send({
+      type: 'design:editCurrent',
+      prompt: designBridgeState.prompt,
+      outputType: designBridgeState.outputType,
+      style: designBridgeState.style,
+      html: designBridgeState.html,
+      sliders: designBridgeState.sliders,
+      ...(designBridgeState.referenceImage ? {
+        referenceImageDataUrl: designBridgeState.referenceImage.dataUrl,
+        referenceImageMimeType: designBridgeState.referenceImage.mimeType,
+      } : {}),
+    });
+    return;
+  }
+
+  send({
+    type: 'design:requestDirections',
+    prompt: designBridgeState.prompt,
+    outputType: designBridgeState.outputType,
+    style: designBridgeState.style,
+    ...(designBridgeState.referenceImage ? {
+      referenceImageDataUrl: designBridgeState.referenceImage.dataUrl,
+      referenceImageMimeType: designBridgeState.referenceImage.mimeType,
+    } : {}),
+  });
+}
+
+function chooseDesignDirection(directionId) {
+  const suggestion = (designBridgeState.directionSuggestions || []).find(item => item.id === directionId);
+  if (!suggestion) return;
+  designBridgeState.style = suggestion.stylePrompt;
+  designBridgeState.suggestionVisible = false;
+  renderDesignBridgePage();
+  send({
+    type: 'design:generate',
+    prompt: designBridgeState.prompt,
+    outputType: designBridgeState.outputType,
+    style: designBridgeState.style,
+    ...(designBridgeState.referenceImage ? {
+      referenceImageDataUrl: designBridgeState.referenceImage.dataUrl,
+      referenceImageMimeType: designBridgeState.referenceImage.mimeType,
+    } : {}),
+  });
+}
+
+function skipDesignDirectionSuggestions() {
+  designBridgeState.suggestionVisible = false;
+  renderDesignBridgePage();
+  send({
+    type: 'design:generate',
+    prompt: designBridgeState.prompt,
+    outputType: designBridgeState.outputType,
+    style: designBridgeState.style,
+    ...(designBridgeState.referenceImage ? {
+      referenceImageDataUrl: designBridgeState.referenceImage.dataUrl,
+      referenceImageMimeType: designBridgeState.referenceImage.mimeType,
+    } : {}),
+  });
+}
+
+function clearDesignReference() {
+  designBridgeState.referenceImage = null;
+  renderDesignBridgePage();
+}
+
+function handleDesignReferenceUpload(event) {
+  const file = Array.from(event.target?.files || [])[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = ev => {
+    const dataUrl = ev.target?.result;
+    if (typeof dataUrl !== 'string') return;
+    designBridgeState.referenceImage = {
+      dataUrl,
+      mimeType: file.type || 'image/png',
+      name: file.name || 'reference.png',
+    };
+    renderDesignBridgePage();
+  };
+  reader.readAsDataURL(file);
+  event.target.value = '';
+}
+
+function pickLatestImageLabResultForDesign() {
+  const latestImage = (imageLabState.resultBatches || [])
+    .flatMap(batch => batch.items || [])
+    .find(item => item?.src);
+  if (!latestImage?.src) {
+    designBridgeState.error = isEnglishUi()
+      ? 'There is no Image Lab result to reuse yet.'
+      : '当前还没有可复用的 Image Lab 结果图。';
+    renderDesignBridgePage();
+    return;
+  }
+
+  designBridgeState.referenceImage = {
+    dataUrl: latestImage.src,
+    mimeType: latestImage.src.startsWith('data:')
+      ? (latestImage.src.slice(5, latestImage.src.indexOf(';')) || 'image/png')
+      : 'image/png',
+    name: `image-lab-${latestImage.id || 'result'}.png`,
+  };
+  renderDesignBridgePage();
+}
+
+function loadDesignVersions() {
+  send({
+    type: 'design:loadVersions',
+  });
+}
+
+function restoreDesignVersion(versionId) {
+  if (!versionId) return;
+  send({
+    type: 'design:restoreVersion',
+    versionId,
+  });
+}
+
+async function exportDesignWorkbench(format) {
+  if (!designBridgeState.html) {
+    designBridgeState.error = isEnglishUi()
+      ? 'There is no design content to export.'
+      : '当前没有可导出的设计内容。';
+    renderDesignBridgePage();
+    return;
+  }
+
+  designBridgeState.error = '';
+  renderDesignBridgePage();
+  const projectLabel = (designBridgeState.prompt || designBridgeState.title || 'kainclaw-design').slice(0, 48);
+  if (format === 'pptx') {
+    try {
+      const filePath = await window.electronAPI.exportDesignPptx(
+        buildHtmlArtifactSrcdoc(designBridgeState.html),
+        projectLabel,
+      );
+      handleMessage({ type: 'design:exportDone', format: 'pptx', filePath });
+    } catch (error) {
+      handleMessage({
+        type: 'design:error',
+        message: error instanceof Error ? error.message : String(error),
+      });
+    }
+    return;
+  }
+
+  if (format === 'pdf') {
+    try {
+      const filePath = await window.electronAPI.exportDesignPdf(
+        buildHtmlArtifactSrcdoc(designBridgeState.html),
+        projectLabel,
+      );
+      handleMessage({ type: 'design:exportDone', format: 'pdf', filePath });
+    } catch (error) {
+      handleMessage({
+        type: 'design:error',
+        message: error instanceof Error ? error.message : String(error),
+      });
+    }
+    return;
+  }
+
+  send({
+    type: 'design:export',
+    format: 'html',
+    html: designBridgeState.html,
+    sliders: designBridgeState.sliders.map(slider => ({
+      ...slider,
+      default: designBridgeState.sliderValues[slider.id] ?? slider.default,
+    })),
+    projectLabel: (designBridgeState.prompt || designBridgeState.title || 'kainclaw-design').slice(0, 48),
+  });
+}
+
+function cancelDesignPatchSelection() {
+  designBridgeState.selectedNode = null;
+  designBridgeState.patchLoading = false;
+  const commentInput = document.getElementById('design-patch-comment');
+  if (commentInput) commentInput.value = '';
+  renderDesignBridgePage();
+}
+
+function buildDesignImageLabPrompt(node, comment) {
+  if (!node) return '';
+  const descriptors = [
+    node.alt,
+    node.ariaLabel,
+    node.title,
+    node.text,
+  ]
+    .map(value => String(value || '').trim())
+    .filter(Boolean);
+
+  const subject = descriptors.length > 0
+    ? descriptors.join(' · ')
+    : (isEnglishUi() ? 'image slot in the current design' : '当前设计里的图片位');
+
+  const extraComment = String(comment || '').trim();
+  return [
+    isEnglishUi()
+      ? `Create an image for this design slot: ${subject}.`
+      : `为这个设计图片位生成一张图：${subject}。`,
+    ...(extraComment
+      ? [
+          isEnglishUi()
+            ? `Additional direction: ${extraComment}.`
+            : `补充要求：${extraComment}。`,
+        ]
+      : []),
+    isEnglishUi()
+      ? 'Match the current design mood and keep the composition clean for direct placement into the layout.'
+      : '请匹配当前设计的整体气质，构图干净，适合直接放回这个版面。',
+  ].join('\n');
+}
+
+function sendDesignImageNodeToImageLab() {
+  const node = designBridgeState.selectedNode;
+  if (!node) {
+    designBridgeState.error = isEnglishUi()
+      ? 'Select an image slot first.'
+      : '请先选中一个图片位。';
+    renderDesignBridgePage();
+    return;
+  }
+  if (String(node.tagName || '').toLowerCase() !== 'img') {
+    designBridgeState.error = isEnglishUi()
+      ? 'Only image slots can be sent to Image Lab.'
+      : '只有图片位才能直接发到 Image Lab。';
+    renderDesignBridgePage();
+    return;
+  }
+
+  const commentInput = document.getElementById('design-patch-comment');
+  const comment = commentInput?.value?.trim() || '';
+  const prompt = buildDesignImageLabPrompt(node, comment);
+  if (!prompt) {
+    designBridgeState.error = isEnglishUi()
+      ? 'This image slot does not have enough description yet. Add a comment first.'
+      : '这个图片位的描述还不够，请先补一句评论。';
+    renderDesignBridgePage();
+    return;
+  }
+
+  showPage('images');
+  send({ type: 'image:loadState' });
+  requestAnimationFrame(() => {
+    const promptInput = document.getElementById('imglab-prompt');
+    if (promptInput) {
+      promptInput.value = prompt;
+      promptInput.focus();
+      promptInput.setSelectionRange(promptInput.value.length, promptInput.value.length);
+    }
+    setImageLabStatus(
+      isEnglishUi()
+        ? 'Sent the selected design image slot to Image Lab. You can generate immediately or refine the prompt first.'
+        : '已把当前设计图片位送到 Image Lab。你可以直接生成，也可以先改一下提示词。',
+    );
+    runImageLab();
+  });
+}
+
+function applyDesignPatchRequest() {
+  const commentInput = document.getElementById('design-patch-comment');
+  const comment = commentInput?.value?.trim() || '';
+  if (!designBridgeState.selectedNode || !comment) {
+    designBridgeState.error = isEnglishUi()
+      ? 'Select an element and enter a comment first.'
+      : '请先选中元素并输入评论。';
+    renderDesignBridgePage();
+    return;
+  }
+
+  designBridgeState.patchLoading = true;
+  designBridgeState.error = '';
+  renderDesignBridgePage();
+  send({
+    type: 'design:patch',
+    html: designBridgeState.html,
+    selector: designBridgeState.selectedNode.selector,
+    targetOuterHtml: designBridgeState.selectedNode.outerHTML,
+    comment,
+  });
 }
 
 function openKainClawDesignBridge(payload) {
   designBridgeState.artifactId = payload.artifactId || null;
   designBridgeState.title = payload.title || 'KainClaw Design';
   designBridgeState.html = payload.html || '';
+  designBridgeState.prompt = '';
+  designBridgeState.outputType = 'prototype';
+  designBridgeState.style = '';
+  designBridgeState.sliders = [];
+  designBridgeState.sliderValues = {};
+  designBridgeState.loading = false;
+  designBridgeState.error = '';
+  designBridgeState.selectedNode = null;
+  designBridgeState.patchLoading = false;
+  designBridgeState.versions = [];
+  designBridgeState.versionId = null;
+  designBridgeState.directionSuggestions = [];
+  designBridgeState.suggestionVisible = false;
   designBridgeState.editModeAvailable = false;
   designBridgeState.editModeActive = false;
   designBridgeState.lastEdits = null;
+  designBridgeState.mode = 'edit';
   designBridgeState.renderToken = Date.now();
-  renderDesignBridgePage();
-  showPage('design');
+  designBridgeRenderedToken = 0;
+  showDesignPage();
 }
 
 function toggleDesignTweaks() {
   if (!designBridgeState.editModeAvailable) {
+    designBridgeState.error = isEnglishUi()
+      ? 'This artifact does not expose tweak mode yet.'
+      : '\u8fd9\u4e2a\u539f\u578b\u8fd8\u6ca1\u6709\u63a5\u5165 Tweaks \u6a21\u5f0f\u3002';
+    renderDesignBridgePage();
     return;
   }
 
@@ -2411,6 +3277,24 @@ function handleKainClawDesignFrameMessage(event) {
   }
 
   const payload = event.data || {};
+  if (payload.type === '__design_patch_target') {
+    designBridgeState.selectedNode = payload.selector && payload.outerHTML
+      ? {
+          selector: String(payload.selector),
+          outerHTML: String(payload.outerHTML),
+          text: typeof payload.text === 'string' ? payload.text : '',
+          tagName: typeof payload.tagName === 'string' ? payload.tagName : '',
+          alt: typeof payload.alt === 'string' ? payload.alt : '',
+          ariaLabel: typeof payload.ariaLabel === 'string' ? payload.ariaLabel : '',
+          title: typeof payload.title === 'string' ? payload.title : '',
+          src: typeof payload.src === 'string' ? payload.src : '',
+          role: typeof payload.role === 'string' ? payload.role : '',
+        }
+      : null;
+    designBridgeState.patchLoading = false;
+    renderDesignBridgePage();
+    return;
+  }
   if (payload.type === '__edit_mode_available') {
     designBridgeState.editModeAvailable = true;
     updateDesignTweaksButton();
@@ -2815,13 +3699,22 @@ function renderToolResultMessage(message) {
   const content = String(message.content || '').trim();
   const badgeClass = message.toolIsError ? 'badge-orange' : 'badge-green';
   const badgeLabel = message.toolIsError ? 'error' : 'done';
+  const maxPreviewChars = 4000;
+  const previewLineLimit = 40;
+  const contentLines = content ? content.split('\n') : [];
+  const truncatedByLines = contentLines.length > previewLineLimit;
+  const previewText = truncatedByLines
+    ? contentLines.slice(0, previewLineLimit).join('\n')
+    : content.slice(0, maxPreviewChars);
+  const isTruncated = content.length > maxPreviewChars || truncatedByLines;
   return `<div class="tool-report">
     <div class="tool-report-head">
       <span class="tool-report-title">Tool Result</span>
       <span class="${badgeClass}">${escapeHtml(badgeLabel)}</span>
     </div>
     ${summary ? `<div class="tool-report-meta">${renderInlineMarkdown(summary)}</div>` : ''}
-    ${content ? `<pre><code>${escapeHtml(content)}</code></pre>` : ''}
+    ${previewText ? `<pre><code>${escapeHtml(previewText)}${isTruncated ? '\n…[truncated]' : ''}</code></pre>` : ''}
+    ${isTruncated ? `<div class="tool-report-meta">${isEnglishUi() ? 'Large tool output was truncated in chat to keep the page responsive.' : '工具输出过长，聊天区已截断显示，避免页面卡顿。'}</div>` : ''}
   </div>`;
 }
 
@@ -3309,104 +4202,6 @@ function escapeHtml(s) {
   return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g, '&#39;');
 }
 
-// Sessions
-function renderSessions(sessions, activeId) {
-  currentSessions = sessions || [];
-  currentActiveSessionId = activeId || null;
-  const container = document.getElementById('sessions-list');
-  if (!sessions.length) {
-  container.innerHTML = '<div style="font-size:11px;font-weight:600;color:#a1a1aa;padding:6px 6px 3px;letter-spacing:.05em;text-transform:uppercase">会话</div><div style="font-size:12px;color:#a1a1aa;padding:8px 8px">暂无会话</div>';
-    return;
-  }
-
-  let html = '<div style="font-size:11px;font-weight:600;color:#a1a1aa;padding:6px 6px 3px;letter-spacing:.05em;text-transform:uppercase">会话</div>';
-  for (const s of sessions) {
-    const active = s.id === activeId;
-    const title = escapeHtml(s.title || '新对话');
-    html += `<div class="sess-item${active ? ' active' : ''}" onclick="switchSession('${s.id}')">
-      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="flex-shrink:0"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
-      <span class="sess-item-title">${title}</span>
-      <div class="sess-actions">
-        <button class="sess-action" title="重命名会话" onclick="event.stopPropagation();renameSession('${s.id}', '${encodeURIComponent(s.title || '新对话')}')">
-          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4 12.5-12.5z"/></svg>
-        </button>
-        <button class="sess-action" title="导出会话" onclick="event.stopPropagation();exportSession('${s.id}')">
-          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-        </button>
-        <button class="sess-action" title="删除会话" onclick="event.stopPropagation();deleteSession('${s.id}')">
-          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/></svg>
-        </button>
-      </div>
-    </div>`;
-  }
-  container.innerHTML = html;
-
-  const sessionItems = container.querySelectorAll('.sess-item');
-  sessionItems.forEach((item, index) => {
-    const session = sessions[index];
-    const renameButton = item.querySelector('.sess-action');
-    if (!session || !renameButton) {
-      return;
-    }
-
-    renameButton.removeAttribute('onclick');
-    renameButton.setAttribute('type', 'button');
-    renameButton.setAttribute('title', '重命名会话');
-
-    renameButton.addEventListener('click', event => {
-      event.stopPropagation();
-      renameSession(session.id, session.title || '');
-    });
-  });
-
-  // Update chat title
-  const active = sessions.find(s => s.id === activeId);
-  if (active) document.getElementById('chat-title').textContent = active.title || '新对话';
-}
-
-function switchSession(id) {
-  send({ type: 'sessions:switch', id });
-  send({ type: 'sessions:load' });
-}
-
-function newSession() {
-  send({ type: 'sessions:new' });
-  send({ type: 'sessions:load' });
-}
-
-function renameSession(id, encodedTitle) {
-  const currentTitle = decodeURIComponent(encodedTitle || '');
-  const nextTitle = prompt('重命名会话', currentTitle);
-  if (nextTitle == null) return;
-  const trimmed = nextTitle.trim();
-  if (!trimmed || trimmed === currentTitle) return;
-  send({ type: 'sessions:rename', id, title: trimmed });
-  setTimeout(() => send({ type: 'sessions:load' }), 100);
-}
-
-function renameCurrentSession() {
-  if (!currentActiveSessionId) return;
-  const current = currentSessions.find(s => s.id === currentActiveSessionId);
-  if (!current) return;
-  renameSession(currentActiveSessionId, encodeURIComponent(current.title || '新对话'));
-}
-
-function exportSession(id) {
-  if (!id) return;
-  send({ type: 'sessions:export', id });
-}
-
-function exportCurrentSession() {
-  if (!currentActiveSessionId) return;
-  exportSession(currentActiveSessionId);
-}
-
-function deleteSession(id) {
-  if (!confirm(shellText('deleteSessionConfirm'))) return;
-  send({ type: 'sessions:delete', id });
-  send({ type: 'sessions:load' });
-}
-
 // Settings
 function normalizeSessionRenameTitle(title) {
   if (typeof title !== 'string') {
@@ -3872,8 +4667,35 @@ function renderSessions(sessions, activeId) {
     : shellText('defaultSessionTitle');
 }
 
+function switchSession(id) {
+  if (!id || id === currentActiveSessionId) return;
+  send({ type: 'sessions:switch', id });
+}
+
+function newSession() {
+  send({ type: 'sessions:new' });
+}
+
+function exportSession(id) {
+  if (!id) return;
+  send({ type: 'sessions:export', id });
+}
+
+function exportCurrentSession() {
+  if (!currentActiveSessionId) return;
+  exportSession(currentActiveSessionId);
+}
+
+function deleteSession(id) {
+  if (!id) return;
+  if (!localizedConfirm(shellText('deleteSessionConfirm'))) return;
+  send({ type: 'sessions:delete', id });
+}
+
 function getWorkspaceStatusMeta(workspaceInfo) {
   switch (workspaceInfo?.kind) {
+    case 'active_worktree_session':
+      return { label: shellText('workspaceStatusWorktree'), shortLabel: '', color: '#1d4ed8' };
     case 'direct_git_root':
     case 'inside_git_repo':
     case 'nested_git_root':
@@ -5296,25 +6118,25 @@ function clearImageHistoryPrompt() {
 }
 
 function clearImageLabResults() {
-  if (!confirm('清空所有结果批次？')) return;
+  if (!localizedConfirm('清空所有结果批次？')) return;
   send({ type: 'image:clearResults' });
 }
 
 function deleteImageResult(id) {
   if (!id) return;
-  if (!confirm('删除这张图片结果？')) return;
+  if (!localizedConfirm('删除这张图片结果？')) return;
   send({ type: 'image:deleteResult', id });
 }
 
 function getImageResultSourceMeta(source) {
   if (source === 'variant') {
-    return { label: 'variant', badgeClass: 'badge-purple' };
+    return { label: '变体', badgeClass: 'badge-purple' };
   }
   if (source === 'edit') {
-    return { label: 'edit', badgeClass: 'badge-blue' };
+    return { label: '编辑', badgeClass: 'badge-blue' };
   }
 
-  return { label: 'generate', badgeClass: 'badge-green' };
+  return { label: '生成', badgeClass: 'badge-green' };
 }
 
 function renderImageLabResults() {
@@ -5348,14 +6170,14 @@ function renderImageLabResults() {
               <span class="imglab-loader-square s9"></span>
             </div>
             <div class="imglab-loader-copy">
-              <div class="imglab-loader-title">正在生成 #${index + 1}</div>
-              <div class="imglab-loader-subtitle">${activeImageModelLabel ? `${escapeHtml(activeImageModelLabel)} 多彩流光渲染中，请稍候` : '多彩流光渲染中，请稍候'}</div>
+              <div class="imglab-loader-title">${escapeHtml(shellText(pendingBatch.source === 'edit' ? 'imagePendingLoaderTitleEdit' : 'imagePendingLoaderTitleGenerate'))} #${index + 1}</div>
+              <div class="imglab-loader-subtitle">${escapeHtml(activeImageModelLabel ? formatShellText('imagePendingLoaderSubtitleWithModel', { model: activeImageModelLabel }) : shellText('imagePendingLoaderSubtitle'))}</div>
             </div>
           </div>
         </div>
         <div style="padding:12px 12px 10px">
           <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:8px">
-            <span class="${sourceMeta.badgeClass}">${sourceMeta.label}</span>
+            <span class="${sourceMeta.badgeClass}">${translateSurfaceText(sourceMeta.label)}</span>
             <span style="font-size:11px;color:#9b8a7b">#${index}</span>
           </div>
           <div style="display:flex;flex-direction:column;gap:8px;min-height:58px">
@@ -5375,11 +6197,11 @@ function renderImageLabResults() {
       <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin-bottom:12px">
         <div style="min-width:0">
           <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
-            <span class="${sourceMeta.badgeClass}">${sourceMeta.label}</span>
-            <span style="font-size:12px;font-weight:700;color:#5f4f43">${pendingBatch.count} 张</span>
-            <span style="font-size:11px;color:#8a68ff;font-weight:700;letter-spacing:.03em">生成中</span>
+            <span class="${sourceMeta.badgeClass}">${translateSurfaceText(sourceMeta.label)}</span>
+            <span style="font-size:12px;font-weight:700;color:#5f4f43">${translateSurfaceText(`${pendingBatch.count} 张`)}</span>
+            <span style="font-size:11px;color:#8a68ff;font-weight:700;letter-spacing:.03em">${escapeHtml(shellText('imagePendingCreating'))}</span>
           </div>
-          <div style="font-size:12px;color:#8b7969;line-height:1.6;margin-top:6px">正在请求图像服务并等待图片返回。彩色流光占位会在真实图片到达后自动替换。</div>
+          <div style="font-size:12px;color:#8b7969;line-height:1.6;margin-top:6px">${escapeHtml(translateSurfaceText('正在请求图像服务并等待图片返回。彩色流光占位会在真实图片到达后自动替换。'))}</div>
         </div>
       </div>
       <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px">${placeholderCards}</div>
@@ -5389,7 +6211,7 @@ function renderImageLabResults() {
   const batchesHtml = batches.map(batch => {
     const sourceMeta = getImageResultSourceMeta(batch.source);
     const prompt = escapeHtml(batch.prompt || '');
-    const batchCountLabel = `${batch.itemCount || (batch.items || []).length || 0} 张`;
+    const batchCountLabel = translateSurfaceText(`${batch.itemCount || (batch.items || []).length || 0} 张`);
     const batchItems = batch.items || [];
     const shouldSpanFullRow = batchItems.length > 1;
     const itemsHtml = (batch.items || []).map(result => {
@@ -5398,7 +6220,7 @@ function renderImageLabResults() {
         <img src="${result.src}" alt="generated" style="width:100%;aspect-ratio:1/1;object-fit:cover;display:block;background:#f5efe8">
         <div style="padding:12px 12px 10px">
           <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:6px">
-            <span class="${sourceMeta.badgeClass}">${sourceMeta.label}</span>
+            <span class="${sourceMeta.badgeClass}">${translateSurfaceText(sourceMeta.label)}</span>
             <div style="display:flex;align-items:center;gap:8px">
               <span style="font-size:11px;color:#9b8a7b">#${escapeHtml(String(result.id).split('-').slice(-1)[0] || '1')}</span>
               <button class="btn-ghost" title="删除这张结果" onclick="deleteImageResult('${result.id}')">
@@ -5468,7 +6290,7 @@ async function beginImageResultEdit(id) {
 
 function setImageLabStatus(message, isError = false) {
   const status = document.getElementById('imglab-status');
-  status.textContent = message;
+  status.textContent = translateSurfaceText(message);
   status.style.background = isError ? '#fdeaea' : '#f7ede5';
   status.style.color = isError ? '#a12626' : '#7a6656';
 }
@@ -6531,7 +7353,7 @@ function setActiveImageModelConfig(id) {
 }
 
 function deleteImageModelConfig(id) {
-  if (!confirm('删除这条图像模型配置？')) return;
+  if (!localizedConfirm('删除这条图像模型配置？')) return;
   if (editingImageModelId === id) {
     editingImageModelId = null;
     settingsImageEditorOpen = false;
@@ -6637,7 +7459,7 @@ function saveNewProvider() {
   const model = document.getElementById('new-prov-model').value.trim();
   const key = document.getElementById('new-prov-key').value.trim();
   const baseUrl = document.getElementById('new-prov-url').value.trim();
-  if (!alias) { alert('请填写别名'); return; }
+  if (!alias) { localizedAlert('请填写别名'); return; }
   const meta = { type: preset.type, alias, ...(editingProviderId ? { id: editingProviderId } : {}), ...(model ? { model } : {}), ...(baseUrl ? { baseUrl } : {}) };
   send({ type: 'settings:saveProvider', meta, apiKey: key });
   hideAddProvider();
@@ -6649,7 +7471,7 @@ function setActiveProvider(id) {
 }
 
 function deleteProvider(id) {
-  if (!confirm('删除这个提供商？')) return;
+  if (!localizedConfirm('删除这个提供商？')) return;
   send({ type: 'settings:deleteProvider', id });
   setTimeout(() => send({ type: 'settings:load' }), 100);
 }
@@ -6663,13 +7485,13 @@ function runSkill(name) {
 }
 
 function resetAllConfig() {
-  if (!confirm('确定要重置所有配置吗？\n\n这会清除 Provider 配置并重新进入配置向导，会话记录不会受影响。')) return;
+  if (!localizedConfirm('确定要重置所有配置吗？\n\n这会清除 Provider 配置并重新进入配置向导，会话记录不会受影响。')) return;
   send({ type: 'settings:reset' });
 }
 
 function activateLicense() {
   const key = document.getElementById('lic-key-input').value.trim();
-  if (!key) { alert('请输入 License Key'); return; }
+  if (!key) { localizedAlert('请输入 License Key'); return; }
   send({ type: 'license:activate', key });
 }
 
