@@ -13,6 +13,7 @@ export type DesignProjectRecord = {
   createdAt: number;
   updatedAt: number;
   lastOpenedAt: number;
+  versionCount?: number;
 };
 
 type StoredDesignProjects = {
@@ -109,6 +110,10 @@ export class DesignProjectStore {
         WHERE source_artifact_id IS NOT NULL;
       CREATE INDEX IF NOT EXISTS idx_projects_last_opened
         ON design_projects(last_opened_at DESC);
+      CREATE TABLE IF NOT EXISTS design_meta (
+        key TEXT PRIMARY KEY,
+        value TEXT
+      );
     `);
   }
 
@@ -261,6 +266,18 @@ export class DesignProjectStore {
 
   async listProjects(): Promise<DesignProjectRecord[]> {
     const projects = await this.withDatabase(database => {
+      const versionCounts = new Map<string, number>();
+      try {
+        const vcRows = database.prepare(
+          "SELECT project_id, COUNT(*) AS cnt FROM design_versions GROUP BY project_id",
+        ).all() as Array<{ project_id: string; cnt: number }>;
+        for (const row of vcRows) {
+          versionCounts.set(row.project_id, Number(row.cnt) || 0);
+        }
+      } catch {
+        // design_versions table may not exist yet — version counts default to 0
+      }
+
       const rows = database.prepare(`
         SELECT project_id, name, source, source_artifact_id, active_version_id, created_at, updated_at, last_opened_at
         FROM design_projects
@@ -276,7 +293,10 @@ export class DesignProjectStore {
         last_opened_at: number;
       }>;
 
-      return rows.map(row => this.rowToProjectRecord(row));
+      return rows.map(row => ({
+        ...this.rowToProjectRecord(row),
+        versionCount: versionCounts.get(row.project_id) ?? 0,
+      }));
     });
 
     if (projects) {
@@ -393,5 +413,39 @@ export class DesignProjectStore {
       "utf8",
     );
     return next;
+  }
+
+  async getLastOpenedProjectId(): Promise<string | null> {
+    const lastOpenedProjectId = await this.withDatabase(database => {
+      const row = database.prepare(`
+        SELECT value
+        FROM design_meta
+        WHERE key = 'lastOpenedProjectId'
+      `).get() as { value?: string | null } | undefined;
+      return typeof row?.value === "string" && row.value.trim() ? row.value.trim() : null;
+    });
+    return lastOpenedProjectId ?? null;
+  }
+
+  async setLastOpenedProjectId(projectId: string): Promise<void> {
+    const trimmed = projectId.trim();
+    if (!trimmed) {
+      return;
+    }
+    const saved = await this.withDatabase(database => {
+      database.prepare(`
+        INSERT INTO design_meta (key, value)
+        VALUES ('lastOpenedProjectId', ?)
+        ON CONFLICT(key) DO UPDATE SET value = excluded.value
+      `).run(trimmed);
+      return true;
+    });
+    if (saved) {
+      return;
+    }
+  }
+
+  dispose(): void {
+    this.sqliteModulePromise = null;
   }
 }

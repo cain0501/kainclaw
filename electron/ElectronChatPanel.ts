@@ -354,6 +354,7 @@ export class ElectronChatPanel {
   dispose(): void {
     this.backgroundTaskHost.dispose();
     void this.browserRuntime.dispose();
+    this.designProjectStore.dispose();
     if (this.backgroundTaskNotificationTimer) {
       clearInterval(this.backgroundTaskNotificationTimer);
       this.backgroundTaskNotificationTimer = undefined;
@@ -2821,7 +2822,9 @@ export class ElectronChatPanel {
 
   private async setCurrentDesignProject(project: DesignProjectRecord | null): Promise<void> {
     this.currentDesignProjectId = project?.projectId;
-    await this.host.setState("cain.lastOpenedDesignProjectId", project?.projectId ?? null);
+    if (project?.projectId) {
+      await this.designProjectStore.setLastOpenedProjectId(project.projectId);
+    }
   }
 
   private async openDesignProject(projectId: string): Promise<DesignProjectRecord | null> {
@@ -2881,7 +2884,7 @@ export class ElectronChatPanel {
   }
 
   private async getLastDesignProject(): Promise<void> {
-    const projectId = this.host.getState<string | null>("cain.lastOpenedDesignProjectId");
+    const projectId = await this.designProjectStore.getLastOpenedProjectId();
     if (!projectId) {
       this.sendToRenderer({
         type: "design:projectOpened",

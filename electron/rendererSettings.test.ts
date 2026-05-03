@@ -94,7 +94,9 @@ describe("Electron renderer settings", () => {
     expect(html).toContain("function pickLatestImageLabResultForDesign()");
     expect(html).toContain("function clearDesignReference()");
     expect(patchableSrcdocMatches).toHaveLength(1);
-    expect(html).toContain("tweaksBtn.disabled = !designBridgeState.editModeAvailable;");
+    expect(html).toContain("const hasSliders = (designBridgeState.sliders?.length ?? 0) > 0;");
+    expect(html).toContain("const tweaksAvailable = designBridgeState.editModeAvailable || hasSliders;");
+    expect(html).toContain("tweaksBtn.disabled = !tweaksAvailable;");
     expect(html).toContain("tweaksBtn.style.display = designBridgeState.html ? 'inline-flex' : 'none';");
     expect(html).toContain("This artifact does not expose tweak mode yet.");
     expect(html).toContain("tagName: el.tagName.toLowerCase()");

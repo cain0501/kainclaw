@@ -193,6 +193,8 @@ class FakeHostAdapter implements IHostAdapter {
   }
 }
 
+const activePanels: ElectronChatPanel[] = [];
+
 async function createHarness(options?: {
   desktopRuntimeServices?: DesktopRuntimeServices;
 }) {
@@ -210,6 +212,7 @@ async function createHarness(options?: {
     },
     options?.desktopRuntimeServices,
   );
+  activePanels.push(panel);
 
   return {
     storagePath,
@@ -255,6 +258,10 @@ describe("ElectronChatPanel session lifecycle", () => {
   });
 
   afterEach(async () => {
+    while (activePanels.length > 0) {
+      const panel = activePanels.pop();
+      panel?.dispose();
+    }
     await Promise.all(
       tempDirs.splice(0).map(dir => rm(dir, { recursive: true, force: true })),
     );

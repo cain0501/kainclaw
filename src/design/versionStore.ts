@@ -143,6 +143,30 @@ export class DesignVersionStore {
       CREATE INDEX IF NOT EXISTS idx_design_versions_project_created
         ON design_versions(project_id, created_at DESC);
     `);
+
+    const cols = database.prepare("PRAGMA table_info(design_versions)").all() as { name: string }[];
+    const existingColumns = new Set(cols.map(column => column.name));
+    const requiredColumns: Array<{ name: string; addSql: string }> = [
+      { name: "id", addSql: "ALTER TABLE design_versions ADD COLUMN id TEXT DEFAULT ''" },
+      { name: "project_id", addSql: "ALTER TABLE design_versions ADD COLUMN project_id TEXT NOT NULL DEFAULT ''" },
+      { name: "base_version_id", addSql: "ALTER TABLE design_versions ADD COLUMN base_version_id TEXT" },
+      { name: "created_at", addSql: "ALTER TABLE design_versions ADD COLUMN created_at INTEGER NOT NULL DEFAULT 0" },
+      { name: "prompt", addSql: "ALTER TABLE design_versions ADD COLUMN prompt TEXT NOT NULL DEFAULT ''" },
+      { name: "output_type", addSql: "ALTER TABLE design_versions ADD COLUMN output_type TEXT NOT NULL DEFAULT 'prototype'" },
+      { name: "style", addSql: "ALTER TABLE design_versions ADD COLUMN style TEXT NOT NULL DEFAULT ''" },
+      { name: "html", addSql: "ALTER TABLE design_versions ADD COLUMN html TEXT NOT NULL DEFAULT ''" },
+      { name: "sliders_json", addSql: "ALTER TABLE design_versions ADD COLUMN sliders_json TEXT NOT NULL DEFAULT '[]'" },
+      { name: "slider_values_json", addSql: "ALTER TABLE design_versions ADD COLUMN slider_values_json TEXT NOT NULL DEFAULT '{}'" },
+      { name: "source", addSql: "ALTER TABLE design_versions ADD COLUMN source TEXT NOT NULL DEFAULT 'generate'" },
+    ];
+
+    for (const column of requiredColumns) {
+      if (existingColumns.has(column.name)) {
+        continue;
+      }
+      database.exec(column.addSql);
+      existingColumns.add(column.name);
+    }
   }
 
   private async migrateLegacyJson(

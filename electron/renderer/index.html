@@ -149,6 +149,107 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-seri
   .imglab-lib-editor-grid{grid-template-columns:1fr}
 }
 
+.design-home-topbar{height:44px;padding:0 16px;background:rgba(255,255,255,.88);backdrop-filter:blur(12px);border-bottom:1px solid rgba(0,0,0,.06)}
+.design-home-topbar .klogo{width:26px;height:26px;background:#18181b;border-radius:6px;font-size:13px;font-weight:800}
+.design-home-sep{width:1px;height:16px;background:#e4ddd4;flex-shrink:0}
+.design-home-topbar-title{font-size:13px;font-weight:600;color:#18181b}
+.design-home-create-btn{padding:6px 14px;border:none;border-radius:8px;background:#18181b;color:#fff;font-size:12px;font-weight:600;cursor:pointer;font-family:inherit;display:inline-flex;align-items:center;gap:6px;transition:background .12s}
+.design-home-create-btn:hover{background:#3d3d3d}
+.design-home-create-btn svg{opacity:.82}
+.design-home-close-btn{width:28px;height:28px;border:none;border-radius:7px;background:transparent;color:#7b7069;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:background .12s,color .12s}
+.design-home-close-btn:hover{background:rgba(0,0,0,.06);color:#18181b}
+.design-home-scroll{flex:1;overflow:auto;padding:24px 24px 40px;background:
+  radial-gradient(circle at top left,rgba(255,255,255,.72),rgba(255,255,255,0) 28%),
+  linear-gradient(180deg,#f8f3ec 0%,#f6f1ea 32%,#f2ebe2 100%)}
+.design-home-shell{max-width:960px;margin:0 auto;display:flex;flex-direction:column;gap:32px}
+.design-home-section{display:flex;flex-direction:column;gap:12px}
+.design-home-section-head{display:flex;align-items:baseline;gap:8px;flex-wrap:wrap}
+.design-home-section-title{font-size:12px;font-weight:700;color:#7b4a2e;letter-spacing:.06em;text-transform:uppercase}
+.design-home-section-count{font-size:11px;color:#a08e7f}
+.design-home-recent-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:12px}
+.design-home-card{border:1px solid #ede5db;border-radius:14px;background:#fff;overflow:hidden;cursor:pointer;text-align:left;box-shadow:0 1px 0 rgba(255,255,255,.5) inset;transition:box-shadow .15s,transform .15s,border-color .15s}
+.design-home-card:hover{border-color:#e4d6c7;box-shadow:0 10px 28px rgba(77,49,24,.14);transform:translateY(-2px)}
+.design-home-card-preview{position:relative;height:108px;overflow:hidden}
+.design-home-card-lines{position:absolute;inset:16px 16px auto;display:flex;flex-direction:column;gap:6px}
+.design-home-card-line{border-radius:999px}
+.design-home-card-line.heading{height:10px;width:100%}
+.design-home-card-line.medium{height:7px;width:76%}
+.design-home-card-line.short{height:5px;width:58%}
+.design-home-card-line.tiny{height:4px;width:46%}
+.design-home-card-body{padding:10px 12px 12px}
+.design-home-card-name{font-size:12px;font-weight:600;color:#18181b;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-bottom:6px}
+.design-home-card-meta{display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+.design-home-card-time{font-size:11px;color:#a08e7f;margin-top:6px}
+.design-home-pill{display:inline-flex;align-items:center;padding:2px 6px;border-radius:999px;font-size:10px;font-weight:700;line-height:1.2;border:1px solid transparent}
+.design-home-pill.version{background:#f0ebe4;color:#7b4a2e;border-color:#e6d6c2}
+.design-home-pill.version-empty{background:#f5efe8;color:#9b8574;border-color:#eadfd2}
+.design-home-pill.source-artifact{background:#eef4fb;color:#3a6b9f;border-color:#c3d9f0}
+.design-home-pill.source-blank{background:#edf5ed;color:#5a6e5a;border-color:#c3d9c3}
+.design-home-list{border:1px solid #ede5db;border-radius:14px;background:#fff;overflow:hidden}
+.design-home-list-row{width:100%;border:none;border-bottom:1px solid #f5efe8;background:transparent;padding:11px 16px;cursor:pointer;display:flex;align-items:center;gap:12px;text-align:left;transition:background .1s}
+.design-home-list-row:last-child{border-bottom:none}
+.design-home-list-row:hover{background:#faf6f0}
+.design-home-list-dot{width:28px;height:28px;border-radius:8px;display:grid;place-items:center;flex-shrink:0;font-size:11px;font-weight:700;color:rgba(24,24,27,.62)}
+.design-home-list-main{flex:1;min-width:0}
+.design-home-list-name{font-size:13px;font-weight:500;color:#18181b;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.design-home-list-meta{display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-top:5px}
+.design-home-list-right{display:flex;align-items:flex-end;gap:6px;flex-direction:column;flex-shrink:0}
+.design-home-list-time{font-size:11px;color:#b8a898;white-space:nowrap}
+.design-home-empty-shell{display:flex;justify-content:center}
+.design-home-empty-card{width:100%;max-width:640px;padding:48px 24px 42px;border:1.5px dashed #ddd5c8;border-radius:16px;background:rgba(255,255,255,.82);text-align:center;color:#9d8f82}
+.design-home-empty-icon{width:56px;height:56px;margin:0 auto 16px;border-radius:18px;background:linear-gradient(135deg,#1f1f23 0%,#3a2c25 100%);display:grid;place-items:center;color:#fff;box-shadow:0 14px 30px rgba(24,24,27,.12)}
+.design-home-empty-title{font-size:15px;font-weight:600;color:#6b5a50;margin-bottom:6px}
+.design-home-empty-copy{font-size:12px;line-height:1.75;color:#9d8f82}
+.design-home-empty-actions{margin-top:20px;display:flex;justify-content:center}
+.design-home-empty-note{padding:10px 12px;border:1px dashed #ded4c7;border-radius:12px;background:rgba(255,255,255,.72);font-size:12px;color:#9d8f82;line-height:1.7}
+.design-side-stage{display:flex;flex-direction:column;gap:12px}
+.design-side-intro{display:flex;flex-direction:column;gap:6px}
+.design-side-kicker{font-size:11px;font-weight:700;color:#7b4a2e;letter-spacing:.08em;text-transform:uppercase}
+.design-side-heading{font-size:22px;font-weight:700;letter-spacing:-.03em;color:#18181b}
+.design-side-copy{font-size:12px;color:#8b7969;line-height:1.7}
+.design-side-section{border:1px solid #eadfd2;border-radius:18px;background:#fff;padding:14px 16px}
+.design-side-section.muted{background:#fcfaf7}
+.design-side-compact{display:flex;flex-direction:column;gap:10px}
+.design-side-stack{display:flex;flex-direction:column;gap:10px}
+.design-side-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.design-side-divider{height:1px;background:#f1e7dc}
+.design-side-badge{display:inline-flex;align-items:center;gap:6px;padding:3px 9px;border-radius:999px;background:#f8efe5;color:#7b4a2e;border:1px solid #ead7c5;font-size:11px;font-weight:700}
+.design-side-summary{display:flex;align-items:flex-start;justify-content:space-between;gap:10px}
+.design-side-summary-main{min-width:0;display:flex;flex-direction:column;gap:6px}
+.design-side-project-title{font-size:16px;font-weight:700;color:#18181b;line-height:1.4}
+.design-side-project-meta{font-size:12px;color:#8b7969;line-height:1.6}
+.design-side-prompt-box{border:1px solid #eadfd2;border-radius:16px;background:#fff;padding:12px}
+.design-side-prompt-box textarea{width:100%;min-height:104px;border:none;outline:none;resize:vertical;background:transparent;color:#2d1f14;font-family:inherit;line-height:1.65}
+.design-side-collapsible{border:1px solid #eadfd2;border-radius:16px;background:#fff;overflow:hidden}
+.design-side-collapsible[open]{box-shadow:0 8px 18px rgba(77,49,24,.06)}
+.design-side-collapsible summary{list-style:none;cursor:pointer;display:flex;align-items:center;justify-content:space-between;gap:10px;padding:12px 14px;font-size:12px;font-weight:700;color:#7b4a2e;letter-spacing:.04em;text-transform:uppercase}
+.design-side-collapsible summary::-webkit-details-marker{display:none}
+.design-side-collapsible summary:hover{background:#fcfaf7}
+.design-side-collapsible-body{padding:0 14px 14px}
+.design-side-chevron{font-size:10px;color:#a08e7f;transition:transform .14s ease}
+.design-side-collapsible[open] .design-side-chevron{transform:rotate(90deg)}
+.design-side-action-row{display:flex;gap:8px;flex-wrap:wrap}
+.design-side-action-row .btn-secondary,.design-side-action-row .btn-red{justify-content:center}
+.design-side-action-row.export-row .btn-secondary{flex:1;min-width:84px}
+.design-side-note{font-size:11px;color:#9a8878;line-height:1.65}
+.design-patch-popover{position:absolute;z-index:8;width:min(320px,calc(100% - 24px));max-width:320px}
+.design-canvas-toolbar{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:12px}
+.design-canvas-mode-btn{border:1px solid #eadfd2;border-radius:999px;background:#fff;color:#6f6258;padding:6px 12px;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;display:inline-flex;align-items:center;justify-content:center;gap:6px;transition:all .14s}
+.design-canvas-mode-btn:hover{background:#fcfaf7;border-color:#dbcab8;color:#4f3d31}
+.design-canvas-mode-btn.active{background:#fff0e6;border-color:#f0c8a0;color:#7b4a2e}
+.design-canvas-mode-dot{width:8px;height:8px;border-radius:50%;background:currentColor;opacity:.5}
+@media (max-width: 1200px){
+  .design-side-grid{grid-template-columns:1fr}
+}
+@media (max-width: 720px){
+  .design-home-scroll{padding:18px 16px 28px}
+  .design-home-shell{gap:24px}
+  .design-home-topbar{padding:0 12px}
+  .design-home-recent-grid{grid-template-columns:1fr}
+  .design-home-list-row{align-items:flex-start}
+  .design-home-list-right{align-items:flex-start}
+}
+
 .overlay{position:fixed;inset:0;background:rgba(0,0,0,.45);display:none;align-items:center;justify-content:center;z-index:200}
 .overlay.show{display:flex}
 
@@ -920,27 +1021,49 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-seri
 
 
 <div id="page-design-home" class="page" style="flex-direction:column;background:#f6f1ea">
-  <div class="ptop" style="background:rgba(255,255,255,.84);backdrop-filter:blur(12px)">
+  <div class="ptop design-home-topbar">
     <div class="klogo">K</div>
-    <span class="ptop-title">设计</span>
+    <div class="design-home-sep"></div>
+    <span class="design-home-topbar-title">设计</span>
     <div style="flex:1"></div>
-    <button class="btn-red" style="padding:8px 14px;border-radius:10px" onclick="createNewDesignProject()">新建设计</button>
-    <button class="btn-ghost" onclick="showPage('chat')">
+    <button class="design-home-create-btn" onclick="createNewDesignProject()">
+      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+      新建设计
+    </button>
+    <button class="design-home-close-btn" onclick="showPage('chat')" title="返回聊天">
       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
     </button>
   </div>
-  <div style="flex:1;overflow:auto;padding:18px 20px 24px">
-    <div style="max-width:1100px;margin:0 auto;display:flex;flex-direction:column;gap:18px">
-      <section style="background:#fff;border:1px solid #eadfd2;border-radius:18px;padding:16px 18px;box-shadow:0 18px 40px rgba(77,49,24,.08)">
-        <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:12px">
-          <div style="font-size:13px;font-weight:700;color:#7b4a2e;letter-spacing:.04em;text-transform:uppercase">最近继续</div>
-          <div style="font-size:11px;color:#a08e7f">最近 8 个</div>
+  <div class="design-home-scroll">
+    <div class="design-home-shell">
+      <section id="design-home-empty-state" class="design-home-empty-shell" style="display:none">
+        <div class="design-home-empty-card">
+          <div class="design-home-empty-icon">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1"><rect x="3" y="4" width="18" height="16" rx="3"></rect><line x1="8" y1="9" x2="16" y2="9"></line><line x1="8" y1="13" x2="16" y2="13"></line></svg>
+          </div>
+          <div class="design-home-empty-title">还没有设计项目</div>
+          <div class="design-home-empty-copy">点击上方「新建设计」从空白开始，或先在聊天中生成 HTML 原型，再从 Artifacts 面板进入 KainClaw Design。</div>
+          <div class="design-home-empty-actions">
+            <button class="design-home-create-btn" onclick="createNewDesignProject()">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+              新建设计
+            </button>
+          </div>
         </div>
-        <div id="design-home-recent" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px"></div>
       </section>
-      <section style="background:#fff;border:1px solid #eadfd2;border-radius:18px;padding:16px 18px;box-shadow:0 18px 40px rgba(77,49,24,.08)">
-        <div style="font-size:13px;font-weight:700;color:#7b4a2e;letter-spacing:.04em;text-transform:uppercase;margin-bottom:12px">所有设计</div>
-        <div id="design-home-all" style="display:flex;flex-direction:column;gap:10px"></div>
+      <section id="design-home-recent-section" class="design-home-section" style="display:none">
+        <div class="design-home-section-head">
+          <span class="design-home-section-title">最近继续</span>
+          <span id="design-home-recent-count" class="design-home-section-count"></span>
+        </div>
+        <div id="design-home-recent" class="design-home-recent-grid"></div>
+      </section>
+      <section id="design-home-all-section" class="design-home-section" style="display:none">
+        <div class="design-home-section-head">
+          <span class="design-home-section-title">所有设计</span>
+          <span id="design-home-all-count" class="design-home-section-count"></span>
+        </div>
+        <div id="design-home-all" class="design-home-list"></div>
       </section>
     </div>
   </div>
@@ -950,23 +1073,66 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-seri
 <div id="page-design" class="page" style="flex-direction:column;background:#f6f1ea">
   <div class="ptop" style="background:rgba(255,255,255,.84);backdrop-filter:blur(12px)">
     <div class="klogo">K</div>
-    <span class="ptop-title">KainClaw Design</span>
+    <span id="design-ptop-title" class="ptop-title" style="max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">KainClaw Design</span>
+    <span id="design-ptop-badge" style="display:none;font-size:10px;font-weight:700;padding:2px 7px;border-radius:4px;background:#fff0e6;color:#7b4a2e;border:1px solid #f0c8a0;white-space:nowrap"></span>
     <div style="flex:1"></div>
     <button id="design-tweaks-btn" class="btn-secondary" onclick="toggleDesignTweaks()">Tweaks</button>
-    <button class="btn-ghost" onclick="showPage('chat')">
+    <button class="btn-ghost" onclick="showPage('design-home')" title="返回设计列表">
       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
     </button>
   </div>
   <div style="flex:1;overflow:hidden;padding:18px;display:grid;grid-template-columns:minmax(280px,340px) minmax(0,1fr);gap:16px">
     <div style="background:rgba(255,255,255,.9);border:1px solid #eadfd2;border-radius:22px;padding:18px;display:flex;flex-direction:column;gap:12px;box-shadow:0 18px 40px rgba(77,49,24,.08)">
-      <div style="font-size:22px;font-weight:700;letter-spacing:-.03em">KainClaw Design</div>
-      <div id="design-bridge-subtitle" style="font-size:12px;color:#8b7969;line-height:1.7">当前 HTML 已带入，可继续用 Tweaks 预览和微调。</div>
-      <div class="imglab-lib-editor" style="margin-bottom:0">
-        <div class="imglab-lib-field">
-          <label for="design-prompt-input">设计需求</label>
-          <textarea id="design-prompt-input" placeholder="例如：做一个高端 AI 产品官网首屏原型，偏信息建筑和极简编辑感。"></textarea>
+      <div id="design-stage-a" class="design-side-stage">
+        <div class="design-side-intro">
+          <div class="design-side-kicker">Phase A</div>
+          <div id="design-stage-a-title" class="design-side-heading">从空白开始生成设计</div>
+          <div id="design-stage-a-copy" class="design-side-copy">当前还没有设计内容。先定义需求、输出类型和可选参考图，生成这个项目的第一版。</div>
         </div>
-        <div class="imglab-lib-editor-grid">
+      </div>
+      <div id="design-stage-b" class="design-side-stage" style="display:none">
+        <div class="design-side-intro">
+          <div class="design-side-kicker">Phase B</div>
+          <div class="design-side-summary">
+            <div class="design-side-summary-main">
+              <div id="design-stage-b-title" class="design-side-project-title">KainClaw Design</div>
+              <div id="design-stage-b-meta" class="design-side-project-meta"></div>
+            </div>
+            <span class="design-side-badge" id="design-source-label">当前产物</span>
+          </div>
+          <div id="design-bridge-title" style="display:none">KainClaw Design</div>
+          <div id="design-bridge-status" class="design-side-copy">先从 Artifacts 面板打开一个 HTML 原型，再进入 KainClaw Design。</div>
+          <div id="design-bridge-subtitle" class="design-side-note">当前 HTML 已带入，可继续用 Tweaks 预览和微调。</div>
+        </div>
+        <div class="design-side-section muted">
+          <div class="design-side-note" style="margin-bottom:8px">当前设计模式</div>
+          <div style="display:flex;flex-direction:column;gap:6px">
+            <button id="design-mode-edit-btn" class="btn-secondary" onclick="setDesignMode('edit')" style="text-align:left;padding:9px 12px;border-radius:10px;display:flex;flex-direction:column;gap:3px;width:100%">
+              <span style="font-size:12px;font-weight:600;display:flex;align-items:center;gap:5px">
+                <span id="design-mode-edit-indicator" style="font-size:9px">●</span>
+                编辑当前页面
+              </span>
+              <span id="design-mode-edit-desc" style="font-size:11px;font-weight:400;opacity:.7;line-height:1.5">在现有设计基础上生成新版本</span>
+            </button>
+            <button id="design-mode-new-btn" class="btn-secondary" onclick="setDesignMode('new')" style="text-align:left;padding:9px 12px;border-radius:10px;display:flex;flex-direction:column;gap:3px;width:100%">
+              <span style="font-size:12px;font-weight:600;display:flex;align-items:center;gap:5px">
+                <span id="design-mode-new-indicator" style="font-size:9px">○</span>
+                新建设计
+              </span>
+              <span id="design-mode-new-desc" style="font-size:11px;font-weight:400;opacity:.7;line-height:1.5">创建新项目，不影响当前设计</span>
+            </button>
+          </div>
+        </div>
+      </div>
+      <div class="design-side-section">
+        <div class="imglab-lib-field">
+          <label id="design-prompt-label" for="design-prompt-input">设计需求</label>
+          <div id="design-prompt-helper" class="design-side-note" style="margin-bottom:6px">描述你要生成的设计内容，KainClaw 会先产出这个项目的第一版。</div>
+          <div class="design-side-prompt-box">
+            <textarea id="design-prompt-input" placeholder="例如：做一个高端 AI 产品官网首屏原型，偏信息建筑和极简编辑感。"></textarea>
+          </div>
+        </div>
+        <div class="design-side-grid" style="margin-top:12px">
           <div class="imglab-lib-field">
             <label for="design-output-type">输出类型</label>
             <select id="design-output-type" class="imglab-lib-select">
@@ -976,51 +1142,80 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-seri
               <option value="animation">Animation</option>
             </select>
           </div>
-          <div class="imglab-lib-field">
+          <div id="design-style-field-wrap" class="imglab-lib-field">
             <label for="design-style-input">风格提示</label>
             <input id="design-style-input" type="text" placeholder="例如：minimal editorial / bold experimental" />
           </div>
         </div>
-        <div style="display:flex;gap:8px;flex-wrap:wrap">
-          <button id="design-mode-edit-btn" class="btn-secondary" onclick="setDesignMode('edit')">&#32534;&#36753;&#24403;&#21069;&#39029;&#38754;</button>
-          <button id="design-mode-new-btn" class="btn-secondary" onclick="setDesignMode('new')">&#26032;&#24314;&#35774;&#35745;</button>
-        </div>
-      <div class="imglab-lib-actions">
+        <div class="design-side-note" id="design-generate-hint" style="margin-top:12px">先设置输出类型，再点击生成设计，产出这个项目的第一版。</div>
+        <div class="imglab-lib-actions" style="margin-top:12px">
           <button id="design-generate-btn" class="btn-red" onclick="generateDesignWorkbench()">生成设计</button>
         </div>
-        <div id="design-generate-status" style="font-size:12px;color:#8b7969;line-height:1.6"></div>
-        <div id="design-direction-panel" style="display:none;border:1px dashed #eadfd2;border-radius:16px;background:#fcfaf7;padding:12px 14px"></div>
-        <div id="design-reference-panel" style="border:1px solid #eadfd2;border-radius:16px;background:#fff;padding:12px 14px">
-          <div style="font-size:12px;font-weight:700;color:#7b4a2e;letter-spacing:.04em;text-transform:uppercase;margin-bottom:8px">设计参考图</div>
-          <div id="design-reference-meta" style="font-size:12px;color:#7a6656;line-height:1.6;margin-bottom:10px">当前未带参考图。你可以本地上传一张，或从 Image Lab 最近结果里选一张。</div>
-          <div id="design-reference-preview" style="display:none;margin-bottom:10px"></div>
-          <div style="display:flex;gap:8px;flex-wrap:wrap">
-            <input id="design-reference-input" type="file" accept="image/*" style="display:none" onchange="handleDesignReferenceUpload(event)" />
-            <button class="btn-secondary" onclick="document.getElementById('design-reference-input').click()">上传参考图</button>
-            <button class="btn-secondary" onclick="pickLatestImageLabResultForDesign()">从 Image Lab 选图</button>
-            <button class="btn-secondary" onclick="clearDesignReference()">清空参考图</button>
+        <div id="design-generate-status" style="font-size:12px;color:#8b7969;line-height:1.6;margin-top:10px"></div>
+        <div id="design-direction-panel" style="display:none;border:1px dashed #eadfd2;border-radius:16px;background:#fcfaf7;padding:12px 14px;margin-top:10px"></div>
+      </div>
+      <details id="design-style-details" class="design-side-collapsible" ontoggle="handleDesignDetailsToggle('style', this.open)">
+        <summary>
+          <span>风格提示（可选）</span>
+          <span class="design-side-chevron">›</span>
+        </summary>
+        <div class="design-side-collapsible-body">
+          <div class="design-side-note">需要更明确的视觉方向时，再补充风格关键词。</div>
+          <div class="design-side-note" style="margin-top:10px">主输入区已提供风格提示输入，这里保持折叠说明即可。</div>
+        </div>
+      </details>
+      <details id="design-reference-details" class="design-side-collapsible" ontoggle="handleDesignDetailsToggle('reference', this.open)">
+        <summary>
+          <span>参考图（可选）</span>
+          <span class="design-side-chevron">›</span>
+        </summary>
+        <div class="design-side-collapsible-body">
+          <div id="design-reference-panel" class="design-side-compact" style="border:none;border-radius:0;background:transparent;padding:0">
+            <div id="design-reference-meta" style="font-size:12px;color:#7a6656;line-height:1.6;margin-bottom:10px">当前未带参考图。你可以本地上传一张，或从 Image Lab 最近结果里选一张。</div>
+            <div id="design-reference-preview" style="display:none;margin-bottom:10px"></div>
+            <div class="design-side-action-row">
+              <input id="design-reference-input" type="file" accept="image/*" style="display:none" onchange="handleDesignReferenceUpload(event)" />
+              <button class="btn-secondary" onclick="document.getElementById('design-reference-input').click()">上传参考图</button>
+              <button class="btn-secondary" onclick="pickLatestImageLabResultForDesign()">从 Image Lab 选图</button>
+              <button class="btn-secondary" onclick="clearDesignReference()">清空参考图</button>
+            </div>
           </div>
         </div>
-      </div>
-      <div style="border:1px solid #eadfd2;border-radius:18px;background:#fff;padding:14px 16px">
-        <div id="design-source-label" style="font-size:12px;font-weight:700;color:#7b4a2e;letter-spacing:.04em;text-transform:uppercase;margin-bottom:8px">当前产物</div>
-        <div id="design-bridge-title" style="font-size:15px;font-weight:600;color:#18181b;line-height:1.5">未加载设计内容</div>
-        <div id="design-bridge-status" style="font-size:12px;color:#8b7969;line-height:1.6;margin-top:6px">先从 Artifacts 面板打开一个 HTML 原型，再进入 KainClaw Design。</div>
-      </div>
+      </details>
       <div id="design-bridge-edits" style="display:none;border:1px dashed #eadfd2;border-radius:16px;background:#fcfaf7;padding:12px 14px;font-size:12px;color:#7a6656;line-height:1.7"></div>
-      <div id="design-sliders-panel" style="display:none;border:1px solid #eadfd2;border-radius:18px;background:#fff;padding:14px 16px;overflow:auto;max-height:320px"></div>
-      <div id="design-versions-panel" style="display:none;border:1px solid #eadfd2;border-radius:18px;background:#fff;padding:14px 16px;overflow:auto;max-height:240px"></div>
-      <div style="display:flex;gap:8px;flex-wrap:wrap">
-        <button id="design-export-html-btn" class="btn-secondary" onclick="exportDesignWorkbench('html')">导出 HTML</button>
-        <button id="design-export-pdf-btn" class="btn-secondary" onclick="exportDesignWorkbench('pdf')">导出 PDF</button>
-        <button id="design-export-pptx-btn" class="btn-secondary" onclick="exportDesignWorkbench('pptx')">导出 PPTX</button>
-      </div>
-      <button id="design-back-btn" class="btn-secondary" onclick="showPage('design-home')">返回设计</button>
+      <details id="design-versions-details" class="design-side-collapsible" ontoggle="handleDesignDetailsToggle('versions', this.open)" style="display:none">
+        <summary>
+          <span>版本历史</span>
+          <span class="design-side-chevron">›</span>
+        </summary>
+        <div class="design-side-collapsible-body">
+          <div id="design-versions-panel"></div>
+        </div>
+      </details>
+      <details id="design-export-details" class="design-side-collapsible" ontoggle="handleDesignDetailsToggle('export', this.open)" style="display:none">
+        <summary>
+          <span>导出</span>
+          <span class="design-side-chevron">›</span>
+        </summary>
+        <div class="design-side-collapsible-body">
+          <div class="design-side-note" style="margin-bottom:10px">导出当前版本为静态 HTML、PDF 或 PPTX。</div>
+          <div class="design-side-action-row export-row">
+            <button id="design-export-html-btn" class="btn-secondary" onclick="exportDesignWorkbench('html')">导出 HTML</button>
+            <button id="design-export-pdf-btn" class="btn-secondary" onclick="exportDesignWorkbench('pdf')">导出 PDF</button>
+            <button id="design-export-pptx-btn" class="btn-secondary" onclick="exportDesignWorkbench('pptx')">导出 PPTX</button>
+          </div>
+        </div>
+      </details>
     </div>
-    <div style="background:rgba(255,255,255,.92);border:1px solid #eadfd2;border-radius:22px;padding:18px;display:flex;flex-direction:column;min-height:0;box-shadow:0 18px 40px rgba(77,49,24,.08)">
+    <div style="background:rgba(255,255,255,.92);border:1px solid #eadfd2;border-radius:22px;padding:18px;display:flex;flex-direction:column;min-height:0;box-shadow:0 18px 40px rgba(77,49,24,.08);position:relative">
+      <div class="design-canvas-toolbar">
+        <button id="design-canvas-view-btn" class="design-canvas-mode-btn" onclick="setDesignCanvasMode('view')"><span class="design-canvas-mode-dot"></span>View</button>
+        <button id="design-canvas-select-btn" class="design-canvas-mode-btn" onclick="setDesignCanvasMode('select')"><span class="design-canvas-mode-dot"></span>Select</button>
+        <button id="design-canvas-tweaks-btn" class="design-canvas-mode-btn" onclick="toggleDesignTweaks()"><span class="design-canvas-mode-dot"></span>Tweaks</button>
+      </div>
       <div id="design-bridge-empty" class="artifacts-panel__placeholder" style="flex:1;min-height:220px">先从 Artifacts 面板打开一个 HTML 原型，再进入 KainClaw Design。</div>
       <iframe id="design-bridge-frame" class="artifacts-panel__frame" style="display:none;flex:1;min-height:0" sandbox="allow-scripts"></iframe>
-      <div id="design-patch-popover" style="display:none;margin-top:12px;border:1px solid #eadfd2;border-radius:16px;background:#fff7f0;padding:12px 14px">
+      <div id="design-patch-popover" class="design-patch-popover" style="display:none;border:1px solid #eadfd2;border-radius:16px;background:#fff7f0;padding:12px 14px">
         <div id="design-patch-target" style="font-size:11px;font-weight:700;color:#7b4a2e;letter-spacing:.04em;text-transform:uppercase;margin-bottom:8px">未选中元素</div>
         <textarea id="design-patch-comment" placeholder="例如：把这个标题改成渐变暖色，并保留现有布局节奏。" style="width:100%;min-height:88px;border:1px solid #eadfd2;border-radius:12px;padding:10px 12px;background:#fff;color:#2d1f14;font-family:inherit;resize:vertical;line-height:1.6"></textarea>
         <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:10px">
@@ -1028,6 +1223,10 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-seri
           <button class="btn-secondary" onclick="cancelDesignPatchSelection()">取消</button>
           <button id="design-patch-apply-btn" class="btn-red" onclick="applyDesignPatchRequest()">应用改写</button>
         </div>
+      </div>
+      <div id="design-tweaks-drawer" style="display:none;position:absolute;top:0;right:0;bottom:0;width:268px;z-index:5;background:rgba(255,255,255,.97);border-left:1px solid #eadfd2;border-radius:0 20px 20px 0;padding:16px;overflow-y:auto;box-shadow:-6px 0 20px rgba(77,49,24,.08)">
+        <div style="font-size:12px;font-weight:700;color:#7b4a2e;letter-spacing:.04em;text-transform:uppercase;margin-bottom:12px">Tweaks</div>
+        <div id="design-sliders-panel"></div>
       </div>
     </div>
   </div>
@@ -1152,6 +1351,7 @@ const designBridgeState = {
   style: '',
   sliders: [],
   sliderValues: {},
+  canvasMode: 'view',
   loading: false,
   error: '',
   selectedNode: null,
@@ -1161,6 +1361,10 @@ const designBridgeState = {
   directionSuggestions: [],
   suggestionVisible: false,
   referenceImage: null,
+  stylePanelExpanded: false,
+  referencePanelExpanded: false,
+  versionsPanelExpanded: false,
+  exportPanelExpanded: false,
 };
 let designBridgeRenderedToken = 0;
 let designBridgeFrameLoading = false;
@@ -1799,10 +2003,10 @@ function handleMessage(msg) {
       designBridgeState.sliderValues = msg.activeVersion?.sliderValues && typeof msg.activeVersion.sliderValues === 'object'
         ? msg.activeVersion.sliderValues
         : {};
+      designBridgeState.canvasMode = 'view';
       designBridgeState.renderToken = Date.now();
       designBridgeRenderedToken = 0;
       showDesignPage();
-      break;
       break;
     case 'design:progress':
       designBridgeState.loading = true;
@@ -1829,6 +2033,7 @@ function handleMessage(msg) {
       designBridgeState.lastEdits = null;
       designBridgeState.selectedNode = null;
       designBridgeState.patchLoading = false;
+      designBridgeState.canvasMode = 'view';
       designBridgeState.versionId = msg.versionId || null;
       designBridgeState.renderToken = Date.now();
       showDesignPage();
@@ -1838,6 +2043,7 @@ function handleMessage(msg) {
       designBridgeState.patchLoading = false;
       designBridgeState.selectedNode = null;
       designBridgeState.error = '';
+      designBridgeState.canvasMode = 'view';
       designBridgeState.versionId = msg.versionId || designBridgeState.versionId || null;
       designBridgeState.renderToken = Date.now();
       {
@@ -2322,7 +2528,7 @@ function showDesignPage() {
 }
 
 function openDesignHub() {
-  showPage('design-home');
+  send({ type: 'design:getLastProject' });
 }
 
 function setDesignMode(mode) {
@@ -2346,58 +2552,156 @@ function openDesignProjectFromHome(projectId) {
 function renderDesignHome() {
   const recentEl = document.getElementById('design-home-recent');
   const allEl = document.getElementById('design-home-all');
-  if (!recentEl || !allEl) return;
+  const emptyStateEl = document.getElementById('design-home-empty-state');
+  const recentSectionEl = document.getElementById('design-home-recent-section');
+  const allSectionEl = document.getElementById('design-home-all-section');
+  const recentCountEl = document.getElementById('design-home-recent-count');
+  const allCountEl = document.getElementById('design-home-all-count');
+  if (!recentEl || !allEl || !emptyStateEl || !recentSectionEl || !allSectionEl || !recentCountEl || !allCountEl) return;
 
   const projects = Array.isArray(designHomeState.projects) ? designHomeState.projects : [];
+  const sortedProjects = [...projects].sort((a, b) => ((b.updatedAt || b.createdAt || b.lastOpenedAt || 0) - (a.updatedAt || a.createdAt || a.lastOpenedAt || 0)));
   const recent = [...projects]
+    .filter(project => Boolean(project.lastOpenedAt))
     .sort((a, b) => (b.lastOpenedAt || 0) - (a.lastOpenedAt || 0))
     .slice(0, 8);
 
-  const formatTime = project =>
-    new Date(project.updatedAt || project.createdAt || Date.now()).toLocaleString();
-  const versionLabel = project =>
-    project.activeVersionId && project.activeVersionId !== 'pending-version'
-      ? '有版本'
-      : '未生成';
-  const previewTone = project => {
-    const value = [...String(project.projectId || '')].reduce((sum, ch) => sum + ch.charCodeAt(0), 0) % 360;
-    return `linear-gradient(135deg, hsl(${value} 55% 92%), hsl(${(value + 28) % 360} 45% 84%))`;
+  const formatRelativeTime = ts => {
+    const diff = Date.now() - (ts || 0);
+    if (diff < 60000) return '刚刚';
+    if (diff < 3600000) return `${Math.floor(diff / 60000)} 分钟前`;
+    if (diff < 86400000) return `${Math.floor(diff / 3600000)} 小时前`;
+    if (diff < 7 * 86400000) return `${Math.floor(diff / 86400000)} 天前`;
+    const d = new Date(ts);
+    return `${d.getMonth() + 1}/${d.getDate()}`;
   };
+
+  const formatListTime = ts => {
+    if (!ts) return '未打开';
+    const d = new Date(ts);
+    const now = new Date();
+    const sameYear = d.getFullYear() === now.getFullYear();
+    const minutes = String(d.getMinutes()).padStart(2, '0');
+    const hours = String(d.getHours()).padStart(2, '0');
+    const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+    const startOfTarget = new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
+    const diffDays = Math.floor((startOfToday - startOfTarget) / 86400000);
+    if (diffDays === 0) return `今天 ${hours}:${minutes}`;
+    if (diffDays === 1) return `昨天 ${hours}:${minutes}`;
+    if (sameYear) return `${d.getMonth() + 1}/${d.getDate()} ${hours}:${minutes}`;
+    return `${d.getFullYear()}/${d.getMonth() + 1}/${d.getDate()}`;
+  };
+
+  const versionBadge = project => {
+    const cnt = typeof project.versionCount === 'number' ? project.versionCount : 0;
+    if (cnt === 0) {
+      return '<span class="design-home-pill version-empty">未生成</span>';
+    }
+    return `<span class="design-home-pill version">v${cnt}</span>`;
+  };
+
+  const sourceBadge = project => {
+    if (project.source === 'artifact') {
+      return '<span class="design-home-pill source-artifact">来自对话</span>';
+    }
+    return '<span class="design-home-pill source-blank">空白新建</span>';
+  };
+
+  const previewSeed = project => {
+    const value = [...String(project.projectId || '')].reduce((sum, ch) => sum + ch.charCodeAt(0), 0) % 360;
+    return {
+      hue: value,
+      darkTheme: value % 3 === 0,
+    };
+  };
+
+  const previewTone = project => {
+    const seed = previewSeed(project);
+    if (seed.darkTheme) {
+      return `linear-gradient(135deg, hsl(${seed.hue} 34% 16%), hsl(${(seed.hue + 22) % 360} 32% 24%))`;
+    }
+    return `linear-gradient(135deg, hsl(${seed.hue} 58% 94%), hsl(${(seed.hue + 24) % 360} 44% 83%))`;
+  };
+
+  const previewLineColor = project => {
+    const seed = previewSeed(project);
+    return {
+      strong: seed.darkTheme ? 'rgba(255,255,255,.24)' : 'rgba(24,24,27,.14)',
+      soft: seed.darkTheme ? 'rgba(255,255,255,.12)' : 'rgba(24,24,27,.08)',
+    };
+  };
+
+  const miniLines = project => {
+    const colors = previewLineColor(project);
+    return `
+      <div class="design-home-card-lines" aria-hidden="true">
+        <div class="design-home-card-line heading" style="background:${colors.strong}"></div>
+        <div class="design-home-card-line medium" style="background:${colors.soft}"></div>
+        <div class="design-home-card-line short" style="background:${colors.soft}"></div>
+        <div style="height:8px"></div>
+        <div class="design-home-card-line tiny" style="background:${colors.soft}"></div>
+        <div class="design-home-card-line tiny" style="width:40%;background:${colors.soft}"></div>
+      </div>
+    `;
+  };
+
+  const encodedProjectId = project => encodeURIComponent(String(project.projectId || ''));
+
   const recentCard = project => `
-    <button style="border:1px solid #eadfd2;border-radius:16px;background:#fff;padding:0;cursor:pointer;text-align:left;overflow:hidden" onclick="openDesignProjectFromHome('${escapeHtml(project.projectId)}')">
-      <div style="height:86px;background:${previewTone(project)};position:relative">
-        <div style="position:absolute;left:14px;right:14px;top:16px;height:2px;background:rgba(24,24,27,.08)"></div>
-        <div style="position:absolute;left:14px;right:72px;top:34px;height:14px;border-radius:999px;background:rgba(24,24,27,.12)"></div>
-        <div style="position:absolute;left:14px;right:110px;top:56px;height:10px;border-radius:999px;background:rgba(24,24,27,.08)"></div>
-      </div>
-      <div style="padding:12px 14px">
-        <div style="font-size:13px;font-weight:700;color:#18181b;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${escapeHtml(project.name || 'Untitled Design')}</div>
-        <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-top:8px">
-          <span style="font-size:11px;color:#7b4a2e;background:#fcfaf7;border:1px solid #eadfd2;border-radius:999px;padding:3px 8px">${escapeHtml(versionLabel(project))}</span>
-          <span style="font-size:11px;color:#8b7969">${escapeHtml(formatTime(project))}</span>
+    <button class="design-home-card" onclick="openDesignProjectFromHome(decodeURIComponent('${encodedProjectId(project)}'))">
+      <div class="design-home-card-preview" style="background:${previewTone(project)}">${miniLines(project)}</div>
+      <div class="design-home-card-body">
+        <div class="design-home-card-name">${escapeHtml(project.name || 'Untitled Design')}</div>
+        <div class="design-home-card-meta">
+          ${versionBadge(project)}
+          ${sourceBadge(project)}
         </div>
+        <div class="design-home-card-time">${escapeHtml(formatRelativeTime(project.lastOpenedAt || project.updatedAt || project.createdAt))}</div>
       </div>
-    </button>
-  `;
-  const allRow = project => `
-    <button style="border:1px solid #eadfd2;border-radius:14px;background:#fff;padding:12px 14px;cursor:pointer;text-align:left;display:flex;align-items:center;justify-content:space-between;gap:12px" onclick="openDesignProjectFromHome('${escapeHtml(project.projectId)}')">
-      <div style="display:flex;align-items:center;gap:12px;min-width:0">
-        <div style="width:32px;height:32px;border-radius:50%;display:flex;align-items:center;justify-content:center;background:${previewTone(project)};font-size:13px;font-weight:700;color:#5f4f43;flex-shrink:0">${escapeHtml((project.name || 'U').charAt(0).toUpperCase())}</div>
-        <div style="min-width:0">
-          <div style="font-size:13px;font-weight:700;color:#18181b;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${escapeHtml(project.name || 'Untitled Design')}</div>
-          <div style="font-size:11px;color:#8b7969;margin-top:4px">${escapeHtml(versionLabel(project))}</div>
-        </div>
-      </div>
-      <div style="font-size:11px;color:#8b7969;flex-shrink:0">${escapeHtml(formatTime(project))}</div>
     </button>
   `;
 
-  recentEl.innerHTML = recent.length
-    ? recent.map(recentCard).join('')
-    : '<div style="font-size:12px;color:#8b7969;line-height:1.7;padding:6px 2px">还没有最近继续的设计，先新建一张。</div>';
-  allEl.innerHTML = projects.length
-    ? projects.map(allRow).join('')
-    : '<div style="font-size:12px;color:#8b7969;line-height:1.7;padding:6px 2px">当前还没有设计项目。</div>';
+  const allRow = project => `
+    <button class="design-home-list-row" onclick="openDesignProjectFromHome(decodeURIComponent('${encodedProjectId(project)}'))">
+      <div class="design-home-list-dot" style="background:${previewTone(project)}">${escapeHtml((project.name || 'U').trim().charAt(0).toUpperCase() || 'U')}</div>
+      <div class="design-home-list-main">
+        <div class="design-home-list-name">${escapeHtml(project.name || 'Untitled Design')}</div>
+        <div class="design-home-list-meta">
+          ${versionBadge(project)}
+          ${sourceBadge(project)}
+        </div>
+      </div>
+      <div class="design-home-list-right">
+        <div class="design-home-list-time">${escapeHtml(formatListTime(project.lastOpenedAt || project.updatedAt || project.createdAt))}</div>
+      </div>
+    </button>
+  `;
+
+  if (!projects.length) {
+    emptyStateEl.style.display = 'flex';
+    recentSectionEl.style.display = 'none';
+    allSectionEl.style.display = 'none';
+    recentEl.innerHTML = '';
+    allEl.innerHTML = '';
+    recentCountEl.textContent = '';
+    allCountEl.textContent = '';
+    return;
+  }
+
+  emptyStateEl.style.display = 'none';
+  recentSectionEl.style.display = 'flex';
+  allSectionEl.style.display = 'flex';
+
+  recentCountEl.textContent = `${recent.length || 0} 个`;
+  allCountEl.textContent = `${sortedProjects.length} 个项目`;
+
+  if (recent.length) {
+    recentEl.innerHTML = recent.map(recentCard).join('');
+  } else {
+    recentEl.innerHTML = '<div class="design-home-empty-note">还没有最近继续的项目。先打开一次任意设计，它会按最近访问时间出现在这里。</div>';
+  }
+
+  allEl.innerHTML = sortedProjects.map(allRow).join('');
 }
 
 function resetOnboardingProviderSelection(providerId = 'anthropic') {
@@ -2686,6 +2990,11 @@ function buildDesignPatchableSrcdoc(html) {
     event.stopPropagation();
     clearMarks();
     const selector = buildSelector(el);
+    const rect = el.getBoundingClientRect();
+    const selectionEnabled = document.body.dataset.kcSelectionMode === 'true';
+    if (!selectionEnabled) {
+      return;
+    }
     el.setAttribute(MARK_ATTR, 'true');
     el.style.outline = '2px dashed #2563eb';
     el.style.outlineOffset = '2px';
@@ -2700,6 +3009,12 @@ function buildDesignPatchableSrcdoc(html) {
       title: el.getAttribute('title') || '',
       src: el.getAttribute('src') || '',
       role: el.getAttribute('role') || '',
+      rect: {
+        top: rect.top,
+        left: rect.left,
+        width: rect.width,
+        height: rect.height,
+      },
     }, '*');
   }, true);
   window.addEventListener('message', event => {
@@ -2759,20 +3074,140 @@ function isDesignBridgeFrameSource(source) {
 
 function updateDesignTweaksButton() {
   const tweaksBtn = document.getElementById('design-tweaks-btn');
+  const canvasTweaksBtn = document.getElementById('design-canvas-tweaks-btn');
   if (!tweaksBtn) return;
 
+  const hasSliders = (designBridgeState.sliders?.length ?? 0) > 0;
+  const tweaksAvailable = designBridgeState.editModeAvailable || hasSliders;
   tweaksBtn.style.display = designBridgeState.html ? 'inline-flex' : 'none';
-  tweaksBtn.disabled = !designBridgeState.editModeAvailable;
-  tweaksBtn.style.opacity = designBridgeState.editModeAvailable ? '1' : '.55';
-  tweaksBtn.style.cursor = designBridgeState.editModeAvailable ? 'pointer' : 'not-allowed';
+  tweaksBtn.disabled = !tweaksAvailable;
+  tweaksBtn.style.opacity = tweaksAvailable ? '1' : '.55';
+  tweaksBtn.style.cursor = tweaksAvailable ? 'pointer' : 'not-allowed';
   tweaksBtn.title = !designBridgeState.html
     ? ''
-    : designBridgeState.editModeAvailable
+    : tweaksAvailable
       ? (isEnglishUi() ? 'Toggle tweak mode for this artifact' : '\u5207\u6362\u8fd9\u4e2a\u539f\u578b\u7684 Tweaks \u6a21\u5f0f')
       : (isEnglishUi() ? 'This artifact does not expose tweak mode' : '\u8fd9\u4e2a\u539f\u578b\u6ca1\u6709\u63a5\u5165 Tweaks \u6a21\u5f0f');
   tweaksBtn.textContent = designBridgeState.editModeActive
     ? (isEnglishUi() ? 'Hide Tweaks' : '\u5173\u95ed Tweaks')
     : 'Tweaks';
+  const tweaksDrawer = document.getElementById('design-tweaks-drawer');
+  if (tweaksDrawer) tweaksDrawer.style.display = designBridgeState.editModeActive ? 'block' : 'none';
+  if (canvasTweaksBtn) {
+    canvasTweaksBtn.style.display = designBridgeState.html ? 'inline-flex' : 'none';
+    canvasTweaksBtn.disabled = !tweaksAvailable;
+    canvasTweaksBtn.style.opacity = tweaksAvailable ? '1' : '.55';
+    canvasTweaksBtn.style.cursor = tweaksAvailable ? 'pointer' : 'not-allowed';
+    canvasTweaksBtn.classList.toggle('active', !!designBridgeState.editModeActive);
+  }
+}
+
+function positionDesignPatchPopover(popoverEl, frameEl) {
+  if (!popoverEl || !frameEl || !designBridgeState.selectedNode?.rect) {
+    return;
+  }
+
+  const frameRect = frameEl.getBoundingClientRect();
+  const hostRect = frameEl.parentElement?.getBoundingClientRect() || frameRect;
+  const selectedRect = designBridgeState.selectedNode.rect;
+  const viewportTop = frameRect.top + Number(selectedRect.top || 0);
+  const viewportLeft = frameRect.left + Number(selectedRect.left || 0);
+  const elementWidth = Number(selectedRect.width || 0);
+  const elementHeight = Number(selectedRect.height || 0);
+  const margin = 12;
+
+  popoverEl.style.left = '12px';
+  popoverEl.style.top = '12px';
+  const popoverRect = popoverEl.getBoundingClientRect();
+  const maxLeft = Math.max(margin, hostRect.width - popoverRect.width - margin);
+  const desiredLeft = Math.max(margin, Math.min(maxLeft, viewportLeft - hostRect.left));
+  const belowTop = viewportTop - hostRect.top + elementHeight + margin;
+  const aboveTop = viewportTop - hostRect.top - popoverRect.height - margin;
+  const fitsBelow = belowTop + popoverRect.height <= hostRect.height - margin;
+  const desiredTop = fitsBelow
+    ? belowTop
+    : Math.max(margin, aboveTop);
+
+  popoverEl.style.left = `${desiredLeft}px`;
+  popoverEl.style.top = `${desiredTop}px`;
+}
+
+function updateDesignCanvasToolbar() {
+  const viewBtn = document.getElementById('design-canvas-view-btn');
+  const selectBtn = document.getElementById('design-canvas-select-btn');
+  const frameEl = document.getElementById('design-bridge-frame');
+  const hasDesignContent = !!designBridgeState.html;
+  const activeMode = designBridgeState.editModeActive
+    ? 'tweaks'
+    : (designBridgeState.canvasMode || 'view');
+
+  [viewBtn, selectBtn].forEach(button => {
+    if (!button) return;
+    button.style.display = hasDesignContent ? 'inline-flex' : 'none';
+    button.disabled = !hasDesignContent;
+  });
+  if (viewBtn) viewBtn.classList.toggle('active', activeMode === 'view');
+  if (selectBtn) selectBtn.classList.toggle('active', activeMode === 'select');
+  if (frameEl?.contentDocument?.body) {
+    frameEl.contentDocument.body.dataset.kcSelectionMode = activeMode === 'select' ? 'true' : 'false';
+  }
+}
+
+function setDesignCanvasMode(mode) {
+  if (!designBridgeState.html) {
+    return;
+  }
+  designBridgeState.canvasMode = mode === 'select' ? 'select' : 'view';
+  if (designBridgeState.editModeActive) {
+    designBridgeState.editModeActive = false;
+    if (designBridgeState.editModeAvailable) {
+      const frame = document.getElementById('design-bridge-frame');
+      frame?.contentWindow?.postMessage({ type: '__deactivate_edit_mode' }, '*');
+    }
+  }
+  if (designBridgeState.canvasMode !== 'select') {
+    designBridgeState.selectedNode = null;
+  }
+  renderDesignBridgePage();
+}
+
+function updateDesignCanvasToolbar() {
+  const viewBtn = document.getElementById('design-canvas-view-btn');
+  const selectBtn = document.getElementById('design-canvas-select-btn');
+  const frameEl = document.getElementById('design-bridge-frame');
+  const hasDesignContent = !!designBridgeState.html;
+  const activeMode = designBridgeState.editModeActive
+    ? 'tweaks'
+    : (designBridgeState.canvasMode || 'view');
+
+  [viewBtn, selectBtn].forEach(button => {
+    if (!button) return;
+    button.style.display = hasDesignContent ? 'inline-flex' : 'none';
+    button.disabled = !hasDesignContent;
+  });
+  if (viewBtn) viewBtn.classList.toggle('active', activeMode === 'view');
+  if (selectBtn) selectBtn.classList.toggle('active', activeMode === 'select');
+  if (frameEl?.contentDocument?.body) {
+    frameEl.contentDocument.body.dataset.kcSelectionMode = activeMode === 'select' ? 'true' : 'false';
+  }
+}
+
+function setDesignCanvasMode(mode) {
+  if (!designBridgeState.html) {
+    return;
+  }
+  designBridgeState.canvasMode = mode === 'select' ? 'select' : 'view';
+  if (designBridgeState.editModeActive) {
+    designBridgeState.editModeActive = false;
+    if (designBridgeState.editModeAvailable) {
+      const frame = document.getElementById('design-bridge-frame');
+      frame?.contentWindow?.postMessage({ type: '__deactivate_edit_mode' }, '*');
+    }
+  }
+  if (designBridgeState.canvasMode !== 'select') {
+    designBridgeState.selectedNode = null;
+  }
+  renderDesignBridgePage();
 }
 
 function renderDesignBridgePage() {
@@ -2783,11 +3218,12 @@ function renderDesignBridgePage() {
   const editsEl = document.getElementById('design-bridge-edits');
   const emptyEl = document.getElementById('design-bridge-empty');
   const frameEl = document.getElementById('design-bridge-frame');
-  const backBtn = document.getElementById('design-back-btn');
   const generateStatusEl = document.getElementById('design-generate-status');
   const generateBtn = document.getElementById('design-generate-btn');
   const editModeBtn = document.getElementById('design-mode-edit-btn');
   const newModeBtn = document.getElementById('design-mode-new-btn');
+  const editModeDescEl = document.getElementById('design-mode-edit-desc');
+  const newModeDescEl = document.getElementById('design-mode-new-desc');
   const slidersPanel = document.getElementById('design-sliders-panel');
   const promptInput = document.getElementById('design-prompt-input');
   const outputTypeSelect = document.getElementById('design-output-type');
@@ -2800,30 +3236,130 @@ function renderDesignBridgePage() {
   const directionPanel = document.getElementById('design-direction-panel');
   const referenceMeta = document.getElementById('design-reference-meta');
   const referencePreview = document.getElementById('design-reference-preview');
+  const styleFieldWrap = document.getElementById('design-style-field-wrap');
+  const styleDetails = document.getElementById('design-style-details');
+  const referenceDetails = document.getElementById('design-reference-details');
+  const versionsDetails = document.getElementById('design-versions-details');
+  const exportDetails = document.getElementById('design-export-details');
+  const stageA = document.getElementById('design-stage-a');
+  const stageB = document.getElementById('design-stage-b');
+  const stageATitle = document.getElementById('design-stage-a-title');
+  const stageACopy = document.getElementById('design-stage-a-copy');
+  const stageBTitle = document.getElementById('design-stage-b-title');
+  const stageBMeta = document.getElementById('design-stage-b-meta');
+  const promptLabel = document.getElementById('design-prompt-label');
+  const promptHelper = document.getElementById('design-prompt-helper');
+  const generateHint = document.getElementById('design-generate-hint');
 
-  if (!titleEl || !statusEl || !subtitleEl || !sourceLabelEl || !editsEl || !emptyEl || !frameEl || !backBtn || !generateStatusEl || !generateBtn || !editModeBtn || !newModeBtn || !slidersPanel || !promptInput || !outputTypeSelect || !styleInput || !patchPopover || !patchTarget || !patchApplyBtn || !imageLabBtn || !versionsPanel || !directionPanel || !referenceMeta || !referencePreview) {
+  if (!titleEl || !statusEl || !subtitleEl || !sourceLabelEl || !editsEl || !emptyEl || !frameEl || !generateStatusEl || !generateBtn || !editModeBtn || !newModeBtn || !editModeDescEl || !newModeDescEl || !slidersPanel || !promptInput || !outputTypeSelect || !styleInput || !patchPopover || !patchTarget || !patchApplyBtn || !imageLabBtn || !versionsPanel || !directionPanel || !referenceMeta || !referencePreview || !styleFieldWrap || !styleDetails || !referenceDetails || !versionsDetails || !exportDetails || !stageA || !stageB || !stageATitle || !stageACopy || !stageBTitle || !stageBMeta || !promptLabel || !promptHelper || !generateHint) {
     return;
   }
 
+  const hasDesignContent = !!designBridgeState.html;
+  const ptopTitle = document.getElementById('design-ptop-title');
+  const ptopBadge = document.getElementById('design-ptop-badge');
+  if (ptopTitle) {
+    ptopTitle.textContent = designBridgeState.title || 'KainClaw Design';
+    ptopTitle.title = designBridgeState.title || 'KainClaw Design';
+  }
+  if (ptopBadge) {
+    if (designBridgeState.loading) {
+      ptopBadge.textContent = '生成中...';
+      ptopBadge.style.display = 'inline-block';
+      ptopBadge.style.background = '#f0f0f0';
+      ptopBadge.style.color = '#52525b';
+      ptopBadge.style.borderColor = '#e4e4e7';
+    } else if (designBridgeState.html) {
+      const versionHint = designBridgeState.versionId ? '编辑中' : '已加载';
+      ptopBadge.textContent = versionHint;
+      ptopBadge.style.display = 'inline-block';
+      ptopBadge.style.background = '#fff0e6';
+      ptopBadge.style.color = '#7b4a2e';
+      ptopBadge.style.borderColor = '#f0c8a0';
+    } else if (designBridgeState.mode === 'new' || !designBridgeState.html) {
+      ptopBadge.textContent = '新建中';
+      ptopBadge.style.display = 'inline-block';
+      ptopBadge.style.background = '#edf5ed';
+      ptopBadge.style.color = '#3a6b3a';
+      ptopBadge.style.borderColor = '#c3d9c3';
+    } else {
+      ptopBadge.style.display = 'none';
+    }
+  }
+
   updateDesignTweaksButton();
-  backBtn.textContent = isEnglishUi() ? 'Back to chat' : '返回聊天';
   sourceLabelEl.textContent = designBridgeState.prompt
     ? (isEnglishUi() ? 'Current design run' : '当前设计结果')
     : (isEnglishUi() ? 'Current artifact' : '当前产物');
+  stageA.style.display = hasDesignContent ? 'none' : 'flex';
+  stageB.style.display = hasDesignContent ? 'flex' : 'none';
+  styleFieldWrap.style.display = hasDesignContent ? 'none' : 'block';
+  styleDetails.style.display = hasDesignContent ? 'none' : 'block';
+  referenceDetails.style.display = hasDesignContent ? 'none' : 'block';
+  promptLabel.textContent = hasDesignContent
+    ? (isEnglishUi() ? 'Continue designing' : '继续修改 / 提新需求')
+    : (isEnglishUi() ? 'Design request' : '设计需求');
+  promptHelper.textContent = hasDesignContent
+    ? (isEnglishUi()
+        ? 'Describe the next revision, or ask for a fresh direction while staying in this project.'
+        : '继续描述下一轮修改，或在保留当前项目的前提下提出新的方向。')
+    : (isEnglishUi()
+        ? 'Describe what to generate. KainClaw will create the first version for this project.'
+        : '描述你要生成的设计内容，KainClaw 会先产出这个项目的第一版。');
+  generateHint.textContent = hasDesignContent
+    ? (isEnglishUi()
+        ? 'Use the prompt box above to continue editing, then generate a new version.'
+        : '在上方输入框继续描述修改方向，再生成新版本。')
+    : (isEnglishUi()
+        ? 'Set the output type first, then click generate to create your first design.'
+        : '先设置输出类型，再点击生成设计，产出这个项目的第一版。');
+  stageATitle.textContent = isEnglishUi() ? 'Start a new design' : '从空白开始生成设计';
+  stageACopy.textContent = isEnglishUi()
+    ? 'No design content is loaded yet. Define the request, output type, and optional references to create the first version.'
+    : '当前还没有设计内容。先定义需求、输出类型和可选参考图，生成这个项目的第一版。';
+  stageBTitle.textContent = designBridgeState.title || 'KainClaw Design';
+  stageBMeta.textContent = hasDesignContent
+    ? [
+        designBridgeState.versionId
+          ? (isEnglishUi() ? `Editing version ${designBridgeState.versionId.slice(0, 8)}` : `当前版本 ${designBridgeState.versionId.slice(0, 8)}`)
+          : (isEnglishUi() ? 'Editing current project' : '当前正在编辑此项目'),
+        designBridgeState.prompt
+          ? (isEnglishUi()
+              ? `Latest prompt: ${String(designBridgeState.prompt).slice(0, 48)}`
+              : `最近一次需求：${String(designBridgeState.prompt).slice(0, 48)}`)
+          : (isEnglishUi() ? 'No prompt recorded yet' : '当前还没有记录需求'),
+      ].join(' · ')
+    : '';
   promptInput.value = designBridgeState.prompt || '';
-  editModeBtn.classList.toggle('on', designBridgeState.mode === 'edit');
-  newModeBtn.classList.toggle('on', designBridgeState.mode === 'new');
-  editModeBtn.style.borderColor = designBridgeState.mode === 'edit' ? '#E84040' : '#d4d4d8';
-  editModeBtn.style.background = designBridgeState.mode === 'edit' ? '#fff5f5' : '#fff';
-  editModeBtn.style.color = designBridgeState.mode === 'edit' ? '#E84040' : '#52525b';
-  newModeBtn.style.borderColor = designBridgeState.mode === 'new' ? '#E84040' : '#d4d4d8';
-  newModeBtn.style.background = designBridgeState.mode === 'new' ? '#fff5f5' : '#fff';
-  newModeBtn.style.color = designBridgeState.mode === 'new' ? '#E84040' : '#52525b';
+  const isEdit = designBridgeState.mode === 'edit';
+  const isNew = designBridgeState.mode === 'new';
+  editModeBtn.classList.toggle('on', isEdit);
+  newModeBtn.classList.toggle('on', isNew);
+  editModeBtn.style.borderColor = isEdit ? '#c97b3c' : '#eadfd2';
+  editModeBtn.style.background = isEdit ? '#fff8f2' : '#fff';
+  editModeBtn.style.color = isEdit ? '#7b4a2e' : '#52525b';
+  newModeBtn.style.borderColor = isNew ? '#c97b3c' : '#eadfd2';
+  newModeBtn.style.background = isNew ? '#fff8f2' : '#fff';
+  newModeBtn.style.color = isNew ? '#7b4a2e' : '#52525b';
   editModeBtn.disabled = !designBridgeState.html;
-  editModeBtn.style.opacity = designBridgeState.html ? '1' : '.55';
+  editModeBtn.style.opacity = designBridgeState.html ? '1' : '.5';
   editModeBtn.title = designBridgeState.html ? '' : (isEnglishUi() ? 'There is no current page to edit yet.' : '\u5f53\u524d\u8fd8\u6ca1\u6709\u9875\u9762\u53ef\u7f16\u8f91\u3002');
+  const editInd = document.getElementById('design-mode-edit-indicator');
+  const newInd = document.getElementById('design-mode-new-indicator');
+  if (editInd) editInd.textContent = isEdit ? '\u25cf' : '\u25cb';
+  if (newInd) newInd.textContent = isNew ? '\u25cf' : '\u25cb';
+  if (hasDesignContent) {
+    editModeDescEl.textContent = isEnglishUi() ? 'Generate a new version on top of current design' : '\u5728\u73b0\u6709\u8bbe\u8ba1\u57fa\u7840\u4e0a\u751f\u6210\u65b0\u7248\u672c';
+  }
+  newModeDescEl.textContent = isEnglishUi() ? 'Start fresh \u2014 creates a new project' : '\u521b\u5efa\u65b0\u9879\u76ee\uff0c\u4e0d\u5f71\u54cd\u5f53\u524d\u8bbe\u8ba1';
   outputTypeSelect.value = designBridgeState.outputType || 'prototype';
   styleInput.value = designBridgeState.style || '';
+  styleDetails.open = designBridgeState.stylePanelExpanded;
+  referenceDetails.open = designBridgeState.referencePanelExpanded;
+  versionsDetails.open = designBridgeState.versionsPanelExpanded;
+  exportDetails.open = designBridgeState.exportPanelExpanded;
+  versionsDetails.style.display = hasDesignContent ? 'block' : 'none';
+  exportDetails.style.display = hasDesignContent ? 'block' : 'none';
   generateBtn.disabled = !!designBridgeState.loading;
   generateBtn.textContent = designBridgeState.loading
     ? (isEnglishUi() ? 'Generating...' : '生成中...')
@@ -2849,6 +3385,10 @@ function renderDesignBridgePage() {
   patchApplyBtn.textContent = designBridgeState.patchLoading
     ? (isEnglishUi() ? 'Applying...' : '应用中...')
     : (isEnglishUi() ? 'Apply patch' : '应用改写');
+  if (designBridgeState.selectedNode) {
+    positionDesignPatchPopover(patchPopover, frameEl);
+  }
+  updateDesignCanvasToolbar();
   renderDesignVersionsPanel(versionsPanel);
   renderDesignDirectionPanel(directionPanel);
   renderDesignReferencePanel(referenceMeta, referencePreview);
@@ -2972,15 +3512,14 @@ function renderDesignDirectionPanel(panel) {
 function renderDesignVersionsPanel(panel) {
   const versions = Array.isArray(designBridgeState.versions) ? designBridgeState.versions : [];
   if (!versions.length) {
-    panel.style.display = 'none';
-    panel.innerHTML = '';
+    panel.innerHTML = `<div class="design-side-note">${isEnglishUi() ? 'No saved versions yet.' : '当前还没有可恢复的历史版本。'}</div>`;
     return;
   }
 
-  panel.style.display = 'block';
+  const visibleVersions = versions.slice(0, 5);
   panel.innerHTML = [
-    `<div style="font-size:12px;font-weight:700;color:#7b4a2e;letter-spacing:.04em;text-transform:uppercase;margin-bottom:10px">${isEnglishUi() ? 'Recent versions' : '最近版本'}</div>`,
-    ...versions.map(version => {
+    `<div class="design-side-note" style="margin-bottom:10px">${isEnglishUi() ? 'Select one of the latest 5 saved versions to restore it into the canvas.' : '这里展示最近 5 个版本，点击即可恢复到画布。'}</div>`,
+    ...visibleVersions.map(version => {
       const active = version.id === designBridgeState.versionId;
       const time = new Date(version.createdAt).toLocaleTimeString(isEnglishUi() ? 'en-US' : 'zh-CN', { hour: '2-digit', minute: '2-digit' });
       const label = version.prompt
@@ -3034,6 +3573,25 @@ function renderDesignSlidersPanel(panel, frameEl) {
   ].join('');
 
   applyAllDesignSliderValues(frameEl);
+}
+
+function handleDesignDetailsToggle(key, open) {
+  switch (key) {
+    case 'style':
+      designBridgeState.stylePanelExpanded = !!open;
+      break;
+    case 'reference':
+      designBridgeState.referencePanelExpanded = !!open;
+      break;
+    case 'versions':
+      designBridgeState.versionsPanelExpanded = !!open;
+      break;
+    case 'export':
+      designBridgeState.exportPanelExpanded = !!open;
+      break;
+    default:
+      break;
+  }
 }
 
 function applyAllDesignSliderValues(frameEl) {
@@ -3395,7 +3953,8 @@ function openKainClawDesignBridge(payload) {
 }
 
 function toggleDesignTweaks() {
-  if (!designBridgeState.editModeAvailable) {
+  const hasSliders = (designBridgeState.sliders?.length ?? 0) > 0;
+  if (!designBridgeState.editModeAvailable && !hasSliders) {
     designBridgeState.error = isEnglishUi()
       ? 'This artifact does not expose tweak mode yet.'
       : '\u8fd9\u4e2a\u539f\u578b\u8fd8\u6ca1\u6709\u63a5\u5165 Tweaks \u6a21\u5f0f\u3002';
@@ -3410,11 +3969,15 @@ function toggleDesignTweaks() {
   }
 
   const nextActive = !designBridgeState.editModeActive;
-  targetWindow.postMessage({
-    type: nextActive ? '__activate_edit_mode' : '__deactivate_edit_mode',
-  }, '*');
+  if (designBridgeState.editModeAvailable) {
+    targetWindow.postMessage({
+      type: nextActive ? '__activate_edit_mode' : '__deactivate_edit_mode',
+    }, '*');
+  }
   designBridgeState.editModeActive = nextActive;
+  designBridgeState.canvasMode = 'view';
   updateDesignTweaksButton();
+  updateDesignCanvasToolbar();
 }
 
 function handleKainClawDesignFrameMessage(event) {
@@ -3435,6 +3998,14 @@ function handleKainClawDesignFrameMessage(event) {
           title: typeof payload.title === 'string' ? payload.title : '',
           src: typeof payload.src === 'string' ? payload.src : '',
           role: typeof payload.role === 'string' ? payload.role : '',
+          rect: payload.rect && typeof payload.rect === 'object'
+            ? {
+                top: Number(payload.rect.top || 0),
+                left: Number(payload.rect.left || 0),
+                width: Number(payload.rect.width || 0),
+                height: Number(payload.rect.height || 0),
+              }
+            : null,
         }
       : null;
     designBridgeState.patchLoading = false;
