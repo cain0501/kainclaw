@@ -160,6 +160,18 @@ describe("SessionRepository appendMessages", () => {
           content: "look",
           attachments: [{ data: "QUJDRA==", mimeType: "image/png" }],
         },
+        {
+          role: "assistant",
+          content: "image result",
+          generatedImages: [
+            {
+              id: "img-session-1",
+              src: "data:image/png;base64,AAAA",
+              source: "generate",
+              prompt: "homepage hero",
+            },
+          ],
+        },
       ],
     });
 
@@ -171,6 +183,18 @@ describe("SessionRepository appendMessages", () => {
           role: "user",
           content: "look",
           attachments: [{ data: "QUJDRA==", mimeType: "image/png" }],
+        },
+        {
+          role: "assistant",
+          content: "image result",
+          generatedImages: [
+            {
+              id: "img-session-1",
+              src: "data:image/png;base64,AAAA",
+              source: "generate",
+              prompt: "homepage hero",
+            },
+          ],
         },
       ],
     });

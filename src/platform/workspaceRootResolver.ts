@@ -27,8 +27,16 @@ export type ResolvedWorkspaceRootKind =
   | "direct_git_root"
   | "inside_git_repo"
   | "nested_git_root"
+  | "active_worktree_session"
   | "non_git_workspace"
   | "ambiguous_nested_git_roots";
+
+export type ActiveWorktreeSessionSummary = {
+  worktreePath: string;
+  worktreeName: string;
+  worktreeBranch?: string;
+  originalWorkspaceRoot: string;
+};
 
 export type ResolvedWorkspaceRoot = {
   selectedRoot: string;
@@ -37,6 +45,7 @@ export type ResolvedWorkspaceRoot = {
   kind: ResolvedWorkspaceRootKind;
   detail?: string;
   candidates?: string[];
+  activeWorktree?: ActiveWorktreeSessionSummary;
 };
 
 function normalizeWorkspacePath(root: string): string {

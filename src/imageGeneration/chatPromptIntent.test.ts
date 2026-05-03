@@ -99,6 +99,22 @@ describe("chatPromptIntent", () => {
     })).toBe("chat");
   });
 
+  it("keeps official-site hero requests on the normal chat pipeline", () => {
+    expect(determineChatPromptIntent({
+      prompt: "做一个高端 AI 产品官网首屏，黑白主色，带少量红色点缀，偏信息建筑风格",
+      hasAttachments: false,
+      hasRecentGeneratedImageContext: false,
+    })).toBe("chat");
+  });
+
+  it("keeps product intro dual-column requests on the normal chat pipeline", () => {
+    expect(determineChatPromptIntent({
+      prompt: "做一个双栏产品介绍页，左侧大标题，右侧特性卡片，极简编辑感",
+      hasAttachments: false,
+      hasRecentGeneratedImageContext: false,
+    })).toBe("chat");
+  });
+
   it("keeps svg artifact requests on the normal chat pipeline", () => {
     expect(determineChatPromptIntent({
       prompt: "Please output a complete SVG pie chart that shows Q1-Q4 sales share with no explanation",
@@ -122,4 +138,17 @@ describe("chatPromptIntent", () => {
       hasRecentGeneratedImageContext: false,
     })).toBe("chat");
   });
+  it("keeps Tweaks-bridge html authoring requests on the normal chat pipeline", () => {
+    expect(determineChatPromptIntent({
+      prompt: [
+        "Please generate a single-file HTML page and embed a KainClaw Tweaks bridge.",
+        "On load, call window.parent.postMessage({ type: '__edit_mode_available' }, '*').",
+        "Listen for __activate_edit_mode and __deactivate_edit_mode.",
+        "Keep the result as a complete previewable landing page.",
+      ].join(" "),
+      hasAttachments: false,
+      hasRecentGeneratedImageContext: false,
+    })).toBe("chat");
+  });
+
 });

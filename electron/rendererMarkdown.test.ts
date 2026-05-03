@@ -8,13 +8,42 @@ async function renderRendererContent(input: string, isUser = false): Promise<str
   const rendererPath = path.join(__dirname, "renderer", "index.html");
   const html = await readFile(rendererPath, "utf8");
   const start = html.indexOf("function renderMessageContent(text, isUser = false) {");
-  const end = html.indexOf("\n// Sessions", start);
+  const end = html.indexOf("function renderSessions(sessions, activeId) {", start);
 
   expect(start).toBeGreaterThanOrEqual(0);
   expect(end).toBeGreaterThan(start);
 
   const script = `${html.slice(start, end)}\nresult = renderMessageContent(input, isUser);`;
   const context = { input, isUser, marked, result: "" };
+  vm.runInNewContext(script, context);
+  return context.result;
+}
+
+async function renderToolResultMessageHtml(message: {
+  toolSummary?: string;
+  content?: string;
+  toolIsError?: boolean;
+}): Promise<string> {
+  const { marked } = await import("marked");
+  const rendererPath = path.join(__dirname, "renderer", "index.html");
+  const html = await readFile(rendererPath, "utf8");
+  const renderToolStart = html.indexOf("function renderToolResultMessage(message) {");
+  const inlineStart = html.indexOf("function renderInlineMarkdown(text) {");
+  const escapeStart = html.indexOf("function escapeHtml(s) {", renderToolStart);
+  const end = html.indexOf("function renderSessions(sessions, activeId) {", renderToolStart);
+
+  expect(renderToolStart).toBeGreaterThanOrEqual(0);
+  expect(inlineStart).toBeGreaterThan(renderToolStart);
+  expect(escapeStart).toBeGreaterThan(inlineStart);
+  expect(end).toBeGreaterThan(escapeStart);
+
+  const script = `${html.slice(renderToolStart, end)}\nresult = renderToolResultMessage(message);`;
+  const context = {
+    message,
+    marked,
+    result: "",
+    isEnglishUi: () => false,
+  };
   vm.runInNewContext(script, context);
   return context.result;
 }
@@ -204,5 +233,20 @@ describe("Electron renderer markdown", () => {
     expect(rendered).toContain("&lt;strong&gt;not raw html&lt;/strong&gt;");
     expect(rendered).not.toContain("<script>alert(1)</script>");
     expect(rendered).not.toContain("<strong>not raw html</strong>");
+  });
+
+  it("truncates oversized tool results to keep chat rendering responsive", async () => {
+    const hugeOutput = Array.from({ length: 80 }, (_, index) => `line-${index}`).join("\n");
+    const rendered = await renderToolResultMessageHtml({
+      toolSummary: "Listed files",
+      content: hugeOutput,
+      toolIsError: false,
+    });
+
+    expect(rendered).toContain("Listed files");
+    expect(rendered).toContain("line-0");
+    expect(rendered).toContain("…[truncated]");
+    expect(rendered).toContain("工具输出过长，聊天区已截断显示，避免页面卡顿。");
+    expect(rendered).not.toContain("line-79");
   });
 });

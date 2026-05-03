@@ -4,14 +4,14 @@ const HTML_REQUEST_PATTERNS = [
   /\bhtml\b/i,
   /<!DOCTYPE html>/i,
   /单文件(页面|网页)/i,
-  /(首页原型|页面原型|落地页原型|可点击原型|交互原型|作品集首页|作品集页面|dashboard页面|dashboard原型)/i,
+  /(首页原型|页面原型|落地页原型|可点击原型|交互原型|作品集首页|作品集页面|dashboard页面|dashboard原型|官网首页|产品官网|产品官网首页|专题页|专题页面|首屏页面|首屏设计|产品介绍页|双栏页面|双栏介绍页|landing page|hero section)/i,
 ];
 
 const HTML_CREATION_PATTERNS = [
   /(输出|给我|请只输出).*(html|页面|网页|原型)/i,
   /(第一行必须是|不要 markdown|不要解释)/i,
-  /(做|创建|实现|生成|写|帮(我)?做|帮(我)?生成|帮(我)?创建|帮(我)?实现|来(一个|个)).*(首页|页面|网页|落地页|作品集|dashboard|原型|prototype)/i,
-  /(首页原型|页面原型|落地页原型|可点击原型|交互原型|作品集首页|作品集页面)/i,
+  /(做|创建|实现|生成|写|帮(我)?做|帮(我)?生成|帮(我)?创建|帮(我)?实现|来(一个|个)).*(首页|页面|网页|落地页|作品集|dashboard|原型|prototype|官网|首屏|专题页|介绍页|双栏)/i,
+  /(首页原型|页面原型|落地页原型|可点击原型|交互原型|作品集首页|作品集页面|官网首页|产品官网|专题页|首屏页面|首屏设计|产品介绍页|双栏页面|双栏介绍页)/i,
 ];
 
 const ARTIFACT_ANALYSIS_EXCLUSION_PATTERNS = [
@@ -81,6 +81,15 @@ export function detectArtifactPromptTarget(prompt: string): ArtifactPromptTarget
   const normalizedPrompt = prompt.trim();
   if (!normalizedPrompt) {
     return null;
+  }
+
+  const requestsHtmlTweakBridge =
+    /\bhtml\b/i.test(normalizedPrompt) &&
+    /__edit_mode_available|__activate_edit_mode|__deactivate_edit_mode|__edit_mode_set_keys|postmessage|tweaks bridge/i.test(
+      normalizedPrompt,
+    );
+  if (requestsHtmlTweakBridge) {
+    return "html";
   }
 
   if (matchesArtifactIntent({
@@ -184,4 +193,8 @@ export function augmentArtifactPrompt(prompt: string): string {
   }
 
   return prompt;
+}
+
+export function shouldDisableToolsForArtifactPrompt(prompt: string): boolean {
+  return detectArtifactPromptTarget(prompt) === "html";
 }

@@ -33,11 +33,89 @@ describe("Electron renderer settings", () => {
     expect(html).toContain("shellText('composerPlaceholder')");
   });
 
-  it("includes the KainClaw Design bridge surface and artifact handoff wiring", async () => {
+  it("routes native dialogs and shell status surfaces through the shared translation helper", async () => {
     const rendererPath = path.join(__dirname, "renderer", "index.html");
     const html = await readFile(rendererPath, "utf8");
 
+    expect(html).toContain("function translateSurfaceText(value)");
+    expect(html).toContain("function localizedAlert(message)");
+    expect(html).toContain("function localizedConfirm(message)");
+    expect(html).toContain("toast.textContent = translateSurfaceText(message);");
+    expect(html).toContain("status.textContent = translateSurfaceText(message);");
+    expect(html).toContain("localizedAlert('请填写别名')");
+    expect(html).toContain("localizedConfirm('删除这个提供商？')");
+    expect(html).toContain("document.getElementById('win-controls')");
+    expect(html).toContain("document.getElementById('artifacts-panel-deep-edit')");
+  });
+
+  it("recognizes active worktree sessions in the workspace status surface", async () => {
+    const rendererPath = path.join(__dirname, "renderer", "index.html");
+    const html = await readFile(rendererPath, "utf8");
+
+    expect(html).toContain("case 'active_worktree_session':");
+    expect(html).toContain("shellText('workspaceStatusWorktree')");
+  });
+
+  it("includes the KainClaw Design bridge surface and artifact handoff wiring", async () => {
+    const rendererPath = path.join(__dirname, "renderer", "index.html");
+    const html = await readFile(rendererPath, "utf8");
+    const patchableSrcdocMatches = html.match(/function buildDesignPatchableSrcdoc\(/g) ?? [];
+
     expect(html).toContain('id="page-design"');
+    expect(html).toContain('id="design-prompt-input"');
+    expect(html).toContain('id="design-generate-btn"');
+    expect(html).toContain('id="design-mode-edit-btn"');
+    expect(html).toContain('id="design-mode-new-btn"');
+    expect(html).toContain("function openDesignHub()");
+    expect(html).toContain("function setDesignMode(mode)");
+    expect(html).toContain('id="design-sliders-panel"');
+    expect(html).toContain('id="design-patch-popover"');
+    expect(html).toContain('id="design-patch-comment"');
+    expect(html).toContain('id="design-image-lab-btn"');
+    expect(html).toContain('id="design-versions-panel"');
+    expect(html).toContain('id="design-direction-panel"');
+    expect(html).toContain('id="design-reference-panel"');
+    expect(html).toContain('id="design-reference-input"');
+    expect(html).toContain('id="design-export-html-btn"');
+    expect(html).toContain('id="design-export-pdf-btn"');
+    expect(html).toContain('id="design-export-pptx-btn"');
+    expect(html).toContain('id="design-tweaks-btn" class="btn-secondary" onclick="toggleDesignTweaks()"');
+    expect(html).toContain("function generateDesignWorkbench()");
+    expect(html).toContain("function applyDesignPatchRequest()");
+    expect(html).toContain("function buildDesignImageLabPrompt(node, comment)");
+    expect(html).toContain("function sendDesignImageNodeToImageLab()");
+    expect(html).toContain("function loadDesignVersions()");
+    expect(html).toContain("function restoreDesignVersion(versionId)");
+    expect(html).toContain("function exportDesignWorkbench(format)");
+    expect(html).toContain("function chooseDesignDirection(directionId)");
+    expect(html).toContain("function skipDesignDirectionSuggestions()");
+    expect(html).toContain("function renderDesignReferencePanel(metaEl, previewEl)");
+    expect(html).toContain("function handleDesignReferenceUpload(event)");
+    expect(html).toContain("function pickLatestImageLabResultForDesign()");
+    expect(html).toContain("function clearDesignReference()");
+    expect(patchableSrcdocMatches).toHaveLength(1);
+    expect(html).toContain("tweaksBtn.disabled = !designBridgeState.editModeAvailable;");
+    expect(html).toContain("tweaksBtn.style.display = designBridgeState.html ? 'inline-flex' : 'none';");
+    expect(html).toContain("This artifact does not expose tweak mode yet.");
+    expect(html).toContain("tagName: el.tagName.toLowerCase()");
+    expect(html).toContain("alt: el.getAttribute('alt') || ''");
+    expect(html).toContain("ariaLabel: el.getAttribute('aria-label') || ''");
+    expect(html).toContain("type: '__kc_apply_slider_values'");
+    expect(html).toContain("targetWindow.postMessage({");
+    expect(html).not.toContain("const doc = frameEl?.contentWindow?.document;");
+    expect(html).toContain("showPage('images')");
+    expect(html).toContain("runImageLab()");
+    expect(html).toContain("frameEl.onload = () => {");
+    expect(html).toContain("applyAllDesignSliderValues(frameEl);");
+    expect(html).toContain("designBridgeRenderedToken = 0;");
+    expect(html).toContain("referenceImageDataUrl");
+    expect(html).toContain("referenceImageMimeType");
+    expect(html).toContain("window.electronAPI.exportDesignPptx");
+    expect(html).toContain("case 'design:patchResult':");
+    expect(html).toContain("case 'design:result':");
+    expect(html).toContain("case 'design:versions':");
+    expect(html).toContain("case 'design:directions':");
+    expect(html).toContain("case 'design:exportDone':");
     expect(html).toContain("artifact:openKainClawDesign");
     expect(html).toContain("kainclawDesign:open");
     expect(html).toContain("__edit_mode_available");

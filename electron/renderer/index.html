@@ -675,7 +675,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-seri
     <div class="klogo">K</div>
     <span class="ptop-title">Skills</span>
     <div style="flex:1"></div>
-    <button class="btn-ghost" onclick="showPage('chat')">
+    <button class="btn-ghost" onclick="showPage('design-home')">
       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
     </button>
   </div>
@@ -918,6 +918,34 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-seri
   </div>
 </div>
 
+
+<div id="page-design-home" class="page" style="flex-direction:column;background:#f6f1ea">
+  <div class="ptop" style="background:rgba(255,255,255,.84);backdrop-filter:blur(12px)">
+    <div class="klogo">K</div>
+    <span class="ptop-title">设计</span>
+    <div style="flex:1"></div>
+    <button class="btn-red" style="padding:8px 14px;border-radius:10px" onclick="createNewDesignProject()">新建设计</button>
+    <button class="btn-ghost" onclick="showPage('chat')">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+    </button>
+  </div>
+  <div style="flex:1;overflow:auto;padding:18px 20px 24px">
+    <div style="max-width:1100px;margin:0 auto;display:flex;flex-direction:column;gap:18px">
+      <section style="background:#fff;border:1px solid #eadfd2;border-radius:18px;padding:16px 18px;box-shadow:0 18px 40px rgba(77,49,24,.08)">
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:12px">
+          <div style="font-size:13px;font-weight:700;color:#7b4a2e;letter-spacing:.04em;text-transform:uppercase">最近继续</div>
+          <div style="font-size:11px;color:#a08e7f">最近 8 个</div>
+        </div>
+        <div id="design-home-recent" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px"></div>
+      </section>
+      <section style="background:#fff;border:1px solid #eadfd2;border-radius:18px;padding:16px 18px;box-shadow:0 18px 40px rgba(77,49,24,.08)">
+        <div style="font-size:13px;font-weight:700;color:#7b4a2e;letter-spacing:.04em;text-transform:uppercase;margin-bottom:12px">所有设计</div>
+        <div id="design-home-all" style="display:flex;flex-direction:column;gap:10px"></div>
+      </section>
+    </div>
+  </div>
+</div>
+
 <!-- DESIGN BRIDGE -->
 <div id="page-design" class="page" style="flex-direction:column;background:#f6f1ea">
   <div class="ptop" style="background:rgba(255,255,255,.84);backdrop-filter:blur(12px)">
@@ -987,7 +1015,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-seri
         <button id="design-export-pdf-btn" class="btn-secondary" onclick="exportDesignWorkbench('pdf')">导出 PDF</button>
         <button id="design-export-pptx-btn" class="btn-secondary" onclick="exportDesignWorkbench('pptx')">导出 PPTX</button>
       </div>
-      <button id="design-back-btn" class="btn-secondary" onclick="showPage('chat')">返回聊天</button>
+      <button id="design-back-btn" class="btn-secondary" onclick="showPage('design-home')">返回设计</button>
     </div>
     <div style="background:rgba(255,255,255,.92);border:1px solid #eadfd2;border-radius:22px;padding:18px;display:flex;flex-direction:column;min-height:0;box-shadow:0 18px 40px rgba(77,49,24,.08)">
       <div id="design-bridge-empty" class="artifacts-panel__placeholder" style="flex:1;min-height:220px">先从 Artifacts 面板打开一个 HTML 原型，再进入 KainClaw Design。</div>
@@ -1136,6 +1164,10 @@ const designBridgeState = {
 };
 let designBridgeRenderedToken = 0;
 let designBridgeFrameLoading = false;
+const designHomeState = {
+  projects: [],
+  currentProjectId: null,
+};
 
 const DEFAULT_DIALOG_STRINGS = {
   needConfirmation: '需要确认',
@@ -1744,6 +1776,34 @@ function handleMessage(msg) {
       designBridgeState.error = String(msg.message || (isEnglishUi() ? 'Unable to load KainClaw Design.' : '当前无法打开 KainClaw Design。'));
       renderDesignBridgePage();
       break;
+    case 'design:projects':
+      designHomeState.projects = Array.isArray(msg.projects) ? msg.projects : [];
+      renderDesignHome();
+      break;
+    case 'design:projectOpened':
+      if (!msg.project) {
+        designHomeState.currentProjectId = null;
+        showPage('design-home');
+        requestDesignHome();
+        break;
+      }
+      designHomeState.currentProjectId = msg.project.projectId || null;
+      designBridgeState.mode = msg.project.source === 'blank' && !msg.activeVersion ? 'new' : 'edit';
+      designBridgeState.title = msg.project.name || 'KainClaw Design';
+      designBridgeState.versionId = msg.activeVersion?.id || msg.project.activeVersionId || null;
+      designBridgeState.prompt = msg.activeVersion?.prompt || '';
+      designBridgeState.outputType = msg.activeVersion?.outputType || 'prototype';
+      designBridgeState.style = msg.activeVersion?.style || '';
+      designBridgeState.html = msg.activeVersion?.html || '';
+      designBridgeState.sliders = Array.isArray(msg.activeVersion?.sliders) ? msg.activeVersion.sliders : [];
+      designBridgeState.sliderValues = msg.activeVersion?.sliderValues && typeof msg.activeVersion.sliderValues === 'object'
+        ? msg.activeVersion.sliderValues
+        : {};
+      designBridgeState.renderToken = Date.now();
+      designBridgeRenderedToken = 0;
+      showDesignPage();
+      break;
+      break;
     case 'design:progress':
       designBridgeState.loading = true;
       designBridgeState.error = '';
@@ -2227,6 +2287,9 @@ function showPage(id) {
   document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
   const el = document.getElementById('page-' + id);
   if (el) el.classList.add('active');
+  if (id === 'design-home') {
+    requestDesignHome();
+  }
   if (id === 'design') {
     designBridgeRenderedToken = 0;
     renderDesignBridgePage();
@@ -2238,6 +2301,12 @@ function showPage(id) {
     requestAnimationFrame(() => {
       const input = document.getElementById('prompt-input');
       input?.focus();
+    });
+  }
+  if (id === 'design-home') {
+    requestAnimationFrame(() => {
+      const cta = document.querySelector('#page-design-home .btn-red');
+      cta?.focus?.();
     });
   }
 }
@@ -2253,13 +2322,82 @@ function showDesignPage() {
 }
 
 function openDesignHub() {
-  designBridgeState.mode = designBridgeState.html ? 'edit' : 'new';
-  showDesignPage();
+  showPage('design-home');
 }
 
 function setDesignMode(mode) {
   designBridgeState.mode = mode === 'edit' ? 'edit' : 'new';
   renderDesignBridgePage();
+}
+
+function requestDesignHome() {
+  send({ type: 'design:listProjects' });
+}
+
+function createNewDesignProject() {
+  send({ type: 'design:createProject', name: 'Untitled Design' });
+}
+
+function openDesignProjectFromHome(projectId) {
+  if (!projectId) return;
+  send({ type: 'design:openProject', projectId });
+}
+
+function renderDesignHome() {
+  const recentEl = document.getElementById('design-home-recent');
+  const allEl = document.getElementById('design-home-all');
+  if (!recentEl || !allEl) return;
+
+  const projects = Array.isArray(designHomeState.projects) ? designHomeState.projects : [];
+  const recent = [...projects]
+    .sort((a, b) => (b.lastOpenedAt || 0) - (a.lastOpenedAt || 0))
+    .slice(0, 8);
+
+  const formatTime = project =>
+    new Date(project.updatedAt || project.createdAt || Date.now()).toLocaleString();
+  const versionLabel = project =>
+    project.activeVersionId && project.activeVersionId !== 'pending-version'
+      ? '有版本'
+      : '未生成';
+  const previewTone = project => {
+    const value = [...String(project.projectId || '')].reduce((sum, ch) => sum + ch.charCodeAt(0), 0) % 360;
+    return `linear-gradient(135deg, hsl(${value} 55% 92%), hsl(${(value + 28) % 360} 45% 84%))`;
+  };
+  const recentCard = project => `
+    <button style="border:1px solid #eadfd2;border-radius:16px;background:#fff;padding:0;cursor:pointer;text-align:left;overflow:hidden" onclick="openDesignProjectFromHome('${escapeHtml(project.projectId)}')">
+      <div style="height:86px;background:${previewTone(project)};position:relative">
+        <div style="position:absolute;left:14px;right:14px;top:16px;height:2px;background:rgba(24,24,27,.08)"></div>
+        <div style="position:absolute;left:14px;right:72px;top:34px;height:14px;border-radius:999px;background:rgba(24,24,27,.12)"></div>
+        <div style="position:absolute;left:14px;right:110px;top:56px;height:10px;border-radius:999px;background:rgba(24,24,27,.08)"></div>
+      </div>
+      <div style="padding:12px 14px">
+        <div style="font-size:13px;font-weight:700;color:#18181b;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${escapeHtml(project.name || 'Untitled Design')}</div>
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-top:8px">
+          <span style="font-size:11px;color:#7b4a2e;background:#fcfaf7;border:1px solid #eadfd2;border-radius:999px;padding:3px 8px">${escapeHtml(versionLabel(project))}</span>
+          <span style="font-size:11px;color:#8b7969">${escapeHtml(formatTime(project))}</span>
+        </div>
+      </div>
+    </button>
+  `;
+  const allRow = project => `
+    <button style="border:1px solid #eadfd2;border-radius:14px;background:#fff;padding:12px 14px;cursor:pointer;text-align:left;display:flex;align-items:center;justify-content:space-between;gap:12px" onclick="openDesignProjectFromHome('${escapeHtml(project.projectId)}')">
+      <div style="display:flex;align-items:center;gap:12px;min-width:0">
+        <div style="width:32px;height:32px;border-radius:50%;display:flex;align-items:center;justify-content:center;background:${previewTone(project)};font-size:13px;font-weight:700;color:#5f4f43;flex-shrink:0">${escapeHtml((project.name || 'U').charAt(0).toUpperCase())}</div>
+        <div style="min-width:0">
+          <div style="font-size:13px;font-weight:700;color:#18181b;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${escapeHtml(project.name || 'Untitled Design')}</div>
+          <div style="font-size:11px;color:#8b7969;margin-top:4px">${escapeHtml(versionLabel(project))}</div>
+        </div>
+      </div>
+      <div style="font-size:11px;color:#8b7969;flex-shrink:0">${escapeHtml(formatTime(project))}</div>
+    </button>
+  `;
+
+  recentEl.innerHTML = recent.length
+    ? recent.map(recentCard).join('')
+    : '<div style="font-size:12px;color:#8b7969;line-height:1.7;padding:6px 2px">还没有最近继续的设计，先新建一张。</div>';
+  allEl.innerHTML = projects.length
+    ? projects.map(allRow).join('')
+    : '<div style="font-size:12px;color:#8b7969;line-height:1.7;padding:6px 2px">当前还没有设计项目。</div>';
 }
 
 function resetOnboardingProviderSelection(providerId = 'anthropic') {
@@ -2675,6 +2813,12 @@ function renderDesignBridgePage() {
   promptInput.value = designBridgeState.prompt || '';
   editModeBtn.classList.toggle('on', designBridgeState.mode === 'edit');
   newModeBtn.classList.toggle('on', designBridgeState.mode === 'new');
+  editModeBtn.style.borderColor = designBridgeState.mode === 'edit' ? '#E84040' : '#d4d4d8';
+  editModeBtn.style.background = designBridgeState.mode === 'edit' ? '#fff5f5' : '#fff';
+  editModeBtn.style.color = designBridgeState.mode === 'edit' ? '#E84040' : '#52525b';
+  newModeBtn.style.borderColor = designBridgeState.mode === 'new' ? '#E84040' : '#d4d4d8';
+  newModeBtn.style.background = designBridgeState.mode === 'new' ? '#fff5f5' : '#fff';
+  newModeBtn.style.color = designBridgeState.mode === 'new' ? '#E84040' : '#52525b';
   editModeBtn.disabled = !designBridgeState.html;
   editModeBtn.style.opacity = designBridgeState.html ? '1' : '.55';
   editModeBtn.title = designBridgeState.html ? '' : (isEnglishUi() ? 'There is no current page to edit yet.' : '\u5f53\u524d\u8fd8\u6ca1\u6709\u9875\u9762\u53ef\u7f16\u8f91\u3002');
@@ -2690,7 +2834,9 @@ function renderDesignBridgePage() {
       ? (isEnglishUi() ? 'KainClaw Design is generating HTML and sliders...' : 'KainClaw Design 正在生成 HTML 与 sliders...')
       : designBridgeState.prompt
         ? (isEnglishUi() ? 'Design result is ready. Sliders apply locally.' : '设计结果已就绪，sliders 在本地即时生效。')
-        : (isEnglishUi() ? 'Generate a design or open an artifact into this surface.' : '你可以直接生成设计，或从 Artifacts 面板带入 HTML。');
+        : (isEnglishUi()
+            ? 'Enter a design request to start, or bring in an existing page to edit.'
+            : '输入设计需求开始生成，或带入已有页面继续编辑。');
   generateStatusEl.style.color = designBridgeState.error ? '#b91c1c' : '#8b7969';
   patchPopover.style.display = designBridgeState.selectedNode ? 'block' : 'none';
   patchTarget.textContent = designBridgeState.selectedNode
@@ -2710,11 +2856,11 @@ function renderDesignBridgePage() {
   if (!designBridgeState.html) {
     titleEl.textContent = isEnglishUi() ? 'No design loaded' : '未加载设计内容';
     statusEl.textContent = isEnglishUi()
-      ? 'Open an HTML artifact from the Artifacts panel to enter KainClaw Design.'
-      : '先从 Artifacts 面板打开一个 HTML 原型，再进入 KainClaw Design。';
+      ? 'Enter a design request and click generate to start.'
+      : '输入设计需求，点击生成开始。';
     subtitleEl.textContent = isEnglishUi()
-      ? 'The bridge only loads the current HTML artifact and preview surface in this step.'
-      : '当前桥接只负责带入 HTML artifact，并打开预览工作台。';
+      ? 'You can create a brand-new design here, or bring in an existing page later.'
+      : '这里可以直接新建设计，之后也可以带入已有页面继续编辑。';
     editsEl.style.display = 'none';
     editsEl.textContent = '';
     slidersPanel.style.display = 'none';

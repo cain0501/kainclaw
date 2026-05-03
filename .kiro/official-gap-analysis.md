@@ -1,10 +1,11 @@
 # KainClaw vs 官方 Claude Code 能力对账
 
-## 快速摘要（2026-05-02）
+## 快速摘要（2026-05-03）
 
 - 当前任务：`bd ready` 查看；sprint 历史见 `git log`，本文只维护能力矩阵与对账
-- 最后验证基线：161 个测试文件，1254 个测试通过（2026-05-02）
+- 最后验证基线：168 个测试文件，1299 个测试通过（2026-05-03）
 - 已按 Claude baseline 收口：MCP（transport/auth/OAuth/prompts/transcript）、Tasks/toolRuntime、Compact lifecycle、TaskStop remote、LSP、ToolSearchTool、Task aliases、Markdown renderer、/verify report、provider identity、工具去重、installed-skills、bilingual i18n
+- 最近已收口的桌面壳主线：KainClaw Design V1（`vscode-extension-aab`）与 V2 联动（`vscode-extension-0xu`）
 - 剩余 P1 缺口：extension.ts 宿主下沉（vscode-extension-f4v）、MCP oauth.xaa（vscode-extension-2tf）、Tasks hosted/detached remote（vscode-extension-7w2）
 
 ---
@@ -12,6 +13,7 @@
 ## 使用规则
 
 - 这份文档只记录当前代码真实状态与对官方能力的对账结果，不再保留流水账式历史。
+- `bd / beads` 负责任务状态、依赖、claim/close；只有当 beads 任务改变了能力矩阵、验证基线或主线边界时，才回写本文。
 - 判断优先级：
   - 先看官方 Claude Code 主线能力是否已经对齐
   - 再看 KainClaw 扩展能力是否独立成立
@@ -129,3 +131,21 @@
   - `E:\claudecodejingiang\vscode-extension\.kiro\specs\p3-custom-agents-wizard.md`
 - Cron / Scheduler：
   - `E:\claudecodejingiang\vscode-extension\.kiro\specs\p3-cron-scheduled-tasks.md`
+
+## 2026-05-03 增量记录
+
+- KainClaw Design V1 主线（`vscode-extension-aab`）已完成：
+  - generate / workbench iframe / sliders
+  - partial patch
+  - version history
+  - HTML / PDF export
+  - direction guidance
+- KainClaw Design V2 联动主线（`vscode-extension-0xu`）已完成：
+  - Image Lab → Design 参考图
+  - Design → Image Lab 反向发起
+  - SQLite 版本存储
+  - PPTX export
+- Electron 用户态 artifact / 页面生成请求现在应视为桌面壳主路径：
+  - 继续走 chat/sendPrompt 主链
+  - 但宿主侧必须禁用工具
+  - 目的不是削弱能力，而是避免把 `tool_use / tool_result`、`.beads`、`list_files / read_file / write_file` 这类内部 plumbing 暴露给最终用户

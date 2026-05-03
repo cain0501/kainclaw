@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   augmentArtifactPrompt,
   detectArtifactPromptTarget,
+  shouldDisableToolsForArtifactPrompt,
   shouldRequireInteractivePrototype,
 } from "./artifactPromptAugmenter";
 
@@ -15,6 +16,18 @@ describe("artifactPromptAugmenter", () => {
   it("detects natural-language html artifact creation requests", () => {
     expect(
       detectArtifactPromptTarget("做一个摄影师个人作品集首页原型，暗色背景，大图瀑布流，顶部极简导航"),
+    ).toBe("html");
+  });
+
+  it("detects official-site hero requests as html artifact creation", () => {
+    expect(
+      detectArtifactPromptTarget("做一个高端 AI 产品官网首屏，黑白主色，带少量红色点缀，偏信息建筑风格"),
+    ).toBe("html");
+  });
+
+  it("detects product intro dual-column requests as html artifact creation", () => {
+    expect(
+      detectArtifactPromptTarget("做一个双栏产品介绍页，左侧大标题，右侧特性卡片，极简编辑感"),
     ).toBe("html");
   });
 
@@ -100,4 +113,26 @@ describe("artifactPromptAugmenter", () => {
     expect(augmented).toContain("Return only Mermaid diagram source.");
     expect(augmented).toContain("Do not wrap the diagram in HTML.");
   });
+
+  it("disables tools for html artifact prompts only", () => {
+    expect(
+      shouldDisableToolsForArtifactPrompt("做一个双栏产品介绍页，左侧大标题，右侧特性卡片，极简编辑感"),
+    ).toBe(true);
+    expect(
+      shouldDisableToolsForArtifactPrompt("帮我分析这个首页原型的布局设计"),
+    ).toBe(false);
+  });
+  it("detects english html prompts that request a KainClaw Tweaks bridge", () => {
+    const prompt = [
+      "Please generate a single-file HTML page and embed a KainClaw Tweaks bridge.",
+      "On load, call window.parent.postMessage({ type: '__edit_mode_available' }, '*').",
+      "Listen for __activate_edit_mode and __deactivate_edit_mode.",
+      "Keep the result as a complete previewable landing page.",
+    ].join(" ");
+
+    expect(detectArtifactPromptTarget(prompt)).toBe("html");
+    expect(shouldDisableToolsForArtifactPrompt(prompt)).toBe(true);
+    expect(augmentArtifactPrompt(prompt)).toContain("[Internal artifact output contract]");
+  });
+
 });

@@ -422,6 +422,33 @@ export class SessionRepository {
                     })),
                   }
                 : {}),
+              ...(Array.isArray(message.generatedImages) &&
+              message.generatedImages.every(
+                image =>
+                  !!image &&
+                  typeof image.id === "string" &&
+                  typeof image.src === "string" &&
+                  (
+                    image.source === undefined ||
+                    image.source === "generate" ||
+                    image.source === "edit" ||
+                    image.source === "variant"
+                  ) &&
+                  (image.prompt === undefined || typeof image.prompt === "string") &&
+                  (image.revisedPrompt === undefined || typeof image.revisedPrompt === "string"),
+              )
+                ? {
+                    generatedImages: message.generatedImages.map(image => ({
+                      id: image.id,
+                      src: image.src,
+                      ...(image.source ? { source: image.source } : {}),
+                      ...(typeof image.prompt === "string" ? { prompt: image.prompt } : {}),
+                      ...(typeof image.revisedPrompt === "string"
+                        ? { revisedPrompt: image.revisedPrompt }
+                        : {}),
+                    })),
+                  }
+                : {}),
             }))
         : undefined;
       const compactBoundary =
@@ -523,6 +550,20 @@ export class SessionRepository {
                     attachments: message.attachments.map(attachment => ({
                       data: attachment.data,
                       mimeType: attachment.mimeType,
+                    })),
+                  }
+                : {}),
+              ...(Array.isArray(message.generatedImages) &&
+              message.generatedImages.length > 0
+                ? {
+                    generatedImages: message.generatedImages.map(image => ({
+                      id: image.id,
+                      src: image.src,
+                      ...(image.source ? { source: image.source } : {}),
+                      ...(typeof image.prompt === "string" ? { prompt: image.prompt } : {}),
+                      ...(typeof image.revisedPrompt === "string"
+                        ? { revisedPrompt: image.revisedPrompt }
+                        : {}),
                     })),
                   }
                 : {}),

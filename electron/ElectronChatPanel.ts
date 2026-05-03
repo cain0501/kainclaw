@@ -132,13 +132,17 @@ import {
   buildDeriveArtifactPrompt,
   providerSupportsArtifactDerivation,
 } from "../src/artifacts/deriveArtifact";
-import { augmentArtifactPrompt } from "../src/artifacts/artifactPromptAugmenter";
+import {
+  augmentArtifactPrompt,
+  shouldDisableToolsForArtifactPrompt,
+} from "../src/artifacts/artifactPromptAugmenter";
 import { InMemoryArtifactRegistry } from "../src/artifacts/artifactRegistry";
 import { resolveImageBatchPlan } from "../src/imageGeneration/imagePromptBatching";
 import { resolveRequestedImageSize } from "../src/imageGeneration/imagePromptSizing";
 import type { DesktopRuntimeServices } from "../src/platform/desktopRuntimeServices";
 import {
   resolveWorkspaceRoot,
+  type ActiveWorktreeSessionSummary,
   type ResolvedWorkspaceRoot,
 } from "../src/platform/workspaceRootResolver";
 import { PersistentTaskRuntimeStore } from "../src/tasks/taskRuntime";
@@ -146,6 +150,32 @@ import { PersistentWorktreeRuntimeStore } from "../src/worktree/runtime";
 import type { ConversationTaskRuntime } from "../src/tasks/types";
 import type { ConversationWorktreeRuntime } from "../src/worktree/types";
 import type { EffortLevel, ProviderRuntimeOptions } from "../src/thinkingEffort/types";
+import {
+  generateKainClawDesign,
+  type DesignGenerateOptions,
+} from "../src/design/designEngine";
+import { buildKainClawDesignSystemPrompt } from "../src/design/designPrompt";
+import {
+  buildKainClawDesignPatchSystemPrompt,
+  patchKainClawDesignNode,
+} from "../src/design/patchEngine";
+import {
+  DesignProjectStore,
+  type DesignProjectRecord,
+} from "../src/design/designProjectStore";
+import {
+  DesignVersionStore,
+  type DesignVersionRecord,
+} from "../src/design/versionStore";
+import {
+  buildDesignExportPath,
+  exportDesignHtml,
+  type DesignExportFormat,
+} from "../src/design/exporters";
+import {
+  getDesignDirectionSuggestions,
+  isAmbiguousDesignPrompt,
+} from "../src/design/showcaseIndex";
 
 const SUPPORTED_ELECTRON_TOOL_NAMES = new Set([
   "AskUserQuestion",
@@ -266,6 +296,8 @@ export class ElectronChatPanel {
   private readonly mcpRuntime: McpRuntime;
   private readonly imageGalleryStore: ImageLabGalleryStore;
   private readonly promptLibraryRepository: PromptLibraryRepository;
+  private readonly designProjectStore: DesignProjectStore;
+  private readonly designVersionStore: DesignVersionStore;
   private readonly taskRuntimeStore: PersistentTaskRuntimeStore;
   private readonly worktreeRuntimeStore: PersistentWorktreeRuntimeStore;
   private readonly backgroundTaskHost: BackgroundTaskHost;
@@ -273,6 +305,7 @@ export class ElectronChatPanel {
   private readonly cachedWorkspaceResolutions = new Map<string, ResolvedWorkspaceRoot>();
   private readonly sessionInstalledSkillHooks = new Map<string, HookDefinition[]>();
   private readonly artifactRegistries = new Map<string, InMemoryArtifactRegistry>();
+  private currentDesignProjectId: string | undefined;
   private pendingQuestion: PendingQuestionState | undefined;
   private sessionMessageWriteQueue: Promise<void> = Promise.resolve();
   private backgroundTaskNotificationTimer: NodeJS.Timeout | undefined;
@@ -293,6 +326,8 @@ export class ElectronChatPanel {
     );
     this.imageGalleryStore = new ImageLabGalleryStore(this.host.getStorageUri());
     this.promptLibraryRepository = new PromptLibraryRepository(this.host.getStorageUri());
+    this.designProjectStore = new DesignProjectStore(this.host.getStorageUri());
+    this.designVersionStore = new DesignVersionStore(this.host.getStorageUri());
     this.taskRuntimeStore = new PersistentTaskRuntimeStore(this.host.getStorageUri());
     this.worktreeRuntimeStore = new PersistentWorktreeRuntimeStore(this.host.getStorageUri());
     this.backgroundTaskHost = new BackgroundTaskHost({
@@ -543,8 +578,42 @@ export class ElectronChatPanel {
     }
 
     const resolution = await resolveWorkspaceRoot(selectedRoot);
-    this.cachedWorkspaceResolutions.set(selectedRoot, resolution);
-    return resolution;
+    const enrichedResolution = {
+      ...resolution,
+      ...this.buildActiveWorktreeWorkspaceOverlay(selectedRoot),
+    };
+    this.cachedWorkspaceResolutions.set(selectedRoot, enrichedResolution);
+    return enrichedResolution;
+  }
+
+  private buildActiveWorktreeWorkspaceOverlay(
+    selectedRoot: string,
+  ): Partial<ResolvedWorkspaceRoot> {
+    if (!selectedRoot.trim()) {
+      return {};
+    }
+
+    const session = this.getConversationWorktreeRuntime(selectedRoot).getSession();
+    if (!session) {
+      return {};
+    }
+
+    const activeWorktree: ActiveWorktreeSessionSummary = {
+      worktreePath: session.worktreePath,
+      worktreeName: session.worktreeName,
+      ...(session.worktreeBranch ? { worktreeBranch: session.worktreeBranch } : {}),
+      originalWorkspaceRoot: session.originalWorkspaceRoot,
+    };
+
+    return {
+      effectiveRoot: session.worktreePath,
+      gitRoot: session.gitRoot,
+      kind: "active_worktree_session",
+      detail:
+        `Active worktree session: ${session.worktreeName}` +
+        (session.worktreeBranch ? ` (${session.worktreeBranch})` : ""),
+      activeWorktree,
+    };
   }
 
   private buildWorkspaceSystemNote(workspace: ResolvedWorkspaceRoot): string {
@@ -765,7 +834,51 @@ export class ElectronChatPanel {
       return;
     }
     if (type === "artifact:openKainClawDesign") {
-      this.openActiveArtifactInKainClawDesign();
+      await this.openActiveArtifactInKainClawDesign();
+      return;
+    }
+    if (type === "design:listProjects") {
+      await this.listDesignProjects();
+      return;
+    }
+    if (type === "design:createProject") {
+      await this.createDesignProject(message);
+      return;
+    }
+    if (type === "design:openProject") {
+      await this.openDesignProjectMessage(message);
+      return;
+    }
+    if (type === "design:getLastProject") {
+      await this.getLastDesignProject();
+      return;
+    }
+    if (type === "design:generate") {
+      await this.generateDesignWorkbench(message);
+      return;
+    }
+    if (type === "design:editCurrent") {
+      await this.editCurrentDesignWorkbench(message);
+      return;
+    }
+    if (type === "design:requestDirections") {
+      await this.requestDesignDirections(message);
+      return;
+    }
+    if (type === "design:patch") {
+      await this.patchDesignWorkbench(message);
+      return;
+    }
+    if (type === "design:loadVersions") {
+      await this.loadDesignVersions(message);
+      return;
+    }
+    if (type === "design:restoreVersion") {
+      await this.restoreDesignVersion(message);
+      return;
+    }
+    if (type === "design:export") {
+      await this.exportDesignWorkbench(message);
       return;
     }
     if (type === "abort") {
@@ -2044,7 +2157,9 @@ export class ElectronChatPanel {
       );
       if (!artifactAttachments.length) {
         await this.appendRouteErrorMessage(
-          "请先上传一张设计图，或先生成一张图片，再让我把它做成可点击的 HTML 原型。",
+          this.localizeShellSurfaceText(
+            "请先上传一张设计图，或先生成一张图片，再让我把它做成可点击的 HTML 原型。",
+          ),
         );
         return;
       }
@@ -2054,7 +2169,9 @@ export class ElectronChatPanel {
         const { config } = await resolveProviderConfig(this.settings, workspaceRoot);
         if (!providerSupportsArtifactDerivation(config)) {
           await this.appendRouteErrorMessage(
-            "当前聊天模型不支持图片理解。请先切换到支持视觉输入的聊天模型，再把设计图转换成 HTML 原型。",
+            this.localizeShellSurfaceText(
+              "当前聊天模型不支持图片理解。请先切换到支持视觉输入的聊天模型，再把设计图转换成 HTML 原型。",
+            ),
           );
           return;
         }
@@ -2438,6 +2555,9 @@ export class ElectronChatPanel {
       }
 
       effectivePrompt = augmentArtifactPrompt(effectivePrompt);
+      if (shouldDisableToolsForArtifactPrompt(effectivePrompt)) {
+        activeTools = [];
+      }
 
       const modelUserMessage: PersistedConversationMessage = {
         role: "user",
@@ -2548,37 +2668,9 @@ export class ElectronChatPanel {
           }
         },
         onToolStart: (toolName, _input, _execId) => {
-          const toolUseMessage: ChatMessage = {
-            role: "assistant",
-            content: "",
-            kind: "tool_use",
-            toolName,
-            toolInputPreview: _input ? JSON.stringify(_input) : undefined,
-            excludeFromConversation: true,
-            timestamp: Date.now(),
-          };
-          void this.appendAssistantMessageToSession(
-            requestSessionId,
-            toolUseMessage,
-            { updatePreview: false },
-          );
           this.sendToRenderer({ type: "tool:start", toolName });
         },
         onToolEnd: (_execId, summary, isError, content) => {
-          const toolResultMessage: ChatMessage = {
-            role: "assistant",
-            content: content || summary,
-            kind: "tool_result",
-            toolSummary: summary,
-            toolIsError: isError,
-            excludeFromConversation: true,
-            timestamp: Date.now(),
-          };
-          void this.appendAssistantMessageToSession(
-            requestSessionId,
-            toolResultMessage,
-            { updatePreview: false },
-          );
           this.sendToRenderer({ type: "tool:end", summary, isError });
         },
         abortSignal: abortController.signal,
@@ -2720,7 +2812,105 @@ export class ElectronChatPanel {
     return this.pendingQuestion?.request ?? this.host.getPendingApproval();
   }
 
-  private openActiveArtifactInKainClawDesign(): void {
+  private async getCurrentDesignProject(): Promise<DesignProjectRecord | null> {
+    if (!this.currentDesignProjectId) {
+      return null;
+    }
+    return this.designProjectStore.getProject(this.currentDesignProjectId);
+  }
+
+  private async setCurrentDesignProject(project: DesignProjectRecord | null): Promise<void> {
+    this.currentDesignProjectId = project?.projectId;
+    await this.host.setState("cain.lastOpenedDesignProjectId", project?.projectId ?? null);
+  }
+
+  private async openDesignProject(projectId: string): Promise<DesignProjectRecord | null> {
+    const existing = await this.designProjectStore.getProject(projectId);
+    if (!existing) {
+      return null;
+    }
+
+    const updated = await this.designProjectStore.updateProject(projectId, {
+      lastOpenedAt: Date.now(),
+    });
+    await this.setCurrentDesignProject(updated ?? existing);
+    return updated ?? existing;
+  }
+
+  private async listDesignProjects(): Promise<void> {
+    const projects = await this.designProjectStore.listProjects();
+    this.sendToRenderer({
+      type: "design:projects",
+      projects,
+    });
+  }
+
+  private async createDesignProject(message: Record<string, unknown>): Promise<void> {
+    await this.setCurrentDesignProject(null);
+    this.sendToRenderer({
+      type: "design:projectOpened",
+      project: {
+        projectId: null,
+        name: typeof message.name === "string" && message.name.trim()
+          ? message.name.trim()
+          : "Untitled Design",
+        source: "blank",
+        activeVersionId: null,
+      },
+      activeVersion: null,
+    });
+  }
+
+  private async openDesignProjectMessage(message: Record<string, unknown>): Promise<void> {
+    const projectId = typeof message.projectId === "string" ? message.projectId.trim() : "";
+    if (!projectId) {
+      return;
+    }
+    const project = await this.openDesignProject(projectId);
+    if (!project) {
+      return;
+    }
+    const activeVersion = project.activeVersionId && project.activeVersionId !== "pending-version"
+      ? await this.designVersionStore.getVersion(project.activeVersionId)
+      : null;
+    this.sendToRenderer({
+      type: "design:projectOpened",
+      project,
+      activeVersion,
+    });
+  }
+
+  private async getLastDesignProject(): Promise<void> {
+    const projectId = this.host.getState<string | null>("cain.lastOpenedDesignProjectId");
+    if (!projectId) {
+      this.sendToRenderer({
+        type: "design:projectOpened",
+        project: null,
+        activeVersion: null,
+      });
+      return;
+    }
+
+    const project = await this.openDesignProject(projectId);
+    if (!project) {
+      this.sendToRenderer({
+        type: "design:projectOpened",
+        project: null,
+        activeVersion: null,
+      });
+      return;
+    }
+    const activeVersion = project?.activeVersionId && project.activeVersionId !== "pending-version"
+      ? await this.designVersionStore.getVersion(project.activeVersionId)
+      : null;
+    this.sendToRenderer({
+      type: "design:projectOpened",
+      project,
+      activeVersion,
+    });
+  }
+
+  private async openActiveArtifactInKainClawDesign(): Promise<void> {
     if (!this.currentSessionId) {
       this.sendToRenderer({
         type: "kainclawDesign:error",
@@ -2739,13 +2929,434 @@ export class ElectronChatPanel {
       return;
     }
 
+    const existingProject = await this.designProjectStore.getProjectBySourceArtifactId(
+      activeArtifact.id,
+    );
+    if (existingProject) {
+      const openedProject = await this.openDesignProject(existingProject.projectId);
+      const activeVersion = openedProject?.activeVersionId &&
+        openedProject.activeVersionId !== "pending-version"
+        ? await this.designVersionStore.getVersion(openedProject.activeVersionId)
+        : null;
+
+      if (openedProject && activeVersion) {
+        this.sendToRenderer({
+          type: "design:projectOpened",
+          project: openedProject,
+          activeVersion,
+        });
+        return;
+      }
+    }
+
+    const project = existingProject ?? await this.designProjectStore.createProject({
+      name: activeArtifact.title || "Untitled Design",
+      source: "artifact",
+      sourceArtifactId: activeArtifact.id,
+      activeVersionId: "pending-version",
+    });
+    await this.setCurrentDesignProject(project);
+
     this.sendToRenderer({
       type: "kainclawDesign:open",
       artifactId: activeArtifact.id,
       title: activeArtifact.title,
       html: activeArtifact.content,
+      projectId: project.projectId,
     });
   }
+
+  private async generateDesignWorkbench(
+    message: Record<string, unknown>,
+  ): Promise<void> {
+    const prompt = String(message.prompt ?? "").trim();
+    if (!prompt) {
+      this.sendToRenderer({
+        type: "design:error",
+        message: "请输入设计需求后再生成。",
+      });
+      return;
+    }
+
+    const outputType = message.outputType === "slide" ||
+      message.outputType === "infographic" ||
+      message.outputType === "animation"
+      ? message.outputType
+      : "prototype";
+    const style = typeof message.style === "string" ? message.style.trim() : "";
+    const referenceImageDataUrl =
+      typeof message.referenceImageDataUrl === "string" &&
+        message.referenceImageDataUrl.trim()
+        ? message.referenceImageDataUrl.trim()
+        : undefined;
+    const referenceImageMimeType =
+      typeof message.referenceImageMimeType === "string" &&
+        message.referenceImageMimeType.trim()
+        ? message.referenceImageMimeType.trim()
+        : undefined;
+    const workspaceRoot = this.getSelectedWorkspaceRoot();
+      const { config, envMap } = await resolveProviderConfig(
+        this.settings,
+        workspaceRoot,
+      );
+      const provider = this.createProviderForSystemPrompt(
+        config,
+        workspaceRoot,
+        envMap,
+        buildKainClawDesignSystemPrompt(),
+      );
+
+    this.sendToRenderer({ type: "design:progress", step: "generating" });
+
+    try {
+      const result = await generateKainClawDesign(provider, {
+        prompt,
+        outputType,
+        ...(style ? { style } : {}),
+        ...(referenceImageDataUrl ? { referenceImageDataUrl } : {}),
+        ...(referenceImageMimeType ? { referenceImageMimeType } : {}),
+      } as DesignGenerateOptions);
+      const activeArtifact =
+        this.currentSessionId
+          ? this.artifactRegistries.get(this.currentSessionId)?.activeArtifact ?? null
+          : null;
+      const version = await this.saveDesignVersion({
+        prompt,
+        outputType,
+        ...(style ? { style } : {}),
+        html: result.html,
+        sliders: result.sliders,
+        source: "generate",
+        ...(activeArtifact?.type === "html" ? { sourceArtifactId: activeArtifact.id } : {}),
+      });
+
+      this.sendToRenderer({
+        type: "design:result",
+        html: result.html,
+        sliders: result.sliders,
+        prompt,
+        outputType,
+        ...(style ? { style } : {}),
+        versionId: version.id,
+      });
+    } catch (error) {
+      this.sendToRenderer({
+        type: "design:error",
+        message: error instanceof Error ? error.message : String(error),
+      });
+    }
+  }
+
+  private async editCurrentDesignWorkbench(
+    message: Record<string, unknown>,
+  ): Promise<void> {
+    const prompt = String(message.prompt ?? "").trim();
+    const currentHtml = String(message.html ?? "").trim();
+    if (!prompt) {
+      this.sendToRenderer({
+        type: "design:error",
+        message: "请输入要应用到当前页面的修改要求。",
+      });
+      return;
+    }
+    if (!currentHtml) {
+      await this.generateDesignWorkbench(message);
+      return;
+    }
+
+    const outputType = message.outputType === "slide" ||
+      message.outputType === "infographic" ||
+      message.outputType === "animation"
+      ? message.outputType
+      : "prototype";
+    const style = typeof message.style === "string" ? message.style.trim() : "";
+    const referenceImageDataUrl =
+      typeof message.referenceImageDataUrl === "string" &&
+        message.referenceImageDataUrl.trim()
+        ? message.referenceImageDataUrl.trim()
+        : undefined;
+    const referenceImageMimeType =
+      typeof message.referenceImageMimeType === "string" &&
+        message.referenceImageMimeType.trim()
+        ? message.referenceImageMimeType.trim()
+        : undefined;
+
+    const workspaceRoot = this.getSelectedWorkspaceRoot();
+    const { config, envMap } = await resolveProviderConfig(
+      this.settings,
+      workspaceRoot,
+    );
+    const provider = this.createProviderForSystemPrompt(
+      config,
+      workspaceRoot,
+      envMap,
+      buildKainClawDesignSystemPrompt({
+        customInstructions: [
+          "You are editing an existing HTML design, not creating a different unrelated page.",
+          "Preserve the current page structure when possible and apply the user's changes onto the existing layout.",
+          "If the user asks for a new visual direction, reinterpret the current page rather than discarding it.",
+          "",
+          "Current HTML to revise:",
+          currentHtml,
+        ].join("\n"),
+      }),
+    );
+
+    this.sendToRenderer({ type: "design:progress", step: "editing-current" });
+
+    try {
+      const result = await generateKainClawDesign(provider, {
+        prompt,
+        outputType,
+        ...(style ? { style } : {}),
+        ...(referenceImageDataUrl ? { referenceImageDataUrl } : {}),
+        ...(referenceImageMimeType ? { referenceImageMimeType } : {}),
+      } as DesignGenerateOptions);
+      const version = await this.saveDesignVersion({
+        prompt,
+        outputType,
+        ...(style ? { style } : {}),
+        html: result.html,
+        sliders: result.sliders,
+        source: "editCurrent",
+      });
+
+      this.sendToRenderer({
+        type: "design:result",
+        html: result.html,
+        sliders: result.sliders,
+        prompt,
+        outputType,
+        ...(style ? { style } : {}),
+        versionId: version.id,
+      });
+    } catch (error) {
+      this.sendToRenderer({
+        type: "design:error",
+        message: error instanceof Error ? error.message : String(error),
+      });
+    }
+  }
+
+  private async requestDesignDirections(
+    message: Record<string, unknown>,
+  ): Promise<void> {
+    const prompt = String(message.prompt ?? "").trim();
+    const outputType = message.outputType === "slide" ||
+      message.outputType === "infographic" ||
+      message.outputType === "animation"
+      ? message.outputType
+      : "prototype";
+
+    if (!prompt || !isAmbiguousDesignPrompt(prompt)) {
+      await this.generateDesignWorkbench(message);
+      return;
+    }
+
+    this.sendToRenderer({
+      type: "design:directions",
+      suggestions: getDesignDirectionSuggestions(outputType),
+    });
+  }
+
+  private async patchDesignWorkbench(
+    message: Record<string, unknown>,
+  ): Promise<void> {
+    const html = String(message.html ?? "").trim();
+    const selector = String(message.selector ?? "").trim();
+    const comment = String(message.comment ?? "").trim();
+    const targetOuterHtml = String(message.targetOuterHtml ?? "").trim();
+
+    if (!html || !selector || !comment || !targetOuterHtml) {
+      this.sendToRenderer({
+        type: "design:error",
+        message: "设计局部改写缺少必要信息。",
+      });
+      return;
+    }
+
+    const workspaceRoot = this.getSelectedWorkspaceRoot();
+      const { config, envMap } = await resolveProviderConfig(
+        this.settings,
+        workspaceRoot,
+      );
+      const provider = this.createProviderForSystemPrompt(
+        config,
+        workspaceRoot,
+        envMap,
+        buildKainClawDesignPatchSystemPrompt(),
+      );
+
+    this.sendToRenderer({ type: "design:progress", step: "patching" });
+
+    try {
+      const result = await patchKainClawDesignNode({
+        provider,
+        html,
+        selector,
+        comment,
+        targetOuterHtml,
+      });
+      const version = await this.saveDesignVersion({
+        ...(typeof message.prompt === "string" ? { prompt: String(message.prompt) } : {}),
+        ...(message.outputType === "slide" ||
+        message.outputType === "infographic" ||
+        message.outputType === "animation"
+          ? { outputType: message.outputType }
+          : { outputType: "prototype" as const }),
+        ...(typeof message.style === "string" ? { style: String(message.style) } : {}),
+        html: result.html,
+        sliders: Array.isArray(message.sliders) ? message.sliders : [],
+        source: "patch",
+      });
+
+      this.sendToRenderer({
+        type: "design:patchResult",
+        html: result.html,
+        selector,
+        replacementNode: result.replacementNode,
+        versionId: version.id,
+      });
+    } catch (error) {
+      this.sendToRenderer({
+        type: "design:error",
+        message: error instanceof Error ? error.message : String(error),
+      });
+    }
+  }
+
+  private async saveDesignVersion(options: {
+    prompt?: string;
+    outputType?: "prototype" | "slide" | "infographic" | "animation";
+    style?: string;
+    html: string;
+    sliders: unknown[];
+    source: "generate" | "patch" | "editCurrent" | "restore";
+    sourceArtifactId?: string;
+    baseVersionId?: string;
+  }): Promise<DesignVersionRecord> {
+    await this.ensureSession();
+    let project = await this.getCurrentDesignProject();
+    if (!project) {
+      project = await this.designProjectStore.createProject({
+        name: (options.prompt?.trim() || "KainClaw Design").slice(0, 80),
+        source: options.sourceArtifactId ? "artifact" : "blank",
+        ...(options.sourceArtifactId ? { sourceArtifactId: options.sourceArtifactId } : {}),
+        activeVersionId: "pending-version",
+      });
+      await this.setCurrentDesignProject(project);
+    }
+
+    const version = await this.designVersionStore.saveVersion({
+      projectId: project.projectId,
+      ...(options.baseVersionId ? { baseVersionId: options.baseVersionId } : {}),
+      prompt: options.prompt?.trim() || "",
+      outputType: options.outputType ?? "prototype",
+      style: options.style?.trim() || "",
+      html: options.html,
+      sliders: Array.isArray(options.sliders) ? options.sliders as DesignVersionRecord["sliders"] : [],
+      sliderValues: {},
+      source: options.source,
+    });
+
+    const updatedProject = await this.designProjectStore.updateProject(project.projectId, {
+      activeVersionId: version.id,
+      updatedAt: version.createdAt,
+      lastOpenedAt: Date.now(),
+      ...(options.prompt?.trim() ? { name: options.prompt.trim().slice(0, 80) } : {}),
+    });
+    await this.setCurrentDesignProject(updatedProject ?? project);
+    return version;
+  }
+
+  private async loadDesignVersions(message: Record<string, unknown>): Promise<void> {
+    await this.ensureSession();
+    const projectId = typeof message.projectId === "string" && message.projectId.trim()
+      ? message.projectId.trim()
+      : this.currentDesignProjectId ?? "design-default";
+    const versions = await this.designVersionStore.listVersions(projectId);
+    this.sendToRenderer({
+      type: "design:versions",
+      versions,
+    });
+  }
+
+  private async restoreDesignVersion(message: Record<string, unknown>): Promise<void> {
+    const versionId = typeof message.versionId === "string" ? message.versionId.trim() : "";
+    if (!versionId) {
+      this.sendToRenderer({
+        type: "design:error",
+        message: "缺少要恢复的版本 ID。",
+      });
+      return;
+    }
+
+    const version = await this.designVersionStore.getVersion(versionId);
+    if (!version) {
+      this.sendToRenderer({
+        type: "design:error",
+        message: "未找到指定的设计版本。",
+      });
+      return;
+    }
+
+    this.sendToRenderer({
+      type: "design:result",
+      html: version.html,
+      sliders: version.sliders,
+      prompt: version.prompt ?? "",
+      outputType: version.outputType ?? "prototype",
+      ...(version.style ? { style: version.style } : {}),
+      versionId: version.id,
+      projectId: version.projectId,
+      activeVersionId: version.id,
+    });
+
+    await this.openDesignProject(version.projectId);
+    if (this.currentDesignProjectId) {
+      await this.designProjectStore.updateProject(this.currentDesignProjectId, {
+        activeVersionId: version.id,
+        updatedAt: Date.now(),
+        lastOpenedAt: Date.now(),
+      });
+    }
+  }
+
+  private async exportDesignWorkbench(message: Record<string, unknown>): Promise<void> {
+    const html = typeof message.html === "string" ? message.html : "";
+    const sliders = Array.isArray(message.sliders) ? message.sliders : [];
+    const format: DesignExportFormat = message.format === "pdf" ? "pdf" : "html";
+    const projectLabel = typeof message.projectLabel === "string" ? message.projectLabel : "kainclaw-design";
+
+    if (!html.trim()) {
+      this.sendToRenderer({
+        type: "design:error",
+        message: "当前没有可导出的设计内容。",
+      });
+      return;
+    }
+
+    try {
+      const pathToOpen = await exportDesignHtml({
+        storageRoot: this.host.getStorageUri(),
+        html,
+        sliders: sliders as DesignVersionRecord["sliders"],
+        projectLabel,
+      });
+
+      this.sendToRenderer({
+        type: "design:exportDone",
+        format,
+        filePath: pathToOpen,
+      });
+    } catch (error) {
+      this.sendToRenderer({
+        type: "design:error",
+        message: error instanceof Error ? error.message : String(error),
+      });
+    }
+  }
+
 
   private async requestUserQuestion(
     request: AskUserQuestionRequest,
@@ -3486,6 +4097,11 @@ export class ElectronChatPanel {
     return [referenceImage];
   }
 
+  private localizeShellSurfaceText(content: string): string {
+    const { surfaceTextMap } = getElectronShellStrings(this.settings.getLanguage());
+    return surfaceTextMap[content] ?? content;
+  }
+
   private async appendRouteErrorMessage(content: string): Promise<void> {
     await this.ensureSession();
     if (!this.currentSessionId) {
@@ -3694,6 +4310,7 @@ export class ElectronChatPanel {
       ? (this.artifactRegistries.get(this.currentSessionId) ?? null)
       : null;
     const activeArtifact = currentArtifactRegistry?.activeArtifact ?? null;
+    const currentDesignProject = await this.getCurrentDesignProject();
 
     this.sendToRenderer({
       type: "state",
@@ -3720,6 +4337,11 @@ export class ElectronChatPanel {
         activeArtifact,
         activeArtifactId: activeArtifact?.id ?? null,
         artifactCount: currentArtifactRegistry?.artifacts.length ?? 0,
+      },
+      designState: {
+        currentProjectId: currentDesignProject?.projectId ?? null,
+        currentProjectName: currentDesignProject?.name ?? null,
+        activeVersionId: currentDesignProject?.activeVersionId ?? null,
       },
       workspaceRoot,
       workspaceInfo,

@@ -99,7 +99,18 @@ describe("conversationRuntimeStateHost", () => {
         content: "hello",
         attachments: [{ data: "QUJDRA==", mimeType: "image/png" }],
       },
-      { role: "assistant" as const, content: "world" },
+      {
+        role: "assistant" as const,
+        content: "world",
+        generatedImages: [
+          {
+            id: "img-1",
+            src: "data:image/png;base64,AAAA",
+            source: "generate" as const,
+            prompt: "make a wireframe",
+          },
+        ],
+      },
     ];
     expect(serializeModelConversation(conversationMessages)).toEqual([
       {
@@ -107,7 +118,18 @@ describe("conversationRuntimeStateHost", () => {
         content: "hello",
         attachments: [{ data: "QUJDRA==", mimeType: "image/png" }],
       },
-      { role: "assistant", content: "world" },
+      {
+        role: "assistant",
+        content: "world",
+        generatedImages: [
+          {
+            id: "img-1",
+            src: "data:image/png;base64,AAAA",
+            source: "generate",
+            prompt: "make a wireframe",
+          },
+        ],
+      },
     ]);
 
     const target = [{ role: "user" as const, content: "old" }];
@@ -117,6 +139,14 @@ describe("conversationRuntimeStateHost", () => {
           role: "assistant",
           content: "restored",
           attachments: [{ data: "RUZHSA==", mimeType: "image/jpeg" }],
+          generatedImages: [
+            {
+              id: "img-restored",
+              src: "data:image/png;base64,BBBB",
+              source: "edit",
+              revisedPrompt: "clean up the layout",
+            },
+          ],
         },
       ],
       conversationMessages: target,
@@ -129,6 +159,14 @@ describe("conversationRuntimeStateHost", () => {
         role: "assistant",
         content: "restored",
         attachments: [{ data: "RUZHSA==", mimeType: "image/jpeg" }],
+        generatedImages: [
+          {
+            id: "img-restored",
+            src: "data:image/png;base64,BBBB",
+            source: "edit",
+            revisedPrompt: "clean up the layout",
+          },
+        ],
       },
     ]);
   });
@@ -140,6 +178,17 @@ describe("conversationRuntimeStateHost", () => {
         role: "user" as const,
         content: "hello",
         attachments: [{ data: "QUJDRA==", mimeType: "image/png" }],
+      },
+      {
+        role: "assistant" as const,
+        content: "image result",
+        generatedImages: [
+          {
+            id: "img-2",
+            src: "data:image/png;base64,CCCC",
+            source: "variant" as const,
+          },
+        ],
       },
     ];
 
@@ -157,6 +206,17 @@ describe("conversationRuntimeStateHost", () => {
           role: "user",
           content: "hello",
           attachments: [{ data: "QUJDRA==", mimeType: "image/png" }],
+        },
+        {
+          role: "assistant",
+          content: "image result",
+          generatedImages: [
+            {
+              id: "img-2",
+              src: "data:image/png;base64,CCCC",
+              source: "variant",
+            },
+          ],
         },
       ],
     });
@@ -178,6 +238,17 @@ describe("conversationRuntimeStateHost", () => {
           role: "user",
           content: "hello",
           attachments: [{ data: "QUJDRA==", mimeType: "image/png" }],
+        },
+        {
+          role: "assistant",
+          content: "image result",
+          generatedImages: [
+            {
+              id: "img-2",
+              src: "data:image/png;base64,CCCC",
+              source: "variant",
+            },
+          ],
         },
       ],
     });

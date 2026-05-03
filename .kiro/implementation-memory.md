@@ -1,9 +1,9 @@
 # 实现记忆
 
-## 快速摘要（2026-05-02）
+## 快速摘要（2026-05-03）
 
 - 当前任务：`bd ready` 查看；sprint 历史见 `git log`，本文只记录长期有效结论
-- 最后验证基线：161 个测试文件，1254 个测试通过（2026-05-02）
+- 最后验证基线：168 个测试文件，1299 个测试通过（2026-05-03）
 - 最近已收口：installed-skills（技能根目录 / 安装器 / 执行 / hooks / SkillTool）、AskUserQuestion modal、freeze/careful、bilingual i18n
 - 回退入口：若 beads 不可用，从"## 当前稳定结论"开始读
 
@@ -35,6 +35,9 @@
   - 只维护当前真实状态、验证基线、关键风险、下一优先级。
 - `implementation-memory.md`
   - 只维护长期有效的实现结论、边界、模式和踩坑经验。
+- `bd / beads`
+  - 只维护任务状态、依赖、claim/close。
+  - beads 关闭任务后，如果它改变了长期边界、主线路径、验证基线或工程经验，必须同步把结论写回文档，而不是只留在 beads 里。
 
 ### 3. 验证基线登记
 
@@ -480,3 +483,33 @@
 - 后续每组收口后都要同步这三份文档，但不要把每次小修都写成大段演进史。
 - 多项连续开发时，每完成 5 个用户可感知事项，就先把当前稳定状态 push 到 GitHub；不要把恢复能力建立在本地会话记录、临时恢复稿或未同步文档上。
 - 只要改动影响到前端可见行为、桌面壳交互、图片链路、审批流、会话切换、设置页或其它必须人工点按才能确认的路径，就要在收尾时明确提醒用户手测，并给出最短复现步骤。
+
+### 6. KainClaw Design 主线已落地，但仍受 Electron 壳边界约束
+
+- `vscode-extension-aab`
+  - 已完成 KainClaw Design V1 主线：generate、workbench iframe/sliders、partial patch、版本快照、HTML/PDF export、方向引导。
+- `vscode-extension-0xu`
+  - 已完成 KainClaw Design V2 联动：Image Lab → Design 参考图、Design → Image Lab 反向发起、SQLite 版本存储、PPTX export。
+- 这些能力已经是当前 Electron 壳中的真实产品能力，但不改变核心架构判断：
+  - `src/` runtime / service / adapter 仍优先
+  - Electron 仍是桌面验证壳，不是长期核心业务归宿
+
+### 7. Electron 最终用户壳必须隐藏内部工具 plumbing
+
+- 历史原则来自 `fb6ff02 Hide Electron inspection plumbing from end users`。
+- 同一原则也适用于 HTML artifact / 页面生成请求：
+  - 对最终用户来说，“做一个官网首页 / 双栏产品介绍页 / 落地页原型”是页面生成，不是调试工作区。
+  - 这类 prompt 允许继续走 chat/sendPrompt 主链，但在宿主侧必须传 `tools = []` 给 `runAgent()`。
+  - 目标是避免 Electron 壳显示 `Tool Use / Tool Result`、`.beads`、`list_files / read_file / write_file` 这类实现细节。
+
+### 8. `electron/renderer/index.html` 的高风险经验
+
+- 这个单文件 renderer 已经出现过几类真实回归：
+  - 重复定义 session / design 函数块，导致点击链混乱
+  - patch 过程中误删仍被 `onclick` 使用的函数，导致新建/切会话失效
+  - 设置页渲染链局部改坏，出现只剩标题或整块空白
+  - 内联 `<script>` 模板字符串边界断裂，直接触发白屏
+- 继续修改这个文件前必须先做三件事：
+  - 搜同名函数是否有重复定义
+  - 搜所有 `onclick="..."` 是否仍指向存在的函数
+  - 必要时先做脚本级语法检查，再跑 Electron build

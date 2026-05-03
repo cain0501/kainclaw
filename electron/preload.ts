@@ -6,6 +6,10 @@ contextBridge.exposeInMainWorld("electronAPI", {
   maximize: () => ipcRenderer.send("window:maximize"),
   close: () => ipcRenderer.send("window:close"),
   pickWorkspace: () => ipcRenderer.invoke("workspace:pick"),
+  exportDesignPdf: (html: string, projectLabel: string) =>
+    ipcRenderer.invoke("design:exportPdf", { html, projectLabel }),
+  exportDesignPptx: (html: string, projectLabel: string) =>
+    ipcRenderer.invoke("design:exportPptx", { html, projectLabel }),
 });
 
 /**

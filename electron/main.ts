@@ -1,4 +1,5 @@
 import path from "node:path";
+import { promises as fs } from "node:fs";
 import { app, BrowserWindow, ipcMain, globalShortcut, dialog } from "electron";
 import { ElectronHostAdapter } from "../src/platform/electronHostAdapter";
 import {
@@ -23,6 +24,35 @@ import type { BridgeProviderConfig } from "../src/platform/localBridgeRuntime";
 
 let mainWindow: BrowserWindow | null = null;
 let chatPanel: ElectronChatPanel | null = null;
+
+function buildTimestampedExportPath(projectLabel: string, format: "pdf" | "pptx"): string {
+  return path.join(
+    resolveElectronStoragePath(app.getPath("userData")),
+    "exports",
+    `${projectLabel.replace(/[^a-zA-Z0-9._-]+/g, "-").slice(0, 48) || "design"}-${new Date().toISOString().replace(/[:]/g, "-").replace(/\..+$/, "")}.${format}`,
+  );
+}
+
+async function renderDesignSlidePng(html: string): Promise<Buffer> {
+  const win = new BrowserWindow({
+    show: false,
+    width: 1600,
+    height: 900,
+    webPreferences: {
+      sandbox: true,
+      contextIsolation: true,
+      nodeIntegration: false,
+    },
+  });
+
+  try {
+    await win.loadURL(`data:text/html;base64,${Buffer.from(html).toString("base64")}`);
+    const image = await win.webContents.capturePage();
+    return image.toPNG();
+  } finally {
+    win.destroy();
+  }
+}
 
 function buildLocalBridgeProviderConfig(
   settings: SettingsRepository,
@@ -206,6 +236,61 @@ ipcMain.handle("workspace:pick", async () => {
     buttonLabel: "选择文件夹",
   });
   return result.canceled ? null : (result.filePaths[0] ?? null);
+});
+
+ipcMain.handle("design:exportPdf", async (_event, payload: Record<string, unknown>) => {
+  const html = typeof payload.html === "string" ? payload.html : "";
+  const projectLabel =
+    typeof payload.projectLabel === "string" && payload.projectLabel.trim()
+      ? payload.projectLabel.trim()
+      : "kainclaw-design";
+  if (!html.trim()) {
+    throw new Error("Design PDF export requires html.");
+  }
+
+  const exportPath = buildTimestampedExportPath(projectLabel, "pdf");
+
+  const win = new BrowserWindow({
+    show: false,
+    webPreferences: {
+      sandbox: true,
+      contextIsolation: true,
+      nodeIntegration: false,
+    },
+  });
+
+  try {
+    await win.loadURL(`data:text/html;base64,${Buffer.from(html).toString("base64")}`);
+    const pdf = await win.webContents.printToPDF({ printBackground: true });
+    await fs.mkdir(path.dirname(exportPath), { recursive: true });
+    await fs.writeFile(exportPath, pdf);
+    return exportPath;
+  } finally {
+    win.destroy();
+  }
+});
+
+ipcMain.handle("design:exportPptx", async (_event, payload: Record<string, unknown>) => {
+  const html = typeof payload.html === "string" ? payload.html : "";
+  const projectLabel =
+    typeof payload.projectLabel === "string" && payload.projectLabel.trim()
+      ? payload.projectLabel.trim()
+      : "kainclaw-design";
+  if (!html.trim()) {
+    throw new Error("Design PPTX export requires html.");
+  }
+
+  const png = await renderDesignSlidePng(html);
+  const exportPath = buildTimestampedExportPath(projectLabel, "pptx");
+  await fs.mkdir(path.dirname(exportPath), { recursive: true });
+  const { exportDesignPptx } = await import("../src/design/exporters.js");
+  return exportDesignPptx({
+    storageRoot: resolveElectronStoragePath(app.getPath("userData")),
+    html,
+    sliders: [],
+    projectLabel,
+    renderSlideImage: async () => png,
+  });
 });
 
 // ─── IPC: renderer → main ────────────────────────────────────────────────────

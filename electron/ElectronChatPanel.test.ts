@@ -19,6 +19,10 @@ import {
   runImageLabRequest,
 } from "../src/imageGeneration/imageLabRuntime";
 import { searchPublicReferenceImages } from "../src/imageGeneration/imageMaterialSearch";
+import { generateKainClawDesign } from "../src/design/designEngine";
+import { patchKainClawDesignNode } from "../src/design/patchEngine";
+import { buildKainClawDesignSystemPrompt } from "../src/design/designPrompt";
+import { buildKainClawDesignPatchSystemPrompt } from "../src/design/patchEngine";
 import { normalizeWebviewAttachments } from "../src/attachmentHandler";
 import type { IHostAdapter } from "../src/platform/IHostAdapter";
 import type { DesktopRuntimeServices } from "../src/platform/desktopRuntimeServices";
@@ -114,6 +118,15 @@ vi.mock("../src/imageGeneration/imageLabRuntime", () => ({
 
 vi.mock("../src/imageGeneration/imageMaterialSearch", () => ({
   searchPublicReferenceImages: vi.fn(),
+}));
+
+vi.mock("../src/design/designEngine", () => ({
+  generateKainClawDesign: vi.fn(),
+}));
+
+vi.mock("../src/design/patchEngine", () => ({
+  buildKainClawDesignPatchSystemPrompt: vi.fn(() => "patch-system-prompt"),
+  patchKainClawDesignNode: vi.fn(),
 }));
 
 class FakeHostAdapter implements IHostAdapter {
@@ -340,7 +353,7 @@ describe("ElectronChatPanel session lifecycle", () => {
     expect(lastStatePayload.messages.map(message => message.content)).toEqual(["EDFG"]);
   });
 
-  it("records tool use and tool result messages in the visible session transcript", async () => {
+  it("keeps tool plumbing out of the Electron user transcript", async () => {
     const harness = await createHarness();
     tempDirs.push(harness.storagePath);
 
@@ -381,22 +394,8 @@ describe("ElectronChatPanel session lifecycle", () => {
     expect(sessionId).toBeTruthy();
 
     const messages = await harness.sessions.loadMessages(sessionId!);
-    expect(
-      messages.some(message =>
-        message.kind === "tool_use" &&
-        message.toolName === "mcp__notion__notion-get-users" &&
-        message.toolInputPreview === "{\"page_size\":5}" &&
-        message.excludeFromConversation === true,
-      ),
-    ).toBe(true);
-    expect(
-      messages.some(message =>
-        message.kind === "tool_result" &&
-        message.toolSummary === "Fetched users" &&
-        message.content.includes("\"ii cai n\"") &&
-        message.excludeFromConversation === true,
-      ),
-    ).toBe(true);
+    expect(messages.some(message => message.kind === "tool_use")).toBe(false);
+    expect(messages.some(message => message.kind === "tool_result")).toBe(false);
     expect(messages[messages.length - 1]?.content).toBe("我已经读取到 1 个用户。");
   });
 
@@ -477,6 +476,40 @@ describe("ElectronChatPanel session lifecycle", () => {
       title: "Landing Two",
     });
     expect(reopenedState?.artifactState?.artifactCount).toBe(2);
+  });
+
+  it("lists, creates, opens, and restores design projects through the phase-1 IPC messages", async () => {
+    const harness = await createHarness();
+    tempDirs.push(harness.storagePath);
+
+    await harness.settings.setOnboardingDone(true);
+    await harness.panel.handleMessage({ type: "ready" });
+
+    await harness.panel.handleMessage({
+      type: "design:createProject",
+      name: "Blank Design",
+    });
+    const createdPayload = getLastRendererPayloadOfType<{
+      type: "design:projectOpened";
+      project?: { projectId: string; name: string } | null;
+    }>(harness.rendererPayloads, "design:projectOpened");
+    expect(createdPayload?.project).toMatchObject({ name: "Blank Design" });
+
+    await harness.panel.handleMessage({ type: "design:listProjects" });
+    const projectsPayload = getLastRendererPayloadOfType<{
+      type: "design:projects";
+      projects: Array<{ projectId: string; name: string }>;
+    }>(harness.rendererPayloads, "design:projects");
+    expect(projectsPayload?.projects.some(project => project.name === "Blank Design")).toBe(false);
+
+    await harness.panel.handleMessage({ type: "design:getLastProject" });
+    const lastPayload = getLastRendererPayloadOfType<{
+      type: "design:projectOpened";
+      project?: { projectId: string; name: string } | null;
+    }>(harness.rendererPayloads, "design:projectOpened");
+    expect(lastPayload?.project).toBeNull();
+
+    expect(createdPayload?.project).toMatchObject({ name: "Blank Design" });
   });
 
   it("opens the active html artifact in KainClaw Design", async () => {
@@ -2206,6 +2239,75 @@ describe("ElectronChatPanel session lifecycle", () => {
     expect(capturedPrompt).toContain("vanilla JavaScript");
   });
 
+  it("disables tool execution for html artifact prompts that request a Tweaks bridge", async () => {
+    const harness = await createHarness();
+    tempDirs.push(harness.storagePath);
+
+    await harness.settings.setOnboardingDone(true);
+    vi.mocked(resolveProviderConfig).mockResolvedValue({
+      config: {
+        type: "anthropic",
+        apiKey: "test-key",
+        model: "claude-sonnet-4-6",
+      },
+      envMap: {},
+    });
+    vi.mocked(buildProviderAdapter).mockReturnValue({} as never);
+    vi.mocked(handleElectronPromptCommand).mockResolvedValue({ kind: "continue" });
+
+    let receivedToolCount = -1;
+    let capturedPrompt = "";
+    vi.mocked(runAgent).mockImplementation(async (history, options) => {
+      receivedToolCount = options.tools.length;
+      capturedPrompt = String(history[history.length - 1]?.content || "");
+      return "<!DOCTYPE html><html><head><title>Tweaks Bridge</title></head><body></body></html>";
+    });
+
+    await harness.panel.handleMessage({
+      type: "sendPrompt",
+      prompt: [
+        "?????? HTML???? KainClaw Tweaks bridge?",
+        "1. ??????? window.parent.postMessage({ type: '__edit_mode_available' }, '*')",
+        "2. ?? window message???? '__activate_edit_mode' / '__deactivate_edit_mode' ???????? tweak ??",
+        "3. tweak ??????? window.parent.postMessage({ type: '__edit_mode_set_keys', edits: {...} }, '*')",
+        "4. ??????????????????",
+      ].join("\n"),
+    });
+
+    expect(receivedToolCount).toBe(0);
+    expect(capturedPrompt).toContain("[Internal artifact output contract]");
+  });
+
+  it("disables tool execution for html artifact prompts", async () => {
+    const harness = await createHarness();
+    tempDirs.push(harness.storagePath);
+
+    await harness.settings.setOnboardingDone(true);
+    vi.mocked(resolveProviderConfig).mockResolvedValue({
+      config: {
+        type: "anthropic",
+        apiKey: "test-key",
+        model: "claude-sonnet-4-6",
+      },
+      envMap: {},
+    });
+    vi.mocked(buildProviderAdapter).mockReturnValue({} as never);
+    vi.mocked(handleElectronPromptCommand).mockResolvedValue({ kind: "continue" });
+
+    let receivedToolCount = -1;
+    vi.mocked(runAgent).mockImplementation(async (_history, options) => {
+      receivedToolCount = options.tools.length;
+      return "<!DOCTYPE html><html><head><title>No Tools</title></head><body></body></html>";
+    });
+
+    await harness.panel.handleMessage({
+      type: "sendPrompt",
+      prompt: "做一个双栏产品介绍页，左侧大标题，右侧特性卡片，极简编辑感",
+    });
+
+    expect(receivedToolCount).toBe(0);
+  });
+
   it("derives image size from the user's requested ratio or dimensions", async () => {
     const harness = await createHarness();
     tempDirs.push(harness.storagePath);
@@ -3779,6 +3881,409 @@ Freeze skill body.
     const index = await harness.sessions.readIndex();
     expect(index.sessions[0]?.title).toBe("New chat");
   });
+
+  it("handles design:generate by returning HTML and sliders to the page-design workbench", async () => {
+    const harness = await createHarness();
+    tempDirs.push(harness.storagePath);
+
+    await harness.settings.setOnboardingDone(true);
+    await harness.panel.handleMessage({ type: "ready" });
+
+    vi.mocked(resolveProviderConfig).mockResolvedValue({
+      config: {
+        type: "anthropic",
+        apiKey: "test-key",
+        model: "claude-sonnet-4-6",
+      },
+      envMap: {},
+    });
+    vi.mocked(buildProviderAdapter).mockReturnValue({} as never);
+    vi.mocked(generateKainClawDesign).mockResolvedValue({
+      html: "<!DOCTYPE html><html><head><style>:root{--color-primary:#111;--spacing-base:16px;--fw-display:300;}</style></head><body><main>Design</main></body></html>",
+      sliders: [
+        { id: "primary", label: "Primary", type: "color", cssVar: "--color-primary", default: "#111111" },
+        { id: "spacing", label: "Spacing", type: "range", cssVar: "--spacing-base", default: 16, min: 8, max: 32, unit: "px" },
+        { id: "weight", label: "Weight", type: "select", cssVar: "--fw-display", default: "300", options: ["200", "300", "400"] },
+      ],
+      rawOutput: "raw",
+      systemPrompt: "system",
+      userPrompt: "user",
+    });
+
+    await harness.panel.handleMessage({
+      type: "design:generate",
+      prompt: "Make a premium robotics landing page",
+      outputType: "prototype",
+      style: "minimal editorial",
+      referenceImageDataUrl: "data:image/png;base64,QUJDRA==",
+      referenceImageMimeType: "image/png",
+    });
+
+    expect(buildProviderAdapter).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: "anthropic",
+      }),
+      "",
+      buildKainClawDesignSystemPrompt(),
+      {},
+    );
+    expect(generateKainClawDesign).toHaveBeenCalledWith(
+      expect.any(Object),
+      expect.objectContaining({
+        prompt: "Make a premium robotics landing page",
+        outputType: "prototype",
+        style: "minimal editorial",
+        referenceImageDataUrl: "data:image/png;base64,QUJDRA==",
+        referenceImageMimeType: "image/png",
+      }),
+    );
+
+    const resultPayload = getLastRendererPayloadOfType<{
+      type: "design:result";
+      html: string;
+      sliders: Array<{ id: string; cssVar: string }>;
+      prompt: string;
+      outputType: string;
+      style?: string;
+    }>(harness.rendererPayloads, "design:result");
+
+    expect(resultPayload).toMatchObject({
+      type: "design:result",
+      html: expect.stringContaining("<!DOCTYPE html>"),
+      prompt: "Make a premium robotics landing page",
+      outputType: "prototype",
+      style: "minimal editorial",
+    });
+    expect(resultPayload?.sliders).toHaveLength(3);
+  });
+
+  it("handles design:editCurrent by revising the current page instead of treating it as a fresh design", async () => {
+    const harness = await createHarness();
+    tempDirs.push(harness.storagePath);
+
+    await harness.settings.setOnboardingDone(true);
+    await harness.panel.handleMessage({ type: "ready" });
+
+    vi.mocked(resolveProviderConfig).mockResolvedValue({
+      config: {
+        type: "anthropic",
+        apiKey: "test-key",
+        model: "claude-sonnet-4-6",
+      },
+      envMap: {},
+    });
+    vi.mocked(buildProviderAdapter).mockReturnValue({} as never);
+    vi.mocked(generateKainClawDesign).mockResolvedValue({
+      html: "<!DOCTYPE html><html><head><style>:root{--color-primary:#111;--spacing-base:16px;--fw-display:300;}</style></head><body><main>Edited current page</main></body></html>",
+      sliders: [
+        { id: "primary", label: "Primary", type: "color", cssVar: "--color-primary", default: "#111111" },
+        { id: "spacing", label: "Spacing", type: "range", cssVar: "--spacing-base", default: 16, min: 8, max: 32, unit: "px" },
+        { id: "weight", label: "Weight", type: "select", cssVar: "--fw-display", default: "300", options: ["200", "300", "400"] },
+      ],
+      rawOutput: "raw",
+      systemPrompt: "system",
+      userPrompt: "user",
+    });
+
+    await harness.panel.handleMessage({
+      type: "design:editCurrent",
+      prompt: "Keep this layout but turn it into an editorial white product page",
+      outputType: "prototype",
+      style: "editorial white",
+      html: "<!DOCTYPE html><html><body><main>Current page</main></body></html>",
+    });
+
+    expect(buildProviderAdapter).toHaveBeenCalledWith(
+      expect.objectContaining({ type: "anthropic" }),
+      "",
+      expect.stringContaining("Current HTML to revise:"),
+      {},
+    );
+    const resultPayload = getLastRendererPayloadOfType<{
+      type: "design:result";
+      html: string;
+      prompt: string;
+    }>(harness.rendererPayloads, "design:result");
+
+    expect(resultPayload).toMatchObject({
+      type: "design:result",
+      html: expect.stringContaining("Edited current page"),
+      prompt: "Keep this layout but turn it into an editorial white product page",
+    });
+  });
+
+  it("handles design:patch by returning updated HTML without requiring a full page rewrite", async () => {
+    const harness = await createHarness();
+    tempDirs.push(harness.storagePath);
+
+    await harness.settings.setOnboardingDone(true);
+    await harness.panel.handleMessage({ type: "ready" });
+
+    vi.mocked(resolveProviderConfig).mockResolvedValue({
+      config: {
+        type: "anthropic",
+        apiKey: "test-key",
+        model: "claude-sonnet-4-6",
+      },
+      envMap: {},
+    });
+    vi.mocked(buildProviderAdapter).mockReturnValue({} as never);
+    vi.mocked(patchKainClawDesignNode).mockResolvedValue({
+      replacementNode: '<h1 class="hero-title">Warm headline</h1>',
+      html: "<!DOCTYPE html><html><body><section class=\"hero\"><h1 class=\"hero-title\">Warm headline</h1></section></body></html>",
+      rawOutput: "raw",
+    });
+
+    await harness.panel.handleMessage({
+      type: "design:patch",
+      html: "<!DOCTYPE html><html><body><section class=\"hero\"><h1>Hello</h1></section></body></html>",
+      selector: "section.hero > h1",
+      targetOuterHtml: "<h1>Hello</h1>",
+      comment: "Make the title warmer.",
+    });
+
+    expect(buildProviderAdapter).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: "anthropic",
+      }),
+      "",
+      buildKainClawDesignPatchSystemPrompt(),
+      {},
+    );
+    expect(patchKainClawDesignNode).toHaveBeenCalledWith(
+      expect.objectContaining({
+        html: expect.stringContaining("<!DOCTYPE html>"),
+        selector: "section.hero > h1",
+        targetOuterHtml: "<h1>Hello</h1>",
+        comment: "Make the title warmer.",
+      }),
+    );
+
+    const patchPayload = getLastRendererPayloadOfType<{
+      type: "design:patchResult";
+      html: string;
+      selector: string;
+      replacementNode: string;
+    }>(harness.rendererPayloads, "design:patchResult");
+
+    expect(patchPayload).toMatchObject({
+      type: "design:patchResult",
+      selector: "section.hero > h1",
+      replacementNode: expect.stringContaining("hero-title"),
+      html: expect.stringContaining("Warm headline"),
+    });
+  });
+
+  it("lists and restores saved design versions for the current session", async () => {
+    const harness = await createHarness();
+    tempDirs.push(harness.storagePath);
+
+    await harness.settings.setOnboardingDone(true);
+    await harness.panel.handleMessage({ type: "ready" });
+
+    vi.mocked(resolveProviderConfig).mockResolvedValue({
+      config: {
+        type: "anthropic",
+        apiKey: "test-key",
+        model: "claude-sonnet-4-6",
+      },
+      envMap: {},
+    });
+    vi.mocked(generateKainClawDesign).mockResolvedValue({
+      html: "<!DOCTYPE html><html><head><style>:root{--color-primary:#111;--spacing-base:16px;--fw-display:300;}</style></head><body><main>Version A</main></body></html>",
+      sliders: [
+        { id: "primary", label: "Primary", type: "color", cssVar: "--color-primary", default: "#111111" },
+        { id: "spacing", label: "Spacing", type: "range", cssVar: "--spacing-base", default: 16, min: 8, max: 32, unit: "px" },
+        { id: "weight", label: "Weight", type: "select", cssVar: "--fw-display", default: "300", options: ["200", "300", "400"] },
+      ],
+      rawOutput: "raw",
+      systemPrompt: "system",
+      userPrompt: "user",
+    });
+
+    await harness.panel.handleMessage({
+      type: "design:generate",
+      prompt: "Make version A",
+      outputType: "prototype",
+      style: "minimal editorial",
+    });
+
+    const firstResult = getLastRendererPayloadOfType<{
+      type: "design:result";
+      versionId?: string;
+    }>(harness.rendererPayloads, "design:result");
+    expect(firstResult?.versionId).toBeTruthy();
+
+    await harness.panel.handleMessage({ type: "design:loadVersions" });
+    const versionsPayload = getLastRendererPayloadOfType<{
+      type: "design:versions";
+      versions: Array<{ id: string; html: string; prompt?: string }>;
+    }>(harness.rendererPayloads, "design:versions");
+    expect(versionsPayload?.versions[0]).toMatchObject({
+      id: firstResult?.versionId,
+      prompt: "Make version A",
+    });
+
+    await harness.panel.handleMessage({
+      type: "design:restoreVersion",
+      versionId: firstResult?.versionId,
+    });
+    const restoredPayload = getLastRendererPayloadOfType<{
+      type: "design:result";
+      html: string;
+      prompt: string;
+      versionId?: string;
+    }>(harness.rendererPayloads, "design:result");
+    expect(restoredPayload).toMatchObject({
+      type: "design:result",
+      html: expect.stringContaining("Version A"),
+      prompt: "Make version A",
+      versionId: firstResult?.versionId,
+    });
+  });
+
+  it("exports design HTML and reports the written file path", async () => {
+    const harness = await createHarness();
+    tempDirs.push(harness.storagePath);
+
+    await harness.settings.setOnboardingDone(true);
+    await harness.panel.handleMessage({ type: "ready" });
+
+    await harness.panel.handleMessage({
+      type: "design:export",
+      format: "html",
+      html: "<!DOCTYPE html><html><head><style>:root{--color-primary:#000;}</style></head><body><main>Export me</main></body></html>",
+      sliders: [
+        {
+          id: "primary",
+          label: "Primary",
+          type: "color",
+          cssVar: "--color-primary",
+          default: "#111111",
+        },
+      ],
+      projectLabel: "design-export",
+    });
+
+    const exportPayload = getLastRendererPayloadOfType<{
+      type: "design:exportDone";
+      format: string;
+      filePath: string;
+    }>(harness.rendererPayloads, "design:exportDone");
+
+    expect(exportPayload).toMatchObject({
+      type: "design:exportDone",
+      format: "html",
+    });
+    expect(exportPayload?.filePath.endsWith(".html")).toBe(true);
+
+    const exportedHtml = await readFile(exportPayload!.filePath, "utf8");
+    expect(exportedHtml).toContain("Export me");
+    expect(exportedHtml).toContain("--color-primary: #111111;");
+  });
+
+  it("returns direction suggestions for ambiguous design prompts before generation", async () => {
+    const harness = await createHarness();
+    tempDirs.push(harness.storagePath);
+
+    await harness.settings.setOnboardingDone(true);
+    await harness.panel.handleMessage({ type: "ready" });
+
+    await harness.panel.handleMessage({
+      type: "design:requestDirections",
+      prompt: "做个页面",
+      outputType: "prototype",
+      style: "",
+    });
+
+    const directionsPayload = getLastRendererPayloadOfType<{
+      type: "design:directions";
+      suggestions: Array<{ id: string; label: string; stylePrompt: string }>;
+    }>(harness.rendererPayloads, "design:directions");
+
+    expect(directionsPayload?.suggestions).toHaveLength(3);
+    expect(directionsPayload?.suggestions[0]).toMatchObject({
+      id: expect.any(String),
+      label: expect.any(String),
+      stylePrompt: expect.any(String),
+    });
+    expect(generateKainClawDesign).not.toHaveBeenCalled();
+  });
+
+  it("surfaces an active worktree session in workspaceInfo after ready restores the session scope", async () => {
+    const harness = await createHarness();
+    tempDirs.push(harness.storagePath);
+
+    const repoRoot = await mkdtemp(path.join(os.tmpdir(), "electron-worktree-repo-"));
+    const worktreeRoot = path.join(repoRoot, ".claude", "worktrees", "feature+demo");
+    tempDirs.push(repoRoot);
+    await execFileAsync("git", ["init"], { cwd: repoRoot });
+    await writeFile(path.join(repoRoot, "README.md"), "# worktree test\n", "utf8");
+    await execFileAsync("git", ["add", "README.md"], { cwd: repoRoot });
+    await execFileAsync(
+      "git",
+      [
+        "-c",
+        "user.name=Test User",
+        "-c",
+        "user.email=test@example.com",
+        "commit",
+        "-m",
+        "init",
+      ],
+      { cwd: repoRoot },
+    );
+    await mkdir(worktreeRoot, { recursive: true });
+
+    await harness.settings.setOnboardingDone(true);
+    await harness.settings.setWorkspaceRoot(repoRoot);
+    await harness.panel.handleMessage({ type: "ready" });
+
+    const currentSessionId = harness.settings.getActiveSessionId();
+    expect(currentSessionId).toBeTruthy();
+
+    await harness.sessions.saveRuntimeState(currentSessionId!, {
+      workspaceRoot: repoRoot,
+    });
+
+    const worktreeRuntime = (harness.panel as any).getConversationWorktreeRuntime(repoRoot);
+    await worktreeRuntime.enterWorktree({ name: "feature/demo" });
+
+    harness.rendererPayloads.length = 0;
+    await harness.panel.handleMessage({ type: "ready" });
+
+    const statePayload = getLastRendererPayloadOfType<{
+      type: "state";
+      workspaceInfo: {
+        selectedRoot: string;
+        effectiveRoot: string;
+        gitRoot: string | null;
+        kind: string;
+        detail?: string;
+        activeWorktree?: {
+          worktreePath: string;
+          worktreeName: string;
+          worktreeBranch?: string;
+          originalWorkspaceRoot: string;
+        };
+      };
+    }>(harness.rendererPayloads, "state");
+
+    expect(statePayload?.workspaceInfo).toMatchObject({
+      selectedRoot: repoRoot,
+      effectiveRoot: worktreeRoot,
+      kind: "active_worktree_session",
+      activeWorktree: {
+        worktreePath: worktreeRoot,
+        worktreeName: "feature/demo",
+        worktreeBranch: "worktree-feature+demo",
+        originalWorkspaceRoot: repoRoot,
+      },
+    });
+    expect(path.normalize(statePayload?.workspaceInfo.gitRoot ?? "")).toBe(path.normalize(repoRoot));
+    expect(statePayload?.workspaceInfo.detail).toContain("feature/demo");
+  });
+
   it("routes derive_artifact intents through the artifact pipeline with recent image context", async () => {
     const harness = await createHarness();
     tempDirs.push(harness.storagePath);

@@ -1,10 +1,10 @@
 # Claude Handoff / Claude 交接说明
 
-## 快速摘要（2026-05-02）
+## 快速摘要（2026-05-03）
 
 - 主工作目录：`E:\claudecodejingiang\vscode-extension`
 - 当前任务：`bd ready` 查看（以 beads 实时结果为准）
-- 最后验证基线：161 个测试文件，1254 个测试通过（2026-05-02）
+- 最后验证基线：168 个测试文件，1299 个测试通过（2026-05-03）
 - Sprint 变更详情见 `git log`；本文只维护"当前状态"，不积累流水账
 
 ## 当前状态总览
@@ -294,3 +294,24 @@
   - `E:\claudecodejingiang\vscode-extension\.kiro\specs\kainclaw-design.md`
 - Worker 权限边界：
   - `E:\claudecodejingiang\vscode-extension\.kiro\specs\p05-worker-permissions.md`
+
+## 2026-05-03 当前补充
+
+- beads 已完成并关闭：
+  - `vscode-extension-aab`：KainClaw Design V1 主线
+  - `vscode-extension-0xu`：KainClaw Design V2 联动主线
+- 当前 Electron 壳新增并稳定存在的 Design 能力：
+  - generate / iframe preview / sliders
+  - partial patch
+  - version history
+  - HTML / PDF / PPTX export
+  - Image Lab ↔ Design 双向联动
+- Electron 用户态 artifact / 页面生成主路径当前约束：
+  - 页面生成类 prompt 继续走 chat/sendPrompt 主链
+  - 但宿主侧必须禁用工具，避免把 `Tool Use / Tool Result`、`.beads`、`list_files / read_file / write_file` 这些内部 plumbing 暴露给最终用户
+- 当前全局验证基线已更新为：
+  - `npm test`
+  - `npm run check`
+  - `npm run build`
+  - `npm run build:electron`
+  - `168` 个测试文件，`1299` 个测试通过

@@ -148,7 +148,9 @@ export function deserializePendingPlanVerificationState(
 }
 
 export function serializeModelConversation(
-  conversationMessages: Array<Pick<ChatMessage, "role" | "content" | "attachments">>,
+  conversationMessages: Array<
+    Pick<ChatMessage, "role" | "content" | "attachments" | "generatedImages">
+  >,
 ): PersistedConversationMessage[] | undefined {
   if (conversationMessages.length === 0) {
     return undefined;
@@ -160,12 +162,17 @@ export function serializeModelConversation(
     ...(message.attachments && message.attachments.length > 0
       ? { attachments: message.attachments }
       : {}),
+    ...(message.generatedImages && message.generatedImages.length > 0
+      ? { generatedImages: message.generatedImages }
+      : {}),
   }));
 }
 
 export function restoreModelConversation(options: {
   modelConversation: PersistedConversationMessage[] | undefined;
-  conversationMessages: Array<Pick<ChatMessage, "role" | "content" | "attachments">>;
+  conversationMessages: Array<
+    Pick<ChatMessage, "role" | "content" | "attachments" | "generatedImages">
+  >;
   rebuildConversationMessagesFromSession: () => void;
 }): void {
   if (options.modelConversation && options.modelConversation.length > 0) {
@@ -177,6 +184,9 @@ export function restoreModelConversation(options: {
         ...(message.attachments && message.attachments.length > 0
           ? { attachments: message.attachments }
           : {}),
+        ...(message.generatedImages && message.generatedImages.length > 0
+          ? { generatedImages: message.generatedImages }
+          : {}),
       });
     }
     return;
@@ -187,7 +197,9 @@ export function restoreModelConversation(options: {
 
 export function buildSessionRuntimeState(options: {
   pendingPlanVerification: PendingPlanVerificationState | undefined;
-  conversationMessages: Array<Pick<ChatMessage, "role" | "content" | "attachments">>;
+  conversationMessages: Array<
+    Pick<ChatMessage, "role" | "content" | "attachments" | "generatedImages">
+  >;
   compactBoundary?: CompactBoundarySessionState;
 }): SessionRuntimeState {
   return {
@@ -205,7 +217,9 @@ export function persistSessionRuntimeState(options: {
   enabled: boolean;
   currentSessionId?: string;
   pendingPlanVerification: PendingPlanVerificationState | undefined;
-  conversationMessages: Array<Pick<ChatMessage, "role" | "content" | "attachments">>;
+  conversationMessages: Array<
+    Pick<ChatMessage, "role" | "content" | "attachments" | "generatedImages">
+  >;
   compactBoundary?: CompactBoundarySessionState;
   saveRuntimeState: (
     sessionId: string,
@@ -241,7 +255,7 @@ export function createConversationRuntimeStateBindings(options: {
   getCurrentSessionId: () => string | undefined;
   getSessionMessages: () => Array<Pick<ChatMessage, "role" | "content">>;
   getConversationMessages: () => Array<
-    Pick<ChatMessage, "role" | "content" | "attachments">
+    Pick<ChatMessage, "role" | "content" | "attachments" | "generatedImages">
   >;
   saveRuntimeState: (
     sessionId: string,
