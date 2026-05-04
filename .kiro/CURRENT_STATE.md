@@ -35,7 +35,9 @@ npm run build:electron   # only when Electron behavior changed
 | vscode-extension-bdi | Design 导出全部失效（HTML/PDF/PPTX） | ✓ CLOSED | — |
 | vscode-extension-nce | 首屏设计入口默认显示 Design Home | ✓ CLOSED | — |
 | vscode-extension-a4o | Design 项目删除 + 重命名 | ✓ CLOSED | — |
-| vscode-extension-pmh | Design Home UI 升级（缩略图+网格） | READY | `.kiro/primers/vscode-extension-pmh.md` |
+| vscode-extension-pmh | Design Home UI 升级（缩略图+网格） | ✓ CLOSED | — |
+| vscode-extension-175 | Design 生成流式输出（onToken + shimmer）| ✓ CLOSED | — |
+| vscode-extension-b8n | Artifact 面板持久化：折叠/恢复 + 版本导航 | READY | `.kiro/primers/vscode-extension-b8n.md` |
 
 **→ Design UX 下一个:** `.kiro/primers/vscode-extension-pmh.md`
 
