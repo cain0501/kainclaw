@@ -105,6 +105,15 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-seri
 .imglab-loader-title{font-size:14px;font-weight:700;letter-spacing:.04em;color:#5b3f52;text-shadow:0 0 12px rgba(255,255,255,.75);animation:imglab-text-glow 1.8s ease-in-out infinite}
 .imglab-loader-subtitle{font-size:11px;color:#8b7969;margin-top:4px}
 
+/* Design generating overlay — reuses imglab shimmer keyframes */
+#design-generating-overlay{position:absolute;inset:0;border-radius:14px;overflow:hidden;z-index:4;display:none}
+#design-generating-overlay.active{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px}
+.dgo-bg{position:absolute;inset:0;background:linear-gradient(130deg,rgba(255,255,255,.94) 0%,rgba(255,246,240,.95) 24%,rgba(241,244,255,.95) 48%,rgba(255,241,248,.95) 72%,rgba(245,255,252,.96) 100%);background-size:220% 220%;animation:imglab-pulse 2.8s ease-in-out infinite,imglab-rainbow-flow 8.5s linear infinite}
+.dgo-bg::after{content:'';position:absolute;inset:-20%;pointer-events:none;background:linear-gradient(110deg,rgba(255,255,255,0) 12%,rgba(255,255,255,.16) 28%,rgba(148,163,255,.22) 40%,rgba(255,132,173,.22) 52%,rgba(126,239,214,.18) 64%,rgba(255,255,255,0) 78%);transform:translateX(-160%) skewX(-18deg);animation:imglab-shimmer 2.2s ease-in-out infinite}
+.dgo-content{position:relative;z-index:1;display:flex;flex-direction:column;align-items:center;gap:14px}
+.dgo-title{font-size:13px;font-weight:700;letter-spacing:.04em;color:#5b3f52;text-shadow:0 0 12px rgba(255,255,255,.75);animation:imglab-text-glow 1.8s ease-in-out infinite}
+.dgo-counter{font-size:11px;color:#8b7969;margin-top:2px}
+
 /* Image Lab gallery tabs */
 .imglab-tab-btn{padding:5px 14px;border-radius:999px;border:none;font-size:13px;font-weight:500;cursor:pointer;background:#f0e8e0;color:#7a6656;font-family:inherit;transition:all .15s;white-space:nowrap}
 .imglab-tab-btn:hover{background:#e4d8cc;color:#4a3727}
@@ -1227,6 +1236,21 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-seri
       </div>
       <div id="design-bridge-empty" class="artifacts-panel__placeholder" style="flex:1;min-height:220px">先从 Artifacts 面板打开一个 HTML 原型，再进入 KainClaw Design。</div>
       <iframe id="design-bridge-frame" class="artifacts-panel__frame" style="display:none;flex:1;min-height:0" sandbox="allow-scripts"></iframe>
+      <div id="design-generating-overlay">
+        <div class="dgo-bg"></div>
+        <div class="dgo-content">
+          <div class="imglab-loader-grid">
+            <div class="imglab-loader-square s1"></div>
+            <div class="imglab-loader-square s2"></div>
+            <div class="imglab-loader-square s3"></div>
+            <div class="imglab-loader-square s4"></div>
+            <div class="imglab-loader-square alt s5"></div>
+            <div class="imglab-loader-square alt s6"></div>
+          </div>
+          <div class="dgo-title" id="dgo-title">KainClaw 正在生成设计...</div>
+          <div class="dgo-counter" id="dgo-counter"></div>
+        </div>
+      </div>
       <div id="design-patch-popover" class="design-patch-popover" style="display:none;border:1px solid #eadfd2;border-radius:16px;background:#fff7f0;padding:12px 14px">
         <div id="design-patch-target" style="font-size:11px;font-weight:700;color:#7b4a2e;letter-spacing:.04em;text-transform:uppercase;margin-bottom:8px">未选中元素</div>
         <textarea id="design-patch-comment" placeholder="例如：把这个标题改成渐变暖色，并保留现有布局节奏。" style="width:100%;min-height:88px;border:1px solid #eadfd2;border-radius:12px;padding:10px 12px;background:#fff;color:#2d1f14;font-family:inherit;resize:vertical;line-height:1.6"></textarea>
@@ -2023,6 +2047,17 @@ function handleMessage(msg) {
       designBridgeRenderedToken = 0;
       showDesignPage();
       break;
+    case 'design:token': {
+      const overlay = document.getElementById('design-generating-overlay');
+      const counter = document.getElementById('dgo-counter');
+      if (overlay) overlay.classList.add('active');
+      if (counter && typeof msg.count === 'number') {
+        counter.textContent = isEnglishUi()
+          ? `${msg.count.toLocaleString()} chars generated...`
+          : `已生成 ${msg.count.toLocaleString()} 字符...`;
+      }
+      break;
+    }
     case 'design:progress':
       designBridgeState.loading = msg.step === 'patching' ? designBridgeState.loading : true;
       designBridgeState.patchLoading = msg.step === 'patching';
@@ -3462,6 +3497,18 @@ function renderDesignBridgePage() {
   exportDetails.open = designBridgeState.exportPanelExpanded;
   versionsDetails.style.display = hasDesignContent ? 'block' : 'none';
   exportDetails.style.display = hasDesignContent ? 'block' : 'none';
+  const genOverlay = document.getElementById('design-generating-overlay');
+  const dgoTitle = document.getElementById('dgo-title');
+  const dgoCounter = document.getElementById('dgo-counter');
+  if (genOverlay) {
+    const isGenerating = !!designBridgeState.loading && !designBridgeState.patchLoading;
+    genOverlay.classList.toggle('active', isGenerating);
+    if (!isGenerating) {
+      if (dgoCounter) dgoCounter.textContent = '';
+    } else if (dgoTitle) {
+      dgoTitle.textContent = isEnglishUi() ? 'KainClaw is generating design...' : 'KainClaw 正在生成设计...';
+    }
+  }
   generateBtn.disabled = !!designBridgeState.loading;
   generateBtn.textContent = designBridgeState.loading
     ? (isEnglishUi() ? 'Generating...' : '生成中...')

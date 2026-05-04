@@ -3096,6 +3096,7 @@ export class ElectronChatPanel {
       );
 
     this.sendToRenderer({ type: "design:progress", step: "generating" });
+    let tokenCount = 0;
 
     try {
       const result = await generateKainClawDesign(provider, {
@@ -3104,6 +3105,10 @@ export class ElectronChatPanel {
         ...(style ? { style } : {}),
         ...(referenceImageDataUrl ? { referenceImageDataUrl } : {}),
         ...(referenceImageMimeType ? { referenceImageMimeType } : {}),
+        onToken: (token: string) => {
+          tokenCount += token.length;
+          this.sendToRenderer({ type: "design:token", count: tokenCount });
+        },
       } as DesignGenerateOptions);
       const activeArtifact =
         this.currentSessionId
@@ -3192,6 +3197,7 @@ export class ElectronChatPanel {
     );
 
     this.sendToRenderer({ type: "design:progress", step: "editing-current" });
+    let tokenCount = 0;
 
     try {
       const result = await generateKainClawDesign(provider, {
@@ -3200,6 +3206,10 @@ export class ElectronChatPanel {
         ...(style ? { style } : {}),
         ...(referenceImageDataUrl ? { referenceImageDataUrl } : {}),
         ...(referenceImageMimeType ? { referenceImageMimeType } : {}),
+        onToken: (token: string) => {
+          tokenCount += token.length;
+          this.sendToRenderer({ type: "design:token", count: tokenCount });
+        },
       } as DesignGenerateOptions);
       const version = await this.saveDesignVersion({
         prompt,
