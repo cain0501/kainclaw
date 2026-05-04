@@ -2565,17 +2565,43 @@ function openDesignProjectFromHome(projectId) {
   send({ type: 'design:openProject', projectId });
 }
 
-function renameDesignProjectFromHome(projectId, currentName) {
+function renameDesignProjectFromHome(evt, projectId, currentName) {
   if (!projectId) return;
-  const nextName = prompt(isEnglishUi() ? 'Rename project' : '重命名项目', currentName || '');
-  if (typeof nextName !== 'string') {
-    return;
-  }
-  const trimmed = nextName.trim();
-  if (!trimmed || trimmed === currentName) {
-    return;
-  }
-  send({ type: 'design:renameProject', projectId, newName: trimmed });
+  const card = evt.target.closest('.design-home-card');
+  const nameEl = card && card.querySelector('.design-home-card-name');
+  if (!nameEl || nameEl.querySelector('input')) return;
+
+  const originalName = currentName || nameEl.textContent || '';
+  const input = document.createElement('input');
+  input.value = originalName;
+  input.style.cssText = 'width:100%;border:none;outline:1px solid #c8b8a8;border-radius:4px;padding:1px 4px;font:inherit;font-size:12px;font-weight:600;color:#18181b;background:#fff;box-sizing:border-box';
+
+  let committed = false;
+  const commit = () => {
+    if (committed) return;
+    committed = true;
+    const trimmed = input.value.trim();
+    nameEl.textContent = trimmed || originalName;
+    if (trimmed && trimmed !== originalName) {
+      send({ type: 'design:renameProject', projectId, newName: trimmed });
+    }
+  };
+  const cancel = () => {
+    if (committed) return;
+    committed = true;
+    nameEl.textContent = originalName;
+  };
+
+  input.addEventListener('keydown', e => {
+    if (e.key === 'Enter') { e.preventDefault(); commit(); }
+    if (e.key === 'Escape') { e.preventDefault(); cancel(); }
+  });
+  input.addEventListener('blur', commit);
+
+  nameEl.textContent = '';
+  nameEl.appendChild(input);
+  input.focus();
+  input.select();
 }
 
 function deleteDesignProjectFromHome(projectId, projectName) {
@@ -2712,7 +2738,7 @@ function renderDesignHome() {
       <div class="design-home-card-preview" style="background:${previewTone(project)}">
         ${miniPageThumb(project)}
         <div class="card-actions">
-          <span class="action-btn" onclick="event.stopPropagation(); renameDesignProjectFromHome(decodeURIComponent('${encodedProjectId(project)}'), decodeURIComponent('${encodedProjectName(project)}'));" title="${isEnglishUi() ? 'Rename' : '重命名'}">✎</span>
+          <span class="action-btn" onclick="event.stopPropagation(); renameDesignProjectFromHome(event, decodeURIComponent('${encodedProjectId(project)}'), decodeURIComponent('${encodedProjectName(project)}'));" title="${isEnglishUi() ? 'Rename' : '重命名'}">✎</span>
           <span class="action-btn" onclick="event.stopPropagation(); deleteDesignProjectFromHome(decodeURIComponent('${encodedProjectId(project)}'), decodeURIComponent('${encodedProjectName(project)}'));" title="${isEnglishUi() ? 'Delete' : '删除'}">✕</span>
         </div>
       </div>
@@ -2732,7 +2758,7 @@ function renderDesignHome() {
       <div class="design-home-card-preview" style="background:${previewTone(project)}">
         ${miniPageThumb(project)}
         <div class="card-actions">
-          <span class="action-btn" onclick="event.stopPropagation(); renameDesignProjectFromHome(decodeURIComponent('${encodedProjectId(project)}'), decodeURIComponent('${encodedProjectName(project)}'));" title="${isEnglishUi() ? 'Rename' : '重命名'}">✎</span>
+          <span class="action-btn" onclick="event.stopPropagation(); renameDesignProjectFromHome(event, decodeURIComponent('${encodedProjectId(project)}'), decodeURIComponent('${encodedProjectName(project)}'));" title="${isEnglishUi() ? 'Rename' : '重命名'}">✎</span>
           <span class="action-btn" onclick="event.stopPropagation(); deleteDesignProjectFromHome(decodeURIComponent('${encodedProjectId(project)}'), decodeURIComponent('${encodedProjectName(project)}'));" title="${isEnglishUi() ? 'Delete' : '删除'}">✕</span>
         </div>
       </div>
