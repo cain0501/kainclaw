@@ -204,7 +204,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-seri
 .design-home-new-preview{display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,.025);color:#b0a090}
 .card-actions{position:absolute;top:6px;right:6px;display:flex;gap:3px;opacity:0;transition:opacity .12s}
 .design-home-card:hover .card-actions{opacity:1}
-.action-btn{width:22px;height:22px;border-radius:6px;border:none;background:rgba(255,255,255,.82);backdrop-filter:blur(4px);color:#5a4a3a;font-size:11px;cursor:pointer;display:flex;align-items:center;justify-content:center;padding:0;line-height:1;box-shadow:0 1px 3px rgba(0,0,0,.12)}
+.action-btn{width:22px;height:22px;border-radius:6px;background:rgba(255,255,255,.82);backdrop-filter:blur(4px);color:#5a4a3a;font-size:11px;cursor:pointer;display:flex;align-items:center;justify-content:center;line-height:1;box-shadow:0 1px 3px rgba(0,0,0,.12);user-select:none}
 .action-btn:hover{background:#fff;color:#1a1a1a}
 .design-home-empty-shell{display:flex;justify-content:center}
 .design-home-empty-card{width:100%;max-width:640px;padding:48px 24px 42px;border:1.5px dashed #ddd5c8;border-radius:16px;background:rgba(255,255,255,.82);text-align:center;color:#9d8f82}
@@ -2712,8 +2712,8 @@ function renderDesignHome() {
       <div class="design-home-card-preview" style="background:${previewTone(project)}">
         ${miniPageThumb(project)}
         <div class="card-actions">
-          <button class="action-btn" onclick="event.stopPropagation(); renameDesignProjectFromHome(decodeURIComponent('${encodedProjectId(project)}'), decodeURIComponent('${encodedProjectName(project)}'));" title="${isEnglishUi() ? 'Rename' : '重命名'}">✎</button>
-          <button class="action-btn" onclick="event.stopPropagation(); deleteDesignProjectFromHome(decodeURIComponent('${encodedProjectId(project)}'), decodeURIComponent('${encodedProjectName(project)}'));" title="${isEnglishUi() ? 'Delete' : '删除'}">✕</button>
+          <span class="action-btn" onclick="event.stopPropagation(); renameDesignProjectFromHome(decodeURIComponent('${encodedProjectId(project)}'), decodeURIComponent('${encodedProjectName(project)}'));" title="${isEnglishUi() ? 'Rename' : '重命名'}">✎</span>
+          <span class="action-btn" onclick="event.stopPropagation(); deleteDesignProjectFromHome(decodeURIComponent('${encodedProjectId(project)}'), decodeURIComponent('${encodedProjectName(project)}'));" title="${isEnglishUi() ? 'Delete' : '删除'}">✕</span>
         </div>
       </div>
       <div class="design-home-card-body">
@@ -2732,8 +2732,8 @@ function renderDesignHome() {
       <div class="design-home-card-preview" style="background:${previewTone(project)}">
         ${miniPageThumb(project)}
         <div class="card-actions">
-          <button class="action-btn" onclick="event.stopPropagation(); renameDesignProjectFromHome(decodeURIComponent('${encodedProjectId(project)}'), decodeURIComponent('${encodedProjectName(project)}'));" title="${isEnglishUi() ? 'Rename' : '重命名'}">✎</button>
-          <button class="action-btn" onclick="event.stopPropagation(); deleteDesignProjectFromHome(decodeURIComponent('${encodedProjectId(project)}'), decodeURIComponent('${encodedProjectName(project)}'));" title="${isEnglishUi() ? 'Delete' : '删除'}">✕</button>
+          <span class="action-btn" onclick="event.stopPropagation(); renameDesignProjectFromHome(decodeURIComponent('${encodedProjectId(project)}'), decodeURIComponent('${encodedProjectName(project)}'));" title="${isEnglishUi() ? 'Rename' : '重命名'}">✎</span>
+          <span class="action-btn" onclick="event.stopPropagation(); deleteDesignProjectFromHome(decodeURIComponent('${encodedProjectId(project)}'), decodeURIComponent('${encodedProjectName(project)}'));" title="${isEnglishUi() ? 'Delete' : '删除'}">✕</span>
         </div>
       </div>
       <div class="design-home-card-body">
