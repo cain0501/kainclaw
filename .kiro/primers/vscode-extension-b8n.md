@@ -244,3 +244,10 @@ bd close vscode-extension-b8n
 git add <files> && git commit -m "Artifact panel: collapse/restore strip + version navigation"
 git push
 ```
+
+### Already Completed
+
+- Added persisted `artifactPanel.collapsed` session runtime state and round-trip coverage.
+- Added `artifact:collapse` / `artifact:setActive` IPC handlers and expanded artifact renderer state payload.
+- Added the right-side restore strip and footer version navigation in the Electron renderer.
+- Verified with `npm test`, `npm run check`, `npm run build`, and `npm run build:electron`.

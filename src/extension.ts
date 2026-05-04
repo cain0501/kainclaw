@@ -208,6 +208,7 @@ import {
   createExtensionPromptRequestPartsFactory,
   type ExtensionPromptRequestPartsFactory,
 } from "./extensionPromptPartsHost";
+import { createExtensionPromptRequestState } from "./extensionPromptStateHost";
 import { SkillStore } from "./skills/skillStore";
 import { ProfileStore } from "./userModel/profileStore";
 
@@ -1188,7 +1189,7 @@ class ChatSidebarProvider implements vscode.WebviewViewProvider, vscode.Disposab
               moodPenaltyApplied = true;
               void this.companionBindings.updateCompanionMood(-2);
             },
-            state: {
+            state: createExtensionPromptRequestState({
               getCurrentSessionId: () => this.currentSessionId,
               setCurrentSessionId: sessionId => {
                 this.currentSessionId = sessionId;
@@ -1237,7 +1238,7 @@ class ChatSidebarProvider implements vscode.WebviewViewProvider, vscode.Disposab
               clearStreamingText: () => {
                 this.streamingText = "";
               },
-            },
+            }),
           }),
         });
       },

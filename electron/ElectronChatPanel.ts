@@ -540,12 +540,30 @@ export class ElectronChatPanel {
     if (artifactRegistry && artifactRegistry.artifacts.length > 0) {
       nextRuntimeState.artifactPanel = {
         activeArtifactId: artifactRegistry.activeArtifactId,
+        collapsed: runtimeState.artifactPanel?.collapsed ?? false,
       };
     } else {
       delete nextRuntimeState.artifactPanel;
     }
 
     await this.sessions.saveRuntimeState(sessionId, nextRuntimeState);
+  }
+
+  private async setArtifactPanelCollapsedState(
+    sessionId: string,
+    collapsed: boolean,
+  ): Promise<void> {
+    const runtimeState = await this.loadSessionRuntimeState(sessionId);
+    await this.sessions.saveRuntimeState(sessionId, {
+      ...runtimeState,
+      artifactPanel: {
+        activeArtifactId:
+          this.artifactRegistries.get(sessionId)?.activeArtifactId ??
+          runtimeState.artifactPanel?.activeArtifactId ??
+          null,
+        collapsed,
+      },
+    });
   }
 
   private buildModelConversationHistory(): NormalizedMessage[] {
@@ -830,6 +848,25 @@ export class ElectronChatPanel {
       if (this.currentSessionId) {
         this.getArtifactRegistry(this.currentSessionId).dismiss();
         await this.saveCurrentSessionRuntimeState(this.currentSessionId);
+      }
+      await this.postState();
+      return;
+    }
+    if (type === "artifact:collapse") {
+      if (this.currentSessionId) {
+        await this.setArtifactPanelCollapsedState(this.currentSessionId, true);
+      }
+      await this.postState();
+      return;
+    }
+    if (type === "artifact:setActive") {
+      const id = typeof message.id === "string" ? message.id.trim() : "";
+      if (id && this.currentSessionId) {
+        const registry = this.getArtifactRegistry(this.currentSessionId);
+        if (registry.setActive(id)) {
+          await this.setArtifactPanelCollapsedState(this.currentSessionId, false);
+          await this.saveCurrentSessionRuntimeState(this.currentSessionId);
+        }
       }
       await this.postState();
       return;
@@ -2714,6 +2751,7 @@ export class ElectronChatPanel {
       ];
       if (detectedArtifact) {
         this.getArtifactRegistry(requestSessionId).push(detectedArtifact);
+        await this.setArtifactPanelCollapsedState(requestSessionId, false);
       }
       await this.saveCurrentSessionRuntimeState(requestSessionId);
       if (detectedArtifact) {
@@ -4409,6 +4447,9 @@ export class ElectronChatPanel {
       ? (this.artifactRegistries.get(this.currentSessionId) ?? null)
       : null;
     const activeArtifact = currentArtifactRegistry?.activeArtifact ?? null;
+    const currentRuntimeState = this.currentSessionId
+      ? await this.loadSessionRuntimeState(this.currentSessionId)
+      : null;
     const currentDesignProject = await this.getCurrentDesignProject();
 
     this.sendToRenderer({
@@ -4436,6 +4477,13 @@ export class ElectronChatPanel {
         activeArtifact,
         activeArtifactId: activeArtifact?.id ?? null,
         artifactCount: currentArtifactRegistry?.artifacts.length ?? 0,
+        artifacts:
+          currentArtifactRegistry?.artifacts.map(artifact => ({
+            id: artifact.id,
+            title: artifact.title || "Artifact",
+            type: artifact.type,
+          })) ?? [],
+        artifactPanelCollapsed: currentRuntimeState?.artifactPanel?.collapsed ?? false,
       },
       designState: {
         currentProjectId: currentDesignProject?.projectId ?? null,

@@ -27,9 +27,19 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-seri
 .artifacts-panel__placeholder{display:flex;align-items:center;justify-content:center;min-height:160px;padding:16px;border:1px dashed #d4d4d8;border-radius:12px;background:#fff;color:#71717a;font-size:13px;text-align:center;line-height:1.7}
 .artifacts-panel__toast{display:none;margin:0 14px 10px;padding:9px 12px;border-radius:10px;background:#fff7ed;border:1px solid #fed7aa;color:#c2410c;font-size:12px;line-height:1.6}
 .artifacts-panel__toast.show{display:block}
+.artifact-peek-strip{width:20px;flex-shrink:0;background:rgba(255,255,255,.72);border-left:1px solid #e4e4e7;display:none;flex-direction:column;align-items:center;justify-content:center;cursor:pointer;gap:6px;transition:background .12s}
+.artifact-peek-strip:hover{background:#f4f4f5}
+.artifact-peek-strip.visible{display:flex}
+.artifact-peek-strip-label{writing-mode:vertical-rl;text-orientation:mixed;font-size:10px;font-weight:600;color:#71717a;letter-spacing:.06em;user-select:none}
+.artifacts-panel-footer{flex-shrink:0;display:flex;align-items:center;justify-content:space-between;padding:6px 10px;border-top:1px solid #e4e4e7;background:#fafafa}
+.artifact-nav-btn{border:none;background:transparent;color:#71717a;cursor:pointer;padding:3px 6px;border-radius:5px;font-size:13px;line-height:1}
+.artifact-nav-btn:hover{background:#f0f0f0;color:#18181b}
+.artifact-nav-btn:disabled{opacity:.3;cursor:default}
+.artifact-nav-label{font-size:11px;color:#71717a;font-weight:600}
 @media (max-width: 959px){
   .artifacts-resizer{display:none !important}
   .artifacts-panel{position:absolute;top:44px;right:0;bottom:0;left:0;z-index:20;width:auto;min-width:0;max-width:none;box-shadow:-12px 0 32px rgba(0,0,0,.12)}
+  .artifact-peek-strip{position:absolute;top:44px;right:0;bottom:0;z-index:19;background:rgba(255,255,255,.92)}
 }
 
 ::-webkit-scrollbar{width:4px}::-webkit-scrollbar-thumb{background:#e4e4e7;border-radius:2px}
@@ -601,6 +611,10 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-seri
         </div>
       </div>
       <div id="artifacts-resizer" class="artifacts-resizer hidden" aria-hidden="true"></div>
+      <div id="artifact-peek-strip" class="artifact-peek-strip" onclick="restoreArtifactPanel()" title="查看预览">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15 18 9 12 15 6"/></svg>
+        <span class="artifact-peek-strip-label">查看预览</span>
+      </div>
       <aside id="artifacts-panel" class="artifacts-panel hidden" aria-live="polite">
         <div class="artifacts-panel__header">
           <span id="artifacts-panel-title" class="artifacts-panel__title">Artifacts</span>
@@ -612,6 +626,11 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-seri
         </div>
         <div id="artifacts-panel-toast" class="artifacts-panel__toast"></div>
         <div id="artifacts-panel-content" class="artifacts-panel__content"></div>
+        <div id="artifacts-panel-footer" class="artifacts-panel-footer" style="display:none">
+          <button class="artifact-nav-btn" id="artifact-nav-prev" onclick="navigateArtifact(-1)">‹</button>
+          <span class="artifact-nav-label" id="artifact-nav-label">v1 / 1</span>
+          <button class="artifact-nav-btn" id="artifact-nav-next" onclick="navigateArtifact(1)">›</button>
+        </div>
       </aside>
     </div>
   </div>
@@ -1368,6 +1387,8 @@ let appState = {
     activeArtifact: null,
     activeArtifactId: null,
     artifactCount: 0,
+    artifacts: [],
+    artifactPanelCollapsed: false,
   },
 };
 const expandedThinkingSummaries = new Set();
@@ -2335,6 +2356,8 @@ function applyState(state) {
     activeArtifact: null,
     activeArtifactId: null,
     artifactCount: 0,
+    artifacts: [],
+    artifactPanelCollapsed: false,
   };
   applyUiLanguageState(state.uiLanguage, state.dialogStrings, state.shellStrings);
   appState.providerLabel = state.providerLabel || shellText('providerLabelUnset');
@@ -3224,7 +3247,21 @@ function buildMermaidArtifactSrcdoc(content) {
 }
 
 function dismissArtifactPanel() {
-  send({ type: 'artifact:dismiss' });
+  send({ type: 'artifact:collapse' });
+}
+
+function restoreArtifactPanel() {
+  send({ type: 'artifact:setActive', id: appState.artifactState?.activeArtifactId || '' });
+}
+
+function navigateArtifact(dir) {
+  const artifacts = appState.artifactState?.artifacts || [];
+  const currentId = appState.artifactState?.activeArtifactId;
+  const idx = artifacts.findIndex(a => a.id === currentId);
+  const next = artifacts[idx + dir];
+  if (next) {
+    send({ type: 'artifact:setActive', id: next.id });
+  }
 }
 
 function handleArtifactDeepEdit() {
@@ -4227,6 +4264,30 @@ function startArtifactResize(event) {
   resizeArtifactPanelFromClientX(event.clientX);
 }
 
+function updateArtifactFooter(artifact) {
+  const footer = document.getElementById('artifacts-panel-footer');
+  const prevBtn = document.getElementById('artifact-nav-prev');
+  const nextBtn = document.getElementById('artifact-nav-next');
+  const navLabel = document.getElementById('artifact-nav-label');
+  const artifacts = Array.isArray(appState.artifactState?.artifacts) ? appState.artifactState.artifacts : [];
+
+  if (!footer || !prevBtn || !nextBtn || !navLabel || !artifact) {
+    if (footer) footer.style.display = 'none';
+    return;
+  }
+
+  if (artifacts.length <= 1) {
+    footer.style.display = 'none';
+    return;
+  }
+
+  const idx = artifacts.findIndex(item => item.id === artifact.id);
+  footer.style.display = 'flex';
+  navLabel.textContent = `v${idx + 1} / ${artifacts.length}`;
+  prevBtn.disabled = idx <= 0;
+  nextBtn.disabled = idx < 0 || idx >= artifacts.length - 1;
+}
+
 function renderArtifactPanel() {
   const panel = document.getElementById('artifacts-panel');
   const resizer = document.getElementById('artifacts-resizer');
@@ -4234,7 +4295,9 @@ function renderArtifactPanel() {
   const typeBadge = document.getElementById('artifacts-panel-type');
   const content = document.getElementById('artifacts-panel-content');
   const deepEditBtn = document.getElementById('artifacts-panel-deep-edit');
+  const peekStrip = document.getElementById('artifact-peek-strip');
   const artifact = appState.artifactState?.activeArtifact || null;
+  const collapsed = !!appState.artifactState?.artifactPanelCollapsed;
 
   if (!panel || !resizer || !title || !typeBadge || !content || !deepEditBtn) {
     return;
@@ -4246,12 +4309,23 @@ function renderArtifactPanel() {
   if (!artifact) {
     panel.classList.add('hidden');
     resizer.classList.add('hidden');
+    peekStrip?.classList.remove('visible');
+    updateArtifactFooter(null);
     typeBadge.textContent = '';
     deepEditBtn.style.display = 'none';
     title.textContent = 'Artifacts';
     return;
   }
 
+  if (collapsed) {
+    panel.classList.add('hidden');
+    resizer.classList.add('hidden');
+    peekStrip?.classList.add('visible');
+    updateArtifactFooter(null);
+    return;
+  }
+
+  peekStrip?.classList.remove('visible');
   panel.classList.remove('hidden');
   resizer.classList.remove('hidden');
   applyArtifactPanelWidth();
@@ -4269,10 +4343,7 @@ function renderArtifactPanel() {
     code.textContent = artifact.content || '';
     pre.appendChild(code);
     content.appendChild(pre);
-    return;
-  }
-
-  if (artifact.type === 'html' || artifact.type === 'svg' || artifact.type === 'mermaid') {
+  } else if (artifact.type === 'html' || artifact.type === 'svg' || artifact.type === 'mermaid') {
     const frame = document.createElement('iframe');
     frame.className = 'artifacts-panel__frame';
     frame.setAttribute('sandbox', 'allow-scripts');
@@ -4284,13 +4355,14 @@ function renderArtifactPanel() {
         ? buildSvgArtifactSrcdoc(artifact.content)
         : buildMermaidArtifactSrcdoc(artifact.content);
     content.appendChild(frame);
-    return;
+  } else {
+    const fallback = document.createElement('div');
+    fallback.className = 'artifacts-panel__placeholder';
+    fallback.textContent = '当前产物类型暂不支持面板渲染。';
+    content.appendChild(fallback);
   }
 
-  const fallback = document.createElement('div');
-  fallback.className = 'artifacts-panel__placeholder';
-  fallback.textContent = '当前产物类型暂不支持面板渲染。';
-  content.appendChild(fallback);
+  updateArtifactFooter(artifact);
 }
 
 // Message Rendering

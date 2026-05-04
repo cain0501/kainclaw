@@ -68,6 +68,7 @@ export type CompactBoundarySessionState = {
 
 export type ArtifactPanelSessionState = {
   activeArtifactId: string | null;
+  collapsed?: boolean;
 };
 
 export type SessionRuntimeState = {
@@ -487,6 +488,9 @@ export class SessionRepository {
           ? {
               artifactPanel: {
                 activeArtifactId: parsed.artifactPanel.activeArtifactId,
+                ...(typeof parsed.artifactPanel.collapsed === "boolean"
+                  ? { collapsed: parsed.artifactPanel.collapsed }
+                  : {}),
               },
             }
           : {}),
@@ -536,6 +540,9 @@ export class SessionRepository {
         ? {
             artifactPanel: {
               activeArtifactId: state.artifactPanel.activeArtifactId,
+              ...(typeof state.artifactPanel.collapsed === "boolean"
+                ? { collapsed: state.artifactPanel.collapsed }
+                : {}),
             },
           }
         : {}),

@@ -22,10 +22,11 @@
 - [x] `settingsPanelHost.ts` — `createSettingsPanelControllerFactory` 已提取（2026-04-30）
 - [x] `sessionPanelHost.ts` — `createSessionPanelControllerFactory` 已提取（2026-05-01）
 - [x] `companionHost.ts` — `createCompanionControllerFactory` 已提取（2026-05-01）
+- [x] `extensionPromptStateHost.ts` — prompt request state wiring extracted from `handlePrompt()` via `createExtensionPromptRequestState`（2026-05-04）
 
 ## Next Step (the ONLY thing to do this session)
 
-**读 `src/extension.ts` 的 `handlePrompt()` 函数，找出下一个可以安全提取的独立逻辑块，提取到新 host 文件。**
+**读 `src/extension.ts` 的 `handlePrompt()` 函数，优先继续把 quick action / editor selection binding（`postEditorSelectionPayload` 周边 wiring）提取到新 host 文件。**
 
 提取顺序建议（按耦合度从低到高）：
 1. Quick action / editor selection binding（`postEditorSelectionPayload` 周围的 wiring）
@@ -72,3 +73,9 @@ npm run build
 - [ ] `npm run build` 通过
 - [ ] beads notes 里写了：本次提取了什么 + 下一个建议目标是什么
 - [ ] 不需要手动测试（纯结构移动）
+
+### This Session
+
+- Extracted prompt request state assembly from `handlePrompt()` into `src/extensionPromptStateHost.ts`.
+- Verification passed: `npm test`, `npm run check`, `npm run build`.
+- Suggested next target: quick action / editor selection wiring around `postEditorSelectionPayload`.

@@ -224,6 +224,7 @@ describe("SessionRepository appendMessages", () => {
     await repository.saveRuntimeState("session-artifact-panel", {
       artifactPanel: {
         activeArtifactId: null,
+        collapsed: true,
       },
     });
 
@@ -232,6 +233,7 @@ describe("SessionRepository appendMessages", () => {
     ).resolves.toEqual({
       artifactPanel: {
         activeArtifactId: null,
+        collapsed: true,
       },
     });
   });
