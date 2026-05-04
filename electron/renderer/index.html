@@ -170,12 +170,25 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-seri
 .design-home-card{border:1px solid #ede5db;border-radius:14px;background:#fff;overflow:hidden;cursor:pointer;text-align:left;box-shadow:0 1px 0 rgba(255,255,255,.5) inset;transition:box-shadow .15s,transform .15s,border-color .15s}
 .design-home-card:hover{border-color:#e4d6c7;box-shadow:0 10px 28px rgba(77,49,24,.14);transform:translateY(-2px)}
 .design-home-card-preview{position:relative;height:108px;overflow:hidden}
-.design-home-card-lines{position:absolute;inset:16px 16px auto;display:flex;flex-direction:column;gap:6px}
-.design-home-card-line{border-radius:999px}
-.design-home-card-line.heading{height:10px;width:100%}
-.design-home-card-line.medium{height:7px;width:76%}
-.design-home-card-line.short{height:5px;width:58%}
-.design-home-card-line.tiny{height:4px;width:46%}
+.design-home-thumb{position:absolute;inset:0;overflow:hidden}
+.dht-nav{height:14px;padding:0 8px;display:flex;align-items:center;gap:4px;background:rgba(0,0,0,.08)}
+.dht-logo{width:10px;height:10px;border-radius:3px;flex-shrink:0}
+.dht-nav-links{flex:1;display:flex;gap:4px;margin-left:6px}
+.dht-btn{width:22px;height:8px;border-radius:3px;flex-shrink:0}
+.dht-hero{padding:10px 10px 6px;display:flex;flex-direction:column;gap:4px}
+.dht-features{padding:0 8px;display:flex;gap:5px}
+.dht-feat-card{flex:1;height:16px;border-radius:4px}
+.dht-bar{height:5px;border-radius:999px}
+.dht-bar.heading{height:8px}
+.dht-bar.w70{width:70%}
+.dht-bar.w50{width:50%}
+.dht-bar.w40{width:40%}
+.dht-bar.w20{width:20%}
+.dht-bar.w16{width:16%}
+.dht-bar.w18{width:18%}
+.dht-btns{display:flex;gap:5px;margin-top:4px}
+.dht-pill{width:28px;height:8px;border-radius:3px}
+.dht-pill.ghost{background:transparent;border:1px solid}
 .design-home-card-body{padding:10px 12px 12px}
 .design-home-card-name{font-size:12px;font-weight:600;color:#18181b;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-bottom:6px}
 .design-home-card-meta{display:flex;align-items:center;gap:6px;flex-wrap:wrap}
@@ -185,16 +198,14 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-seri
 .design-home-pill.version-empty{background:#f5efe8;color:#9b8574;border-color:#eadfd2}
 .design-home-pill.source-artifact{background:#eef4fb;color:#3a6b9f;border-color:#c3d9f0}
 .design-home-pill.source-blank{background:#edf5ed;color:#5a6e5a;border-color:#c3d9c3}
-.design-home-list{border:1px solid #ede5db;border-radius:14px;background:#fff;overflow:hidden}
-.design-home-list-row{width:100%;border:none;border-bottom:1px solid #f5efe8;background:transparent;padding:11px 16px;cursor:pointer;display:flex;align-items:center;gap:12px;text-align:left;transition:background .1s}
-.design-home-list-row:last-child{border-bottom:none}
-.design-home-list-row:hover{background:#faf6f0}
-.design-home-list-dot{width:28px;height:28px;border-radius:8px;display:grid;place-items:center;flex-shrink:0;font-size:11px;font-weight:700;color:rgba(24,24,27,.62)}
-.design-home-list-main{flex:1;min-width:0}
-.design-home-list-name{font-size:13px;font-weight:500;color:#18181b;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.design-home-list-meta{display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-top:5px}
-.design-home-list-right{display:flex;align-items:flex-end;gap:6px;flex-direction:column;flex-shrink:0}
-.design-home-list-time{font-size:11px;color:#b8a898;white-space:nowrap}
+.design-home-all-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:12px}
+.design-home-new-card{border-style:dashed;border-color:#d8cfc4}
+.design-home-new-card:hover{border-color:#b8a898}
+.design-home-new-preview{display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,.025);color:#b0a090}
+.card-actions{position:absolute;top:6px;right:6px;display:flex;gap:3px;opacity:0;transition:opacity .12s}
+.design-home-card:hover .card-actions{opacity:1}
+.action-btn{width:22px;height:22px;border-radius:6px;border:none;background:rgba(255,255,255,.82);backdrop-filter:blur(4px);color:#5a4a3a;font-size:11px;cursor:pointer;display:flex;align-items:center;justify-content:center;padding:0;line-height:1;box-shadow:0 1px 3px rgba(0,0,0,.12)}
+.action-btn:hover{background:#fff;color:#1a1a1a}
 .design-home-empty-shell{display:flex;justify-content:center}
 .design-home-empty-card{width:100%;max-width:640px;padding:48px 24px 42px;border:1.5px dashed #ddd5c8;border-radius:16px;background:rgba(255,255,255,.82);text-align:center;color:#9d8f82}
 .design-home-empty-icon{width:56px;height:56px;margin:0 auto 16px;border-radius:18px;background:linear-gradient(135deg,#1f1f23 0%,#3a2c25 100%);display:grid;place-items:center;color:#fff;box-shadow:0 14px 30px rgba(24,24,27,.12)}
@@ -1063,7 +1074,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-seri
           <span class="design-home-section-title">所有设计</span>
           <span id="design-home-all-count" class="design-home-section-count"></span>
         </div>
-        <div id="design-home-all" class="design-home-list"></div>
+        <div id="design-home-all" class="design-home-all-grid"></div>
       </section>
     </div>
   </div>
@@ -1286,7 +1297,8 @@ const vscode = window.acquireVsCodeApi();
 window.addEventListener('message', e => {
   const msg = e.data;
   if (!msg || !msg.type) return;
-  if (typeof msg.type === 'string' && msg.type.startsWith('__edit_mode_')) {
+  const designFrame = document.getElementById('design-bridge-frame');
+  if (designFrame?.contentWindow && e.source === designFrame.contentWindow) {
     handleKainClawDesignFrameMessage(e);
     return;
   }
@@ -2009,7 +2021,8 @@ function handleMessage(msg) {
       showDesignPage();
       break;
     case 'design:progress':
-      designBridgeState.loading = true;
+      designBridgeState.loading = msg.step === 'patching' ? designBridgeState.loading : true;
+      designBridgeState.patchLoading = msg.step === 'patching';
       designBridgeState.error = '';
       renderDesignBridgePage();
       break;
@@ -2037,9 +2050,11 @@ function handleMessage(msg) {
       designBridgeState.versionId = msg.versionId || null;
       designBridgeState.renderToken = Date.now();
       showDesignPage();
+      loadDesignVersions();
       break;
     case 'design:patchResult':
       designBridgeState.html = String(msg.html || designBridgeState.html || '');
+      designBridgeState.loading = false;
       designBridgeState.patchLoading = false;
       designBridgeState.selectedNode = null;
       designBridgeState.error = '';
@@ -2051,6 +2066,7 @@ function handleMessage(msg) {
         if (commentInput) commentInput.value = '';
       }
       renderDesignBridgePage();
+      loadDesignVersions();
       break;
     case 'design:versions':
       designBridgeState.versions = Array.isArray(msg.versions) ? msg.versions : [];
@@ -2528,7 +2544,7 @@ function showDesignPage() {
 }
 
 function openDesignHub() {
-  send({ type: 'design:getLastProject' });
+  showPage('design-home');
 }
 
 function setDesignMode(mode) {
@@ -2547,6 +2563,32 @@ function createNewDesignProject() {
 function openDesignProjectFromHome(projectId) {
   if (!projectId) return;
   send({ type: 'design:openProject', projectId });
+}
+
+function renameDesignProjectFromHome(projectId, currentName) {
+  if (!projectId) return;
+  const nextName = prompt(isEnglishUi() ? 'Rename project' : '重命名项目', currentName || '');
+  if (typeof nextName !== 'string') {
+    return;
+  }
+  const trimmed = nextName.trim();
+  if (!trimmed || trimmed === currentName) {
+    return;
+  }
+  send({ type: 'design:renameProject', projectId, newName: trimmed });
+}
+
+function deleteDesignProjectFromHome(projectId, projectName) {
+  if (!projectId) return;
+  const confirmed = confirm(
+    isEnglishUi()
+      ? `Delete project "${projectName || 'Untitled Design'}"?`
+      : `确认删除项目「${projectName || '未命名设计'}」吗？`,
+  );
+  if (!confirmed) {
+    return;
+  }
+  send({ type: 'design:deleteProject', projectId });
 }
 
 function renderDesignHome() {
@@ -2631,25 +2673,49 @@ function renderDesignHome() {
     };
   };
 
-  const miniLines = project => {
+  const miniPageThumb = project => {
     const colors = previewLineColor(project);
     return `
-      <div class="design-home-card-lines" aria-hidden="true">
-        <div class="design-home-card-line heading" style="background:${colors.strong}"></div>
-        <div class="design-home-card-line medium" style="background:${colors.soft}"></div>
-        <div class="design-home-card-line short" style="background:${colors.soft}"></div>
-        <div style="height:8px"></div>
-        <div class="design-home-card-line tiny" style="background:${colors.soft}"></div>
-        <div class="design-home-card-line tiny" style="width:40%;background:${colors.soft}"></div>
+      <div class="design-home-thumb" aria-hidden="true">
+        <div class="dht-nav">
+          <div class="dht-logo" style="background:${colors.strong}"></div>
+          <div class="dht-nav-links">
+            <div class="dht-bar w20" style="background:${colors.soft}"></div>
+            <div class="dht-bar w16" style="background:${colors.soft}"></div>
+            <div class="dht-bar w18" style="background:${colors.soft}"></div>
+          </div>
+          <div class="dht-btn" style="background:${colors.strong}"></div>
+        </div>
+        <div class="dht-hero">
+          <div class="dht-bar heading w70" style="background:${colors.strong}"></div>
+          <div class="dht-bar w50" style="background:${colors.soft}"></div>
+          <div class="dht-bar w40" style="background:${colors.soft}"></div>
+          <div class="dht-btns">
+            <div class="dht-pill" style="background:${colors.strong}"></div>
+            <div class="dht-pill ghost" style="border-color:${colors.soft}"></div>
+          </div>
+        </div>
+        <div class="dht-features">
+          <div class="dht-feat-card" style="background:${colors.soft}"></div>
+          <div class="dht-feat-card" style="background:${colors.soft}"></div>
+          <div class="dht-feat-card" style="background:${colors.soft}"></div>
+        </div>
       </div>
     `;
   };
 
   const encodedProjectId = project => encodeURIComponent(String(project.projectId || ''));
+  const encodedProjectName = project => encodeURIComponent(String(project.name || 'Untitled Design'));
 
   const recentCard = project => `
     <button class="design-home-card" onclick="openDesignProjectFromHome(decodeURIComponent('${encodedProjectId(project)}'))">
-      <div class="design-home-card-preview" style="background:${previewTone(project)}">${miniLines(project)}</div>
+      <div class="design-home-card-preview" style="background:${previewTone(project)}">
+        ${miniPageThumb(project)}
+        <div class="card-actions">
+          <button class="action-btn" onclick="event.stopPropagation(); renameDesignProjectFromHome(decodeURIComponent('${encodedProjectId(project)}'), decodeURIComponent('${encodedProjectName(project)}'));" title="${isEnglishUi() ? 'Rename' : '重命名'}">✎</button>
+          <button class="action-btn" onclick="event.stopPropagation(); deleteDesignProjectFromHome(decodeURIComponent('${encodedProjectId(project)}'), decodeURIComponent('${encodedProjectName(project)}'));" title="${isEnglishUi() ? 'Delete' : '删除'}">✕</button>
+        </div>
+      </div>
       <div class="design-home-card-body">
         <div class="design-home-card-name">${escapeHtml(project.name || 'Untitled Design')}</div>
         <div class="design-home-card-meta">
@@ -2661,18 +2727,22 @@ function renderDesignHome() {
     </button>
   `;
 
-  const allRow = project => `
-    <button class="design-home-list-row" onclick="openDesignProjectFromHome(decodeURIComponent('${encodedProjectId(project)}'))">
-      <div class="design-home-list-dot" style="background:${previewTone(project)}">${escapeHtml((project.name || 'U').trim().charAt(0).toUpperCase() || 'U')}</div>
-      <div class="design-home-list-main">
-        <div class="design-home-list-name">${escapeHtml(project.name || 'Untitled Design')}</div>
-        <div class="design-home-list-meta">
+  const allCard = project => `
+    <button class="design-home-card" onclick="openDesignProjectFromHome(decodeURIComponent('${encodedProjectId(project)}'))">
+      <div class="design-home-card-preview" style="background:${previewTone(project)}">
+        ${miniPageThumb(project)}
+        <div class="card-actions">
+          <button class="action-btn" onclick="event.stopPropagation(); renameDesignProjectFromHome(decodeURIComponent('${encodedProjectId(project)}'), decodeURIComponent('${encodedProjectName(project)}'));" title="${isEnglishUi() ? 'Rename' : '重命名'}">✎</button>
+          <button class="action-btn" onclick="event.stopPropagation(); deleteDesignProjectFromHome(decodeURIComponent('${encodedProjectId(project)}'), decodeURIComponent('${encodedProjectName(project)}'));" title="${isEnglishUi() ? 'Delete' : '删除'}">✕</button>
+        </div>
+      </div>
+      <div class="design-home-card-body">
+        <div class="design-home-card-name">${escapeHtml(project.name || 'Untitled Design')}</div>
+        <div class="design-home-card-meta">
           ${versionBadge(project)}
           ${sourceBadge(project)}
         </div>
-      </div>
-      <div class="design-home-list-right">
-        <div class="design-home-list-time">${escapeHtml(formatListTime(project.lastOpenedAt || project.updatedAt || project.createdAt))}</div>
+        <div class="design-home-card-time">${escapeHtml(formatListTime(project.lastOpenedAt || project.updatedAt || project.createdAt))}</div>
       </div>
     </button>
   `;
@@ -2701,7 +2771,19 @@ function renderDesignHome() {
     recentEl.innerHTML = '<div class="design-home-empty-note">还没有最近继续的项目。先打开一次任意设计，它会按最近访问时间出现在这里。</div>';
   }
 
-  allEl.innerHTML = sortedProjects.map(allRow).join('');
+  const newCard = `
+    <button class="design-home-card design-home-new-card"
+      onclick="createNewDesignProject()"
+      title="${isEnglishUi() ? 'New design' : '新建设计'}">
+      <div class="design-home-card-preview design-home-new-preview">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+      </div>
+      <div class="design-home-card-body">
+        <div class="design-home-card-name">${isEnglishUi() ? 'New Design' : '新建设计'}</div>
+      </div>
+    </button>
+  `;
+  allEl.innerHTML = newCard + sortedProjects.map(allCard).join('');
 }
 
 function resetOnboardingProviderSelection(providerId = 'anthropic') {
@@ -2984,6 +3066,7 @@ function buildDesignPatchableSrcdoc(html) {
     });
   }
   document.addEventListener('click', event => {
+    parent.postMessage({ type: '__debug_ack', stage: 'click_fired', kcMode: document.body.dataset.kcSelectionMode }, '*');
     const el = event.target instanceof Element ? event.target.closest('body *') : null;
     if (!el) return;
     event.preventDefault();
@@ -2995,13 +3078,14 @@ function buildDesignPatchableSrcdoc(html) {
     if (!selectionEnabled) {
       return;
     }
+    const outerHTML = el.outerHTML;
     el.setAttribute(MARK_ATTR, 'true');
     el.style.outline = '2px dashed #2563eb';
     el.style.outlineOffset = '2px';
     parent.postMessage({
       type: '__design_patch_target',
       selector,
-      outerHTML: el.outerHTML,
+      outerHTML,
       text: (el.textContent || '').trim().slice(0, 120),
       tagName: el.tagName.toLowerCase(),
       alt: el.getAttribute('alt') || '',
@@ -3019,6 +3103,11 @@ function buildDesignPatchableSrcdoc(html) {
   }, true);
   window.addEventListener('message', event => {
     const payload = event.data || {};
+    if (payload.type === '__set_kc_selection_mode') {
+      document.body.dataset.kcSelectionMode = payload.active ? 'true' : 'false';
+      parent.postMessage({ type: '__debug_ack', stage: 'kc_mode_received', active: payload.active }, '*');
+      return;
+    }
     if (payload.type !== '__kc_apply_slider_values' || !payload.values || typeof payload.values !== 'object') {
       return;
     }
@@ -3148,63 +3237,35 @@ function updateDesignCanvasToolbar() {
   });
   if (viewBtn) viewBtn.classList.toggle('active', activeMode === 'view');
   if (selectBtn) selectBtn.classList.toggle('active', activeMode === 'select');
-  if (frameEl?.contentDocument?.body) {
-    frameEl.contentDocument.body.dataset.kcSelectionMode = activeMode === 'select' ? 'true' : 'false';
-  }
+  console.log('[host] sending set_kc_selection_mode, active:', activeMode === 'select');
+  frameEl?.contentWindow?.postMessage(
+    { type: '__set_kc_selection_mode', active: activeMode === 'select' },
+    '*',
+  );
 }
 
 function setDesignCanvasMode(mode) {
   if (!designBridgeState.html) {
     return;
   }
-  designBridgeState.canvasMode = mode === 'select' ? 'select' : 'view';
+  const frame = document.getElementById('design-bridge-frame');
+  const nextMode = mode === 'select' ? 'select' : 'view';
+  const prevMode = designBridgeState.canvasMode || 'view';
+  designBridgeState.canvasMode = nextMode;
+  frame?.contentWindow?.postMessage(
+    { type: '__set_kc_selection_mode', active: nextMode === 'select' },
+    '*',
+  );
   if (designBridgeState.editModeActive) {
     designBridgeState.editModeActive = false;
-    if (designBridgeState.editModeAvailable) {
-      const frame = document.getElementById('design-bridge-frame');
-      frame?.contentWindow?.postMessage({ type: '__deactivate_edit_mode' }, '*');
-    }
   }
-  if (designBridgeState.canvasMode !== 'select') {
-    designBridgeState.selectedNode = null;
+  if (prevMode !== 'select' && nextMode === 'select' && designBridgeState.editModeAvailable) {
+    frame?.contentWindow?.postMessage({ type: '__activate_edit_mode' }, '*');
   }
-  renderDesignBridgePage();
-}
-
-function updateDesignCanvasToolbar() {
-  const viewBtn = document.getElementById('design-canvas-view-btn');
-  const selectBtn = document.getElementById('design-canvas-select-btn');
-  const frameEl = document.getElementById('design-bridge-frame');
-  const hasDesignContent = !!designBridgeState.html;
-  const activeMode = designBridgeState.editModeActive
-    ? 'tweaks'
-    : (designBridgeState.canvasMode || 'view');
-
-  [viewBtn, selectBtn].forEach(button => {
-    if (!button) return;
-    button.style.display = hasDesignContent ? 'inline-flex' : 'none';
-    button.disabled = !hasDesignContent;
-  });
-  if (viewBtn) viewBtn.classList.toggle('active', activeMode === 'view');
-  if (selectBtn) selectBtn.classList.toggle('active', activeMode === 'select');
-  if (frameEl?.contentDocument?.body) {
-    frameEl.contentDocument.body.dataset.kcSelectionMode = activeMode === 'select' ? 'true' : 'false';
+  if (prevMode === 'select' && nextMode !== 'select' && designBridgeState.editModeAvailable) {
+    frame?.contentWindow?.postMessage({ type: '__deactivate_edit_mode' }, '*');
   }
-}
-
-function setDesignCanvasMode(mode) {
-  if (!designBridgeState.html) {
-    return;
-  }
-  designBridgeState.canvasMode = mode === 'select' ? 'select' : 'view';
-  if (designBridgeState.editModeActive) {
-    designBridgeState.editModeActive = false;
-    if (designBridgeState.editModeAvailable) {
-      const frame = document.getElementById('design-bridge-frame');
-      frame?.contentWindow?.postMessage({ type: '__deactivate_edit_mode' }, '*');
-    }
-  }
-  if (designBridgeState.canvasMode !== 'select') {
+  if (nextMode !== 'select') {
     designBridgeState.selectedNode = null;
   }
   renderDesignBridgePage();
@@ -3449,6 +3510,11 @@ function renderDesignBridgePage() {
       designBridgeFrameLoading = false;
       emptyEl.style.display = 'none';
       frameEl.style.display = 'block';
+      const currentMode = designBridgeState.canvasMode ?? 'view';
+      frameEl.contentWindow?.postMessage(
+        { type: '__set_kc_selection_mode', active: currentMode === 'select' },
+        '*',
+      );
       applyAllDesignSliderValues(frameEl);
     };
     const srcdocWithToken = `${nextSrcdoc}<!-- kc-render:${designBridgeState.renderToken} -->`;
@@ -3804,16 +3870,22 @@ async function exportDesignWorkbench(format) {
     return;
   }
 
-  send({
-    type: 'design:export',
-    format: 'html',
-    html: designBridgeState.html,
-    sliders: designBridgeState.sliders.map(slider => ({
-      ...slider,
-      default: designBridgeState.sliderValues[slider.id] ?? slider.default,
-    })),
-    projectLabel: (designBridgeState.prompt || designBridgeState.title || 'kainclaw-design').slice(0, 48),
-  });
+  try {
+    const filePath = await window.electronAPI.exportDesignHtml(
+      designBridgeState.html,
+      designBridgeState.sliders.map(slider => ({
+        ...slider,
+        default: designBridgeState.sliderValues[slider.id] ?? slider.default,
+      })),
+      projectLabel,
+    );
+    handleMessage({ type: 'design:exportDone', format: 'html', filePath });
+  } catch (error) {
+    handleMessage({
+      type: 'design:error',
+      message: error instanceof Error ? error.message : String(error),
+    });
+  }
 }
 
 function cancelDesignPatchSelection() {
@@ -3962,18 +4034,7 @@ function toggleDesignTweaks() {
     return;
   }
 
-  const frame = document.getElementById('design-bridge-frame');
-  const targetWindow = frame?.contentWindow;
-  if (!targetWindow) {
-    return;
-  }
-
   const nextActive = !designBridgeState.editModeActive;
-  if (designBridgeState.editModeAvailable) {
-    targetWindow.postMessage({
-      type: nextActive ? '__activate_edit_mode' : '__deactivate_edit_mode',
-    }, '*');
-  }
   designBridgeState.editModeActive = nextActive;
   designBridgeState.canvasMode = 'view';
   updateDesignTweaksButton();
