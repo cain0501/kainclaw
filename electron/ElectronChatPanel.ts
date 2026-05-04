@@ -850,6 +850,14 @@ export class ElectronChatPanel {
       await this.openDesignProjectMessage(message);
       return;
     }
+    if (type === "design:deleteProject") {
+      await this.deleteDesignProject(message);
+      return;
+    }
+    if (type === "design:renameProject") {
+      await this.renameDesignProject(message);
+      return;
+    }
     if (type === "design:getLastProject") {
       await this.getLastDesignProject();
       return;
@@ -2842,9 +2850,19 @@ export class ElectronChatPanel {
 
   private async listDesignProjects(): Promise<void> {
     const projects = await this.designProjectStore.listProjects();
+    const previews: Record<string, string> = {};
+    await Promise.all(
+      projects
+        .filter(p => p.activeVersionId && p.activeVersionId !== "pending-version")
+        .map(async p => {
+          const html = await this.designVersionStore.getVersionHtml(p.activeVersionId);
+          if (html) previews[p.projectId] = html;
+        })
+    );
     this.sendToRenderer({
       type: "design:projects",
       projects,
+      previews,
     });
   }
 
@@ -2913,6 +2931,53 @@ export class ElectronChatPanel {
     });
   }
 
+  private async deleteDesignProject(message: Record<string, unknown>): Promise<void> {
+    const projectId = typeof message.projectId === "string" ? message.projectId.trim() : "";
+    if (!projectId) {
+      return;
+    }
+
+    await this.designVersionStore.deleteByProjectId(projectId);
+    await this.designProjectStore.deleteProject(projectId);
+
+    if (this.currentDesignProjectId === projectId) {
+      await this.setCurrentDesignProject(null);
+      this.sendToRenderer({
+        type: "design:projectOpened",
+        project: null,
+        activeVersion: null,
+      });
+    }
+
+    await this.listDesignProjects();
+  }
+
+  private async renameDesignProject(message: Record<string, unknown>): Promise<void> {
+    const projectId = typeof message.projectId === "string" ? message.projectId.trim() : "";
+    const newName = typeof message.newName === "string" ? message.newName.trim() : "";
+    if (!projectId || !newName) {
+      return;
+    }
+
+    const project = await this.designProjectStore.renameProject(projectId, newName);
+    if (!project) {
+      return;
+    }
+
+    if (this.currentDesignProjectId === projectId) {
+      const activeVersion = project.activeVersionId && project.activeVersionId !== "pending-version"
+        ? await this.designVersionStore.getVersion(project.activeVersionId)
+        : null;
+      this.sendToRenderer({
+        type: "design:projectOpened",
+        project,
+        activeVersion,
+      });
+    }
+
+    await this.listDesignProjects();
+  }
+
   private async openActiveArtifactInKainClawDesign(): Promise<void> {
     if (!this.currentSessionId) {
       this.sendToRenderer({
@@ -2952,13 +3017,34 @@ export class ElectronChatPanel {
       }
     }
 
-    const project = existingProject ?? await this.designProjectStore.createProject({
+    let project = existingProject ?? await this.designProjectStore.createProject({
       name: activeArtifact.title || "Untitled Design",
       source: "artifact",
       sourceArtifactId: activeArtifact.id,
       activeVersionId: "pending-version",
     });
     await this.setCurrentDesignProject(project);
+
+    // Save the artifact HTML as v1 so it appears in version history
+    if (!project.activeVersionId || project.activeVersionId === "pending-version") {
+      const initialVersion = await this.designVersionStore.saveVersion({
+        projectId: project.projectId,
+        prompt: activeArtifact.title || "",
+        outputType: "prototype",
+        style: "",
+        html: activeArtifact.content,
+        sliders: [],
+        sliderValues: {},
+        source: "generate",
+      });
+      const updated = await this.designProjectStore.updateProject(project.projectId, {
+        activeVersionId: initialVersion.id,
+        updatedAt: initialVersion.createdAt,
+        lastOpenedAt: Date.now(),
+      });
+      project = updated ?? project;
+      await this.setCurrentDesignProject(project);
+    }
 
     this.sendToRenderer({
       type: "kainclawDesign:open",

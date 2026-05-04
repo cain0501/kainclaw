@@ -400,4 +400,42 @@ export class DesignVersionStore {
 
     return version ?? this.readLegacyVersionById(versionId);
   }
+
+  async getVersionHtml(versionId: string): Promise<string | null> {
+    const trimmed = versionId?.trim();
+    if (!trimmed || trimmed === "pending-version") return null;
+    const row = await this.withDatabase(database =>
+      database.prepare(`SELECT html FROM design_versions WHERE id = ?`).get(trimmed) as { html: string } | undefined
+    );
+    if (row?.html) return row.html;
+    const legacy = await this.readLegacyVersionById(trimmed);
+    return legacy?.html ?? null;
+  }
+
+  async deleteByProjectId(projectId: string): Promise<void> {
+    const trimmed = projectId.trim();
+    if (!trimmed) {
+      return;
+    }
+
+    const deleted = await this.withDatabase(database => {
+      database.prepare(`
+        DELETE FROM design_versions
+        WHERE project_id = ?
+      `).run(trimmed);
+      return true;
+    });
+
+    if (deleted) {
+      return;
+    }
+
+    const store = await this.readLegacyStore();
+    const nextVersions = store.versions.filter(version => version.projectId !== trimmed);
+    await fs.writeFile(
+      this.legacyStorePath,
+      JSON.stringify({ versions: nextVersions }, null, 2),
+      "utf8",
+    );
+  }
 }

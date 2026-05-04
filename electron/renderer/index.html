@@ -199,6 +199,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-seri
 .design-home-pill.source-artifact{background:#eef4fb;color:#3a6b9f;border-color:#c3d9f0}
 .design-home-pill.source-blank{background:#edf5ed;color:#5a6e5a;border-color:#c3d9c3}
 .design-home-all-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:12px}
+.design-home-iframe-preview{position:absolute;top:0;left:0;width:900px;height:540px;transform:scale(0.2);transform-origin:top left;pointer-events:none;border:none;background:#fff}
 .design-home-new-card{border-style:dashed;border-color:#d8cfc4}
 .design-home-new-card:hover{border-color:#b8a898}
 .design-home-new-preview{display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,.025);color:#b0a090}
@@ -1382,6 +1383,7 @@ let designBridgeRenderedToken = 0;
 let designBridgeFrameLoading = false;
 const designHomeState = {
   projects: [],
+  previews: {},
   currentProjectId: null,
 };
 
@@ -1994,6 +1996,7 @@ function handleMessage(msg) {
       break;
     case 'design:projects':
       designHomeState.projects = Array.isArray(msg.projects) ? msg.projects : [];
+      designHomeState.previews = (msg.previews && typeof msg.previews === 'object') ? msg.previews : {};
       renderDesignHome();
       break;
     case 'design:projectOpened':
@@ -2730,13 +2733,25 @@ function renderDesignHome() {
     `;
   };
 
+  const cardPreview = project => {
+    const html = (designHomeState.previews || {})[project.projectId];
+    if (html) {
+      const injected = html.includes('</head>')
+        ? html.replace('</head>', '<style>html,body{margin:0;padding:0;overflow:hidden!important;}</style></head>')
+        : '<style>html,body{margin:0;padding:0;overflow:hidden!important;}</style>' + html;
+      const escaped = injected.replace(/&/g, '&amp;').replace(/"/g, '&quot;');
+      return `<iframe class="design-home-iframe-preview" srcdoc="${escaped}" sandbox="" tabindex="-1" aria-hidden="true"></iframe>`;
+    }
+    return miniPageThumb(project);
+  };
+
   const encodedProjectId = project => encodeURIComponent(String(project.projectId || ''));
   const encodedProjectName = project => encodeURIComponent(String(project.name || 'Untitled Design'));
 
   const recentCard = project => `
     <button class="design-home-card" onclick="openDesignProjectFromHome(decodeURIComponent('${encodedProjectId(project)}'))">
       <div class="design-home-card-preview" style="background:${previewTone(project)}">
-        ${miniPageThumb(project)}
+        ${cardPreview(project)}
         <div class="card-actions">
           <span class="action-btn" onclick="event.stopPropagation(); renameDesignProjectFromHome(event, decodeURIComponent('${encodedProjectId(project)}'), decodeURIComponent('${encodedProjectName(project)}'));" title="${isEnglishUi() ? 'Rename' : '重命名'}">✎</span>
           <span class="action-btn" onclick="event.stopPropagation(); deleteDesignProjectFromHome(decodeURIComponent('${encodedProjectId(project)}'), decodeURIComponent('${encodedProjectName(project)}'));" title="${isEnglishUi() ? 'Delete' : '删除'}">✕</span>
@@ -2756,7 +2771,7 @@ function renderDesignHome() {
   const allCard = project => `
     <button class="design-home-card" onclick="openDesignProjectFromHome(decodeURIComponent('${encodedProjectId(project)}'))">
       <div class="design-home-card-preview" style="background:${previewTone(project)}">
-        ${miniPageThumb(project)}
+        ${cardPreview(project)}
         <div class="card-actions">
           <span class="action-btn" onclick="event.stopPropagation(); renameDesignProjectFromHome(event, decodeURIComponent('${encodedProjectId(project)}'), decodeURIComponent('${encodedProjectName(project)}'));" title="${isEnglishUi() ? 'Rename' : '重命名'}">✎</span>
           <span class="action-btn" onclick="event.stopPropagation(); deleteDesignProjectFromHome(decodeURIComponent('${encodedProjectId(project)}'), decodeURIComponent('${encodedProjectName(project)}'));" title="${isEnglishUi() ? 'Delete' : '删除'}">✕</span>
