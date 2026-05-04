@@ -4,7 +4,7 @@ import {
   type ChatPromptIntent,
 } from "./chatPromptIntent";
 
-export const INTENT_ROUTER_TIMEOUT_MS = 800;
+export const INTENT_ROUTER_TIMEOUT_MS = 5000;
 
 export const INTENT_ROUTER_SYSTEM_PROMPT = `You are an intent classifier for a chat-plus-image workflow.
 
