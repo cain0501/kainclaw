@@ -3084,7 +3084,7 @@ function renderMidtaiWorks() {
 
   grid.innerHTML = visibleItems.map(item => {
     const badge = item.contentType === 'design' ? '设计' : '图像';
-    const source = item.source === 'chat' ? '来自对话' : item.source === 'midtai' ? '鏉ヨ嚜涓彴' : '空白';
+    const source = item.source === 'chat' ? '来自对话' : item.source === 'midtai' ? '来自中台' : '空白';
     const action = isReplace
       ? `<button class="btn-red" style="margin-top:10px" onclick="insertToDesign('${escapeHtml(String(item.thumbnail || item.name || item.id))}')">✓ 选用此图</button>`
       : `<button class="btn-secondary" style="margin-top:10px" onclick="openCanvas('${escapeHtml(String(item.name || 'Untitled Design'))}')">打开编辑</button>`;
