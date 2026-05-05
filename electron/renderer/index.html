@@ -367,6 +367,16 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-seri
 .midtai-filter-chip{padding:4px 11px;border:1.5px solid #e5ddd0;background:#fff;border-radius:20px;font-size:11px;color:#78716c}
 .midtai-filter-chip.active{background:#1c1917;color:#fff;border-color:#1c1917}
 .midtai-cta-wrap{padding:12px;display:flex;flex-direction:column;gap:8px}
+.midtai-form-select{padding:7px 10px;border:1.5px solid #e5ddd0;border-radius:8px;font-size:12px;background:#fff;font-family:inherit;color:#1c1917;appearance:none;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1l5 5 5-5' stroke='%2378716c' stroke-width='1.5' fill='none' stroke-linecap='round'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 10px center;cursor:pointer}
+.midtai-form-select:focus{outline:none;border-color:#c94c2e}
+.midtai-direction-picker{display:flex;flex-direction:column;gap:5px}
+.midtai-dir-card{display:flex;align-items:center;gap:8px;padding:7px 9px;border:1.5px solid #e5ddd0;border-radius:8px;cursor:pointer;background:#fff;transition:border-color .12s;text-align:left;width:100%}
+.midtai-dir-card:hover{border-color:#c94c2e}
+.midtai-dir-card.selected{border-color:#c94c2e;background:#fef2f0}
+.midtai-dir-swatch{width:28px;height:28px;border-radius:5px;flex-shrink:0}
+.midtai-dir-info{flex:1;min-width:0}
+.midtai-dir-name{font-size:12px;font-weight:600;color:#1c1917}
+.midtai-dir-summary{font-size:10px;color:#78716c;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .midtai-main-area{flex:1;min-width:0;display:flex;flex-direction:column;overflow:hidden}
 .main-tabs-bar{display:flex;align-items:center;padding:0 16px;background:#fff;border-bottom:1px solid #e5ddd0;flex-shrink:0;height:44px}
 .mtab{padding:0 14px;height:44px;border:none;background:none;font-size:13px;color:#78716c;position:relative;border-bottom:2px solid transparent;margin-bottom:-1px}
@@ -409,6 +419,31 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-seri
 .midtai-card-copy{font-size:12px;color:#78716c;line-height:1.6}
 .midtai-card-meta{display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-top:auto}
 .midtai-card-badge{display:inline-flex;align-items:center;padding:2px 7px;border-radius:999px;background:#f5f0e8;color:#57534e;font-size:10px;font-weight:700}
+/* design-wcard — 我的作品卡片升级样式 */
+.design-wcard{background:#fff;border-radius:10px;overflow:hidden;border:1px solid #e5ddd0;cursor:pointer;transition:box-shadow .15s,transform .15s}
+.design-wcard:hover{box-shadow:0 6px 20px rgba(0,0,0,.1);transform:translateY(-2px)}
+.design-wcard-thumb{width:100%;height:130px;overflow:hidden;position:relative}
+.design-wcard-footer{padding:10px 12px}
+.design-wcard-title{font-size:13px;font-weight:600;color:#1c1917;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-bottom:5px}
+.design-wcard-meta{display:flex;align-items:center;gap:5px;flex-wrap:wrap}
+.ver-badge{padding:1px 7px;background:#1c1917;color:#fff;border-radius:4px;font-size:10px;font-weight:700}
+.source-badge{display:inline-block;padding:1px 6px;border-radius:4px;font-size:10px;font-weight:500}
+.s-chat{background:#e0f2fe;color:#075985}
+.s-mid{background:#fef3c7;color:#92400e}
+.s-blank{background:#f1f5f9;color:#475569}
+.wcard-time{font-size:11px;color:#a8a29e;margin-left:auto}
+/* thumb 渐变调色板 */
+.tw-g1{background:linear-gradient(135deg,#0f0c29,#302b63)}
+.tw-g2{background:linear-gradient(135deg,#1a1a2e,#e94560)}
+.tw-g3{background:linear-gradient(135deg,#134e5e,#71b280)}
+.tw-g4{background:linear-gradient(135deg,#c94b4b,#4b134f)}
+.tw-g5{background:linear-gradient(135deg,#373b44,#4286f4)}
+.tw-g6{background:linear-gradient(135deg,#f7971e,#ffd200)}
+.tw-g7{background:linear-gradient(135deg,#6a11cb,#2575fc)}
+.tw-g8{background:linear-gradient(135deg,#11998e,#38ef7d)}
+/* 图像 grid（较窄列）与设计 grid（标准列）*/
+.img-works-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(158px,1fr));gap:10px}
+.design-works-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:14px}
 .midtai-canvas-shell{flex:1;min-height:0;overflow:hidden;display:flex;flex-direction:column}
 .midtai-canvas-frame{flex:1;min-height:0;display:flex;flex-direction:column}
 .midtai-canvas-title{font-size:20px;font-weight:700;color:#1c1917;margin-bottom:10px}
@@ -1031,8 +1066,21 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-seri
         <div id="midtai-form-design" style="display:none;flex-direction:column">
           <div class="midtai-form">
             <div class="midtai-form-group">
-              <label class="midtai-form-label" for="midtai-design-prompt">设计需求</label>
-              <textarea id="midtai-design-prompt" class="midtai-form-textarea" placeholder="在这里生成设计，右侧切换视图。"></textarea>
+              <label class="midtai-form-label">输出类型</label>
+              <select id="midtai-output-type" class="midtai-form-select" onchange="renderMidtaiDirectionPicker()">
+                <option value="prototype">网页原型</option>
+                <option value="slide">幻灯片</option>
+                <option value="infographic">信息图</option>
+                <option value="animation">动效页</option>
+              </select>
+            </div>
+            <div class="midtai-form-group">
+              <label class="midtai-form-label">设计需求</label>
+              <textarea id="midtai-design-prompt" class="midtai-form-textarea" placeholder="在这里填写设计需求…"></textarea>
+            </div>
+            <div class="midtai-form-group">
+              <label class="midtai-form-label">视觉方向 <span style="color:#a8a29e;font-weight:400;text-transform:none">（可不选）</span></label>
+              <div id="midtai-direction-picker" class="midtai-direction-picker"></div>
             </div>
           </div>
           <div class="midtai-cta-wrap">
@@ -1133,7 +1181,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-seri
           <div class="midtai-canvas-frame">
             <div class="canvas-toolbar">
               <button id="midtai-canvas-view-btn" class="canvas-mode-btn active" onclick="setMidtaiCanvasMode('view')">查看</button>
-              <button id="midtai-canvas-select-btn" class="canvas-mode-btn" disabled title="选择模式即将支持" style="opacity:.45;cursor:not-allowed">选择</button>
+              <button id="midtai-canvas-select-btn" class="canvas-mode-btn" onclick="setMidtaiCanvasMode('select')">选择</button>
               <button id="midtai-canvas-tweak-btn" class="canvas-mode-btn" disabled title="调节模式即将支持" style="opacity:.45;cursor:not-allowed">调节</button>
               <div class="canvas-toolbar-spacer"></div>
               <button class="canvas-toolbar-btn" onclick="exitCanvas()">退出画布</button>
@@ -1143,6 +1191,12 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-seri
             <iframe id="midtai-canvas-iframe" sandbox="allow-scripts" style="flex:1;min-height:0;border:none;width:100%;display:none"></iframe>
             <div id="midtai-canvas-empty" class="midtai-canvas-title" style="display:flex;align-items:center;justify-content:center;flex:1;color:#a8998a;font-size:13px">暂无设计内容</div>
           </div>
+        </div>
+        <div id="midtai-node-panel" style="display:none;width:220px;flex-shrink:0;background:#fff;border-left:1px solid #e5ddd0;padding:16px;overflow-y:auto">
+          <div id="mnp-tag" style="font-size:11px;color:#a8998a;margin-bottom:8px"></div>
+          <div style="font-weight:600;margin-bottom:12px">替换图片</div>
+          <button onclick="goReplaceInImageLab()" class="btn-red" style="width:100%;margin-bottom:8px">✦ 去 Image Lab 生成图</button>
+          <button onclick="goReplaceInWorks()" class="btn-secondary" style="width:100%">🗂 从我的作品选择</button>
         </div>
       </div>
     </div>
@@ -1568,6 +1622,11 @@ window.addEventListener('message', e => {
     handleKainClawDesignFrameMessage(e);
     return;
   }
+  const midtaiFrame = document.getElementById('midtai-canvas-iframe');
+  if (midtaiFrame?.contentWindow && e.source === midtaiFrame.contentWindow) {
+    handleMidtaiCanvasFrameMessage(e);
+    return;
+  }
   handleMessage(msg);
 });
 
@@ -1617,14 +1676,39 @@ const expandedThinkingSummaries = new Set();
 let artifactToastTimer = null;
 let artifactPanelWidth = null;
 let artifactResizeActive = false;
+const MIDTAI_DIRECTIONS = {
+  prototype: [
+    { label:'信息建筑', summary:'高对比网格，适合产品首页和 B2B 原型', stylePrompt:'information architecture, swiss grid, strong editorial hierarchy, black white with restrained red accent, premium product prototype', preview:'linear-gradient(135deg,#111111 0%,#f5f1eb 55%,#e63946 100%)' },
+    { label:'极简奢侈', summary:'大留白衬线，适合高端品牌和创始人产品', stylePrompt:'minimal luxury editorial, warm ivory background, delicate serif display, subtle gold accent, quiet premium spacing', preview:'linear-gradient(135deg,#f7f1e8 0%,#ffffff 58%,#d4a574 100%)' },
+    { label:'东方极简', summary:'米灰软科技，适合文化感与未来感混合产品', stylePrompt:'eastern minimal soft-tech, beige and stone palette, calm whitespace, organic geometry, subtle futuristic interface', preview:'linear-gradient(135deg,#ece4d8 0%,#c9d1c8 52%,#6f7d72 100%)' },
+  ],
+  slide: [
+    { label:'编辑式提案', summary:'强封面感，适合 pitch deck 与产品发布', stylePrompt:'editorial pitch deck, strong cover page, serif display headlines, cinematic whitespace, premium keynote layout', preview:'linear-gradient(135deg,#18181b 0%,#f4efe8 60%,#b86f52 100%)' },
+    { label:'现代数据派', summary:'网格感强，适合指标路演季度汇报', stylePrompt:'modernist data presentation, swiss grid, sharp chart framing, restrained blue-gray accents, presentation not webpage', preview:'linear-gradient(135deg,#1f2937 0%,#dbe6f0 55%,#4f83cc 100%)' },
+    { label:'运动诗学', summary:'流体节奏，适合发布会开场和品牌叙事', stylePrompt:'motion poetry presentation, fluid composition, kinetic typography feeling, luminous gradients, cinematic transition-ready slides', preview:'linear-gradient(135deg,#2a1f4f 0%,#ff8ca8 50%,#ffd0b5 100%)' },
+  ],
+  infographic: [
+    { label:'信号板', summary:'信息密度高，适合流程对比结构化信息图', stylePrompt:'signal-board infographic, structured modules, high information density with clean grouping, editorial diagram style', preview:'linear-gradient(135deg,#131313 0%,#efefef 60%,#ef4444 100%)' },
+    { label:'宁静系统感', summary:'米灰青绿，适合解释型信息图和年度总结', stylePrompt:'calm systems infographic, muted sand and sage palette, neat data storytelling, elegant labels and spacing', preview:'linear-gradient(135deg,#ede7db 0%,#d6dfd8 58%,#7ca08a 100%)' },
+    { label:'实验前锋', summary:'大胆构图，适合主题海报式信息图', stylePrompt:'bold experimental infographic, asymmetrical composition, poster-like information design, texture and attitude', preview:'linear-gradient(135deg,#22181c 0%,#ffb36b 45%,#ff6a89 100%)' },
+  ],
+  animation: [
+    { label:'运动诗学', summary:'流动感节奏，适合动态叙事开场动画', stylePrompt:'motion poetry animated prototype, fluid rhythm, layered gradients, kinetic composition, motion-first atmosphere', preview:'linear-gradient(135deg,#30204d 0%,#7c5cff 42%,#ff8ba7 100%)' },
+    { label:'信号板', summary:'模块化强，适合动效型讲解步骤演示', stylePrompt:'signal-board animated interface, modular timing, precise structure, dynamic explanatory layout', preview:'linear-gradient(135deg,#141414 0%,#d1d5db 58%,#60a5fa 100%)' },
+  ],
+};
+
 let midtaiState = {
   type: 'img',
   imgView: 'preview',
   designView: 'works',
   canvasOpen: false,
+  canvasMode: 'view',
   currentProject: '',
   libraryItems: [],
   replaceCtx: null,
+  selectedCanvasNode: null,
+  designDirection: '',
 };
 
 function resolveInferredImageRatio(node) {
@@ -3014,6 +3098,37 @@ function cancelReplace() {
   renderMidtaiWorks();
 }
 
+function renderMidtaiDirectionPicker() {
+  const picker = document.getElementById('midtai-direction-picker');
+  if (!picker) return;
+  const outputType = document.getElementById('midtai-output-type')?.value || 'prototype';
+  const dirs = MIDTAI_DIRECTIONS[outputType] || MIDTAI_DIRECTIONS.prototype || [];
+  const selected = midtaiState.designDirection || '';
+
+  const autoCard = `<button class="midtai-dir-card${!selected ? ' selected' : ''}" onclick="selectMidtaiDirection('')">
+    <div class="midtai-dir-swatch" style="background:#f5f0e8;border:1px solid #e5ddd0"></div>
+    <div class="midtai-dir-info">
+      <div class="midtai-dir-name">自动</div>
+      <div class="midtai-dir-summary">由 AI 决定视觉风格</div>
+    </div>
+  </button>`;
+
+  const dirCards = dirs.map(d => `<button class="midtai-dir-card${selected === d.stylePrompt ? ' selected' : ''}" onclick="selectMidtaiDirection(${JSON.stringify(d.stylePrompt)})">
+    <div class="midtai-dir-swatch" style="background:${d.preview}"></div>
+    <div class="midtai-dir-info">
+      <div class="midtai-dir-name">${escapeHtml(d.label)}</div>
+      <div class="midtai-dir-summary">${escapeHtml(d.summary)}</div>
+    </div>
+  </button>`).join('');
+
+  picker.innerHTML = autoCard + dirCards;
+}
+
+function selectMidtaiDirection(stylePrompt) {
+  midtaiState.designDirection = stylePrompt;
+  renderMidtaiDirectionPicker();
+}
+
 function updateWorksForContext() {
   const title = document.getElementById('midtai-works-title');
   const filters = document.getElementById('midtai-works-filters');
@@ -3053,14 +3168,15 @@ function renderMidtaiWorks() {
   const isReplace = !!midtaiState.replaceCtx;
   const query = String(search?.value || '').trim().toLowerCase();
   const allItems = Array.isArray(midtaiState.libraryItems) ? midtaiState.libraryItems : [];
+  const isDesignItem = item => item?.contentType === 'design' || item?.type === 'design';
   const visibleItems = allItems
     .filter(item => item && typeof item === 'object')
-    .filter(item => !isReplace || item.contentType === 'image')
+    .filter(item => !isReplace || !isDesignItem(item))
     .filter(item => !query || String(item.name || '').toLowerCase().includes(query));
 
   if (title) {
     title.textContent = isReplace
-      ? `为「${midtaiState.replaceCtx.project} 路 ${midtaiState.replaceCtx.element}」选图`
+      ? `为「${midtaiState.replaceCtx.project} · ${midtaiState.replaceCtx.element}」选图`
       : '我的作品';
     title.style.color = isReplace ? '#92400e' : '#1c1917';
   }
@@ -3073,36 +3189,60 @@ function renderMidtaiWorks() {
   if (!grid) {
     return;
   }
-  if (!visibleItems.length) {
-    grid.innerHTML = `<div class="midtai-card">
+  const designs = visibleItems.filter(item => isDesignItem(item));
+  const images = visibleItems.filter(item => !isDesignItem(item));
+  const gradients = ['tw-g1','tw-g2','tw-g3','tw-g4','tw-g5','tw-g6','tw-g7','tw-g8'];
+
+  function thumbClass(item) {
+    const hash = String(item.id || item.projectId || item.name || '')
+      .split('')
+      .reduce((total, char) => total + char.charCodeAt(0), 0);
+    return gradients[hash % gradients.length];
+  }
+
+  function sourceBadge(item) {
+    if (item.source === 'chat') return '<span class="source-badge s-chat">来自对话</span>';
+    if (item.source === 'midtai') return '<span class="source-badge s-mid">来自中台</span>';
+    return '<span class="source-badge s-blank">空白</span>';
+  }
+
+  function cardHtml(item) {
+    const action = isReplace
+      ? `<button class="btn-red" style="width:100%;margin-top:4px" onclick="insertToDesign('${escapeHtml(String(item.thumbnail || item.name || item.id))}')">✓ 选用此图</button>`
+      : `<button class="btn-secondary" style="width:100%;margin-top:4px" onclick="openCanvas('${escapeHtml(String(item.name || 'Untitled Design'))}')">打开编辑</button>`;
+    return `<div class="design-wcard">
+      <div class="design-wcard-thumb ${thumbClass(item)}"></div>
+      <div class="design-wcard-footer">
+        <div class="design-wcard-title">${escapeHtml(String(item.name || 'Untitled'))}</div>
+        <div class="design-wcard-meta">
+          ${item.version ? `<span class="ver-badge">${escapeHtml(String(item.version))}</span>` : ''}
+          ${sourceBadge(item)}
+        </div>
+        ${action}
+      </div>
+    </div>`;
+  }
+
+  let html = '';
+  if (!isReplace && designs.length) {
+    html += `<div class="design-works-grid" style="margin-bottom:${images.length ? '20px' : '0'}">${designs.map(cardHtml).join('')}</div>`;
+  }
+  if (images.length) {
+    html += `<div class="img-works-grid">${images.map(cardHtml).join('')}</div>`;
+  }
+  if (!designs.length && !images.length) {
+    html = `<div class="midtai-card">
       <div class="midtai-card-title">${isReplace ? '还没有可用图片' : '还没有作品'}</div>
       <div class="midtai-card-copy">${isReplace ? '先去生成预览或打开已有图片，再回来替换。' : '先去生成预览创建设计稿，再回来看这里。'}</div>
       <div class="midtai-card-meta"><span class="midtai-card-badge">${isReplace ? 'Replace' : 'Empty'}</span></div>
     </div>`;
-    return;
   }
-
-  grid.innerHTML = visibleItems.map(item => {
-    const badge = item.contentType === 'design' ? '设计' : '图像';
-    const source = item.source === 'chat' ? '来自对话' : item.source === 'midtai' ? '来自中台' : '空白';
-    const action = isReplace
-      ? `<button class="btn-red" style="margin-top:10px" onclick="insertToDesign('${escapeHtml(String(item.thumbnail || item.name || item.id))}')">✓ 选用此图</button>`
-      : `<button class="btn-secondary" style="margin-top:10px" onclick="openCanvas('${escapeHtml(String(item.name || 'Untitled Design'))}')">打开编辑</button>`;
-    return `<div class="midtai-card">
-      <div class="midtai-card-title">${escapeHtml(String(item.name || 'Untitled'))}</div>
-      <div class="midtai-card-copy">${item.projectId ? escapeHtml(String(item.projectId)) : escapeHtml(source)}</div>
-      <div class="midtai-card-meta">
-        <span class="midtai-card-badge">${escapeHtml(badge)}</span>
-        ${item.version ? `<span class="midtai-card-badge">${escapeHtml(String(item.version))}</span>` : ''}
-      </div>
-      ${action}
-    </div>`;
-  }).join('');
+  grid.innerHTML = html;
 }
 
 function goReplaceInImageLab() {
-  const project = midtaiState.currentProject || 'KainClaw Design';
-  showReplaceCtx(project, '当前图片位');
+  const node = midtaiState.selectedCanvasNode;
+  showReplaceCtx(midtaiState.currentProject || 'KainClaw Design', node?.selector || '图片元素');
   midtaiState.type = 'img';
   document.getElementById('midtai-type-img')?.classList.add('active');
   document.getElementById('midtai-type-design')?.classList.remove('active');
@@ -3112,8 +3252,8 @@ function goReplaceInImageLab() {
 }
 
 function goReplaceInWorks() {
-  const project = midtaiState.currentProject || 'KainClaw Design';
-  showReplaceCtx(project, '当前图片位');
+  const node = midtaiState.selectedCanvasNode;
+  showReplaceCtx(midtaiState.currentProject || 'KainClaw Design', node?.selector || '图片元素');
   midtaiState.type = 'img';
   document.getElementById('midtai-type-img')?.classList.add('active');
   document.getElementById('midtai-type-design')?.classList.remove('active');
@@ -3172,13 +3312,142 @@ function designSwitchView(view) {
   renderMidtaiWorks();
 }
 
+function buildMidtaiCanvasSrcdoc(html) {
+  const source = String(html || '');
+  if (!source) {
+    return '';
+  }
+
+  const bridgeCode = `
+(function() {
+  function readBackgroundImageUrl(node) {
+    const raw = window.getComputedStyle(node).backgroundImage || '';
+    const match = raw.match(/url\\(["']?([^"')]+)/);
+    return match ? match[1] : '';
+  }
+
+  document.addEventListener('click', function(e) {
+    const target = e.target;
+    const img = target && target.closest ? target.closest('img, [style*="background-image"]') : null;
+    if (!img || !window.__kcSelectMode) return;
+    e.preventDefault();
+    e.stopPropagation();
+    const rect = img.getBoundingClientRect();
+    window.parent.postMessage({
+      type: '__midtai_node_selected',
+      tagName: img.tagName,
+      src: img.src || readBackgroundImageUrl(img) || '',
+      selector: img.id ? '#' + img.id : img.className ? '.' + String(img.className).split(' ')[0] : img.tagName.toLowerCase(),
+      outerHTML: (img.outerHTML || '').slice(0, 300),
+      fullOuterHTML: img.outerHTML || '',
+      rect: {
+        top: rect.top,
+        left: rect.left,
+        width: rect.width,
+        height: rect.height,
+      },
+    }, '*');
+  }, true);
+
+  window.addEventListener('message', function(e) {
+    if (e.data && e.data.type === '__midtai_set_select_mode') {
+      window.__kcSelectMode = !!e.data.active;
+      document.body.style.cursor = e.data.active ? 'crosshair' : '';
+    }
+  });
+})();
+`;
+  const bridgeScript = '<script>' + bridgeCode + '</' + 'script>';
+  return source.includes('</body>')
+    ? source.replace('</body>', `${bridgeScript}</body>`)
+    : source + bridgeScript;
+}
+
+function postMidtaiCanvasSelectMode(active) {
+  document.getElementById('midtai-canvas-iframe')?.contentWindow?.postMessage(
+    { type: '__midtai_set_select_mode', active: !!active },
+    '*',
+  );
+}
+
+function showMidtaiNodePanel(node) {
+  const panel = document.getElementById('midtai-node-panel');
+  const tag = document.getElementById('mnp-tag');
+  if (tag) {
+    const pieces = [
+      typeof node?.tagName === 'string' && node.tagName ? String(node.tagName).toUpperCase() : '',
+      typeof node?.selector === 'string' ? node.selector : '',
+    ].filter(Boolean);
+    tag.textContent = pieces.join(' · ');
+  }
+  if (panel) {
+    panel.style.display = 'block';
+  }
+}
+
+function hideMidtaiNodePanel() {
+  const panel = document.getElementById('midtai-node-panel');
+  const tag = document.getElementById('mnp-tag');
+  if (panel) {
+    panel.style.display = 'none';
+  }
+  if (tag) {
+    tag.textContent = '';
+  }
+}
+
+function handleMidtaiCanvasFrameMessage(event) {
+  const payload = event.data || {};
+  if (payload.type !== '__midtai_node_selected') {
+    return;
+  }
+
+  const selector = typeof payload.selector === 'string' ? payload.selector.trim() : '';
+  const outerHTML = typeof payload.fullOuterHTML === 'string' && payload.fullOuterHTML.trim()
+    ? payload.fullOuterHTML
+    : String(payload.outerHTML || '');
+  const node = selector && outerHTML
+    ? {
+        selector,
+        outerHTML,
+        text: '',
+        tagName: typeof payload.tagName === 'string' ? payload.tagName : '',
+        alt: '',
+        ariaLabel: '',
+        title: '',
+        src: typeof payload.src === 'string' ? payload.src : '',
+        role: '',
+        backgroundImage: '',
+        rect: payload.rect && typeof payload.rect === 'object'
+          ? {
+              top: Number(payload.rect.top || 0),
+              left: Number(payload.rect.left || 0),
+              width: Number(payload.rect.width || 0),
+              height: Number(payload.rect.height || 0),
+            }
+          : null,
+      }
+    : null;
+  midtaiState.selectedCanvasNode = node;
+  designBridgeState.selectedNode = node;
+  if (node) {
+    showMidtaiNodePanel(node);
+  } else {
+    hideMidtaiNodePanel();
+  }
+}
+
 function openCanvas(projectName) {
   midtaiState.canvasOpen = true;
+  midtaiState.canvasMode = 'view';
+  midtaiState.selectedCanvasNode = null;
+  designBridgeState.selectedNode = null;
   midtaiState.currentProject = String(projectName || midtaiState.currentProject || '').trim();
   const title = document.getElementById('midtai-canvas-project-title');
   if (title) {
     title.textContent = midtaiState.currentProject || (isEnglishUi() ? 'Design canvas' : '设计画布');
   }
+  hideMidtaiNodePanel();
   updateStateChip();
   showTabBar('design');
   showOnlyMidtaiView('canvas');
@@ -3187,10 +3456,15 @@ function openCanvas(projectName) {
   document.getElementById('dpv-empty').style.display = 'flex';
   const mcFrame = document.getElementById('midtai-canvas-iframe');
   const mcEmpty = document.getElementById('midtai-canvas-empty');
+  document.getElementById('midtai-canvas-view-btn')?.classList.add('active');
+  document.getElementById('midtai-canvas-select-btn')?.classList.remove('active');
   if (mcFrame) {
     const html = designBridgeState?.html || '';
+    mcFrame.onload = () => {
+      postMidtaiCanvasSelectMode(midtaiState.canvasMode === 'select');
+    };
     if (html) {
-      mcFrame.srcdoc = html + `<!-- kc-render:${designBridgeState.renderToken || Date.now()} -->`;
+      mcFrame.srcdoc = buildMidtaiCanvasSrcdoc(html) + `<!-- kc-render:${designBridgeState.renderToken || Date.now()} -->`;
       mcFrame.style.display = 'block';
       if (mcEmpty) mcEmpty.style.display = 'none';
     } else {
@@ -3201,12 +3475,20 @@ function openCanvas(projectName) {
 }
 
 function setMidtaiCanvasMode(mode) {
-  document.getElementById('midtai-canvas-view-btn')?.classList.toggle('active', mode === 'view');
-  document.getElementById('midtai-canvas-select-btn')?.classList.toggle('active', mode === 'select');
+  midtaiState.canvasMode = mode === 'select' ? 'select' : 'view';
+  document.getElementById('midtai-canvas-view-btn')?.classList.toggle('active', midtaiState.canvasMode === 'view');
+  document.getElementById('midtai-canvas-select-btn')?.classList.toggle('active', midtaiState.canvasMode === 'select');
+  if (midtaiState.canvasMode === 'view') {
+    hideMidtaiNodePanel();
+  }
+  postMidtaiCanvasSelectMode(midtaiState.canvasMode === 'select');
 }
 
 function exitCanvas() {
   midtaiState.canvasOpen = false;
+  midtaiState.canvasMode = 'view';
+  hideMidtaiNodePanel();
+  postMidtaiCanvasSelectMode(false);
   updateStateChip();
   showOnlyMidtaiView('works');
   designSwitchView('works');
@@ -3221,6 +3503,9 @@ function switchType(type) {
   if (imgForm) imgForm.style.display = midtaiState.type === 'img' ? 'flex' : 'none';
   if (designForm) designForm.style.display = midtaiState.type === 'design' ? 'flex' : 'none';
   midtaiState.canvasOpen = false;
+  midtaiState.canvasMode = 'view';
+  hideMidtaiNodePanel();
+  postMidtaiCanvasSelectMode(false);
   updateStateChip();
   if (midtaiState.type === 'design') {
     designSwitchView('works');
@@ -3260,6 +3545,7 @@ function openMidtai(payload) {
   const nextView = contentType === 'design' ? midtaiState.designView : midtaiState.imgView;
   showPage('midtai');
   updateStateChip();
+  renderMidtaiDirectionPicker();
   if (contentType === 'design') {
     if (payload?.project) {
       midtaiState.currentProject = String(payload.project?.name || '').trim();
@@ -4573,8 +4859,10 @@ function applyDesignSliderValue(sliderId, nextValue) {
 
 function generateDesignWorkbench() {
   const promptInput = document.getElementById('midtai-design-prompt') || document.getElementById('design-prompt-input');
-  const outputTypeSelect = document.getElementById('design-output-type');
-  const styleInput = document.getElementById('design-style-input');
+  const outputTypeSelect = document.getElementById('midtai-output-type') || document.getElementById('design-output-type');
+  const style = midtaiState.designDirection !== undefined
+    ? midtaiState.designDirection
+    : (document.getElementById('design-style-input')?.value?.trim() || '');
   const prompt = promptInput?.value?.trim() || '';
   if (!prompt) {
     designBridgeState.error = isEnglishUi() ? 'Enter a design request first.' : '\u8bf7\u5148\u8f93\u5165\u8bbe\u8ba1\u9700\u6c42\u3002';
@@ -4584,7 +4872,7 @@ function generateDesignWorkbench() {
 
   designBridgeState.prompt = prompt;
   designBridgeState.outputType = outputTypeSelect?.value || 'prototype';
-  designBridgeState.style = styleInput?.value?.trim() || '';
+  designBridgeState.style = style;
   designBridgeState.loading = true;
   designBridgeState.error = '';
   designBridgeState.suggestionVisible = false;
