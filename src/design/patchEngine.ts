@@ -63,6 +63,7 @@ export function extractPatchNode(rawText: string): string {
 
 interface SelectorSegment {
   tag: string;
+  id?: string;
   classes: string[];
 }
 
@@ -73,10 +74,24 @@ const VOID_TAGS = new Set([
 
 function parseSelector(selector: string): SelectorSegment[] {
   return selector.split(">").map(seg => {
-    const parts = seg.trim().split(".");
+    const normalized = seg.trim();
+    const hashIndex = normalized.indexOf("#");
+    const dotIndex = normalized.indexOf(".");
+    const boundaryIndex = [hashIndex, dotIndex]
+      .filter(index => index >= 0)
+      .sort((left, right) => left - right)[0] ?? normalized.length;
+    const tag = normalized.slice(0, boundaryIndex).trim() || "*";
+    const id = hashIndex >= 0
+      ? normalized
+        .slice(hashIndex + 1, dotIndex >= 0 && dotIndex > hashIndex ? dotIndex : undefined)
+        .trim()
+        .toLowerCase()
+      : "";
+    const classPart = dotIndex >= 0 ? normalized.slice(dotIndex + 1) : "";
     return {
-      tag: parts[0].toLowerCase(),
-      classes: parts.slice(1).map(c => c.toLowerCase()),
+      tag: tag.toLowerCase(),
+      ...(id ? { id } : {}),
+      classes: classPart ? classPart.split(".").map(c => c.toLowerCase()) : [],
     };
   });
 }
@@ -102,7 +117,14 @@ function parseOpenTagAt(html: string, pos: number): OpenTagInfo | null {
 }
 
 function tagMatchesSegment(info: OpenTagInfo, seg: SelectorSegment): boolean {
-  if (info.tagName !== seg.tag) return false;
+  if (seg.tag !== "*" && info.tagName !== seg.tag) return false;
+  if (seg.id) {
+    const idMatch = info.attrStr.match(/\bid\s*=\s*"([^"]*)"/i)
+      ?? info.attrStr.match(/\bid\s*=\s*'([^']*)'/i);
+    if (!idMatch || idMatch[1].trim().toLowerCase() !== seg.id) {
+      return false;
+    }
+  }
   if (seg.classes.length === 0) return true;
   const m = info.attrStr.match(/\bclass\s*=\s*"([^"]*)"/i)
     ?? info.attrStr.match(/\bclass\s*=\s*'([^']*)'/i);

@@ -8,7 +8,7 @@
 | Metric | Value | Last Updated |
 |--------|-------|--------------|
 | Test files | 170 | 2026-05-05 |
-| Tests passing | 1319 | 2026-05-05 |
+| Tests passing | 1320 | 2026-05-05 |
 | Last verified commit | see `git log --oneline -1` | — |
 
 **Required passing commands:**

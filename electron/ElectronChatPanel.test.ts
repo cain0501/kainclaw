@@ -575,6 +575,25 @@ describe("ElectronChatPanel session lifecycle", () => {
     expect(designOpenPayload?.payload?.artifactId).toBeTruthy();
   });
 
+  it("serves midtai request-library by publishing library items to the renderer", async () => {
+    const harness = await createHarness();
+    tempDirs.push(harness.storagePath);
+
+    await harness.settings.setOnboardingDone(true);
+    await harness.panel.handleMessage({ type: "ready" });
+    await harness.panel.handleMessage({ type: "midtai:request-library" });
+
+    const payload = getLastRendererPayloadOfType<{
+      type: "midtai:library-update";
+      items?: Array<{ contentType?: string; name?: string }>;
+    }>(harness.rendererPayloads, "midtai:library-update");
+
+    expect(payload).toMatchObject({
+      type: "midtai:library-update",
+      items: expect.any(Array),
+    });
+  });
+
   it("keeps pure text replies out of artifact state", async () => {
     const harness = await createHarness();
     tempDirs.push(harness.storagePath);
@@ -2375,7 +2394,7 @@ describe("ElectronChatPanel session lifecycle", () => {
     expect(vi.mocked(runImageLabRequest)).toHaveBeenNthCalledWith(1, expect.objectContaining({
       prompt: "生成一个 16:9 的法斗头像",
       config: expect.objectContaining({
-        size: "1536x896",
+        size: "1536x1024",
       }),
     }));
     expect(vi.mocked(runImageLabRequest)).toHaveBeenNthCalledWith(2, expect.objectContaining({

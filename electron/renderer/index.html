@@ -343,6 +343,77 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-seri
 .sess-item-title{flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .sess-item .sess-actions{display:none;position:absolute;right:6px;align-items:center;gap:2px}
 .sess-item:hover .sess-actions{display:flex}
+
+/* Midtai shell scaffold */
+.midtai-shell-topbar{background:rgba(255,255,255,.92);backdrop-filter:blur(12px)}
+.state-chip{display:none;align-items:center;gap:6px;padding:3px 10px;background:#f5f0e8;border:1px solid #e5ddd0;border-radius:20px;font-size:11px;color:#57534e}
+.state-chip.visible{display:flex}
+.state-chip-dot{width:6px;height:6px;border-radius:50%;background:#16a34a;flex-shrink:0}
+.midtai-shell-body{flex:1;min-height:0;display:flex;overflow:hidden}
+.midtai-left-panel{width:236px;flex-shrink:0;background:#fff;border-right:1px solid #e5ddd0;display:flex;flex-direction:column;overflow:hidden}
+.midtai-type-tabs{display:flex;padding:10px 10px 0;gap:2px;flex-shrink:0}
+.midtai-type-tab{flex:1;padding:7px 4px;border:none;background:none;border-radius:7px;font-size:12px;color:#78716c;font-weight:500}
+.midtai-type-tab:hover{background:#f5f0e8;color:#1c1917}
+.midtai-type-tab.active{background:#c94c2e;color:#fff;font-weight:700}
+.midtai-type-divider{height:1px;background:#f0ebe3;margin:10px 10px 0;flex-shrink:0}
+.midtai-left-scroll{flex:1;overflow-y:auto;display:flex;flex-direction:column}
+.midtai-form{padding:12px 12px 0;display:flex;flex-direction:column;gap:10px}
+.midtai-form-group{display:flex;flex-direction:column;gap:5px}
+.midtai-form-label{font-size:10px;font-weight:700;color:#a8a29e;text-transform:uppercase;letter-spacing:.05em}
+.midtai-form-textarea{width:100%;min-height:84px;padding:8px 10px;border:1.5px solid #e5ddd0;border-radius:8px;font-size:12px;resize:none;background:#fdfcfb;line-height:1.5;font-family:inherit}
+.midtai-form-textarea:focus,.midtai-form-input:focus{outline:none;border-color:#c94c2e;background:#fff}
+.midtai-form-input{width:100%;padding:8px 10px;border:1.5px solid #e5ddd0;border-radius:8px;font-size:12px;background:#fdfcfb;font-family:inherit}
+.midtai-chip-row{display:flex;flex-wrap:wrap;gap:5px}
+.midtai-filter-chip{padding:4px 11px;border:1.5px solid #e5ddd0;background:#fff;border-radius:20px;font-size:11px;color:#78716c}
+.midtai-filter-chip.active{background:#1c1917;color:#fff;border-color:#1c1917}
+.midtai-cta-wrap{padding:12px;display:flex;flex-direction:column;gap:8px}
+.midtai-main-area{flex:1;min-width:0;display:flex;flex-direction:column;overflow:hidden}
+.main-tabs-bar{display:flex;align-items:center;padding:0 16px;background:#fff;border-bottom:1px solid #e5ddd0;flex-shrink:0;height:44px}
+.mtab{padding:0 14px;height:44px;border:none;background:none;font-size:13px;color:#78716c;position:relative;border-bottom:2px solid transparent;margin-bottom:-1px}
+.mtab:hover{color:#1c1917}
+.mtab.active{color:#1c1917;font-weight:600;border-bottom-color:#c94c2e}
+.canvas-toolbar{display:flex;align-items:center;gap:6px;padding:7px 14px;background:#fff;border-bottom:1px solid #e5ddd0;flex-shrink:0}
+.canvas-mode-btn{padding:4px 11px;border:1.5px solid #e5ddd0;background:none;border-radius:7px;font-size:12px;color:#78716c}
+.canvas-mode-btn.active{background:#1c1917;color:#fff;border-color:#1c1917}
+.canvas-toolbar-spacer{flex:1}
+.canvas-toolbar-btn{padding:4px 11px;border:1.5px solid #e5ddd0;background:none;border-radius:7px;font-size:12px;color:#57534e}
+.canvas-toolbar-btn:hover{background:#f5f0e8}
+.replace-ctx{display:none;align-items:center;gap:8px;padding:6px 16px;background:#fffbeb;border-bottom:1.5px solid #fbbf24;flex-shrink:0;height:32px}
+.replace-ctx.visible{display:flex}
+.replace-ctx-icon{font-size:12px}
+.replace-ctx-text{font-size:12px;color:#78350f;font-weight:500;flex:1}
+.replace-ctx-cancel{padding:2px 9px;border:1px solid #fbbf24;background:none;border-radius:5px;font-size:11px;color:#92400e;cursor:pointer}
+.replace-ctx-cancel:hover{background:#fef9c3}
+.midtai-view{flex:1;min-height:0;display:none}
+.midtai-view.active{display:flex}
+.midtai-empty-view{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;background:#f5f0e8;color:#a8a29e;padding:40px;text-align:center}
+.midtai-empty-icon{font-size:42px;opacity:.35}
+.midtai-empty-title{font-size:16px;font-weight:600;color:#57534e}
+.midtai-empty-copy{font-size:13px;color:#a8a29e;line-height:1.8;max-width:380px}
+.midtai-empty-cta{padding:10px 24px;background:#c94c2e;color:#fff;border:none;border-radius:9px;font-size:13px;font-weight:700;cursor:pointer}
+.midtai-empty-cta:hover{background:#b54228}
+.midtai-loading-view{display:none;flex:1;flex-direction:column;align-items:center;justify-content:center;gap:12px;color:#78716c}
+.midtai-loading-view.active{display:flex}
+.midtai-loading-spin{display:inline-block;animation:spin 1s linear infinite;font-size:32px;color:#c94c2e}
+@keyframes spin{to{transform:rotate(360deg)}}
+.midtai-works-shell,.midtai-plib-shell{flex:1;display:flex;flex-direction:column;min-height:0}
+.midtai-works-toolbar{display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:14px 16px 12px;flex-shrink:0}
+.midtai-works-title{font-size:14px;font-weight:700;color:#1c1917}
+.midtai-works-count{font-size:12px;color:#a8a29e;margin-right:4px}
+.midtai-works-search{padding:6px 12px;border:1.5px solid #e5ddd0;border-radius:8px;font-size:12px;background:#fff;margin-left:auto;font-family:inherit}
+.midtai-works-search:focus{outline:none;border-color:#c94c2e}
+.midtai-works-scroll,.midtai-plib-scroll{flex:1;overflow-y:auto;padding:0 16px 20px}
+.midtai-card-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:12px}
+.midtai-card{background:#fff;border:1px solid #e5ddd0;border-radius:10px;padding:14px;min-height:112px;display:flex;flex-direction:column;gap:8px}
+.midtai-card-title{font-size:13px;font-weight:600;color:#1c1917}
+.midtai-card-copy{font-size:12px;color:#78716c;line-height:1.6}
+.midtai-card-meta{display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-top:auto}
+.midtai-card-badge{display:inline-flex;align-items:center;padding:2px 7px;border-radius:999px;background:#f5f0e8;color:#57534e;font-size:10px;font-weight:700}
+.midtai-canvas-shell{flex:1;min-height:0;overflow:hidden;display:flex;flex-direction:column}
+.midtai-canvas-frame{flex:1;min-height:0;display:flex;flex-direction:column}
+.midtai-canvas-title{font-size:20px;font-weight:700;color:#1c1917;margin-bottom:10px}
+.midtai-canvas-copy{font-size:13px;color:#78716c;line-height:1.7;max-width:420px}
+.midtai-shell-close{margin-left:auto}
 .sess-item .sess-action{width:20px;height:20px;border:none;border-radius:4px;background:transparent;cursor:pointer;display:flex;align-items:center;justify-content:center;color:#71717a}
 .sess-item .sess-action:hover{background:#d4d4d8}
 .sess-item.active .sess-action{color:rgba(255,255,255,.78)}
@@ -927,6 +998,157 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-seri
 </div>
 
 <!-- IMAGE LAB -->
+<div id="page-midtai" class="page" style="flex-direction:column;background:#f6f1ea">
+  <div class="ptop midtai-shell-topbar">
+    <div class="klogo">K</div>
+    <span class="ptop-title">Midtai</span>
+    <div class="state-chip" id="midtai-state-chip">
+      <div class="state-chip-dot"></div>
+      <span id="midtai-state-chip-text">编辑中·项目</span>
+    </div>
+    <div style="flex:1"></div>
+    <button class="btn-secondary midtai-shell-close" onclick="showPage('chat')">返回对话</button>
+  </div>
+  <div class="midtai-shell-body">
+    <aside class="midtai-left-panel">
+      <div class="midtai-type-tabs">
+        <button id="midtai-type-img" class="midtai-type-tab active" onclick="switchType('img')">图像</button>
+        <button id="midtai-type-design" class="midtai-type-tab" onclick="switchType('design')">设计</button>
+      </div>
+      <div class="midtai-type-divider"></div>
+      <div class="midtai-left-scroll">
+        <div id="midtai-form-img" style="display:flex;flex-direction:column">
+          <div class="midtai-form">
+            <div class="midtai-form-group">
+              <label class="midtai-form-label" for="imglab-prompt">图像描述</label>
+              <textarea class="midtai-form-textarea" placeholder="在这里生成图片，右侧切换视图。"></textarea>
+            </div>
+          </div>
+          <div class="midtai-cta-wrap">
+            <button class="btn-red">生成图片</button>
+          </div>
+        </div>
+        <div id="midtai-form-design" style="display:none;flex-direction:column">
+          <div class="midtai-form">
+            <div class="midtai-form-group">
+              <label class="midtai-form-label" for="midtai-design-prompt">设计需求</label>
+              <textarea id="midtai-design-prompt" class="midtai-form-textarea" placeholder="在这里生成设计，右侧切换视图。"></textarea>
+            </div>
+          </div>
+          <div class="midtai-cta-wrap">
+            <button class="btn-red" onclick="generateDesignWorkbench()">生成设计</button>
+          </div>
+        </div>
+      </div>
+    </aside>
+    <div class="midtai-main-area">
+      <div id="mtbar-img" class="main-tabs-bar">
+        <button id="mt-img-preview" class="mtab active" onclick="imgSwitchView('preview')">生成预览</button>
+        <button id="mt-img-works" class="mtab" onclick="imgSwitchView('works')">我的作品</button>
+        <button id="mt-img-plib" class="mtab" onclick="imgSwitchView('plib')">提示词库</button>
+      </div>
+      <div id="mtbar-design" class="main-tabs-bar" style="display:none">
+        <button id="mt-design-preview" class="mtab" onclick="designSwitchView('preview')">生成预览</button>
+        <button id="mt-design-works" class="mtab active" onclick="designSwitchView('works')">我的作品</button>
+        <button id="mt-design-plib" class="mtab" onclick="designSwitchView('plib')">提示词库</button>
+      </div>
+      <div id="canvas-toolbar" class="canvas-toolbar" style="display:none">
+        <button id="canvas-toolbar-view" class="canvas-mode-btn active">查看</button>
+        <button id="canvas-toolbar-select" class="canvas-mode-btn">选择</button>
+        <button id="canvas-toolbar-tweaks" class="canvas-mode-btn">调节</button>
+        <div class="canvas-toolbar-spacer"></div>
+        <button class="canvas-toolbar-btn" onclick="exitCanvas()">返回</button>
+        <button class="canvas-toolbar-btn">版本历史</button>
+        <button class="canvas-toolbar-btn">导出</button>
+      </div>
+      <div id="replace-ctx" class="replace-ctx">
+        <span class="replace-ctx-icon">🎆</span>
+        <span id="replace-ctx-text" class="replace-ctx-text">替换目标：项目 · 元素</span>
+        <button class="replace-ctx-cancel" onclick="cancelReplace()">× 取消替换</button>
+      </div>
+      <div id="view-img-preview" class="midtai-view active">
+        <div class="midtai-empty-view">
+          <div class="midtai-empty-icon">✦</div>
+          <div class="midtai-empty-title">图像生成预览</div>
+          <div class="midtai-empty-copy">先在左侧输入图像描述，再生成预览结果。</div>
+        </div>
+      </div>
+      <div id="view-design-preview" class="midtai-view">
+        <div id="dpv-empty" class="midtai-empty-view">
+          <div class="midtai-empty-icon">◌</div>
+          <div class="midtai-empty-title">新建设计稿</div>
+          <div class="midtai-empty-copy">在左侧填写设计需求、选择风格和输出类型
+点击「生成设计」开始创作
+
+或者从「我的作品」打开已有设计继续编辑。</div>
+          <button class="midtai-empty-cta" onclick="designSwitchView('works')">查看我的作品 →</button>
+        </div>
+        <div id="dpv-loading" class="midtai-loading-view">
+          <div class="midtai-loading-spin">◴</div>
+          <div style="font-size:13px;color:#78716c">正在生成设计稿...</div>
+          <div style="font-size:11px;color:#a8a29e">通常需要 10~30 秒</div>
+        </div>
+      </div>
+      <div id="view-works" class="midtai-view">
+        <div class="midtai-works-shell">
+          <div class="midtai-works-toolbar">
+            <span id="midtai-works-title" class="midtai-works-title">我的作品</span>
+            <span id="midtai-works-count" class="midtai-works-count">0</span>
+            <div id="midtai-works-filters" class="midtai-chip-row">
+              <button class="midtai-filter-chip active">全部</button>
+              <button class="midtai-filter-chip">图像</button>
+              <button class="midtai-filter-chip">设计</button>
+            </div>
+            <input id="midtai-works-search" class="midtai-works-search" placeholder="搜索..." oninput="renderMidtaiWorks()" />
+          </div>
+          <div class="midtai-works-scroll">
+            <div class="midtai-card-grid">
+              <div class="midtai-card">
+                <div class="midtai-card-title">作品内容将在这里接入</div>
+                <div class="midtai-card-copy">ha8 只先把统一壳层、标签栏和画布接管结构落好。</div>
+                <div class="midtai-card-meta"><span class="midtai-card-badge">Shell</span></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div id="view-plib" class="midtai-view">
+        <div class="midtai-plib-shell">
+          <div class="midtai-works-toolbar">
+            <span class="midtai-works-title">提示词库</span>
+          </div>
+          <div class="midtai-plib-scroll">
+            <div class="midtai-card-grid">
+              <div class="midtai-card">
+                <div class="midtai-card-title">提示词库内容将在这里接入</div>
+                <div class="midtai-card-copy">ha8 只先把统一壳层和双 tab bar 路由起来。</div>
+                <div class="midtai-card-meta"><span class="midtai-card-badge">Shell</span></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div id="view-canvas" class="midtai-view">
+        <div class="midtai-canvas-shell">
+          <div class="midtai-canvas-frame">
+            <div class="canvas-toolbar">
+              <button id="midtai-canvas-view-btn" class="canvas-mode-btn active" onclick="setMidtaiCanvasMode('view')">查看</button>
+              <button id="midtai-canvas-select-btn" class="canvas-mode-btn" disabled title="选择模式即将支持" style="opacity:.45;cursor:not-allowed">选择</button>
+              <button id="midtai-canvas-tweak-btn" class="canvas-mode-btn" disabled title="调节模式即将支持" style="opacity:.45;cursor:not-allowed">调节</button>
+              <div class="canvas-toolbar-spacer"></div>
+              <button class="canvas-toolbar-btn" onclick="exitCanvas()">退出画布</button>
+              <button class="canvas-toolbar-btn" disabled style="opacity:.45;cursor:not-allowed">版本历史</button>
+              <button class="canvas-toolbar-btn" disabled style="opacity:.45;cursor:not-allowed">导出</button>
+            </div>
+            <iframe id="midtai-canvas-iframe" sandbox="allow-scripts" style="flex:1;min-height:0;border:none;width:100%;display:none"></iframe>
+            <div id="midtai-canvas-empty" class="midtai-canvas-title" style="display:flex;align-items:center;justify-content:center;flex:1;color:#a8998a;font-size:13px">暂无设计内容</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
 <div id="page-images" class="page" style="flex-direction:column;background:#f6f1ea">
   <div class="ptop" style="background:rgba(255,255,255,.84);backdrop-filter:blur(12px)">
     <div class="klogo">K</div>
@@ -1396,10 +1618,96 @@ let artifactToastTimer = null;
 let artifactPanelWidth = null;
 let artifactResizeActive = false;
 let midtaiState = {
+  type: 'img',
   imgView: 'preview',
-  designView: 'preview',
+  designView: 'works',
+  canvasOpen: false,
+  currentProject: '',
+  libraryItems: [],
   replaceCtx: null,
 };
+
+function resolveInferredImageRatio(node) {
+  const width = Number(node?.rect?.width || 0);
+  const height = Number(node?.rect?.height || 0);
+  if (!width || !height) {
+    return null;
+  }
+
+  const ratio = width / height;
+  if (!Number.isFinite(ratio) || ratio <= 0) {
+    return null;
+  }
+
+  if (Math.abs(ratio - 1) < 0.08) {
+    return {
+      ratio: '1:1',
+      label: isEnglishUi() ? 'Square 1:1' : '方形 1:1',
+      presetSize: '1024x1024',
+    };
+  }
+
+  if (ratio > 1) {
+    if (ratio >= 1.85) {
+      return {
+        ratio: '2:1',
+        label: isEnglishUi() ? 'Landscape 2:1' : '横版 2:1',
+        presetSize: '1536x1024',
+      };
+    }
+    if (ratio >= 1.6) {
+      return {
+        ratio: '16:9',
+        label: isEnglishUi() ? 'Landscape 16:9' : '横版 16:9',
+        presetSize: '1536x1024',
+      };
+    }
+    return {
+      ratio: '4:3',
+      label: isEnglishUi() ? 'Landscape 4:3' : '横版 4:3',
+      presetSize: '1536x1024',
+    };
+  }
+
+  return {
+    ratio: '2:3',
+    label: isEnglishUi() ? 'Portrait 2:3' : '竖版 2:3',
+    presetSize: '1024x1536',
+  };
+}
+
+function applyInferredImageRatio(inferredRatio) {
+  if (!inferredRatio) return;
+  const presetSelect = document.getElementById('imglab-size-preset');
+  const customInput = document.getElementById('imglab-size');
+  if (!presetSelect || !customInput) return;
+  const sizeByRatio = {
+    '1:1': '1024x1024',
+    '4:3': '1536x1024',
+    '16:9': '1536x1024',
+    '2:1': '1536x1024',
+    '2:3': '1024x1536',
+  };
+  presetSelect.value = sizeByRatio[inferredRatio] || '1024x1024';
+  customInput.value = '';
+  customInput.style.display = 'none';
+}
+
+function describeSupportedImageSpec(inferredImageRatio) {
+  if (!inferredImageRatio?.presetSize) {
+    return null;
+  }
+
+  const dirLabel = inferredImageRatio.ratio === '1:1'
+    ? (isEnglishUi() ? 'Square' : '方形')
+    : inferredImageRatio.ratio === '2:3'
+      ? (isEnglishUi() ? 'Portrait' : '竖版')
+      : (isEnglishUi() ? 'Landscape' : '横版');
+  return {
+    size: inferredImageRatio.presetSize,
+    label: `${dirLabel} ${inferredImageRatio.presetSize}`,
+  };
+}
 const designBridgeState = {
   artifactId: null,
   title: '',
@@ -2041,6 +2349,10 @@ function handleMessage(msg) {
     case 'midtai:open':
       openMidtai(msg.payload || {});
       break;
+    case 'midtai:library-update':
+      midtaiState.libraryItems = Array.isArray(msg.items) ? msg.items : [];
+      renderMidtaiWorks();
+      break;
     case 'kainclawDesign:error':
       showArtifactToast(msg.message || '当前无法打开 KainClaw Design。');
       designBridgeState.loading = false;
@@ -2095,7 +2407,11 @@ function handleMessage(msg) {
       designBridgeState.canvasMode = 'view';
       designBridgeState.versionId = msg.versionId || null;
       designBridgeState.renderToken = Date.now();
-      showDesignPage();
+      if (document.getElementById('page-midtai')?.classList.contains('active')) {
+        openCanvas(designBridgeState.title);
+      } else {
+        showDesignPage();
+      }
       loadDesignVersions();
       break;
     case 'design:patchResult':
@@ -2122,7 +2438,11 @@ function handleMessage(msg) {
       designBridgeState.directionSuggestions = Array.isArray(msg.suggestions) ? msg.suggestions : [];
       designBridgeState.suggestionVisible = designBridgeState.directionSuggestions.length > 0;
       designBridgeState.loading = false;
-      showDesignPage();
+      if (document.getElementById('page-midtai')?.classList.contains('active')) {
+        skipDesignDirectionSuggestions();
+      } else {
+        showDesignPage();
+      }
       break;
     case 'design:exportDone':
       designBridgeState.error = '';
@@ -2133,6 +2453,13 @@ function handleMessage(msg) {
       designBridgeState.loading = false;
       designBridgeState.patchLoading = false;
       designBridgeState.error = String(msg.message || (isEnglishUi() ? 'Design generation failed.' : '设计生成失败。'));
+      if (document.getElementById('page-midtai')?.classList.contains('active')) {
+        document.getElementById('dpv-loading')?.classList.remove('active');
+        const dpvLoading = document.getElementById('dpv-loading');
+        if (dpvLoading) dpvLoading.style.display = 'none';
+        const dpvEmpty = document.getElementById('dpv-empty');
+        if (dpvEmpty) dpvEmpty.style.display = 'flex';
+      }
       renderDesignBridgePage();
       break;
     case 'settings:data':
@@ -2217,6 +2544,7 @@ function handleMessage(msg) {
       }
       break;
     case 'design:patchImageNode:result':
+      designBridgeState.patchLoading = false;
       if (msg.payload?.success) {
         midtaiState.replaceCtx = null;
         showDesignPage();
@@ -2603,6 +2931,7 @@ function showDesignPage() {
 function applyMidtaiRouteState(payload) {
   const contentType = payload?.contentType === 'design' ? 'design' : 'img';
   const nextView = payload?.view === 'works' || payload?.view === 'plib' ? payload.view : 'preview';
+  midtaiState.type = contentType;
   if (contentType === 'design') {
     midtaiState.designView = nextView;
   } else {
@@ -2612,8 +2941,292 @@ function applyMidtaiRouteState(payload) {
     ? {
         project: String(payload.replaceCtx.project || '').trim(),
         element: String(payload.replaceCtx.element || '').trim(),
+        ...(typeof payload.replaceCtx.inferredRatio === 'string' && payload.replaceCtx.inferredRatio.trim()
+          ? {
+              inferredRatio: payload.replaceCtx.inferredRatio.trim(),
+            }
+          : {}),
       }
     : null;
+}
+
+const MIDTAI_ALL_VIEWS = ['img-preview', 'design-preview', 'works', 'plib', 'canvas'];
+
+function showOnlyMidtaiView(view) {
+  MIDTAI_ALL_VIEWS.forEach(id => {
+    const element = document.getElementById('view-' + id);
+    if (element) {
+      element.classList.toggle('active', id === view);
+    }
+  });
+}
+
+function setImgTabActive(id) {
+  document.querySelectorAll('#mtbar-img .mtab').forEach(button => button.classList.remove('active'));
+  document.getElementById(id)?.classList.add('active');
+}
+
+function setDesignTabActive(id) {
+  document.querySelectorAll('#mtbar-design .mtab').forEach(button => button.classList.remove('active'));
+  document.getElementById(id)?.classList.add('active');
+}
+
+function showTabBar(which) {
+  const imgBar = document.getElementById('mtbar-img');
+  const designBar = document.getElementById('mtbar-design');
+  if (imgBar) imgBar.style.display = 'none';
+  if (designBar) designBar.style.display = 'none';
+  if (which === 'img' && imgBar) imgBar.style.display = 'flex';
+  if (which === 'design' && designBar) designBar.style.display = 'flex';
+}
+
+function updateStateChip() {
+  const chip = document.getElementById('midtai-state-chip');
+  const label = document.getElementById('midtai-state-chip-text');
+  if (!chip || !label) {
+    return;
+  }
+
+  if (midtaiState.canvasOpen) {
+    label.textContent = `${isEnglishUi() ? 'Editing' : '编辑中'} · ${midtaiState.currentProject || (isEnglishUi() ? 'Untitled project' : '未命名项目')}`;
+    chip.classList.add('visible');
+    return;
+  }
+
+  chip.classList.remove('visible');
+}
+
+function showReplaceCtx(project, element) {
+  midtaiState.replaceCtx = { project, element };
+  const bar = document.getElementById('replace-ctx');
+  const label = document.getElementById('replace-ctx-text');
+  if (label) {
+    label.textContent = `替换目标：${project} · ${element}`;
+  }
+  if (bar) {
+    bar.classList.add('visible');
+  }
+}
+
+function cancelReplace() {
+  midtaiState.replaceCtx = null;
+  document.getElementById('replace-ctx')?.classList.remove('visible');
+  renderMidtaiWorks();
+}
+
+function updateWorksForContext() {
+  const title = document.getElementById('midtai-works-title');
+  const filters = document.getElementById('midtai-works-filters');
+  const grid = document.querySelector('#view-works .midtai-card-grid');
+  const isReplace = !!midtaiState.replaceCtx;
+
+  if (title) {
+    title.textContent = isReplace
+      ? `为「${midtaiState.replaceCtx.project} · ${midtaiState.replaceCtx.element}」选图`
+      : '我的作品';
+    title.style.color = isReplace ? '#92400e' : '#1c1917';
+  }
+  if (filters) {
+    filters.style.display = isReplace ? 'none' : 'flex';
+  }
+  if (grid) {
+    grid.innerHTML = isReplace
+      ? `<div class="midtai-card">
+          <div class="midtai-card-title">替换模式：仅显示可用图片</div>
+          <div class="midtai-card-copy">后续 7z2 真实接入作品数据后，这里会显示图片卡片，并在悬停时提供“选用此图”。</div>
+          <div class="midtai-card-meta"><span class="midtai-card-badge">Replace</span></div>
+        </div>`
+      : `<div class="midtai-card">
+          <div class="midtai-card-title">作品内容将在这里接入</div>
+          <div class="midtai-card-copy">ha8/7z2 阶段先把统一壳层、上下文化标题和替换流状态接上。</div>
+          <div class="midtai-card-meta"><span class="midtai-card-badge">Shell</span></div>
+        </div>`;
+  }
+}
+
+function renderMidtaiWorks() {
+  const title = document.getElementById('midtai-works-title');
+  const filters = document.getElementById('midtai-works-filters');
+  const count = document.getElementById('midtai-works-count');
+  const search = document.getElementById('midtai-works-search');
+  const grid = document.querySelector('#view-works .midtai-card-grid');
+  const isReplace = !!midtaiState.replaceCtx;
+  const query = String(search?.value || '').trim().toLowerCase();
+  const allItems = Array.isArray(midtaiState.libraryItems) ? midtaiState.libraryItems : [];
+  const visibleItems = allItems
+    .filter(item => item && typeof item === 'object')
+    .filter(item => !isReplace || item.contentType === 'image')
+    .filter(item => !query || String(item.name || '').toLowerCase().includes(query));
+
+  if (title) {
+    title.textContent = isReplace
+      ? `为「${midtaiState.replaceCtx.project} 路 ${midtaiState.replaceCtx.element}」选图`
+      : '我的作品';
+    title.style.color = isReplace ? '#92400e' : '#1c1917';
+  }
+  if (count) {
+    count.textContent = String(visibleItems.length);
+  }
+  if (filters) {
+    filters.style.display = isReplace ? 'none' : 'flex';
+  }
+  if (!grid) {
+    return;
+  }
+  if (!visibleItems.length) {
+    grid.innerHTML = `<div class="midtai-card">
+      <div class="midtai-card-title">${isReplace ? '还没有可用图片' : '还没有作品'}</div>
+      <div class="midtai-card-copy">${isReplace ? '先去生成预览或打开已有图片，再回来替换。' : '先去生成预览创建设计稿，再回来看这里。'}</div>
+      <div class="midtai-card-meta"><span class="midtai-card-badge">${isReplace ? 'Replace' : 'Empty'}</span></div>
+    </div>`;
+    return;
+  }
+
+  grid.innerHTML = visibleItems.map(item => {
+    const badge = item.contentType === 'design' ? '设计' : '图像';
+    const source = item.source === 'chat' ? '来自对话' : item.source === 'midtai' ? '鏉ヨ嚜涓彴' : '空白';
+    const action = isReplace
+      ? `<button class="btn-red" style="margin-top:10px" onclick="insertToDesign('${escapeHtml(String(item.thumbnail || item.name || item.id))}')">✓ 选用此图</button>`
+      : `<button class="btn-secondary" style="margin-top:10px" onclick="openCanvas('${escapeHtml(String(item.name || 'Untitled Design'))}')">打开编辑</button>`;
+    return `<div class="midtai-card">
+      <div class="midtai-card-title">${escapeHtml(String(item.name || 'Untitled'))}</div>
+      <div class="midtai-card-copy">${item.projectId ? escapeHtml(String(item.projectId)) : escapeHtml(source)}</div>
+      <div class="midtai-card-meta">
+        <span class="midtai-card-badge">${escapeHtml(badge)}</span>
+        ${item.version ? `<span class="midtai-card-badge">${escapeHtml(String(item.version))}</span>` : ''}
+      </div>
+      ${action}
+    </div>`;
+  }).join('');
+}
+
+function goReplaceInImageLab() {
+  const project = midtaiState.currentProject || 'KainClaw Design';
+  showReplaceCtx(project, '当前图片位');
+  midtaiState.type = 'img';
+  document.getElementById('midtai-type-img')?.classList.add('active');
+  document.getElementById('midtai-type-design')?.classList.remove('active');
+  document.getElementById('midtai-form-img').style.display = 'flex';
+  document.getElementById('midtai-form-design').style.display = 'none';
+  imgSwitchView('preview');
+}
+
+function goReplaceInWorks() {
+  const project = midtaiState.currentProject || 'KainClaw Design';
+  showReplaceCtx(project, '当前图片位');
+  midtaiState.type = 'img';
+  document.getElementById('midtai-type-img')?.classList.add('active');
+  document.getElementById('midtai-type-design')?.classList.remove('active');
+  document.getElementById('midtai-form-img').style.display = 'flex';
+  document.getElementById('midtai-form-design').style.display = 'none';
+  imgSwitchView('works');
+}
+
+function imgSwitchView(view) {
+  midtaiState.imgView = view;
+  showTabBar('img');
+  if (view === 'works') {
+    showOnlyMidtaiView('works');
+    setImgTabActive('mt-img-works');
+    send({ type: 'image:loadState' });
+    renderMidtaiWorks();
+    return;
+  }
+  if (view === 'plib') {
+    showOnlyMidtaiView('plib');
+    setImgTabActive('mt-img-plib');
+    return;
+  }
+  showOnlyMidtaiView('img-preview');
+  setImgTabActive('mt-img-preview');
+}
+
+function designSwitchView(view) {
+  midtaiState.designView = view;
+  showTabBar('design');
+  if (view === 'preview') {
+    if (midtaiState.canvasOpen) {
+      showOnlyMidtaiView('canvas');
+      setDesignTabActive('mt-design-preview');
+    } else if (designBridgeState.loading) {
+      showOnlyMidtaiView('design-preview');
+      setDesignTabActive('mt-design-preview');
+    } else {
+      showOnlyMidtaiView('design-preview');
+      setDesignTabActive('mt-design-preview');
+      document.getElementById('dpv-empty')?.classList.remove('hidden');
+      document.getElementById('dpv-empty').style.display = 'flex';
+      document.getElementById('dpv-loading').classList.remove('active');
+      document.getElementById('dpv-loading').style.display = 'none';
+    }
+    return;
+  }
+  if (view === 'plib') {
+    showOnlyMidtaiView('plib');
+    setDesignTabActive('mt-design-plib');
+    return;
+  }
+  showOnlyMidtaiView('works');
+  setDesignTabActive('mt-design-works');
+  send({ type: 'image:loadState' });
+  renderMidtaiWorks();
+}
+
+function openCanvas(projectName) {
+  midtaiState.canvasOpen = true;
+  midtaiState.currentProject = String(projectName || midtaiState.currentProject || '').trim();
+  const title = document.getElementById('midtai-canvas-project-title');
+  if (title) {
+    title.textContent = midtaiState.currentProject || (isEnglishUi() ? 'Design canvas' : '设计画布');
+  }
+  updateStateChip();
+  showTabBar('design');
+  showOnlyMidtaiView('canvas');
+  document.getElementById('dpv-loading').classList.remove('active');
+  document.getElementById('dpv-loading').style.display = 'none';
+  document.getElementById('dpv-empty').style.display = 'flex';
+  const mcFrame = document.getElementById('midtai-canvas-iframe');
+  const mcEmpty = document.getElementById('midtai-canvas-empty');
+  if (mcFrame) {
+    const html = designBridgeState?.html || '';
+    if (html) {
+      mcFrame.srcdoc = html + `<!-- kc-render:${designBridgeState.renderToken || Date.now()} -->`;
+      mcFrame.style.display = 'block';
+      if (mcEmpty) mcEmpty.style.display = 'none';
+    } else {
+      mcFrame.style.display = 'none';
+      if (mcEmpty) mcEmpty.style.display = 'flex';
+    }
+  }
+}
+
+function setMidtaiCanvasMode(mode) {
+  document.getElementById('midtai-canvas-view-btn')?.classList.toggle('active', mode === 'view');
+  document.getElementById('midtai-canvas-select-btn')?.classList.toggle('active', mode === 'select');
+}
+
+function exitCanvas() {
+  midtaiState.canvasOpen = false;
+  updateStateChip();
+  showOnlyMidtaiView('works');
+  designSwitchView('works');
+}
+
+function switchType(type) {
+  midtaiState.type = type === 'design' ? 'design' : 'img';
+  document.getElementById('midtai-type-img')?.classList.toggle('active', midtaiState.type === 'img');
+  document.getElementById('midtai-type-design')?.classList.toggle('active', midtaiState.type === 'design');
+  const imgForm = document.getElementById('midtai-form-img');
+  const designForm = document.getElementById('midtai-form-design');
+  if (imgForm) imgForm.style.display = midtaiState.type === 'img' ? 'flex' : 'none';
+  if (designForm) designForm.style.display = midtaiState.type === 'design' ? 'flex' : 'none';
+  midtaiState.canvasOpen = false;
+  updateStateChip();
+  if (midtaiState.type === 'design') {
+    designSwitchView('works');
+    return;
+  }
+  imgSwitchView('preview');
 }
 
 function hydrateDesignProjectIntoBridge(project, activeVersion) {
@@ -2645,32 +3258,28 @@ function openMidtai(payload) {
   applyMidtaiRouteState(payload || {});
   const contentType = payload?.contentType === 'design' ? 'design' : 'img';
   const nextView = contentType === 'design' ? midtaiState.designView : midtaiState.imgView;
-
+  showPage('midtai');
+  updateStateChip();
   if (contentType === 'design') {
     if (payload?.project) {
-      hydrateDesignProjectIntoBridge(payload.project, payload.activeVersion || null);
-      return;
+      midtaiState.currentProject = String(payload.project?.name || '').trim();
+    } else if (payload?.artifact?.title) {
+      midtaiState.currentProject = String(payload.artifact.title || '').trim();
     }
-    if (payload?.artifact && typeof payload.artifact.content === 'string') {
-      openKainClawDesignBridge(payload.artifact);
-      return;
-    }
-    showPage('design-home');
-    if (nextView === 'works' || nextView === 'plib') {
-      requestDesignHome();
+    switchType('design');
+    if (nextView === 'preview' || nextView === 'plib') {
+      designSwitchView(nextView);
+    } else {
+      designSwitchView('works');
     }
     return;
   }
 
-  showPage('images');
-  send({ type: 'image:loadState' });
-  initGalleryTabFavBadge();
-  if (nextView === 'history' || nextView === 'works') {
-    switchGalleryTab('history');
-  } else if (nextView === 'plib') {
-    switchGalleryTab('library');
+  switchType('img');
+  if (nextView === 'works' || nextView === 'plib') {
+    imgSwitchView(nextView);
   } else {
-    switchGalleryTab('history');
+    imgSwitchView('preview');
   }
 }
 
@@ -3262,6 +3871,7 @@ function buildDesignPatchableSrcdoc(html) {
       title: el.getAttribute('title') || '',
       src: el.getAttribute('src') || '',
       role: el.getAttribute('role') || '',
+      backgroundImage: window.getComputedStyle(el).backgroundImage || '',
       rect: {
         top: rect.top,
         left: rect.left,
@@ -3404,6 +4014,67 @@ function positionDesignPatchPopover(popoverEl, frameEl) {
   popoverEl.style.top = `${desiredTop}px`;
 }
 
+function getSelectedDesignNodeTagName() {
+  const selector = String(designBridgeState.selectedNode?.selector || '').trim();
+  if (selector) {
+    const segments = selector
+      .split('>')
+      .map(segment => segment.trim())
+      .filter(Boolean);
+    const lastSegment = segments[segments.length - 1] || '';
+    const tagMatch = lastSegment.match(/^[a-z0-9-]+/i);
+    if (tagMatch) {
+      return tagMatch[0].toLowerCase();
+    }
+  }
+
+  return String(designBridgeState.selectedNode?.tagName || '').trim().toLowerCase();
+}
+
+function ensureDesignImageUploadControls() {
+  const popover = document.getElementById('design-patch-popover');
+  if (!popover) {
+    return {
+      imageUploadBtn: null,
+      imageUploadInput: null,
+    };
+  }
+
+  let imageUploadInput = document.getElementById('design-image-replace-input');
+  if (!imageUploadInput) {
+    imageUploadInput = document.createElement('input');
+    imageUploadInput.id = 'design-image-replace-input';
+    imageUploadInput.type = 'file';
+    imageUploadInput.accept = 'image/*';
+    imageUploadInput.style.display = 'none';
+    imageUploadInput.addEventListener('change', handleDesignImageNodeUpload);
+    popover.insertBefore(imageUploadInput, popover.querySelector('div[style*="justify-content:flex-end"]'));
+  }
+
+  let imageUploadBtn = document.getElementById('design-image-upload-btn');
+  if (!imageUploadBtn) {
+    imageUploadBtn = document.createElement('button');
+    imageUploadBtn.id = 'design-image-upload-btn';
+    imageUploadBtn.className = 'btn-secondary';
+    imageUploadBtn.textContent = isEnglishUi() ? 'Upload image' : '上传图片';
+    imageUploadBtn.addEventListener('click', () => imageUploadInput && imageUploadInput.click());
+    const actionsRow = popover.querySelector('div[style*="justify-content:flex-end"]');
+    const cancelBtn = actionsRow?.querySelector('button.btn-secondary:not(#design-image-lab-btn)');
+    if (actionsRow && cancelBtn) {
+      actionsRow.insertBefore(imageUploadBtn, cancelBtn);
+    } else if (actionsRow) {
+      actionsRow.appendChild(imageUploadBtn);
+    }
+  } else {
+    imageUploadBtn.textContent = isEnglishUi() ? 'Upload image' : '上传图片';
+  }
+
+  return {
+    imageUploadBtn,
+    imageUploadInput,
+  };
+}
+
 function updateDesignCanvasToolbar() {
   const viewBtn = document.getElementById('design-canvas-view-btn');
   const selectBtn = document.getElementById('design-canvas-select-btn');
@@ -3474,8 +4145,10 @@ function renderDesignBridgePage() {
   const styleInput = document.getElementById('design-style-input');
   const patchPopover = document.getElementById('design-patch-popover');
   const patchTarget = document.getElementById('design-patch-target');
+  const patchComment = document.getElementById('design-patch-comment');
   const patchApplyBtn = document.getElementById('design-patch-apply-btn');
   const imageLabBtn = document.getElementById('design-image-lab-btn');
+  const { imageUploadBtn } = ensureDesignImageUploadControls();
   const versionsPanel = document.getElementById('design-versions-panel');
   const directionPanel = document.getElementById('design-direction-panel');
   const referenceMeta = document.getElementById('design-reference-meta');
@@ -3495,7 +4168,7 @@ function renderDesignBridgePage() {
   const promptHelper = document.getElementById('design-prompt-helper');
   const generateHint = document.getElementById('design-generate-hint');
 
-  if (!titleEl || !statusEl || !subtitleEl || !sourceLabelEl || !editsEl || !emptyEl || !frameEl || !generateStatusEl || !generateBtn || !editModeBtn || !newModeBtn || !editModeDescEl || !newModeDescEl || !slidersPanel || !promptInput || !outputTypeSelect || !styleInput || !patchPopover || !patchTarget || !patchApplyBtn || !imageLabBtn || !versionsPanel || !directionPanel || !referenceMeta || !referencePreview || !styleFieldWrap || !styleDetails || !referenceDetails || !versionsDetails || !exportDetails || !stageA || !stageB || !stageATitle || !stageACopy || !stageBTitle || !stageBMeta || !promptLabel || !promptHelper || !generateHint) {
+  if (!titleEl || !statusEl || !subtitleEl || !sourceLabelEl || !editsEl || !emptyEl || !frameEl || !generateStatusEl || !generateBtn || !editModeBtn || !newModeBtn || !editModeDescEl || !newModeDescEl || !slidersPanel || !promptInput || !outputTypeSelect || !styleInput || !patchPopover || !patchTarget || !patchComment || !patchApplyBtn || !imageLabBtn || !imageUploadBtn || !versionsPanel || !directionPanel || !referenceMeta || !referencePreview || !styleFieldWrap || !styleDetails || !referenceDetails || !versionsDetails || !exportDetails || !stageA || !stageB || !stageATitle || !stageACopy || !stageBTitle || !stageBMeta || !promptLabel || !promptHelper || !generateHint) {
     return;
   }
 
@@ -3630,14 +4303,30 @@ function renderDesignBridgePage() {
             ? 'Enter a design request to start, or bring in an existing page to edit.'
             : '输入设计需求开始生成，或带入已有页面继续编辑。');
   generateStatusEl.style.color = designBridgeState.error ? '#b91c1c' : '#8b7969';
+  const _selectedBg = String(designBridgeState.selectedNode?.backgroundImage || '');
+  const isImageNode = getSelectedDesignNodeTagName() === 'img' ||
+    (_selectedBg !== '' && _selectedBg !== 'none' && _selectedBg.includes('url('));
+  const inferredImageRatio = isImageNode ? resolveInferredImageRatio(designBridgeState.selectedNode) : null;
+  const supportedImageSpec = describeSupportedImageSpec(inferredImageRatio);
+  const selectedNodeLabel = designBridgeState.selectedNode
+    ? String(
+        designBridgeState.selectedNode.alt ||
+        designBridgeState.selectedNode.ariaLabel ||
+        designBridgeState.selectedNode.title ||
+        '',
+      ).trim() || (isImageNode ? (isEnglishUi() ? 'Selected image slot' : '当前图片位') : designBridgeState.selectedNode.selector)
+    : '';
   patchPopover.style.display = designBridgeState.selectedNode ? 'block' : 'none';
   patchTarget.textContent = designBridgeState.selectedNode
-    ? `${isEnglishUi() ? 'Selected element' : '当前元素'} · ${designBridgeState.selectedNode.selector}`
+    ? `${isEnglishUi() ? 'Selected element' : '当前元素'} · ${selectedNodeLabel}${isImageNode && supportedImageSpec ? `\n${isEnglishUi() ? 'Generated spec' : '生成规格'}: ${supportedImageSpec.label} (${isEnglishUi() ? 'nearest supported size' : '最近支持规格'})` : ''}`
     : (isEnglishUi() ? 'No element selected' : '未选中元素');
-  imageLabBtn.style.display = String(designBridgeState.selectedNode?.tagName || '').toLowerCase() === 'img'
-    ? 'inline-flex'
-    : 'none';
+  patchComment.style.display = isImageNode ? 'none' : '';
+  patchApplyBtn.style.display = isImageNode ? 'none' : 'inline-flex';
+  imageLabBtn.style.display = isImageNode ? 'inline-flex' : 'none';
+  imageUploadBtn.style.display = isImageNode ? 'inline-flex' : 'none';
   patchApplyBtn.disabled = !!designBridgeState.patchLoading;
+  imageLabBtn.disabled = !!designBridgeState.patchLoading;
+  imageUploadBtn.disabled = !!designBridgeState.patchLoading;
   patchApplyBtn.textContent = designBridgeState.patchLoading
     ? (isEnglishUi() ? 'Applying...' : '应用中...')
     : (isEnglishUi() ? 'Apply patch' : '应用改写');
@@ -3883,7 +4572,7 @@ function applyDesignSliderValue(sliderId, nextValue) {
 }
 
 function generateDesignWorkbench() {
-  const promptInput = document.getElementById('design-prompt-input');
+  const promptInput = document.getElementById('midtai-design-prompt') || document.getElementById('design-prompt-input');
   const outputTypeSelect = document.getElementById('design-output-type');
   const styleInput = document.getElementById('design-style-input');
   const prompt = promptInput?.value?.trim() || '';
@@ -3900,6 +4589,12 @@ function generateDesignWorkbench() {
   designBridgeState.error = '';
   designBridgeState.suggestionVisible = false;
   renderDesignBridgePage();
+  showOnlyMidtaiView('design-preview');
+  showTabBar('design');
+  setDesignTabActive('mt-design-preview');
+  document.getElementById('dpv-empty').style.display = 'none';
+  document.getElementById('dpv-loading').style.display = 'flex';
+  document.getElementById('dpv-loading').classList.add('active');
 
   if (designBridgeState.mode === 'edit' && designBridgeState.html) {
     send({
@@ -4133,7 +4828,10 @@ function sendDesignImageNodeToImageLab() {
     renderDesignBridgePage();
     return;
   }
-  if (String(node.tagName || '').toLowerCase() !== 'img') {
+  const _nodeBg = String(node.backgroundImage || '');
+  const _nodeIsImg = String(node.tagName || '').toLowerCase() === 'img' ||
+    (_nodeBg !== '' && _nodeBg !== 'none' && _nodeBg.includes('url('));
+  if (!_nodeIsImg) {
     designBridgeState.error = isEnglishUi()
       ? 'Only image slots can be sent to Image Lab.'
       : '只有图片位才能直接发到 Image Lab。';
@@ -4141,38 +4839,45 @@ function sendDesignImageNodeToImageLab() {
     return;
   }
 
-  const commentInput = document.getElementById('design-patch-comment');
-  const comment = commentInput?.value?.trim() || '';
-  const prompt = buildDesignImageLabPrompt(node, comment);
-  if (!prompt) {
-    designBridgeState.error = isEnglishUi()
-      ? 'This image slot does not have enough description yet. Add a comment first.'
-      : '这个图片位的描述还不够，请先补一句评论。';
-    renderDesignBridgePage();
-    return;
-  }
-
-  showPage('images');
-  send({ type: 'image:loadState' });
+  const inferredImageRatio = resolveInferredImageRatio(node);
+  const supportedImageSpec = describeSupportedImageSpec(inferredImageRatio);
+  midtaiState.replaceCtx = {
+    project: designBridgeState.title || 'KainClaw Design',
+    element: node.selector || (isEnglishUi() ? 'selected image slot' : '当前选中的图片位'),
+    ...(inferredImageRatio?.ratio ? { inferredRatio: inferredImageRatio.ratio } : {}),
+  };
+  openMidtai({
+    contentType: 'img',
+    view: 'preview',
+    replaceCtx: midtaiState.replaceCtx,
+  });
   requestAnimationFrame(() => {
     const promptInput = document.getElementById('imglab-prompt');
     if (promptInput) {
-      promptInput.value = prompt;
       promptInput.focus();
-      promptInput.setSelectionRange(promptInput.value.length, promptInput.value.length);
     }
+    applyInferredImageRatio(midtaiState.replaceCtx?.inferredRatio);
     setImageLabStatus(
       isEnglishUi()
-        ? 'Sent the selected design image slot to Image Lab. You can generate immediately or refine the prompt first.'
-        : '已把当前设计图片位送到 Image Lab。你可以直接生成，也可以先改一下提示词。',
+        ? `Image Lab is ready for the selected design slot. The nearest supported size ${supportedImageSpec?.size || '1024x1024'} has been preselected from the inferred layout ratio; adjust it if needed, then describe the replacement image and generate it.`
+        : `已进入 Image Lab，并根据推算比例预选最近支持的规格 ${supportedImageSpec?.size || '1024x1024'}；如有需要可手动调整。请先描述你想替换成的图片，再点击生成。`,
     );
-    runImageLab();
   });
 }
 
 function applyDesignPatchRequest() {
   const commentInput = document.getElementById('design-patch-comment');
   const comment = commentInput?.value?.trim() || '';
+  const _applyBg = String(designBridgeState.selectedNode?.backgroundImage || '');
+  const _applyIsImg = getSelectedDesignNodeTagName() === 'img' ||
+    (_applyBg !== '' && _applyBg !== 'none' && _applyBg.includes('url('));
+  if (_applyIsImg) {
+    designBridgeState.error = isEnglishUi()
+      ? 'Image slots must be replaced through Image Lab or upload.'
+      : '图片位只能通过 Image Lab 或上传图片来替换。';
+    renderDesignBridgePage();
+    return;
+  }
   if (!designBridgeState.selectedNode || !comment) {
     designBridgeState.error = isEnglishUi()
       ? 'Select an element and enter a comment first.'
@@ -4191,6 +4896,55 @@ function applyDesignPatchRequest() {
     targetOuterHtml: designBridgeState.selectedNode.outerHTML,
     comment,
   });
+}
+
+function handleDesignImageNodeUpload(event) {
+  const input = event?.target;
+  const file = Array.from(input?.files || [])[0];
+  if (!file) {
+    return;
+  }
+  if (!designBridgeState.selectedNode || getSelectedDesignNodeTagName() !== 'img') {
+    designBridgeState.error = isEnglishUi()
+      ? 'Select an image slot before uploading a replacement.'
+      : '请先选中图片位再上传替换图。';
+    renderDesignBridgePage();
+    if (input) input.value = '';
+    return;
+  }
+
+  const reader = new FileReader();
+  reader.onload = loadEvent => {
+    const dataUrl = loadEvent?.target?.result;
+    if (typeof dataUrl !== 'string' || !dataUrl.trim()) {
+      designBridgeState.patchLoading = false;
+      designBridgeState.error = isEnglishUi()
+        ? 'Failed to read the selected image.'
+        : '读取选中图片失败。';
+      renderDesignBridgePage();
+      return;
+    }
+
+    designBridgeState.patchLoading = true;
+    designBridgeState.error = '';
+    renderDesignBridgePage();
+    send({
+      type: 'design:patchImageNode',
+      projectId: designHomeState.currentProjectId,
+      elementSelector: designBridgeState.selectedNode.selector,
+      targetOuterHtml: designBridgeState.selectedNode.outerHTML,
+      imageUrl: dataUrl.trim(),
+    });
+  };
+  reader.onerror = () => {
+    designBridgeState.patchLoading = false;
+    designBridgeState.error = isEnglishUi()
+      ? 'Failed to read the selected image.'
+      : '读取选中图片失败。';
+    renderDesignBridgePage();
+  };
+  reader.readAsDataURL(file);
+  input.value = '';
 }
 
 function openKainClawDesignBridge(payload) {
@@ -4254,6 +5008,7 @@ function handleKainClawDesignFrameMessage(event) {
           title: typeof payload.title === 'string' ? payload.title : '',
           src: typeof payload.src === 'string' ? payload.src : '',
           role: typeof payload.role === 'string' ? payload.role : '',
+          backgroundImage: typeof payload.backgroundImage === 'string' ? payload.backgroundImage : '',
           rect: payload.rect && typeof payload.rect === 'object'
             ? {
                 top: Number(payload.rect.top || 0),
@@ -5316,6 +6071,10 @@ function insertToDesign(imageUrl) {
     targetOuterHtml: designBridgeState.selectedNode.outerHTML,
     imageUrl: String(imageUrl || '').trim(),
   });
+  const elementLabel = midtaiState.replaceCtx?.element || '当前图片位';
+  cancelReplace();
+  openCanvas(midtaiState.currentProject || designBridgeState.title || 'KainClaw Design');
+  showArtifactToast(`已替换 ${elementLabel}`);
 }
 
 function openImageModelSettings() {
@@ -5371,18 +6130,23 @@ function applyImageLabState(state) {
     );
   }
 
-  const imageLabSize = imageLabState.config.size || '1024x1024';
   const presetSelect = document.getElementById('imglab-size-preset');
   const customInput = document.getElementById('imglab-size');
-  const presetSizes = ['1024x1024', '1536x1024', '1024x1536'];
-  if (presetSizes.includes(imageLabSize)) {
-    presetSelect.value = imageLabSize;
-    customInput.value = '';
-    customInput.style.display = 'none';
+  const inferredRatio = String(midtaiState.replaceCtx?.inferredRatio || '').trim();
+  if (inferredRatio) {
+    applyInferredImageRatio(inferredRatio);
   } else {
-    presetSelect.value = 'custom';
-    customInput.value = imageLabSize;
-    customInput.style.display = '';
+    const imageLabSize = imageLabState.config.size || '1024x1024';
+    const presetSizes = ['1024x1024', '1536x1024', '1024x1536'];
+    if (presetSizes.includes(imageLabSize)) {
+      presetSelect.value = imageLabSize;
+      customInput.value = '';
+      customInput.style.display = 'none';
+    } else {
+      presetSelect.value = 'custom';
+      customInput.value = imageLabSize;
+      customInput.style.display = '';
+    }
   }
   document.getElementById('imglab-batchcount').value = String(imageLabState.config.batchCount || 1);
   document.getElementById('imglab-responseformat').value = imageLabState.config.responseFormat || 'url';

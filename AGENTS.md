@@ -6,7 +6,35 @@
 
 如果只看一份最重要的约束文件，就是它。
 
-你可以把它理解成“当前开发总规则”：
+### 角色分工（重要）
+
+这个项目有明确的三方分工：
+
+- **用户**：提出需求、做最终决策
+- **Claude**：PM 角色。拆解任务、建 beads issue、写 primer、验收 Codex 结果、更新 CURRENT_STATE.md。**不写代码，不执行 primer 里的任务。**
+- **Codex**：执行角色。拿到 primer 写代码，不自己拆任务，不自己建 primer。
+
+### 如果你是 Claude，读到这里就要确认
+
+**你的工作是协调，不是执行。**
+
+- 看到 primer 里有任务 → 不要动手做，把 primer 发给 Codex 执行
+- 用户说"做这个" → **必须同时建 beads issue 和 primer**，缺一不可，然后告诉用户"发给 Codex 执行"
+  - issue：用 `bd create` 登记任务，记录标题、描述、优先级
+  - primer：在 `.kiro/primers/<beads-id>.md` 写实施说明，包含目标、改哪些文件、怎么验收
+  - **只建 issue 不建 primer = Codex 没有实施说明，无法动手**
+- 用户说"检查结果" → 验收 Codex 的工作，不是自己重做
+- 任何时候都不要修改 `src/`、`electron/` 下的代码文件
+
+**对 Codex 的具体含义：**
+- 每次 session，primer 已经由 Claude 写好，你直接按 primer 的 Next Step 执行
+- 如果 primer 不存在，不要自己开始写代码——先告知用户让 Claude 来建 primer
+- 不要自己判断”这个需求大不大、要不要建 issue”——这是 Claude 的职责
+- 你的上下文预算应该全部用在读代码和写代码上，不是用在拆任务上
+
+### 项目总规则
+
+你可以把它理解成”当前开发总规则”：
 
 - `vscode-extension/` 仍然只是本地验证壳
 - 最终产品目标是 Windows 程序，不是 VS Code 扩展本身
@@ -36,12 +64,9 @@
   - `ISchedulerRuntime`
   - `ILocalBridgeRuntime`
 
-你刚刚要求我补进去的流程约束，也已经写进这份文件：
+多项连续开发时，每完成 5 个用户可感知事项，就把当前稳定状态 push 到 GitHub。
 
-- 多项连续开发时，每完成 5 个用户可感知事项，就把当前稳定状态 push 到 GitHub
-- 目的不是形式化，而是防止像今天这样，做着做着本地文档或记录出问题，恢复成本太高
-
-所以以后如果你想检查“我到底该按什么规则做事”，优先看这份文件的中文说明，再看下面英文原文。
+所以以后如果你想检查”我到底该按什么规则做事”，优先看这份文件的中文说明，再看下面英文原文。
 
 ## Project
 
@@ -73,6 +98,16 @@
   - `electron/renderer/index.html`
   - any `.ts` / `.md` / `.html` file containing Chinese user-visible copy
 - After editing a high-risk text file, run a script-level UTF-8 decode check before handoff or commit.
+- **`electron/renderer/index.html` 改动后必须额外验证 JS 语法**，提交前跑：
+  ```bash
+  node -e "
+  const fs=require('fs'),html=fs.readFileSync('electron/renderer/index.html','utf8');
+  const m=html.match(/<script>([\s\S]*?)<\/script>/g)||[];
+  let js='';m.forEach(s=>{js+=s.replace(/<\/?script>/g,'')+'\n';});
+  try{new Function(js);console.log('JS syntax OK');}catch(e){console.error('SYNTAX ERROR:',e.message);process.exit(1);}
+  "
+  ```
+  语法错误时 exit code 非零，CI 或手工检查均可拦截。
 
 ## Codex Working Boundary
 
@@ -94,12 +129,31 @@
 
 ## Required Workflow
 
+### 0. Session Start Protocol (read in this order, stop when you have enough context)
+
+**Step 1 — Always read:**
+- This file (`AGENTS.md`) — rules and constraints
+
+**Step 2 — Read current state:**
+- `.kiro/CURRENT_STATE.md` — single source of truth: active task, test baseline, stable capabilities
+
+**Step 3 — Read the task primer:**
+- `.kiro/primers/<beads-id>.md` — the only session entry point for the active task
+- If no primer exists: create one from `.kiro/primers/PRIMER_TEMPLATE.md` before writing code
+
+**Step 4 — Load additional context ONLY if the primer explicitly requests it:**
+- Spec file (if primer links to one)
+- `official-gap-analysis.md` (only for Claude parity work)
+- `implementation-memory.md` (only when stuck on a known-tricky area)
+- `CLAUDE_HANDOFF.md` (only for full project orientation, not routine tasks)
+
+**Rule:** Do not load `CLAUDE_HANDOFF.md` or `implementation-memory.md` by default. The primer is the contract. Everything else is reference-on-demand.
+
 ### 1. Before starting implementation
 
-- Read `.kiro/specs/v1-product-spec.md` and confirm the current task matches the latest accepted spec.
-- Read `.kiro/official-gap-analysis.md` when the work is part of official-Claude capability migration, and keep "official parity first, kainclaw extensions second" as the decision rule.
-- Keep one more product constraint in view: "VS Code is for local testing; Windows program is the real product target."
+- Confirm the task primer exists and is current. If not, write it before touching code.
 - Review existing code paths before editing; prefer reuse over adding new parallel logic.
+- For high-risk files (`extension.ts`, `webviewHtml.ts`, `renderer/index.html`): read `.kiro/HIGH_RISK_ENTRY.md` and confirm all entry conditions are met before editing.
 - Run the equivalent of `/plan-eng-review` before larger changes:
   - challenge scope
   - check reuse opportunities
@@ -196,6 +250,28 @@ Note:
 - Search for `SWARM_GATE` before release.
 - Any line marked with `SWARM_GATE` is a temporary development unlock that must be reviewed before shipping paid gating.
 
+## Deferred Architectural Decisions
+
+这些决策已分析完毕，方向已定，但暂不实施。待产品功能稳定后再推进。
+
+### image-as-tool 重构（vscode-extension-b3m）
+
+**现状：** image_generate 是独立 pipeline，AI 在图片模式里没有机会开口。用户发复合 prompt（如"生图 + PS 分层建议"）时，非图片部分被静默丢弃。
+
+**目标行为（GPT 实际模式，两轮）：**
+- 第 1 轮：用户发复合/模糊图片请求 → 路由到 chat → AI 分析、提问、出方案（纯文字）
+- 第 2 轮：用户确认 → 路由到 image_generate → 生图
+
+图片生成仍走独立 pipeline，不需要改渲染和流式。
+
+**实际需要改的只有两件事：**
+1. LLM router system prompt 加规则：复合/模糊图片请求先走 chat 澄清（小）
+2. image_generate 构建 prompt 时带入 conversation history，让第二轮"好，生成吧"能知道生什么（中）
+
+**为什么暂缓：** 功能不紧急，当前 regex fallback 对明确图片请求已够用。等产品其他部分稳定后再推进。
+
+**不要提前 hack：** 不要用"image 完成后强行接 chat"来模拟，会制造迁移成本。
+
 ## Default Verification Rule
 
 - Small change: `npm run build`
@@ -225,14 +301,42 @@ bd close <id>         # Complete work
 
 ### Session Start
 
-- If the user specifies a task: do it directly.
-- If no task is specified: run `bd ready`, claim one issue, load context with `bd show <id>`.
-- If bd is unavailable: fall back to `.kiro` documents to determine next work.
+- If the user specifies a task: load `.kiro/CURRENT_STATE.md` → load task primer → do it.
+- If no task is specified: load `.kiro/CURRENT_STATE.md` → run `bd ready` → load primer for claimed issue → do it.
+- If bd is unavailable: load `.kiro/CURRENT_STATE.md` → use active task from that file.
+- If no primer exists for the active task: create it from `.kiro/primers/PRIMER_TEMPLATE.md` before writing code.
 
 ### Session End
 
-1. File issues for remaining work.
-2. Run quality gates if code changed (`npm run build`, `npm test`).
-3. Update issue status (`bd close <id>` or `bd update <id>`).
-4. Push to remote only when: user requests it, phase checkpoint reached, or every 5 user-facing items per existing team rule.
+1. Run quality gates: `npm test && npm run check && npm run build`.
+2. Update beads notes with: what was done + **the specific next step** (not just "continue"). A missing next step means the next agent session cannot start without re-reading the whole codebase.
+3. Update `.kiro/CURRENT_STATE.md` if: test baseline changed, active task changed, or a new stable capability landed.
+4. Update task primer's "Already Completed" section.
+5. Update issue status (`bd close <id>` or `bd update <id>`).
+6. Push to remote: when user requests, at phase checkpoint, or every 5 user-facing items.
+
+### Task Size Rule
+
+- A beads task should be completable in 1–3 focused sessions.
+- If a task has been in_progress for more than 3 days: split it into explicit sub-tasks with `bd create`, close the parent or leave it as the epic.
+- Each sub-task must have a single next step in its primer or beads notes.
+
+### Primer 粒度规则
+
+- 多步骤、跨文件、需要跨 session 的任务 → 建 primer
+- 单文件单方法的小 fix → 直接在消息里说清楚（文件路径 + 行号 + 改什么），不建 primer
+
+### Claude PM 的批量工作模式
+
+Claude 出 primer 时应一次批量出 3–5 个，覆盖一条任务线的完整序列。
+
+- Codex 做完一个，直接读下一个 primer，不需要每次都回来问 Claude
+- 只有以下情况需要找 Claude：遇到高风险文件、结果验收不通过、需求发生变化
+- 每批 primer 出完后，Claude 更新 CURRENT_STATE.md 标注整条队列
+
+### Git Push 规则
+
+- 每完成 5 个用户可感知事项，push 一次到 GitHub
+- 阶段性功能收口时（如一条任务线全部完成），必须 push
+- 不等用户问，Codex 自己判断是否到达 push 节点
 <!-- END BEADS INTEGRATION -->

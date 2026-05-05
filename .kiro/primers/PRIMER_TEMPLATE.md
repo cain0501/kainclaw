@@ -67,6 +67,7 @@ Manual test (only if UI/Electron behavior is affected):
 - [ ] `npm run check` 通过
 - [ ] `npm run build` 通过
 - [ ] 如果改了 Electron 相关：`npm run build:electron` 通过
+- [ ] 如果改了 `electron/renderer/index.html`：JS 语法检查通过（`node -e "const fs=require('fs'),html=fs.readFileSync('electron/renderer/index.html','utf8');const m=html.match(/<script>([\s\S]*?)<\/script>/g)||[];let js='';m.forEach(s=>{js+=s.replace(/<\/?script>/g,'')+'\n';});try{new Function(js);console.log('OK');}catch(e){console.error(e.message);process.exit(1);}"` ）
 - [ ] Next step implemented（只做 primer 定义的那一件事）
 - [ ] Beads notes 已更新：写了做了什么 + 下一步具体是什么
 - [ ] `bd close` 或 `bd update` 已执行

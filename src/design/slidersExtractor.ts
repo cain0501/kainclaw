@@ -123,35 +123,37 @@ function parseSlider(
   }
 
   if (type === "range") {
-    const defaultValue = typeof value.default === "number"
+    const parsedDefaultValue = typeof value.default === "number"
       ? value.default
       : typeof value.default === "string" && value.default.trim() && !Number.isNaN(Number(value.default))
         ? Number(value.default)
         : null;
-    const minValue = typeof value.min === "number"
+    const parsedMinValue = typeof value.min === "number"
       ? value.min
       : typeof value.min === "string" && value.min.trim() && !Number.isNaN(Number(value.min))
         ? Number(value.min)
         : null;
-    const maxValue = typeof value.max === "number"
+    const parsedMaxValue = typeof value.max === "number"
       ? value.max
       : typeof value.max === "string" && value.max.trim() && !Number.isNaN(Number(value.max))
         ? Number(value.max)
         : null;
+    const minValue = parsedMinValue ?? 0;
+    const maxValue = parsedMaxValue ?? 100;
     const unitValue = typeof value.unit === "string" ? value.unit.trim() : "";
-
-    if (defaultValue === null || minValue === null || maxValue === null) {
-      throw new Error(`Range slider ${id} is missing numeric bounds or unit.`);
-    }
+    const defaultValue = parsedDefaultValue ?? minValue;
+    const normalizedMin = Math.min(minValue, maxValue);
+    const normalizedMax = Math.max(minValue, maxValue);
+    const normalizedDefault = Math.min(normalizedMax, Math.max(normalizedMin, defaultValue));
 
     return {
       id,
       label,
       type: "range",
       cssVar,
-      default: defaultValue,
-      min: minValue,
-      max: maxValue,
+      default: normalizedDefault,
+      min: normalizedMin,
+      max: normalizedMax,
       unit: unitValue,
     };
   }

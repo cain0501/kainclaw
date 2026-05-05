@@ -3,32 +3,30 @@ export type RequestedImageSize = {
   source: "dimensions" | "ratio";
 };
 
+const SUPPORTED_IMAGE_SIZES = {
+  square: "1024x1024",
+  landscape: "1536x1024",
+  portrait: "1024x1536",
+} as const;
+
 const DIMENSION_PATTERN = /\b(\d{3,4})\s*[x×*]\s*(\d{3,4})\b/i;
 const RATIO_PATTERN = /\b(\d{1,2})\s*[:：/]\s*(\d{1,2})\b/;
-
-function roundToMultiple(value: number, multiple: number): number {
-  return Math.max(multiple, Math.round(value / multiple) * multiple);
-}
 
 function sizeFromRatio(widthRatio: number, heightRatio: number): string {
   const ratio = widthRatio / heightRatio;
   if (!Number.isFinite(ratio) || ratio <= 0) {
-    return "1024x1024";
+    return SUPPORTED_IMAGE_SIZES.square;
   }
 
   if (Math.abs(ratio - 1) < 0.08) {
-    return "1024x1024";
+    return SUPPORTED_IMAGE_SIZES.square;
   }
 
   if (ratio > 1) {
-    const width = 1536;
-    const height = roundToMultiple(width / ratio, 64);
-    return `${width}x${height}`;
+    return SUPPORTED_IMAGE_SIZES.landscape;
   }
 
-  const height = 1536;
-  const width = roundToMultiple(height * ratio, 64);
-  return `${width}x${height}`;
+  return SUPPORTED_IMAGE_SIZES.portrait;
 }
 
 export function resolveRequestedImageSize(prompt: string): RequestedImageSize | null {

@@ -5,6 +5,7 @@ export type MidtaiContentType = "img" | "design";
 export type MidtaiReplaceContext = {
   project: string;
   element: string;
+  inferredRatio?: string;
 };
 
 export type MidtaiOpenPayload = {

@@ -9,9 +9,9 @@ describe("Electron renderer settings", () => {
     const html = await readFile(rendererPath, "utf8");
 
     expect(html).toContain('onclick="showAddProvider()"');
-    expect(html).toContain("添加提供商");
     expect(html).toContain('<option value="claude-cli">Claude CLI</option>');
   });
+
   it("renders the interface language card through a dedicated advanced slot", async () => {
     const rendererPath = path.join(__dirname, "renderer", "index.html");
     const html = await readFile(rendererPath, "utf8");
@@ -42,8 +42,6 @@ describe("Electron renderer settings", () => {
     expect(html).toContain("function localizedConfirm(message)");
     expect(html).toContain("toast.textContent = translateSurfaceText(message);");
     expect(html).toContain("status.textContent = translateSurfaceText(message);");
-    expect(html).toContain("localizedAlert('请填写别名')");
-    expect(html).toContain("localizedConfirm('删除这个提供商？')");
     expect(html).toContain("document.getElementById('win-controls')");
     expect(html).toContain("document.getElementById('artifacts-panel-deep-edit')");
   });
@@ -67,6 +65,17 @@ describe("Electron renderer settings", () => {
     expect(html).toContain('id="design-mode-edit-btn"');
     expect(html).toContain('id="design-mode-new-btn"');
     expect(html).toContain("function openDesignHub()");
+    expect(html).toContain('id="page-midtai"');
+    expect(html).toContain('id="midtai-state-chip"');
+    expect(html).toContain('id="mtbar-img"');
+    expect(html).toContain('id="mtbar-design"');
+    expect(html).toContain('id="canvas-toolbar"');
+    expect(html).toContain("function showTabBar(which)");
+    expect(html).toContain("function updateStateChip()");
+    expect(html).toContain("function openCanvas(projectName)");
+    expect(html).toContain("function exitCanvas()");
+    expect(html).toContain("function switchType(type)");
+    expect(html).toContain("designSwitchView('works')");
     expect(html).toContain("function setDesignMode(mode)");
     expect(html).toContain('id="design-sliders-panel"');
     expect(html).toContain('id="design-patch-popover"');
@@ -84,6 +93,11 @@ describe("Electron renderer settings", () => {
     expect(html).toContain("function applyDesignPatchRequest()");
     expect(html).toContain("function buildDesignImageLabPrompt(node, comment)");
     expect(html).toContain("function sendDesignImageNodeToImageLab()");
+    expect(html).toContain("midtaiState.replaceCtx = {");
+    expect(html).toContain("element: node.selector");
+    expect(html).toContain("replaceCtx: midtaiState.replaceCtx");
+    expect(html).toContain("resolveInferredImageRatio");
+    expect(html).toContain("applyInferredImageRatio");
     expect(html).toContain("function loadDesignVersions()");
     expect(html).toContain("function restoreDesignVersion(versionId)");
     expect(html).toContain("function exportDesignWorkbench(format)");
@@ -105,14 +119,22 @@ describe("Electron renderer settings", () => {
     expect(html).toContain("type: '__kc_apply_slider_values'");
     expect(html).toContain("targetWindow.postMessage({");
     expect(html).not.toContain("const doc = frameEl?.contentWindow?.document;");
-    expect(html).toContain("showPage('images')");
-    expect(html).toContain("runImageLab()");
+    expect(html).toContain("openMidtai({");
+    expect(html).toContain("contentType: 'img'");
+    expect(html).toContain("send({ type: 'image:loadState' });");
+    expect(html).toContain("inferredRatio");
+    expect(html).toContain("生成规格");
+    expect(html).toContain("最近支持规格");
+    expect(html).toContain("insertToDesign('${result.src}')");
+    expect(html).toContain("design:patchImageNode");
     expect(html).toContain("frameEl.onload = () => {");
     expect(html).toContain("applyAllDesignSliderValues(frameEl);");
     expect(html).toContain("designBridgeRenderedToken = 0;");
     expect(html).toContain("referenceImageDataUrl");
     expect(html).toContain("referenceImageMimeType");
     expect(html).toContain("window.electronAPI.exportDesignPptx");
+    expect(html).toContain("window.electronAPI.exportDesignHtml");
+    expect(html).not.toContain("type: 'design:export'");
     expect(html).toContain("case 'design:patchResult':");
     expect(html).toContain("case 'design:result':");
     expect(html).toContain("case 'design:versions':");

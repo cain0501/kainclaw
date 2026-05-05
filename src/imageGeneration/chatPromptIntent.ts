@@ -35,7 +35,7 @@ const HTML_REQUEST_PATTERNS = [
   /\bhtml\b/i,
   /<!DOCTYPE html>/i,
   /单文件(页面|网页)/i,
-  /(首页原型|页面原型|落地页原型|可点击原型|交互原型|作品集首页|作品集页面|dashboard页面|dashboard原型|官网首页|产品官网|产品官网首页|专题页|专题页面|首屏页面|首屏设计|产品介绍页|双栏页面|双栏介绍页|landing page|hero section)/i,
+  /(首页原型|页面原型|落地页原型|可点击原型|交互原型|作品集首页|作品集页面|dashboard\s*页面|dashboard\s*原型|官网首页|产品官网|产品官网首页|专题页|专题页面|首屏页面|首屏设计|产品介绍页|双栏页面|双栏介绍页|landing page|hero section)/i,
 ];
 
 const HTML_CREATION_PATTERNS = [
@@ -200,6 +200,14 @@ export function determineChatPromptIntent(options: {
 
   if (looksLikeDeriveArtifact) {
     return "derive_artifact";
+  }
+
+  // Image noun takes priority over HTML artifact detection when there is no explicit
+  // page/prototype keyword. "生成一个产品官网图片" wants an image, not HTML.
+  const hasExplicitImageNoun = /图片|图像|poster|海报|封面|头像|壁纸|插画/i.test(prompt);
+  const hasPageKeyword = /页面|原型|prototype|html|网页|landing\s*page|首屏设计|首屏原型|可点击|交互原型/i.test(prompt);
+  if (looksLikeGenerate && hasExplicitImageNoun && !hasPageKeyword) {
+    return "image_generate";
   }
 
   if (looksLikeStructuredTextOutput) {

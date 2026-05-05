@@ -10,6 +10,7 @@ import {
 } from "../src/platform/electronStoragePaths";
 import { SettingsRepository } from "../src/storage/settingsRepository";
 import { SessionRepository } from "../src/storage/sessionRepository";
+import type { DesignSlider } from "../src/design/slidersExtractor";
 import { resolveProviderConfig } from "../src/providerHost";
 import { ElectronChatPanel } from "./ElectronChatPanel";
 import { createPersistentLocalBridgeAuthTokenResolver } from "../src/localBridge/localBridgeAuth";
@@ -238,7 +239,47 @@ ipcMain.handle("workspace:pick", async () => {
   return result.canceled ? null : (result.filePaths[0] ?? null);
 });
 
+ipcMain.handle("design:exportHtml", async (_event, payload: Record<string, unknown>) => {
+  if (!mainWindow) {
+    throw new Error("Main window is not available.");
+  }
+  const html = typeof payload.html === "string" ? payload.html : "";
+  const sliders = Array.isArray(payload.sliders) ? payload.sliders : [];
+  const projectLabel =
+    typeof payload.projectLabel === "string" && payload.projectLabel.trim()
+      ? payload.projectLabel.trim()
+      : "kainclaw-design";
+  if (!html.trim()) {
+    throw new Error("Design HTML export requires html.");
+  }
+
+  const defaultPath = buildTimestampedExportPath(projectLabel, "pdf").replace(/\.pdf$/i, ".html");
+  const result = await dialog.showSaveDialog(mainWindow, {
+    title: "导出 HTML",
+    defaultPath,
+    filters: [{ name: "HTML", extensions: ["html"] }],
+  });
+  if (result.canceled || !result.filePath) {
+    throw new Error("用户取消了 HTML 导出。");
+  }
+
+  const { exportDesignHtml } = await import("../src/design/exporters.js");
+  const tempPath = await exportDesignHtml({
+    storageRoot: resolveElectronStoragePath(app.getPath("userData")),
+    html,
+    sliders: sliders as DesignSlider[],
+    projectLabel,
+  });
+  const buffer = await fs.readFile(tempPath);
+  await fs.mkdir(path.dirname(result.filePath), { recursive: true });
+  await fs.writeFile(result.filePath, buffer);
+  return result.filePath;
+});
+
 ipcMain.handle("design:exportPdf", async (_event, payload: Record<string, unknown>) => {
+  if (!mainWindow) {
+    throw new Error("Main window is not available.");
+  }
   const html = typeof payload.html === "string" ? payload.html : "";
   const projectLabel =
     typeof payload.projectLabel === "string" && payload.projectLabel.trim()
@@ -248,7 +289,15 @@ ipcMain.handle("design:exportPdf", async (_event, payload: Record<string, unknow
     throw new Error("Design PDF export requires html.");
   }
 
-  const exportPath = buildTimestampedExportPath(projectLabel, "pdf");
+  const defaultPath = buildTimestampedExportPath(projectLabel, "pdf");
+  const result = await dialog.showSaveDialog(mainWindow, {
+    title: "导出 PDF",
+    defaultPath,
+    filters: [{ name: "PDF", extensions: ["pdf"] }],
+  });
+  if (result.canceled || !result.filePath) {
+    throw new Error("用户取消了 PDF 导出。");
+  }
 
   const win = new BrowserWindow({
     show: false,
@@ -262,15 +311,18 @@ ipcMain.handle("design:exportPdf", async (_event, payload: Record<string, unknow
   try {
     await win.loadURL(`data:text/html;base64,${Buffer.from(html).toString("base64")}`);
     const pdf = await win.webContents.printToPDF({ printBackground: true });
-    await fs.mkdir(path.dirname(exportPath), { recursive: true });
-    await fs.writeFile(exportPath, pdf);
-    return exportPath;
+    await fs.mkdir(path.dirname(result.filePath), { recursive: true });
+    await fs.writeFile(result.filePath, pdf);
+    return result.filePath;
   } finally {
     win.destroy();
   }
 });
 
 ipcMain.handle("design:exportPptx", async (_event, payload: Record<string, unknown>) => {
+  if (!mainWindow) {
+    throw new Error("Main window is not available.");
+  }
   const html = typeof payload.html === "string" ? payload.html : "";
   const projectLabel =
     typeof payload.projectLabel === "string" && payload.projectLabel.trim()
@@ -280,17 +332,29 @@ ipcMain.handle("design:exportPptx", async (_event, payload: Record<string, unkno
     throw new Error("Design PPTX export requires html.");
   }
 
+  const defaultPath = buildTimestampedExportPath(projectLabel, "pptx");
+  const result = await dialog.showSaveDialog(mainWindow, {
+    title: "导出 PPTX",
+    defaultPath,
+    filters: [{ name: "PowerPoint", extensions: ["pptx"] }],
+  });
+  if (result.canceled || !result.filePath) {
+    throw new Error("用户取消了 PPTX 导出。");
+  }
+
   const png = await renderDesignSlidePng(html);
-  const exportPath = buildTimestampedExportPath(projectLabel, "pptx");
-  await fs.mkdir(path.dirname(exportPath), { recursive: true });
   const { exportDesignPptx } = await import("../src/design/exporters.js");
-  return exportDesignPptx({
+  const tempPath = await exportDesignPptx({
     storageRoot: resolveElectronStoragePath(app.getPath("userData")),
     html,
     sliders: [],
     projectLabel,
     renderSlideImage: async () => png,
   });
+  const buffer = await fs.readFile(tempPath);
+  await fs.mkdir(path.dirname(result.filePath), { recursive: true });
+  await fs.writeFile(result.filePath, buffer);
+  return result.filePath;
 });
 
 // ─── IPC: renderer → main ────────────────────────────────────────────────────

@@ -445,6 +445,48 @@ export class DesignProjectStore {
     }
   }
 
+  async renameProject(projectId: string, newName: string): Promise<DesignProjectRecord | null> {
+    const trimmedName = newName.trim();
+    if (!trimmedName) {
+      return null;
+    }
+    return this.updateProject(projectId, {
+      name: trimmedName,
+      updatedAt: Date.now(),
+    });
+  }
+
+  async deleteProject(projectId: string): Promise<void> {
+    const trimmed = projectId.trim();
+    if (!trimmed) {
+      return;
+    }
+
+    const deleted = await this.withDatabase(database => {
+      database.prepare(`
+        DELETE FROM design_projects
+        WHERE project_id = ?
+      `).run(trimmed);
+      database.prepare(`
+        DELETE FROM design_meta
+        WHERE key = 'lastOpenedProjectId' AND value = ?
+      `).run(trimmed);
+      return true;
+    });
+
+    if (deleted) {
+      return;
+    }
+
+    const store = await this.readLegacyStore();
+    const nextProjects = store.projects.filter(project => project.projectId !== trimmed);
+    await fs.writeFile(
+      this.legacyStorePath,
+      JSON.stringify({ projects: nextProjects }, null, 2),
+      "utf8",
+    );
+  }
+
   dispose(): void {
     this.sqliteModulePromise = null;
   }

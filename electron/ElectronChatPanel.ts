@@ -912,6 +912,10 @@ export class ElectronChatPanel {
       );
       return;
     }
+    if (type === "midtai:request-library") {
+      await this.postMidtaiLibrary();
+      return;
+    }
     if (type === "design:createProject") {
       await this.createDesignProject(message);
       return;
@@ -3153,6 +3157,9 @@ export class ElectronChatPanel {
             replaceCtx: {
               project: String(payload.replaceCtx.project || "").trim(),
               element: String(payload.replaceCtx.element || "").trim(),
+              ...(typeof payload.replaceCtx.inferredRatio === "string" && payload.replaceCtx.inferredRatio.trim()
+                ? { inferredRatio: payload.replaceCtx.inferredRatio.trim() }
+                : {}),
             },
           }
         : { replaceCtx: null }),
