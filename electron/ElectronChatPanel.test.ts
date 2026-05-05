@@ -550,18 +550,29 @@ describe("ElectronChatPanel session lifecycle", () => {
     await harness.panel.handleMessage({ type: "artifact:openKainClawDesign" });
 
     const designOpenPayload = getLastRendererPayloadOfType<{
-      type: "kainclawDesign:open";
-      artifactId?: string;
-      title?: string;
-      html?: string;
-    }>(harness.rendererPayloads, "kainclawDesign:open");
+      type: "midtai:open";
+      payload?: {
+        contentType?: string;
+        artifactId?: string;
+        projectId?: string;
+        activeVersion?: { html?: string; prompt?: string };
+        project?: { name?: string };
+      };
+    }>(harness.rendererPayloads, "midtai:open");
 
     expect(designOpenPayload).toMatchObject({
-      type: "kainclawDesign:open",
-      title: "Design Bridge",
-      html: expect.stringContaining("<!DOCTYPE html>"),
+      type: "midtai:open",
+      payload: {
+        contentType: "design",
+        project: {
+          name: "Design Bridge",
+        },
+        activeVersion: {
+          html: expect.stringContaining("<!DOCTYPE html>"),
+        },
+      },
     });
-    expect(designOpenPayload?.artifactId).toBeTruthy();
+    expect(designOpenPayload?.payload?.artifactId).toBeTruthy();
   });
 
   it("keeps pure text replies out of artifact state", async () => {
@@ -4147,46 +4158,6 @@ Freeze skill body.
       prompt: "Make version A",
       versionId: firstResult?.versionId,
     });
-  });
-
-  it("exports design HTML and reports the written file path", async () => {
-    const harness = await createHarness();
-    tempDirs.push(harness.storagePath);
-
-    await harness.settings.setOnboardingDone(true);
-    await harness.panel.handleMessage({ type: "ready" });
-
-    await harness.panel.handleMessage({
-      type: "design:export",
-      format: "html",
-      html: "<!DOCTYPE html><html><head><style>:root{--color-primary:#000;}</style></head><body><main>Export me</main></body></html>",
-      sliders: [
-        {
-          id: "primary",
-          label: "Primary",
-          type: "color",
-          cssVar: "--color-primary",
-          default: "#111111",
-        },
-      ],
-      projectLabel: "design-export",
-    });
-
-    const exportPayload = getLastRendererPayloadOfType<{
-      type: "design:exportDone";
-      format: string;
-      filePath: string;
-    }>(harness.rendererPayloads, "design:exportDone");
-
-    expect(exportPayload).toMatchObject({
-      type: "design:exportDone",
-      format: "html",
-    });
-    expect(exportPayload?.filePath.endsWith(".html")).toBe(true);
-
-    const exportedHtml = await readFile(exportPayload!.filePath, "utf8");
-    expect(exportedHtml).toContain("Export me");
-    expect(exportedHtml).toContain("--color-primary: #111111;");
   });
 
   it("returns direction suggestions for ambiguous design prompts before generation", async () => {

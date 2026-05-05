@@ -7,8 +7,8 @@
 
 | Metric | Value | Last Updated |
 |--------|-------|--------------|
-| Test files | 169 | 2026-05-04 |
-| Tests passing | 1315 | 2026-05-04 |
+| Test files | 170 | 2026-05-05 |
+| Tests passing | 1319 | 2026-05-05 |
 | Last verified commit | see `git log --oneline -1` | — |
 
 **Required passing commands:**
@@ -59,6 +59,7 @@ npm run build:electron   # only when Electron behavior changed
 - KainClaw Design (generate / iframe / sliders 右侧抽屉 / canvas toolbar / patch popover 贴近元素 + selector 定位 / 左侧面板 A/B / version history / export HTML+PDF+PPTX / lastOpenedProjectId 跨 session)
 - Electron artifact panel persistence (collapse / restore strip / per-session collapsed state / version navigation)
 - Image Lab chain (generate / edit / Prompt Library / reference image search)
+- Midtai P0 foundations (explicit `midtai:open` routing, library DTO aggregation, deterministic design image replacement IPC)
 - Local Bridge / Word Add-in (read + write-back + Track Changes + comments)
 - Electron i18n (shellStrings covering all surfaces)
 

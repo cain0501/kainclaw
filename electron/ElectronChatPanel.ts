@@ -145,6 +145,7 @@ import {
   type ActiveWorktreeSessionSummary,
   type ResolvedWorkspaceRoot,
 } from "../src/platform/workspaceRootResolver";
+import type { MidtaiOpenPayload } from "../src/midtaiRoute";
 import { PersistentTaskRuntimeStore } from "../src/tasks/taskRuntime";
 import { PersistentWorktreeRuntimeStore } from "../src/worktree/runtime";
 import type { ConversationTaskRuntime } from "../src/tasks/types";
@@ -157,6 +158,7 @@ import {
 import { buildKainClawDesignSystemPrompt } from "../src/design/designPrompt";
 import {
   buildKainClawDesignPatchSystemPrompt,
+  patchDesignImageNode,
   patchKainClawDesignNode,
 } from "../src/design/patchEngine";
 import {
@@ -167,6 +169,10 @@ import {
   DesignVersionStore,
   type DesignVersionRecord,
 } from "../src/design/versionStore";
+import {
+  MidtaiLibraryHost,
+  type MidtaiLibraryFilter,
+} from "../src/midtaiLibraryHost";
 import {
   buildDesignExportPath,
   exportDesignHtml,
@@ -298,6 +304,7 @@ export class ElectronChatPanel {
   private readonly promptLibraryRepository: PromptLibraryRepository;
   private readonly designProjectStore: DesignProjectStore;
   private readonly designVersionStore: DesignVersionStore;
+  private readonly midtaiLibraryHost: MidtaiLibraryHost;
   private readonly taskRuntimeStore: PersistentTaskRuntimeStore;
   private readonly worktreeRuntimeStore: PersistentWorktreeRuntimeStore;
   private readonly backgroundTaskHost: BackgroundTaskHost;
@@ -328,6 +335,20 @@ export class ElectronChatPanel {
     this.promptLibraryRepository = new PromptLibraryRepository(this.host.getStorageUri());
     this.designProjectStore = new DesignProjectStore(this.host.getStorageUri());
     this.designVersionStore = new DesignVersionStore(this.host.getStorageUri());
+    this.midtaiLibraryHost = new MidtaiLibraryHost(
+      async () => {
+        await this.ensureImageResultsHydrated();
+        return this.imageResults;
+      },
+      () => this.designProjectStore.listProjects(),
+      async project => {
+        if (!project.activeVersionId || project.activeVersionId === "pending-version") {
+          return undefined;
+        }
+        const html = await this.designVersionStore.getVersionHtml(project.activeVersionId);
+        return html ?? undefined;
+      },
+    );
     this.taskRuntimeStore = new PersistentTaskRuntimeStore(this.host.getStorageUri());
     this.worktreeRuntimeStore = new PersistentWorktreeRuntimeStore(this.host.getStorageUri());
     this.backgroundTaskHost = new BackgroundTaskHost({
@@ -875,8 +896,20 @@ export class ElectronChatPanel {
       await this.openActiveArtifactInKainClawDesign();
       return;
     }
+    if (type === "midtai:open") {
+      await this.openMidtai(message.payload as MidtaiOpenPayload | undefined);
+      return;
+    }
     if (type === "design:listProjects") {
       await this.listDesignProjects();
+      return;
+    }
+    if (type === "midtai:listLibrary") {
+      await this.postMidtaiLibrary(
+        typeof message.filter === "string"
+          ? message.filter as MidtaiLibraryFilter
+          : undefined,
+      );
       return;
     }
     if (type === "design:createProject") {
@@ -913,6 +946,10 @@ export class ElectronChatPanel {
     }
     if (type === "design:patch") {
       await this.patchDesignWorkbench(message);
+      return;
+    }
+    if (type === "design:patchImageNode") {
+      await this.patchDesignImageNode(message);
       return;
     }
     if (type === "design:loadVersions") {
@@ -2041,6 +2078,16 @@ export class ElectronChatPanel {
       workflowPlan: this.imageWorkflowPlan,
       promptLibrary: await this.promptLibraryRepository.loadState(),
     });
+    await this.postMidtaiLibrary();
+  }
+
+  private async postMidtaiLibrary(filter?: MidtaiLibraryFilter): Promise<void> {
+    const items = await this.midtaiLibraryHost.getLibraryItems(filter);
+    this.sendToRenderer({
+      type: "midtai:library-update",
+      items,
+      filter: filter ?? "all",
+    });
   }
 
   private async resetAllConfig(): Promise<void> {
@@ -2902,6 +2949,7 @@ export class ElectronChatPanel {
       projects,
       previews,
     });
+    await this.postMidtaiLibrary();
   }
 
   private async createDesignProject(message: Record<string, unknown>): Promise<void> {
@@ -3040,16 +3088,12 @@ export class ElectronChatPanel {
     );
     if (existingProject) {
       const openedProject = await this.openDesignProject(existingProject.projectId);
-      const activeVersion = openedProject?.activeVersionId &&
-        openedProject.activeVersionId !== "pending-version"
-        ? await this.designVersionStore.getVersion(openedProject.activeVersionId)
-        : null;
-
-      if (openedProject && activeVersion) {
-        this.sendToRenderer({
-          type: "design:projectOpened",
-          project: openedProject,
-          activeVersion,
+      if (openedProject) {
+        await this.openMidtai({
+          contentType: "design",
+          view: "preview",
+          projectId: openedProject.projectId,
+          artifactId: activeArtifact.id,
         });
         return;
       }
@@ -3084,12 +3128,87 @@ export class ElectronChatPanel {
       await this.setCurrentDesignProject(project);
     }
 
-    this.sendToRenderer({
-      type: "kainclawDesign:open",
-      artifactId: activeArtifact.id,
-      title: activeArtifact.title,
-      html: activeArtifact.content,
+    await this.openMidtai({
+      contentType: "design",
+      view: "preview",
       projectId: project.projectId,
+      artifactId: activeArtifact.id,
+    });
+  }
+
+  private async openMidtai(payload?: MidtaiOpenPayload): Promise<void> {
+    const nextPayload: MidtaiOpenPayload = {
+      contentType: payload?.contentType === "design" ? "design" : "img",
+      ...(payload?.view === "works" || payload?.view === "plib" || payload?.view === "preview"
+        ? { view: payload.view }
+        : {}),
+      ...(typeof payload?.projectId === "string" && payload.projectId.trim()
+        ? { projectId: payload.projectId.trim() }
+        : {}),
+      ...(typeof payload?.artifactId === "string" && payload.artifactId.trim()
+        ? { artifactId: payload.artifactId.trim() }
+        : {}),
+      ...(payload?.replaceCtx
+        ? {
+            replaceCtx: {
+              project: String(payload.replaceCtx.project || "").trim(),
+              element: String(payload.replaceCtx.element || "").trim(),
+            },
+          }
+        : { replaceCtx: null }),
+    };
+
+    if (nextPayload.projectId && nextPayload.contentType === "design") {
+      const project = await this.openDesignProject(nextPayload.projectId);
+      const activeVersion = project?.activeVersionId && project.activeVersionId !== "pending-version"
+        ? await this.designVersionStore.getVersion(project.activeVersionId)
+        : null;
+      this.sendToRenderer({
+        type: "midtai:open",
+        payload: {
+          ...nextPayload,
+          ...(project
+            ? {
+                project: {
+                  projectId: project.projectId,
+                  name: project.name,
+                  source: project.source,
+                  activeVersionId: project.activeVersionId,
+                },
+              }
+            : {}),
+          ...(activeVersion ? { activeVersion } : {}),
+        },
+      });
+      return;
+    }
+
+    if (nextPayload.artifactId && nextPayload.contentType === "design") {
+      const artifact = this.currentSessionId
+        ? (this.artifactRegistries.get(this.currentSessionId)?.artifacts.find(entry => entry.id === nextPayload.artifactId) ?? null)
+        : null;
+      this.sendToRenderer({
+        type: "midtai:open",
+        payload: {
+          ...nextPayload,
+          ...(artifact
+            ? {
+                artifact: {
+                  id: artifact.id,
+                  title: artifact.title,
+                  type: artifact.type,
+                  content: artifact.content,
+                },
+              }
+            : {}),
+        },
+      });
+      return;
+    }
+
+    this.sendToRenderer({
+      type: "midtai:open",
+      payload: nextPayload,
     });
   }
 
@@ -3358,6 +3477,80 @@ export class ElectronChatPanel {
       this.sendToRenderer({
         type: "design:error",
         message: error instanceof Error ? error.message : String(error),
+      });
+    }
+  }
+
+  private async patchDesignImageNode(
+    message: Record<string, unknown>,
+  ): Promise<void> {
+    const projectId = String(message.projectId ?? "").trim();
+    const selector = String(message.elementSelector ?? "").trim();
+    const imageUrl = String(message.imageUrl ?? "").trim();
+    const targetOuterHtml = String(message.targetOuterHtml ?? "").trim();
+
+    if (!projectId || !selector || !imageUrl || !targetOuterHtml) {
+      this.sendToRenderer({
+        type: "design:patchImageNode:result",
+        payload: {
+          success: false,
+          error: "Missing projectId, selector, imageUrl, or targetOuterHtml.",
+        },
+      });
+      return;
+    }
+
+    try {
+      const project = await this.designProjectStore.getProject(projectId);
+      if (!project?.activeVersionId || project.activeVersionId === "pending-version") {
+        throw new Error("No active design version is available for image replacement.");
+      }
+
+      const version = await this.designVersionStore.getVersion(project.activeVersionId);
+      if (!version) {
+        throw new Error("Active design version could not be loaded.");
+      }
+
+      const html = patchDesignImageNode({
+        html: version.html,
+        selector,
+        targetOuterHtml,
+        imageUrl,
+      });
+
+      const nextVersion = await this.saveDesignVersion({
+        prompt: version.prompt,
+        outputType: version.outputType,
+        style: version.style,
+        html,
+        sliders: version.sliders,
+        source: "patch",
+        baseVersionId: version.id,
+      });
+
+      this.sendToRenderer({
+        type: "design:patchResult",
+        html,
+        selector,
+        replacementNode: targetOuterHtml,
+        versionId: nextVersion.id,
+      });
+      this.sendToRenderer({
+        type: "design:patchImageNode:result",
+        payload: {
+          success: true,
+          projectId,
+          selector,
+          versionId: nextVersion.id,
+        },
+      });
+    } catch (error) {
+      this.sendToRenderer({
+        type: "design:patchImageNode:result",
+        payload: {
+          success: false,
+          error: error instanceof Error ? error.message : String(error),
+        },
       });
     }
   }

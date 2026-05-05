@@ -1395,6 +1395,11 @@ const expandedThinkingSummaries = new Set();
 let artifactToastTimer = null;
 let artifactPanelWidth = null;
 let artifactResizeActive = false;
+let midtaiState = {
+  imgView: 'preview',
+  designView: 'preview',
+  replaceCtx: null,
+};
 const designBridgeState = {
   artifactId: null,
   title: '',
@@ -2033,6 +2038,9 @@ function handleMessage(msg) {
     case 'kainclawDesign:open':
       openKainClawDesignBridge(msg);
       break;
+    case 'midtai:open':
+      openMidtai(msg.payload || {});
+      break;
     case 'kainclawDesign:error':
       showArtifactToast(msg.message || '当前无法打开 KainClaw Design。');
       designBridgeState.loading = false;
@@ -2045,28 +2053,7 @@ function handleMessage(msg) {
       renderDesignHome();
       break;
     case 'design:projectOpened':
-      if (!msg.project) {
-        designHomeState.currentProjectId = null;
-        showPage('design-home');
-        requestDesignHome();
-        break;
-      }
-      designHomeState.currentProjectId = msg.project.projectId || null;
-      designBridgeState.mode = msg.project.source === 'blank' && !msg.activeVersion ? 'new' : 'edit';
-      designBridgeState.title = msg.project.name || 'KainClaw Design';
-      designBridgeState.versionId = msg.activeVersion?.id || msg.project.activeVersionId || null;
-      designBridgeState.prompt = msg.activeVersion?.prompt || '';
-      designBridgeState.outputType = msg.activeVersion?.outputType || 'prototype';
-      designBridgeState.style = msg.activeVersion?.style || '';
-      designBridgeState.html = msg.activeVersion?.html || '';
-      designBridgeState.sliders = Array.isArray(msg.activeVersion?.sliders) ? msg.activeVersion.sliders : [];
-      designBridgeState.sliderValues = msg.activeVersion?.sliderValues && typeof msg.activeVersion.sliderValues === 'object'
-        ? msg.activeVersion.sliderValues
-        : {};
-      designBridgeState.canvasMode = 'view';
-      designBridgeState.renderToken = Date.now();
-      designBridgeRenderedToken = 0;
-      showDesignPage();
+      hydrateDesignProjectIntoBridge(msg.project || null, msg.activeVersion || null);
       break;
     case 'design:token': {
       const overlay = document.getElementById('design-generating-overlay');
@@ -2227,6 +2214,15 @@ function handleMessage(msg) {
             ? `已新增 ${latestBatchCount} 张${sourceLabel}，并保留之前的图片批次。`
             : `已新增 1 张${sourceLabel}，并保留之前的图片批次。`,
         );
+      }
+      break;
+    case 'design:patchImageNode:result':
+      if (msg.payload?.success) {
+        midtaiState.replaceCtx = null;
+        showDesignPage();
+        showArtifactToast(isEnglishUi() ? 'Image replaced in the current design.' : '已将图片回写到当前设计。');
+      } else if (msg.payload?.error) {
+        setImageLabStatus(String(msg.payload.error), true);
       }
       break;
     case 'image:error':
@@ -2604,8 +2600,82 @@ function showDesignPage() {
   renderDesignBridgePage();
 }
 
+function applyMidtaiRouteState(payload) {
+  const contentType = payload?.contentType === 'design' ? 'design' : 'img';
+  const nextView = payload?.view === 'works' || payload?.view === 'plib' ? payload.view : 'preview';
+  if (contentType === 'design') {
+    midtaiState.designView = nextView;
+  } else {
+    midtaiState.imgView = nextView;
+  }
+  midtaiState.replaceCtx = payload?.replaceCtx && typeof payload.replaceCtx === 'object'
+    ? {
+        project: String(payload.replaceCtx.project || '').trim(),
+        element: String(payload.replaceCtx.element || '').trim(),
+      }
+    : null;
+}
+
+function hydrateDesignProjectIntoBridge(project, activeVersion) {
+  if (!project) {
+    designHomeState.currentProjectId = null;
+    showPage('design-home');
+    requestDesignHome();
+    return;
+  }
+  designHomeState.currentProjectId = project.projectId || null;
+  designBridgeState.mode = project.source === 'blank' && !activeVersion ? 'new' : 'edit';
+  designBridgeState.title = project.name || 'KainClaw Design';
+  designBridgeState.versionId = activeVersion?.id || project.activeVersionId || null;
+  designBridgeState.prompt = activeVersion?.prompt || '';
+  designBridgeState.outputType = activeVersion?.outputType || 'prototype';
+  designBridgeState.style = activeVersion?.style || '';
+  designBridgeState.html = activeVersion?.html || '';
+  designBridgeState.sliders = Array.isArray(activeVersion?.sliders) ? activeVersion.sliders : [];
+  designBridgeState.sliderValues = activeVersion?.sliderValues && typeof activeVersion.sliderValues === 'object'
+    ? activeVersion.sliderValues
+    : {};
+  designBridgeState.canvasMode = 'view';
+  designBridgeState.renderToken = Date.now();
+  designBridgeRenderedToken = 0;
+  showDesignPage();
+}
+
+function openMidtai(payload) {
+  applyMidtaiRouteState(payload || {});
+  const contentType = payload?.contentType === 'design' ? 'design' : 'img';
+  const nextView = contentType === 'design' ? midtaiState.designView : midtaiState.imgView;
+
+  if (contentType === 'design') {
+    if (payload?.project) {
+      hydrateDesignProjectIntoBridge(payload.project, payload.activeVersion || null);
+      return;
+    }
+    if (payload?.artifact && typeof payload.artifact.content === 'string') {
+      openKainClawDesignBridge(payload.artifact);
+      return;
+    }
+    showPage('design-home');
+    if (nextView === 'works' || nextView === 'plib') {
+      requestDesignHome();
+    }
+    return;
+  }
+
+  showPage('images');
+  send({ type: 'image:loadState' });
+  initGalleryTabFavBadge();
+  if (nextView === 'history' || nextView === 'works') {
+    switchGalleryTab('history');
+  } else if (nextView === 'plib') {
+    switchGalleryTab('library');
+  } else {
+    switchGalleryTab('history');
+  }
+}
+
 function openDesignHub() {
-  showPage('design-home');
+  openMidtai({ contentType: 'design', view: midtaiState.designView || 'preview', replaceCtx: midtaiState.replaceCtx });
 }
 
 function setDesignMode(mode) {
@@ -5230,9 +5300,22 @@ function handleRenameOverlayClick(event) {
 }
 
 function openImageLab() {
-  showPage('images');
-  send({ type: 'image:loadState' });
-  initGalleryTabFavBadge();
+  openMidtai({ contentType: 'img', view: midtaiState.imgView || 'preview', replaceCtx: midtaiState.replaceCtx });
+}
+
+function insertToDesign(imageUrl) {
+  if (!midtaiState.replaceCtx || !designHomeState.currentProjectId || !designBridgeState.selectedNode) {
+    setImageLabStatus(isEnglishUi() ? 'There is no active design replacement target.' : '当前没有可回写的设计替换目标。', true);
+    return;
+  }
+
+  send({
+    type: 'design:patchImageNode',
+    projectId: designHomeState.currentProjectId,
+    elementSelector: designBridgeState.selectedNode.selector,
+    targetOuterHtml: designBridgeState.selectedNode.outerHTML,
+    imageUrl: String(imageUrl || '').trim(),
+  });
 }
 
 function openImageModelSettings() {
@@ -7169,7 +7252,9 @@ function renderImageLabResults() {
           <div style="font-size:12px;color:#5f4f43;line-height:1.6;min-height:58px">${resultPrompt.slice(0, 96)}</div>
           <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:10px">
             <a class="btn-secondary" href="${result.src}" download="kainclaw-image-${result.id}.png" style="text-decoration:none">下载</a>
-            <button class="btn-secondary" style="justify-content:center" onclick="setImageLabReferenceFromSource('${result.src}', 'history-${result.id}.png')">加入参考图</button>
+            ${midtaiState.replaceCtx
+              ? `<button class="btn-red" style="justify-content:center" onclick="insertToDesign('${result.src}')">插入到设计</button>`
+              : `<button class="btn-secondary" style="justify-content:center" onclick="setImageLabReferenceFromSource('${result.src}', 'history-${result.id}.png')">加入参考图</button>`}
           </div>
           <div style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;margin-top:8px">
             <button class="btn-secondary" style="justify-content:center" onclick="beginImageResultEdit('${result.id}')">二次编辑</button>
