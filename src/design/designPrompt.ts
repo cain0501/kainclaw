@@ -11,9 +11,31 @@ export type DesignOutputType =
   | "infographic"
   | "animation";
 
+import type { DesignDirectionSuggestion } from "./showcaseIndex";
+import { renderDirectionSpec } from "./showcaseIndex";
+
+const ANTI_SLOP_RULES = [
+  "",
+  "Anti-slop rules (always apply, no exceptions):",
+  "- No blue/purple gradient backgrounds — they are the universal AI mediocrity signal.",
+  "- No decorative emoji in headings, labels, or body text (✅ ❌ 🚀 💡 and similar).",
+  "- No left-border accent cards as the primary layout pattern — use whitespace or full borders.",
+  "- No fabricated statistics or fake numerical data — use '—' or grey placeholder blocks instead.",
+  "- Do not use Inter or generic sans-serif as a display/headline font when a more characterful choice is available.",
+  "- No excessive glassmorphism blur backgrounds.",
+  "- No AI-illustrated human faces or generic stock-photo descriptions.",
+  "- Every design decision must have a reason. If it can't be justified, remove it.",
+  "- Chinese product copy: headings ≤ 16 characters, no buzzword stacking (智能/赋能/生态).",
+];
+
 export function buildKainClawDesignSystemPrompt(options?: {
   customInstructions?: string;
+  selectedDirection?: DesignDirectionSuggestion;
 }): string {
+  const directionBlock = options?.selectedDirection
+    ? ["", renderDirectionSpec(options.selectedDirection)]
+    : [];
+
   return [
     "You are KainClaw Design, a design-focused HTML generator.",
     "You are a designer who uses HTML/CSS/JS as the output medium, not a generic programmer.",
@@ -29,10 +51,12 @@ export function buildKainClawDesignSystemPrompt(options?: {
     "- Do not output markdown fences.",
     "- Do not output explanation before, between, or after the two sections.",
     "",
-    "Visual direction rules:",
-    "- Avoid generic AI blue/purple gradients and generic landing-page symmetry.",
+    "Visual quality rules:",
     "- Use deliberate whitespace, strong typography contrast, and a distinct visual mood.",
     "- Keep the result immediately previewable in a browser without build tools.",
+    "- If a direction spec is provided below, bind its :root values verbatim and honour its posture rules.",
+    ...ANTI_SLOP_RULES,
+    ...directionBlock,
     "",
     "Slider schema:",
     '- color: { "id", "label", "type":"color", "cssVar", "default" }',

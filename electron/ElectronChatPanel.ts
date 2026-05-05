@@ -180,6 +180,7 @@ import {
 } from "../src/design/exporters";
 import {
   getDesignDirectionSuggestions,
+  getDirectionByStylePrompt,
   isAmbiguousDesignPrompt,
 } from "../src/design/showcaseIndex";
 
@@ -3256,7 +3257,9 @@ export class ElectronChatPanel {
         config,
         workspaceRoot,
         envMap,
-        buildKainClawDesignSystemPrompt(),
+        buildKainClawDesignSystemPrompt({
+          selectedDirection: style ? getDirectionByStylePrompt(style) : undefined,
+        }),
       );
 
     this.sendToRenderer({ type: "design:progress", step: "generating" });
