@@ -3113,7 +3113,7 @@ function renderMidtaiDirectionPicker() {
     </div>
   </button>`;
 
-  const dirCards = dirs.map(d => `<button class="midtai-dir-card${selected === d.stylePrompt ? ' selected' : ''}" onclick="selectMidtaiDirection(${JSON.stringify(d.stylePrompt)})">
+  const dirCards = dirs.map(d => `<button class="midtai-dir-card${selected === d.stylePrompt ? ' selected' : ''}" data-style-prompt="${escapeHtml(d.stylePrompt)}" onclick="selectMidtaiDirection(this.dataset.stylePrompt)">
     <div class="midtai-dir-swatch" style="background:${d.preview}"></div>
     <div class="midtai-dir-info">
       <div class="midtai-dir-name">${escapeHtml(d.label)}</div>
