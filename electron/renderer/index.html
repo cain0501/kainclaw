@@ -2480,7 +2480,6 @@ function handleMessage(msg) {
         ? `KainClaw Design · ${msg.outputType}`
         : 'KainClaw Design';
       designBridgeState.html = String(msg.html || '');
-      console.log('[KC-DEBUG] design:result html len:', designBridgeState.html.length, 'midtai active:', !!document.getElementById('page-midtai')?.classList.contains('active'));
       designBridgeState.prompt = String(msg.prompt || designBridgeState.prompt || '');
       designBridgeState.outputType = String(msg.outputType || designBridgeState.outputType || 'prototype');
       designBridgeState.style = String(msg.style || designBridgeState.style || '');
@@ -3301,6 +3300,10 @@ function designSwitchView(view) {
     if (midtaiState.canvasOpen) {
       showOnlyMidtaiView('canvas');
       setDesignTabActive('mt-design-preview');
+    } else if (designBridgeState.html) {
+      // html 存在但 canvasOpen 被 switchType 重置了——直接恢复画布
+      openCanvas(designBridgeState.title || midtaiState.currentProject || 'KainClaw Design');
+      setDesignTabActive('mt-design-preview');
     } else if (designBridgeState.loading) {
       showOnlyMidtaiView('design-preview');
       setDesignTabActive('mt-design-preview');
@@ -3493,24 +3496,25 @@ function openCanvas(projectName) {
   document.getElementById('dpv-loading').classList.remove('active');
   document.getElementById('dpv-loading').style.display = 'none';
   document.getElementById('dpv-empty').style.display = 'flex';
-  const mcFrame = document.getElementById('midtai-canvas-iframe');
   const mcEmpty = document.getElementById('midtai-canvas-empty');
   document.getElementById('midtai-canvas-view-btn')?.classList.add('active');
   document.getElementById('midtai-canvas-select-btn')?.classList.remove('active');
-  if (mcFrame) {
-    const html = designBridgeState?.html || '';
-    console.log('[KC-DEBUG] openCanvas html len:', html.length, 'token:', designBridgeState.renderToken);
-    mcFrame.onload = () => {
-      postMidtaiCanvasSelectMode(midtaiState.canvasMode === 'select');
-    };
-    if (html) {
-      mcFrame.srcdoc = buildMidtaiCanvasSrcdoc(html) + `<!-- kc-render:${designBridgeState.renderToken || Date.now()} -->`;
-      mcFrame.style.display = 'block';
-      if (mcEmpty) mcEmpty.style.display = 'none';
-    } else {
-      mcFrame.style.display = 'none';
-      if (mcEmpty) mcEmpty.style.display = 'flex';
-    }
+  const html = designBridgeState?.html || '';
+  if (html) {
+    // 每次创建新 iframe，避免 srcdoc 复用导致的偶发空白
+    const oldFrame = document.getElementById('midtai-canvas-iframe');
+    const freshFrame = document.createElement('iframe');
+    freshFrame.id = 'midtai-canvas-iframe';
+    freshFrame.sandbox = 'allow-scripts';
+    freshFrame.style.cssText = 'flex:1;min-height:0;border:none;width:100%;display:block';
+    freshFrame.onload = () => { postMidtaiCanvasSelectMode(midtaiState.canvasMode === 'select'); };
+    freshFrame.srcdoc = buildMidtaiCanvasSrcdoc(html);
+    if (oldFrame) oldFrame.replaceWith(freshFrame);
+    if (mcEmpty) mcEmpty.style.display = 'none';
+  } else {
+    const mcFrame = document.getElementById('midtai-canvas-iframe');
+    if (mcFrame) mcFrame.style.display = 'none';
+    if (mcEmpty) mcEmpty.style.display = 'flex';
   }
 }
 
@@ -3632,6 +3636,16 @@ function createNewDesignProject() {
 
 function openDesignProjectFromHome(projectId) {
   if (!projectId) return;
+  if (document.getElementById('page-midtai')?.classList.contains('active')) {
+    // 立即切到预览 tab 并显示 loading，避免点击后无反馈
+    midtaiState.canvasOpen = false;
+    showOnlyMidtaiView('design-preview');
+    setDesignTabActive('mt-design-preview');
+    const loading = document.getElementById('dpv-loading');
+    const empty = document.getElementById('dpv-empty');
+    if (empty) empty.style.display = 'none';
+    if (loading) { loading.style.display = ''; loading.classList.add('active'); }
+  }
   send({ type: 'design:openProject', projectId });
 }
 
@@ -4681,6 +4695,7 @@ function renderDesignBridgePage() {
     emptyEl.style.display = 'flex';
     emptyEl.textContent = statusEl.textContent;
     frameEl.style.display = 'none';
+    console.log('[KC-DEBUG] renderDesignBridgePage clearing design-bridge srcdoc');
     frameEl.srcdoc = '';
     designBridgeRenderedToken = 0;
     return;
@@ -4719,6 +4734,10 @@ function renderDesignBridgePage() {
     emptyEl.style.display = 'flex';
     frameEl.style.display = 'none';
     frameEl.onload = () => {
+      console.log(
+        '[KC-DEBUG] design bridge onload srcdoc len:',
+        typeof frameEl.srcdoc === 'string' ? frameEl.srcdoc.length : -1,
+      );
       designBridgeFrameLoading = false;
       emptyEl.style.display = 'none';
       frameEl.style.display = 'block';
@@ -4730,6 +4749,12 @@ function renderDesignBridgePage() {
       applyAllDesignSliderValues(frameEl);
     };
     const srcdocWithToken = `${nextSrcdoc}<!-- kc-render:${designBridgeState.renderToken} -->`;
+    console.log(
+      '[KC-DEBUG] renderDesignBridgePage setting srcdoc len:',
+      srcdocWithToken.length,
+      'token:',
+      designBridgeState.renderToken,
+    );
     frameEl.srcdoc = srcdocWithToken;
     designBridgeRenderedToken = designBridgeState.renderToken;
     return;
