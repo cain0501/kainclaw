@@ -1730,6 +1730,7 @@ let midtaiState = {
   designDirection: '',
   imgSize: '1024x1024',
   imgCount: 1,
+  imgPreviewSession: false,
 };
 const thumbnailCache = new Map();
 const imageThumbCache = new Map(); // imageId → src (defers large data-url decoding)
@@ -3289,7 +3290,7 @@ function renderMidtaiImageWorks() {
         <div class="midtai-img-grid">
           ${results.map(result => `
             <div class="midtai-img-card">
-              <img data-src="${result.src}" class="midtai-img-thumb" alt="generated" style="background:#f0ebe3" />
+              <img data-imgid="${result.id}" class="midtai-img-thumb" alt="generated" style="background:#f0ebe3" />
               <div class="midtai-img-card-body">
                 <div class="midtai-img-card-copy">${escapeHtml(String(result.revisedPrompt || result.prompt || '')).slice(0, 96)}</div>
                 <div class="midtai-img-actions">
@@ -3354,19 +3355,22 @@ function submitMidtaiImageEdit() {
 }
 
 function observeMidtaiImageThumbs(container) {
-  const imgs = container.querySelectorAll('img[data-src]');
+  const imgs = container.querySelectorAll('img[data-imgid]');
   if (!imgs.length) return;
+  const loadImg = img => {
+    const src = imageThumbCache.get(img.dataset.imgid);
+    if (src) img.src = src;
+    delete img.dataset.imgid;
+  };
   if (!('IntersectionObserver' in window)) {
-    imgs.forEach(img => { img.src = img.dataset.src; delete img.dataset.src; });
+    imgs.forEach(loadImg);
     return;
   }
   const observer = new IntersectionObserver((entries) => {
     entries.forEach(entry => {
       if (!entry.isIntersecting) return;
-      const img = entry.target;
-      img.src = img.dataset.src;
-      delete img.dataset.src;
-      observer.unobserve(img);
+      loadImg(entry.target);
+      observer.unobserve(entry.target);
     });
   }, { rootMargin: '200px' });
   imgs.forEach(img => observer.observe(img));
@@ -3732,6 +3736,7 @@ function runMidtaiImage() {
   if (batchEl) {
     batchEl.value = String(midtaiState.imgCount || 1);
   }
+  midtaiState.imgPreviewSession = true;
   imgSwitchView('preview');
   runImageLab();
 }
@@ -3748,7 +3753,7 @@ function renderMidtaiImagePreview() {
       ))
     : null;
 
-  if (!batches.length && !pendingBatch) {
+  if ((!batches.length && !pendingBatch) || (!midtaiState.imgPreviewSession && !pendingBatch)) {
     container.innerHTML = `
       <div class="midtai-empty-view">
         <div class="midtai-empty-icon">✦</div>
