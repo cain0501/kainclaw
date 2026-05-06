@@ -438,7 +438,8 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-seri
 .wcard-time{font-size:11px;color:#a8a29e;margin-left:auto}
 .midtai-img-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(198px,1fr));gap:12px}
 .midtai-img-card{background:#fff;border:1px solid #eadfd2;border-radius:18px;overflow:hidden;box-shadow:0 12px 24px rgba(77,49,24,.07)}
-.midtai-img-thumb{width:100%;aspect-ratio:1/1;object-fit:cover;display:block;background:#f5efe8}
+.midtai-img-thumb-wrap{width:100%;aspect-ratio:1/1;overflow:hidden;background:#f5efe8}
+.midtai-img-thumb{width:100%;height:100%;object-fit:cover;display:block}
 .midtai-img-card-body{padding:12px 12px 10px}
 .midtai-img-card-copy{font-size:12px;color:#5f4f43;line-height:1.6;min-height:58px}
 .midtai-img-actions{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:10px}
@@ -2693,7 +2694,11 @@ function handleMessage(msg) {
     case 'image:state':
       applyImageLabState(msg);
       if (document.getElementById('page-midtai')?.classList.contains('active') && midtaiState.type === 'img') {
-        renderMidtaiImagePreview();
+        if (midtaiState.imgTabView === 'img-works') {
+          renderMidtaiImageWorks();
+        } else {
+          renderMidtaiImagePreview();
+        }
       }
       break;
     case 'image:result':
@@ -3289,8 +3294,8 @@ function renderMidtaiImageWorks() {
       <div class="midtai-works-scroll">
         <div class="midtai-img-grid">
           ${results.map(result => `
-            <div class="midtai-img-card">
-              <img data-imgid="${result.id}" class="midtai-img-thumb" alt="generated" style="background:#f0ebe3" />
+            <div class="midtai-img-card" data-imgid="${result.id}">
+              <div class="midtai-img-thumb-wrap"><div class="thumb-shimmer"></div></div>
               <div class="midtai-img-card-body">
                 <div class="midtai-img-card-copy">${escapeHtml(String(result.revisedPrompt || result.prompt || '')).slice(0, 96)}</div>
                 <div class="midtai-img-actions">
@@ -3355,21 +3360,27 @@ function submitMidtaiImageEdit() {
 }
 
 function observeMidtaiImageThumbs(container) {
-  const imgs = Array.from(container.querySelectorAll('img[data-imgid]'));
-  if (!imgs.length) return;
-  const loadImg = img => {
-    if (!img.dataset.imgid) return;
-    const src = imageThumbCache.get(img.dataset.imgid);
-    if (src) img.src = src;
-    delete img.dataset.imgid;
-  };
-  // rAF 分批加载：每帧处理 CHUNK 张，不阻塞首次渲染，从上到下顺序填入
+  const cards = Array.from(container.querySelectorAll('.midtai-img-card[data-imgid]'));
+  if (!cards.length) return;
   let i = 0;
-  const CHUNK = 6;
+  const CHUNK = 4;
   function loadChunk() {
-    const end = Math.min(i + CHUNK, imgs.length);
-    while (i < end) loadImg(imgs[i++]);
-    if (i < imgs.length) requestAnimationFrame(loadChunk);
+    const end = Math.min(i + CHUNK, cards.length);
+    while (i < end) {
+      const card = cards[i++];
+      const id = card.dataset.imgid;
+      delete card.dataset.imgid;
+      const src = imageThumbCache.get(id);
+      if (!src) continue;
+      const wrap = card.querySelector('.midtai-img-thumb-wrap');
+      if (!wrap) continue;
+      const img = new Image();
+      img.className = 'midtai-img-thumb';
+      img.alt = 'generated';
+      img.onload = () => { wrap.innerHTML = ''; wrap.appendChild(img); };
+      img.src = src;
+    }
+    if (i < cards.length) requestAnimationFrame(loadChunk);
   }
   requestAnimationFrame(loadChunk);
 }
