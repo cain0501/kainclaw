@@ -3555,6 +3555,20 @@ function buildMidtaiCanvasSrcdoc(html) {
     return match ? match[1] : '';
   }
 
+  function buildSelector(el) {
+    if (!(el instanceof Element)) return '';
+    const parts = [];
+    let current = el;
+    while (current && current.nodeType === 1 && current.tagName.toLowerCase() !== 'html') {
+      let part = current.tagName.toLowerCase();
+      if (current.id) { part += '#' + current.id; parts.unshift(part); break; }
+      if (current.classList.length) { part += '.' + Array.from(current.classList).slice(0, 2).join('.'); }
+      parts.unshift(part);
+      current = current.parentElement;
+    }
+    return parts.join(' > ');
+  }
+
   document.addEventListener('click', function(e) {
     if (!window.__kcSelectMode) return;
     const target = e.target;
@@ -3581,18 +3595,7 @@ function buildMidtaiCanvasSrcdoc(html) {
       type: '__midtai_node_selected',
       tagName: found.tagName,
       src: found.src || readBackgroundImageUrl(found) || '',
-      selector: (function buildSel(el) {
-        var parts = [];
-        var n = el;
-        for (var i = 0; i < 4 && n && n !== document.body && n !== document.documentElement; i++) {
-          var tag = n.tagName.toLowerCase();
-          if (n.id) { parts.unshift(tag + '#' + n.id); break; }
-          var cls = n.className ? '.' + String(n.className).trim().split(/\\s+/)[0] : '';
-          parts.unshift(tag + cls);
-          n = n.parentElement;
-        }
-        return parts.join(' > ') || el.tagName.toLowerCase();
-      })(found),
+      selector: buildSelector(found),
       outerHTML: (found.outerHTML || '').slice(0, 300),
       fullOuterHTML: found.outerHTML || '',
       rect: {
