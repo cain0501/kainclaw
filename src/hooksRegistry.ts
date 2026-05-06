@@ -68,10 +68,14 @@ const SUPPORTED_HOOK_TYPES: HookTypeDefinition[] = [
 ];
 
 const SUPPORTED_HOOK_EVENTS: HookEventDefinition[] = [
+  { id: "SessionStart", summary: "A session entered its ready state." },
   { id: "SessionReady", summary: "Webview session finished its ready sequence." },
+  { id: "Notification", summary: "Claude produced a completed reply notification." },
   { id: "PromptSubmitted", summary: "A user prompt was accepted for execution." },
   { id: "PromptCompleted", summary: "The main prompt turn completed successfully." },
   { id: "PromptFailed", summary: "The main prompt turn failed." },
+  { id: "PreToolUse", summary: "Alias for PreToolCall, compatible with official Claude Code hook configs." },
+  { id: "PostToolUse", summary: "Alias for PostToolCall, compatible with official Claude Code hook configs." },
   { id: "QuickActionStarted", summary: "A quick action prompt was dispatched." },
   { id: "QuickActionCompleted", summary: "A quick action prompt completed." },
   { id: "ToolUseStarted", summary: "A tool invocation started." },
@@ -131,7 +135,19 @@ function normalizeHookDefinition(value: unknown): HookDefinition | null {
   const events = Array.isArray(record.events)
     ? record.events
         .filter((event): event is string => typeof event === "string" && event.trim() !== "")
-        .map(event => event.trim())
+        .map(event => {
+          const trimmed = event.trim();
+          if (trimmed === "PreToolUse") {
+            return "PreToolCall";
+          }
+          if (trimmed === "PostToolUse") {
+            return "PostToolCall";
+          }
+          if (trimmed === "SessionReady") {
+            return "SessionStart";
+          }
+          return trimmed;
+        })
     : [];
 
   if (events.length === 0) {

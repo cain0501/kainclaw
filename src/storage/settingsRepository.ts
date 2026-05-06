@@ -23,10 +23,29 @@ const KEYS = {
   ACTIVE_SESSION_ID: "cain.activeSessionId",
   EFFORT_LEVEL: "cain.effortLevel",
   FAST_MODE: "cain.fastMode",
+  FAST_MODE_DISABLED_FOR_OVERAGE: "cain.fastModeDisabledForOverage",
   SHOW_THINKING_SUMMARIES: "cain.showThinkingSummaries",
   WORKSPACE_ROOT: "cain.workspaceRoot",
   UI_LANGUAGE: "kainclaw.uiLanguage",
 } as const;
+
+let fastModeStateHost: IHostAdapter | undefined;
+
+export function getFastModeDisabledForOverage(): boolean {
+  return (
+    fastModeStateHost?.getState<boolean>(KEYS.FAST_MODE_DISABLED_FOR_OVERAGE) ===
+    true
+  );
+}
+
+export async function setFastModeDisabledForOverage(
+  disabled: boolean,
+): Promise<void> {
+  if (!fastModeStateHost) {
+    return;
+  }
+  await fastModeStateHost.setState(KEYS.FAST_MODE_DISABLED_FOR_OVERAGE, disabled);
+}
 
 function normalizeProviderAlias(value: string): string {
   return value.trim().toLowerCase().replace(/[\s_-]+/g, "");
@@ -78,7 +97,9 @@ export type ImagePromptHistoryEntry = {
 };
 
 export class SettingsRepository {
-  constructor(private readonly host: IHostAdapter) {}
+  constructor(private readonly host: IHostAdapter) {
+    fastModeStateHost = host;
+  }
 
   // Provider list metadata, excluding API keys.
 

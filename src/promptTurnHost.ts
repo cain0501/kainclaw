@@ -79,6 +79,7 @@ export async function runPromptTurnWithHost<TSwarm>(options: {
   runtime: { getToolContext(mode?: string): ToolContext };
   tools: ToolDefinition[];
   installedSkillHooks?: HookDefinition[];
+  userHooks?: HookDefinition[];
   installedSkillAgentRunner?: AgentRunner;
   existingSwarm?: TSwarm;
   createSwarm: () => TSwarm;
@@ -381,6 +382,7 @@ export async function runPromptAgentTurn(options: {
   provider: IProviderAdapter;
   tools: ToolDefinition[];
   installedSkillHooks?: HookDefinition[];
+  userHooks?: HookDefinition[];
   installedSkillAgentRunner?: AgentRunner;
   providerRuntimeContext?: AgentProviderRuntimeContext;
   toolContext: ToolContext;
@@ -405,6 +407,10 @@ export async function runPromptAgentTurn(options: {
   latestThinkingSummary?: string;
 }> {
   const runAgentImpl = options.runAgentImpl ?? runAgent;
+  const activeHooks = [
+    ...(options.installedSkillHooks ?? []),
+    ...(options.userHooks ?? []),
+  ];
   let sawStreamingToken = false;
   let latestThinkingSummary: string | undefined;
 
@@ -412,14 +418,14 @@ export async function runPromptAgentTurn(options: {
     provider: options.provider,
     tools: options.tools,
     toolContext: options.toolContext,
-    beforeToolCall: options.installedSkillHooks?.length
+    beforeToolCall: activeHooks.length
       ? async (toolName, input, toolContext) => {
           const result = await triggerHooks(
             "PreToolCall",
-            options.installedSkillHooks!,
+            activeHooks,
             {
-            workspaceRoot: toolContext.workspaceRoot,
-            toolName,
+              workspaceRoot: toolContext.workspaceRoot,
+              toolName,
             toolInput: input,
           },
           options.installedSkillAgentRunner,
@@ -431,14 +437,14 @@ export async function runPromptAgentTurn(options: {
           }
         }
       : undefined,
-    afterToolCall: options.installedSkillHooks?.length
+    afterToolCall: activeHooks.length
       ? async (toolName, input, output, isError, toolContext) => {
-          await triggerHooks(
-            "PostToolCall",
-            options.installedSkillHooks!,
-            {
-              workspaceRoot: toolContext.workspaceRoot,
-              toolName,
+        await triggerHooks(
+          "PostToolCall",
+          activeHooks,
+          {
+            workspaceRoot: toolContext.workspaceRoot,
+            toolName,
             toolInput: input,
             toolOutput: output,
             ...(isError ? { reply: String(output) } : {}),

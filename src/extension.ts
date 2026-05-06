@@ -94,11 +94,16 @@ import {
   getSessionInstalledSkillHooks,
   registerSessionInstalledSkillHooks,
 } from "./sessionInstalledSkillHooks";
+import { triggerHooks } from "./hooks/hooksTrigger";
+import type { AgentRunner } from "./hooks/hooksExecutor";
+import { loadHooks } from "./hooksRegistry";
 import {
-  createQuickActionBindingsFactory,
   postEditorSelectionPayload,
-  type QuickActionBindings,
 } from "./editorInteractionHost";
+import {
+  createEditorInteractionBindings,
+  type EditorSelectionBindings,
+} from "./editorInteractionBindingsHost";
 import {
   createBeginPromptTurnBindings,
   createFinalizePromptTurnBindings,
@@ -273,7 +278,8 @@ class ChatSidebarProvider implements vscode.WebviewViewProvider, vscode.Disposab
   private readonly sessionPanelActions: SessionPanelActions;
   private readonly settingsPanelActions: SettingsPanelActions;
   private readonly backgroundCommandToolLaunchBindings: BackgroundCommandToolLaunchBindings;
-  private readonly quickActionBindings: QuickActionBindings;
+  private readonly quickActionBindings: ReturnType<typeof createEditorInteractionBindings>["quickAction"];
+  private readonly editorSelectionBindings: EditorSelectionBindings;
   private readonly readySequenceController: ReadySequenceController;
   private readonly workspaceRuntimeHost: WorkspaceRuntimeHost;
   private readonly workspaceStatusController: WorkspaceStatusController;
@@ -790,15 +796,10 @@ class ChatSidebarProvider implements vscode.WebviewViewProvider, vscode.Disposab
       shouldRefreshSessionsList: () => this.shouldRefreshSessionsList(),
       handleSessionsLoad: this.sessionPanelActions.loadSessions,
     });
-    const quickActionBindingsFactory = createQuickActionBindingsFactory({
+    const editorInteractionBindings = createEditorInteractionBindings({
       getWorkspaceRoot: getPrimaryWorkspaceFolderPath,
       getActiveDocumentPath: () => vscode.window.activeTextEditor?.document.uri.fsPath,
-      postErrorMessage: message => {
-        void vscode.window.showErrorMessage(`Cain Claude: ${message}`);
-      },
-      toErrorMessage,
-    });
-    this.quickActionBindings = quickActionBindingsFactory({
+      getActiveEditor: () => vscode.window.activeTextEditor,
       ensureReadySequence: () => this.readySequenceController.ensureReadySequence(),
       handlePrompt: prompt => this.handlePrompt(prompt),
       postUnavailableMessage: message => {
@@ -809,7 +810,21 @@ class ChatSidebarProvider implements vscode.WebviewViewProvider, vscode.Disposab
         });
         this.postState();
       },
+      postErrorMessage: message => {
+        void vscode.window.showErrorMessage(`Cain Claude: ${message}`);
+      },
+      toErrorMessage,
+      postSelectionPayload: options => {
+        postEditorSelectionPayload({
+          ...options,
+          postMessage: payload => {
+            this.webviewView?.webview.postMessage(payload);
+          },
+        });
+      },
     });
+    this.quickActionBindings = editorInteractionBindings.quickAction;
+    this.editorSelectionBindings = editorInteractionBindings.selection;
     const licenseHostBindingsFactory = createLicenseHostBindingsFactory({
       getSecret: key => this.host.getSecret(key),
       verifyLicense,
@@ -843,6 +858,21 @@ class ChatSidebarProvider implements vscode.WebviewViewProvider, vscode.Disposab
       loadRuntimeState: id => this.sessions.loadRuntimeState(id),
       savedSessionActivationBindings,
       setActiveSessionId: id => this.settings.setActiveSessionId(id),
+      onSessionStart: async details => {
+        const userHooks = await loadHooks(details.workspaceRoot ?? "");
+        if (userHooks.length === 0) {
+          return;
+        }
+        await triggerHooks(
+          "SessionStart",
+          userHooks,
+          {
+            workspaceRoot: details.workspaceRoot ?? "",
+            sessionId: this.currentSessionId,
+          },
+          undefined,
+        );
+      },
       postLicenseRequired: feature =>
         this.licenseHostBindings.postLicenseRequired(feature),
       postState: () => this.postState(),
@@ -975,26 +1005,14 @@ class ChatSidebarProvider implements vscode.WebviewViewProvider, vscode.Disposab
             clearChat: () => this.clearChat(),
             sendPrompt: (prompt, attachments) =>
               this.handlePrompt(prompt, attachments),
-            runQuickAction: action =>
-              this.quickActionBindings.handleQuickAction(action),
-            resolvePendingApproval: approved =>
-              this.approvalHost.resolvePendingApproval(approved),
-            requestEditorSelection: () => {
-              const editor = vscode.window.activeTextEditor;
-              postEditorSelectionPayload({
-                ...(!editor || editor.selection.isEmpty
-                  ? {}
-                  : {
-                      selectedText: editor.document.getText(editor.selection),
-                      language: editor.document.languageId,
-                    }),
-                postMessage: payload => {
-                  this.webviewView?.webview.postMessage(payload);
-                },
-              });
-            },
-          },
-        });
+      runQuickAction: action =>
+        this.quickActionBindings.handleQuickAction(action),
+      resolvePendingApproval: approved =>
+        this.approvalHost.resolvePendingApproval(approved),
+      requestEditorSelection: () =>
+        this.editorSelectionBindings.requestEditorSelection(),
+    },
+  });
       },
     });
   }

@@ -7,8 +7,8 @@
 
 | Metric | Value | Last Updated |
 |--------|-------|--------------|
-| Test files | 170 | 2026-05-06 |
-| Tests passing | 1322 | 2026-05-06 |
+| Test files | 171 | 2026-05-06 |
+| Tests passing | 1325 | 2026-05-06 |
 | Last verified commit | see `git log --oneline -1` | — |
 
 **Required passing commands:**
@@ -24,9 +24,9 @@ npm run build:electron   # only when Electron behavior changed
 | Beads ID | Title | Status | Primer |
 |----------|-------|--------|--------|
 | vscode-extension-f4v | extension.ts 宿主总控继续下沉 | IN_PROGRESS | `.kiro/primers/vscode-extension-f4v.md` |
-| vscode-extension-lca | Hooks: 用户配置接入触发链 | OPEN | `.kiro/primers/vscode-extension-lca.md` |
-| vscode-extension-vwq | Hooks: 官方事件名兼容 + Notification/SessionStart | OPEN | `.kiro/primers/vscode-extension-vwq.md` |
-| vscode-extension-pnz | Fast mode: state persistence | OPEN | `.kiro/primers/vscode-extension-pnz.md` |
+| vscode-extension-lca | Hooks: 用户配置接入触发链 | ✓ CLOSED | — |
+| vscode-extension-vwq | Hooks: 官方事件名兼容 + Notification/SessionStart | ✓ CLOSED | — |
+| vscode-extension-pnz | Fast mode: state persistence | ✓ CLOSED | — |
 | vscode-extension-e0i | Midtai 图像整合：左侧表单 + 生成预览 + 提示词库 | ✓ CLOSED | — |
 | vscode-extension-0pq | ~~Design Home UI（阶段 1）~~ | ✓ CLOSED | — |
 | vscode-extension-0pq-2 | Tweaks 右侧抽屉 | ✓ CLOSED | — |
@@ -62,7 +62,7 @@ npm run build:electron   # only when Electron behavior changed
 - Auto-Memory
 - LSP phase 1 + partial phase 2
 - Worktree phase 1
-- Hooks execution chain
+- Hooks execution chain (user .cain/hooks.json 接入触发链 / PreToolUse 官方别名 / Notification + SessionStart 事件)
 - Custom Agents registry / Skills registry
 - User modeling
 - KainClaw Design (generate / iframe / sliders 右侧抽屉 / canvas toolbar / patch popover 贴近元素 + selector 定位 / 左侧面板 A/B / version history / export HTML+PDF+PPTX / lastOpenedProjectId 跨 session)

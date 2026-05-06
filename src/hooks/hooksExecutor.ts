@@ -6,7 +6,15 @@ import {
   readFreezeBoundary,
 } from "../installedSkillCompat";
 
-export type HookEvent = "PreToolCall" | "PostToolCall" | "PrePrompt" | "PostPrompt";
+export type HookEvent =
+  | "PreToolCall"
+  | "PostToolCall"
+  | "PreToolUse"
+  | "PostToolUse"
+  | "PrePrompt"
+  | "PostPrompt"
+  | "Notification"
+  | "SessionStart";
 
 export interface HookContext {
   event: HookEvent;

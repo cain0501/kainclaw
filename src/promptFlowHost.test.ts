@@ -664,6 +664,7 @@ describe("promptFlowHost", () => {
       runtime: promptExecution.runtime,
       tools: promptExecution.tools,
       installedSkillHooks: [],
+      userHooks: [],
       installedSkillAgentRunner: expect.any(Function),
       existingSwarm: options.existingSwarm,
       createSwarm: expect.any(Function),

@@ -23,13 +23,14 @@
 - [x] `sessionPanelHost.ts` — `createSessionPanelControllerFactory` 已提取（2026-05-01）
 - [x] `companionHost.ts` — `createCompanionControllerFactory` 已提取（2026-05-01）
 - [x] `extensionPromptStateHost.ts` — prompt request state wiring extracted from `handlePrompt()` via `createExtensionPromptRequestState`（2026-05-04）
+- [x] `editorInteractionBindingsHost.ts` — quick action + editor selection wiring extracted from constructor into `createEditorInteractionBindings`（2026-05-06）
 
 ## Next Step (the ONLY thing to do this session)
 
-**读 `src/extension.ts` 的 `handlePrompt()` 函数，优先继续把 quick action / editor selection binding（`postEditorSelectionPayload` 周边 wiring）提取到新 host 文件。**
+**下一步建议：License host binding（`verifyLicense` + feature flag dispatch），见 `createLicenseHostBindingsFactory` 相关 wiring in constructor。**
 
 提取顺序建议（按耦合度从低到高）：
-1. Quick action / editor selection binding（`postEditorSelectionPayload` 周围的 wiring）
+1. ~~Quick action / editor selection binding~~ ✅ 已完成
 2. License host binding（`verifyLicense` + feature flag dispatch）
 3. Workspace status wiring（workspace badge / folder status）
 4. 其余根据你读到的代码结构判断
@@ -74,8 +75,15 @@ npm run build
 - [ ] beads notes 里写了：本次提取了什么 + 下一个建议目标是什么
 - [ ] 不需要手动测试（纯结构移动）
 
-### This Session
+### Session 2026-05-04
 
 - Extracted prompt request state assembly from `handlePrompt()` into `src/extensionPromptStateHost.ts`.
 - Verification passed: `npm test`, `npm run check`, `npm run build`.
-- Suggested next target: quick action / editor selection wiring around `postEditorSelectionPayload`.
+
+### Session 2026-05-06
+
+- Extracted quick action + editor selection wiring from constructor into `src/editorInteractionBindingsHost.ts`.
+- `createEditorInteractionBindings` takes narrow deps (no `this`): workspace root getter, active editor getter, ready sequence, handlePrompt, postMessage callback.
+- Fixed a TS2493 error in the new test file (used `toHaveBeenCalledWith(expect.stringContaining(...))` instead of `mock.calls[0]?.[0]`).
+- Verification passed: 171 test files, 1325 tests; `npm run check` and `npm run build` clean.
+- Suggested next target: License host binding (`createLicenseHostBindingsFactory` wiring in constructor).

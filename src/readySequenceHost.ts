@@ -41,6 +41,11 @@ export type ReadySequenceRunnerBindings = {
   ensureConversationWorktreeHydrated: (workspaceRoot: string) => Promise<void>;
   shouldRefreshSessionsList: () => boolean;
   handleSessionsLoad: () => Promise<void>;
+  onSessionStart?: (details: {
+    workspaceRoot: string | null;
+    workspaceHash: string;
+    lastSessionId: string | null;
+  }) => Promise<void> | void;
 };
 
 export type ReadySequenceController = {
@@ -156,6 +161,7 @@ export function createReadySequenceRunnerFactory(options: {
   ensureConversationWorktreeHydrated: (workspaceRoot: string) => Promise<void>;
   shouldRefreshSessionsList: () => boolean;
   handleSessionsLoad: () => Promise<void>;
+  onSessionStart?: ReadySequenceRunnerBindings["onSessionStart"];
 }): ReadySequenceRunnerFactory {
   return createReadySequenceRunner({
     restoreLicenseFlags: options.restoreLicenseFlags,
@@ -207,6 +213,7 @@ export type ReadySequenceControllerFactoryOptions = {
   postState: () => void;
   refreshWorkspaceStatus: () => void;
   ensureConversationWorktreeHydrated: (workspaceRoot: string) => Promise<void>;
+  onSessionStart?: ReadySequenceRunnerBindings["onSessionStart"];
 };
 
 export type ReadySequenceControllerFactoryState = {
@@ -260,6 +267,7 @@ export function createReadySequenceControllerFactory(
         options.ensureConversationWorktreeHydrated,
       shouldRefreshSessionsList: state.shouldRefreshSessionsList,
       handleSessionsLoad: state.handleSessionsLoad,
+      onSessionStart: options.onSessionStart,
     });
 
     return createReadySequenceController({
@@ -353,6 +361,11 @@ export async function applyReadySequenceAction(options: {
   ensureConversationWorktreeHydrated: (workspaceRoot: string) => Promise<void>;
   shouldRefreshSessionsList: () => boolean;
   handleSessionsLoad: () => Promise<void>;
+  onSessionStart?: (details: {
+    workspaceRoot: string | null;
+    workspaceHash: string;
+    lastSessionId: string | null;
+  }) => Promise<void> | void;
 }): Promise<void> {
   if (options.readyAction.kind === "show_onboarding") {
     options.postOnboarding();
@@ -387,6 +400,11 @@ export async function applyReadySequenceAction(options: {
     await options.handleSessionsLoad();
   }
   options.refreshWorkspaceStatus();
+  await options.onSessionStart?.({
+    workspaceRoot: options.workspaceRoot ?? null,
+    workspaceHash: options.workspaceHash,
+    lastSessionId: options.lastSessionId ?? null,
+  });
 }
 
 export async function runReadySequenceWithHost(options: {
@@ -414,6 +432,7 @@ export async function runReadySequenceWithHost(options: {
   ensureConversationWorktreeHydrated: (workspaceRoot: string) => Promise<void>;
   shouldRefreshSessionsList: () => boolean;
   handleSessionsLoad: () => Promise<void>;
+  onSessionStart?: ReadySequenceRunnerBindings["onSessionStart"];
 }): Promise<ReadySequenceAction> {
   const readyAction = await resolveReadySequenceAction({
     onboardingDone: options.onboardingDone,
@@ -439,6 +458,7 @@ export async function runReadySequenceWithHost(options: {
     ensureConversationWorktreeHydrated: options.ensureConversationWorktreeHydrated,
     shouldRefreshSessionsList: options.shouldRefreshSessionsList,
     handleSessionsLoad: options.handleSessionsLoad,
+    onSessionStart: options.onSessionStart,
   });
 
   return readyAction;

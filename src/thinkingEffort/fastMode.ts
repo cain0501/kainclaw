@@ -1,5 +1,9 @@
 import type { ProviderConfig } from "../agent/providers/IProviderAdapter";
 import {
+  getFastModeDisabledForOverage,
+  setFastModeDisabledForOverage,
+} from "../storage/settingsRepository";
+import {
   isAnthropicMessagesProvider,
   isOpus46Model,
 } from "./providerSupport";
@@ -29,11 +33,27 @@ export type CooldownReason = "rate_limit" | "overloaded";
 
 export type FastModeRuntimeState =
   | { status: "active" }
+  | { status: "disabled" }
   | { status: "cooldown"; resetAt: number; reason: CooldownReason };
 
 let runtimeState: FastModeRuntimeState = { status: "active" };
 let cooldownTimer: ReturnType<typeof setTimeout> | undefined;
 const runtimeStateListeners = new Set<() => void>();
+
+function syncPersistedDisabledState(): void {
+  const persistedDisabled = getFastModeDisabledForOverage();
+  if (persistedDisabled) {
+    if (runtimeState.status === "active") {
+      runtimeState = { status: "disabled" };
+      resetCooldownTimer();
+    }
+    return;
+  }
+
+  if (runtimeState.status === "disabled") {
+    runtimeState = { status: "active" };
+  }
+}
 
 function emitRuntimeStateChanged(): void {
   for (const listener of [...runtimeStateListeners]) {
@@ -66,7 +86,10 @@ function isTruthyEnv(value: string | undefined): boolean {
 }
 
 export function isFastModeEnabled(): boolean {
-  return !isTruthyEnv(process.env.CLAUDE_CODE_DISABLE_FAST_MODE);
+  return (
+    !isTruthyEnv(process.env.CLAUDE_CODE_DISABLE_FAST_MODE) &&
+    getFastModeRuntimeState().status !== "disabled"
+  );
 }
 
 export function getFastModeRuntimeState(): FastModeRuntimeState {
@@ -76,6 +99,7 @@ export function getFastModeRuntimeState(): FastModeRuntimeState {
     emitRuntimeStateChanged();
   }
 
+  syncPersistedDisabledState();
   return runtimeState;
 }
 
@@ -99,6 +123,9 @@ export function triggerFastModeCooldown(
   }
 
   runtimeState = { status: "cooldown", resetAt, reason };
+  if (shouldPersistFastModeOffForOverage(reason)) {
+    void setFastModeDisabledForOverage(true);
+  }
   resetCooldownTimer();
   emitRuntimeStateChanged();
 }
@@ -196,7 +223,7 @@ export function isFastModeActive(
     fastMode === true &&
     getFastModeUnavailableReason(config) === null &&
     getFastModeAutoSwitchModel(config) === null &&
-    !isFastModeCooldown()
+    getFastModeRuntimeState().status === "active"
   );
 }
 
@@ -211,6 +238,9 @@ export function getFastModeStatusLabel(
   if (fastMode === true && unavailableReason === null && autoSwitchModel === null) {
     if (runtime.status === "cooldown") {
       return "cooldown";
+    }
+    if (runtime.status === "disabled") {
+      return "off";
     }
 
     return "on";
@@ -241,6 +271,10 @@ function getTransportMessage(
     }
 
     return `${unavailableReason} 请求将走标准响应路径。`;
+  }
+
+  if (fastMode === true && runtime.status === "disabled") {
+    return "Fast mode 已保持关闭。重新执行 `/fast on` 可恢复。请求将走标准响应路径。";
   }
 
   if (fastMode !== true) {
@@ -294,6 +328,10 @@ export function getFastModeIndicatorState(
     return { label: "cooldown", connected: false };
   }
 
+  if (fastMode === true && getFastModeRuntimeState().status === "disabled") {
+    return { label: "off", connected: false };
+  }
+
   return { label: "off", connected: false };
 }
 
@@ -326,6 +364,7 @@ export function executeFastModeCommand(
 
   if (shouldEnable) {
     clearFastModeCooldown();
+    void setFastModeDisabledForOverage(false);
     const unavailableReason = getFastModeUnavailableReason(config);
     if (unavailableReason) {
       return {

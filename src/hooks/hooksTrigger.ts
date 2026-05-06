@@ -61,7 +61,13 @@ function resolveMatchQuery(
   switch (event) {
     case "PreToolCall":
     case "PostToolCall":
+    case "PreToolUse":
+    case "PostToolUse":
       return getToolMatcherCandidates(context.toolName);
+    case "Notification":
+      return context.reply ? [context.reply] : [];
+    case "SessionStart":
+      return context.workspaceRoot ? [context.workspaceRoot] : [];
     default:
       return [];
   }
@@ -73,9 +79,20 @@ export async function triggerHooks(
   context: Omit<HookContext, "event">,
   agentRunner?: AgentRunner,
 ): Promise<TriggerResult> {
+  const eventAliases: Record<HookEvent, HookEvent[]> = {
+    PreToolCall: ["PreToolCall", "PreToolUse"],
+    PostToolCall: ["PostToolCall", "PostToolUse"],
+    PreToolUse: ["PreToolUse", "PreToolCall"],
+    PostToolUse: ["PostToolUse", "PostToolCall"],
+    PrePrompt: ["PrePrompt"],
+    PostPrompt: ["PostPrompt"],
+    Notification: ["Notification"],
+    SessionStart: ["SessionStart"],
+  };
   const matchQueries = resolveMatchQuery(event, context);
   const matching = hooks.filter(h => {
-    if (!h.events.includes(event)) {
+    const acceptedEvents = eventAliases[event] ?? [event];
+    if (!h.events.some(hookEvent => acceptedEvents.includes(hookEvent as HookEvent))) {
       return false;
     }
     if (matchQueries.length === 0 || !h.matcher?.trim()) {

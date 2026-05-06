@@ -8,6 +8,7 @@ import type { PromptExecutionResult, PromptRuntimeLike } from "./promptExecution
 import type { PromptSharedBindings } from "./promptBindingsHost";
 import { buildInjectedPrompt, triggerHooks } from "./hooks/hooksTrigger";
 import type { AgentRunner, HookContext } from "./hooks/hooksExecutor";
+import { loadHooks } from "./hooksRegistry";
 import { applyPromptTurnUserContext } from "./promptSetupHost";
 import {
   createAgentProviderRuntimeContext,
@@ -783,6 +784,7 @@ export async function runPromptFlowWithHost<
   }
 
   const continuePromptExecution = options.promptExecution;
+  const userHooks = await loadHooks(continuePromptExecution.workspaceRoot);
   const installedSkillAgentRunner = createInstalledSkillAgentRunner({
     promptExecution: continuePromptExecution,
     buildWorkspaceSystemPrompt: options.buildWorkspaceSystemPrompt,
@@ -816,10 +818,11 @@ export async function runPromptFlowWithHost<
     continuePromptExecution.installedSkillExecution?.hooks ??
     continuePromptExecution.installedSkillHooks ??
     [];
-  if (installedSkillHooks.length > 0) {
+  const activePromptHooks = [...installedSkillHooks, ...userHooks];
+  if (activePromptHooks.length > 0) {
     const prePromptResult = await triggerHooks(
       "PrePrompt",
-      installedSkillHooks,
+      activePromptHooks,
       {
         workspaceRoot: continuePromptExecution.workspaceRoot,
         prompt: effectivePrompt,
@@ -866,13 +869,14 @@ export async function runPromptFlowWithHost<
     envMap: continuePromptExecution.envMap,
     runtimeOptions: continuePromptExecution.runtimeOptions,
     effortLevel: continuePromptExecution.effortLevel,
-    runtime: continuePromptExecution.runtime as {
-      getToolContext(mode?: string): ToolContext;
-    },
-    tools: continuePromptExecution.tools as ToolDefinition[],
-    installedSkillHooks,
-    installedSkillAgentRunner,
-    existingSwarm: options.existingSwarm,
+      runtime: continuePromptExecution.runtime as {
+        getToolContext(mode?: string): ToolContext;
+      },
+      tools: continuePromptExecution.tools as ToolDefinition[],
+      installedSkillHooks,
+      userHooks,
+      installedSkillAgentRunner,
+      existingSwarm: options.existingSwarm,
     createSwarm: () =>
       options.createSwarm({
         workerToolContext:
@@ -905,14 +909,14 @@ export async function runPromptFlowWithHost<
     updateMood: options.updateMood,
   });
 
-  if (installedSkillHooks.length > 0) {
+  if (activePromptHooks.length > 0) {
     const latestReply =
       options.getConversationHistory().at(-1)?.role === "assistant"
         ? options.getConversationHistory().at(-1)?.content
         : undefined;
     await triggerHooks(
       "PostPrompt",
-      installedSkillHooks,
+      activePromptHooks,
       {
         workspaceRoot: continuePromptExecution.workspaceRoot,
         prompt: effectivePrompt,
@@ -920,5 +924,16 @@ export async function runPromptFlowWithHost<
       },
       installedSkillAgentRunner,
     );
+    if (latestReply) {
+      await triggerHooks(
+        "Notification",
+        activePromptHooks,
+        {
+          workspaceRoot: continuePromptExecution.workspaceRoot,
+          reply: latestReply,
+        },
+        installedSkillAgentRunner,
+      );
+    }
   }
 }
