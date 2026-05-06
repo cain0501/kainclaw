@@ -3355,25 +3355,23 @@ function submitMidtaiImageEdit() {
 }
 
 function observeMidtaiImageThumbs(container) {
-  const imgs = container.querySelectorAll('img[data-imgid]');
+  const imgs = Array.from(container.querySelectorAll('img[data-imgid]'));
   if (!imgs.length) return;
   const loadImg = img => {
+    if (!img.dataset.imgid) return;
     const src = imageThumbCache.get(img.dataset.imgid);
     if (src) img.src = src;
     delete img.dataset.imgid;
   };
-  if (!('IntersectionObserver' in window)) {
-    imgs.forEach(loadImg);
-    return;
+  // rAF 分批加载：每帧处理 CHUNK 张，不阻塞首次渲染，从上到下顺序填入
+  let i = 0;
+  const CHUNK = 6;
+  function loadChunk() {
+    const end = Math.min(i + CHUNK, imgs.length);
+    while (i < end) loadImg(imgs[i++]);
+    if (i < imgs.length) requestAnimationFrame(loadChunk);
   }
-  const observer = new IntersectionObserver((entries) => {
-    entries.forEach(entry => {
-      if (!entry.isIntersecting) return;
-      loadImg(entry.target);
-      observer.unobserve(entry.target);
-    });
-  }, { rootMargin: '200px' });
-  imgs.forEach(img => observer.observe(img));
+  requestAnimationFrame(loadChunk);
 }
 
 function scheduleDesignThumbnailLoads(items) {
