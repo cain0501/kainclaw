@@ -3581,7 +3581,18 @@ function buildMidtaiCanvasSrcdoc(html) {
       type: '__midtai_node_selected',
       tagName: found.tagName,
       src: found.src || readBackgroundImageUrl(found) || '',
-      selector: found.id ? '#' + found.id : found.className ? '.' + String(found.className).trim().split(/\s+/)[0] : found.tagName.toLowerCase(),
+      selector: (function buildSel(el) {
+        var parts = [];
+        var n = el;
+        for (var i = 0; i < 4 && n && n !== document.body && n !== document.documentElement; i++) {
+          var tag = n.tagName.toLowerCase();
+          if (n.id) { parts.unshift(tag + '#' + n.id); break; }
+          var cls = n.className ? '.' + String(n.className).trim().split(/\\s+/)[0] : '';
+          parts.unshift(tag + cls);
+          n = n.parentElement;
+        }
+        return parts.join(' > ') || el.tagName.toLowerCase();
+      })(found),
       outerHTML: (found.outerHTML || '').slice(0, 300),
       fullOuterHTML: found.outerHTML || '',
       rect: {
