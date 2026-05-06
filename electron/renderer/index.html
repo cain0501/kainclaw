@@ -436,7 +436,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-seri
 .s-mid{background:#fef3c7;color:#92400e}
 .s-blank{background:#f1f5f9;color:#475569}
 .wcard-time{font-size:11px;color:#a8a29e;margin-left:auto}
-.midtai-img-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(158px,1fr));gap:12px}
+.midtai-img-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(198px,1fr));gap:12px}
 .midtai-img-card{background:#fff;border:1px solid #eadfd2;border-radius:18px;overflow:hidden;box-shadow:0 12px 24px rgba(77,49,24,.07)}
 .midtai-img-thumb{width:100%;aspect-ratio:1/1;object-fit:cover;display:block;background:#f5efe8}
 .midtai-img-card-body{padding:12px 12px 10px}
@@ -3247,7 +3247,9 @@ function renderMidtaiImageWorks() {
     return;
   }
   const isReplace = !!midtaiState.replaceCtx;
-  const results = (imageLabState.resultBatches || []).flatMap(batch => batch.items || []);
+  const results = [...(imageLabState.resultBatches || [])]
+    .sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0))
+    .flatMap(batch => batch.items || []);
   if (!results.length) {
     container.innerHTML = `<div class="midtai-empty-view"><div class="midtai-empty-title">${isReplace ? '还没有可用图片' : '还没有生成过图像'}</div></div>`;
     return;
@@ -3272,8 +3274,8 @@ function renderMidtaiImageWorks() {
                     : `<button class="btn-secondary" style="justify-content:center" onclick="appendMidtaiImageToConversation('${result.id}')">插入到对话</button>`}
                 </div>
                 <div class="midtai-img-actions" style="margin-top:6px">
-                  <button class="btn-secondary" style="justify-content:center" onclick="beginImageResultEdit('${result.id}')">二次编辑</button>
-                  <button class="btn-secondary" style="justify-content:center" onclick="makeImageVariant('${result.id}')">变体</button>
+                  <button class="btn-secondary" style="justify-content:center" onclick="beginMidtaiImageEdit('${result.id}')">二次编辑</button>
+                  <button class="btn-secondary" style="justify-content:center" onclick="makeMidtaiImageVariant('${result.id}')">变体</button>
                 </div>
               </div>
             </div>
@@ -3282,6 +3284,20 @@ function renderMidtaiImageWorks() {
       </div>
     </div>
   `;
+}
+
+function beginMidtaiImageEdit(id) {
+  const result = (imageLabState.resultBatches || []).flatMap(b => b.items || []).find(i => i.id === id);
+  if (!result) return;
+  const promptEl = document.getElementById('midtai-img-prompt');
+  if (promptEl) promptEl.value = String(result.revisedPrompt || result.prompt || '').trim();
+  setImageLabReferenceFromSource(result.src, `edit-${result.id}.png`, { mode: 'prepend' });
+  showImgView('img-preview');
+}
+
+function makeMidtaiImageVariant(id) {
+  showImgView('img-preview');
+  makeImageVariant(id);
 }
 
 function scheduleDesignThumbnailLoads(items) {
@@ -3714,7 +3730,8 @@ function renderMidtaiImagePreview() {
     `;
   })() : '';
 
-  const imageCards = batches
+  const imageCards = [...batches]
+    .sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0))
     .flatMap(batch => (batch.items || []).map(result => ({ batch, result })))
     .map(({ batch, result }) => {
       const prompt = escapeHtml(result.revisedPrompt || result.prompt || batch.prompt || '');

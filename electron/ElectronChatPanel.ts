@@ -921,15 +921,25 @@ export class ElectronChatPanel {
       return;
     }
     if (type === "design:getThumbnail") {
-      const versionId = typeof message.versionId === "string" ? message.versionId.trim() : "";
-      if (!versionId) {
+      const projectId = typeof message.versionId === "string" ? message.versionId.trim() : "";
+      if (!projectId) {
         return;
       }
       try {
-        const version = await this.designVersionStore.getVersion(versionId);
+        // Try saved thumbnail first (fast path)
+        const saved = await this.designProjectStore.getThumbnail(projectId);
+        if (saved) {
+          this.sendToRenderer({ type: "design:thumbnail", versionId: projectId, dataUrl: saved });
+          return;
+        }
+        // Old project without saved thumbnail: render from active version HTML
+        const project = await this.designProjectStore.getProject(projectId);
+        if (!project?.activeVersionId) return;
+        const version = await this.designVersionStore.getVersion(project.activeVersionId);
         if (version?.html) {
           const dataUrl = await captureDesignThumbnail(version.html);
-          this.sendToRenderer({ type: "design:thumbnail", versionId, dataUrl });
+          void this.designProjectStore.saveThumbnail(projectId, dataUrl).catch(() => {});
+          this.sendToRenderer({ type: "design:thumbnail", versionId: projectId, dataUrl });
         }
       } catch {
         // Keep the renderer shimmer placeholder when thumbnail generation fails.
