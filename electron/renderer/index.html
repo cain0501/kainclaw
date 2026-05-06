@@ -2468,8 +2468,8 @@ function handleMessage(msg) {
     case 'midtai:design-library-update':
       midtaiState.designLibraryItems = Array.isArray(msg.items) ? msg.items : [];
       for (const item of midtaiState.designLibraryItems) {
-        if (item?.thumbnail && item?.versionId && !thumbnailCache.has(item.versionId)) {
-          thumbnailCache.set(item.versionId, item.thumbnail);
+        if (item?.thumbnail && item?.id && !thumbnailCache.has(item.id)) {
+          thumbnailCache.set(item.id, item.thumbnail);
         }
       }
       if (midtaiState.designTabView === 'design-works') {
@@ -3161,7 +3161,7 @@ function showDesignView(view) {
   document.querySelectorAll('#mtbar-design .mt-tab').forEach(button => {
     button.classList.toggle('active', button.dataset.view === view);
   });
-  document.getElementById('mtbar-design').style.display = view === 'canvas' ? 'none' : '';
+  // tab bar 在 canvas 视图也保持可见，让用户能切回生成预览/我的作品
   if (view === 'design-works') {
     send({ type: 'midtai:request-design-library' });
     renderMidtaiDesignWorks();
@@ -3266,9 +3266,14 @@ function renderMidtaiImageWorks() {
               <div class="midtai-img-card-body">
                 <div class="midtai-img-card-copy">${escapeHtml(String(result.revisedPrompt || result.prompt || '')).slice(0, 96)}</div>
                 <div class="midtai-img-actions">
+                  <a class="btn-secondary" href="${result.src}" download="kainclaw-image-${result.id}.png" style="text-decoration:none;text-align:center">下载</a>
                   ${isReplace
                     ? `<button class="btn-red" style="justify-content:center" onclick="insertToDesign('${result.src}')">插入到设计</button>`
                     : `<button class="btn-secondary" style="justify-content:center" onclick="appendMidtaiImageToConversation('${result.id}')">插入到对话</button>`}
+                </div>
+                <div class="midtai-img-actions" style="margin-top:6px">
+                  <button class="btn-secondary" style="justify-content:center" onclick="beginImageResultEdit('${result.id}')">二次编辑</button>
+                  <button class="btn-secondary" style="justify-content:center" onclick="makeImageVariant('${result.id}')">变体</button>
                 </div>
               </div>
             </div>
@@ -3291,11 +3296,11 @@ function scheduleDesignThumbnailLoads(items) {
   const next = () => {
     while ((midtaiState._thumbInFlight || 0) < MAX_CONCURRENT && queue.length > 0) {
       const item = queue.shift();
-      if (!item?.versionId) {
+      if (!item?.id) {
         continue;
       }
       midtaiState._thumbInFlight = (midtaiState._thumbInFlight || 0) + 1;
-      send({ type: 'design:getThumbnail', versionId: item.versionId });
+      send({ type: 'design:getThumbnail', versionId: item.id });
     }
     midtaiState._thumbQueue = queue;
     if (!queue.length && (midtaiState._thumbInFlight || 0) === 0) {
@@ -3327,14 +3332,14 @@ function renderMidtaiDesignWorks() {
       <div class="midtai-works-scroll">
         <div class="design-works-grid">
           ${items.map(item => {
-            const versionId = escapeHtml(String(item.versionId || ''));
+            const itemId = escapeHtml(String(item.id || ''));
             const projectId = escapeHtml(String(item.projectId || item.id || ''));
             const title = escapeHtml(String(item.title || item.name || '未命名'));
             const sourceClass = escapeHtml(String(item.source || 'generate'));
             const sourceLabel = item.source === 'midtai' ? '来自中台' : '来自设计台';
-            const cachedThumbnail = item.versionId ? thumbnailCache.get(item.versionId) : '';
+            const cachedThumbnail = item.id ? thumbnailCache.get(item.id) : '';
             return `
-              <div class="design-wcard" data-version-id="${versionId}">
+              <div class="design-wcard" data-version-id="${itemId}">
                 <div class="wcard-thumb design-wcard-thumb">
                   ${cachedThumbnail
                     ? `<img src="${cachedThumbnail}" style="width:100%;height:100%;object-fit:cover;display:block" />`
@@ -3354,7 +3359,7 @@ function renderMidtaiDesignWorks() {
       </div>
     </div>
   `;
-  scheduleDesignThumbnailLoads(items.filter(item => item?.versionId && !thumbnailCache.has(item.versionId)));
+  scheduleDesignThumbnailLoads(items.filter(item => item?.id && !thumbnailCache.has(item.id)));
 }
 
 function goReplaceInImageLab() {
