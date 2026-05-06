@@ -2480,6 +2480,7 @@ function handleMessage(msg) {
         ? `KainClaw Design · ${msg.outputType}`
         : 'KainClaw Design';
       designBridgeState.html = String(msg.html || '');
+      console.log('[KC-DEBUG] design:result html len:', designBridgeState.html.length, 'midtai active:', !!document.getElementById('page-midtai')?.classList.contains('active'));
       designBridgeState.prompt = String(msg.prompt || designBridgeState.prompt || '');
       designBridgeState.outputType = String(msg.outputType || designBridgeState.outputType || 'prototype');
       designBridgeState.style = String(msg.style || designBridgeState.style || '');
@@ -3341,7 +3342,9 @@ function buildMidtaiCanvasSrcdoc(html) {
   document.addEventListener('click', function(e) {
     if (!window.__kcSelectMode) return;
     const target = e.target;
-    let found = null;
+    if (!target || target === document.documentElement) return;
+    // Prefer image/bg-image elements; fall back to the clicked target
+    let found = target;
     let node = target;
     for (let i = 0; i < 6 && node && node !== document.documentElement; i++) {
       if (node.tagName === 'IMG') { found = node; break; }
@@ -3349,7 +3352,6 @@ function buildMidtaiCanvasSrcdoc(html) {
       if (bg && bg !== 'none' && bg !== '') { found = node; break; }
       node = node.parentElement;
     }
-    if (!found) return;
     e.preventDefault();
     e.stopPropagation();
     if (window.__kcPrevSelected) {
@@ -3497,6 +3499,7 @@ function openCanvas(projectName) {
   document.getElementById('midtai-canvas-select-btn')?.classList.remove('active');
   if (mcFrame) {
     const html = designBridgeState?.html || '';
+    console.log('[KC-DEBUG] openCanvas html len:', html.length, 'token:', designBridgeState.renderToken);
     mcFrame.onload = () => {
       postMidtaiCanvasSelectMode(midtaiState.canvasMode === 'select');
     };
