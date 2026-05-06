@@ -2456,7 +2456,13 @@ function handleMessage(msg) {
       break;
     case 'design:token': {
       const overlay = document.getElementById('design-generating-overlay');
+      const counter = document.getElementById('dgo-counter');
       if (overlay) overlay.classList.add('active');
+      if (counter && typeof msg.count === 'number') {
+        counter.textContent = isEnglishUi()
+          ? `${msg.count.toLocaleString()} chars...`
+          : `已生成 ${msg.count.toLocaleString()} 字符...`;
+      }
       break;
     }
     case 'design:progress':

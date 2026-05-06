@@ -115,6 +115,11 @@ export class DesignProjectStore {
         value TEXT
       );
     `);
+    try {
+      database.exec(`ALTER TABLE design_projects ADD COLUMN thumbnail TEXT`);
+    } catch {
+      // column already exists — safe to ignore
+    }
   }
 
   private async migrateLegacyJson(
@@ -485,6 +490,25 @@ export class DesignProjectStore {
       JSON.stringify({ projects: nextProjects }, null, 2),
       "utf8",
     );
+  }
+
+  async getThumbnail(projectId: string): Promise<string | undefined> {
+    const result = await this.withDatabase(database => {
+      const row = database.prepare(
+        "SELECT thumbnail FROM design_projects WHERE project_id = ?",
+      ).get(projectId) as { thumbnail?: string | null } | undefined;
+      return row?.thumbnail ?? null;
+    });
+    return result ?? undefined;
+  }
+
+  async saveThumbnail(projectId: string, thumbnail: string): Promise<void> {
+    await this.withDatabase(database => {
+      database.prepare(
+        "UPDATE design_projects SET thumbnail = ? WHERE project_id = ?",
+      ).run(thumbnail, projectId);
+      return true;
+    });
   }
 
   dispose(): void {

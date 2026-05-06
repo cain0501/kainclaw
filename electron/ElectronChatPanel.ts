@@ -165,6 +165,7 @@ import {
   DesignProjectStore,
   type DesignProjectRecord,
 } from "../src/design/designProjectStore";
+import { captureDesignThumbnail } from "./designThumbnail";
 import {
   DesignVersionStore,
   type DesignVersionRecord,
@@ -342,13 +343,7 @@ export class ElectronChatPanel {
         return this.imageResults;
       },
       () => this.designProjectStore.listProjects(),
-      async project => {
-        if (!project.activeVersionId || project.activeVersionId === "pending-version") {
-          return undefined;
-        }
-        const html = await this.designVersionStore.getVersionHtml(project.activeVersionId);
-        return html ?? undefined;
-      },
+      async project => this.designProjectStore.getThumbnail(project.projectId),
     );
     this.taskRuntimeStore = new PersistentTaskRuntimeStore(this.host.getStorageUri());
     this.worktreeRuntimeStore = new PersistentWorktreeRuntimeStore(this.host.getStorageUri());
@@ -3605,7 +3600,14 @@ export class ElectronChatPanel {
       lastOpenedAt: Date.now(),
       ...(options.prompt?.trim() ? { name: options.prompt.trim().slice(0, 80) } : {}),
     });
-    await this.setCurrentDesignProject(updatedProject ?? project);
+    const captureProject = updatedProject ?? project;
+    await this.setCurrentDesignProject(captureProject);
+
+    // Async thumbnail capture — doesn't block the response
+    void captureDesignThumbnail(options.html)
+      .then(thumbnail => this.designProjectStore.saveThumbnail(captureProject.projectId, thumbnail))
+      .catch(() => { /* non-critical */ });
+
     return version;
   }
 
