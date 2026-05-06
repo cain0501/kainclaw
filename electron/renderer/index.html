@@ -442,8 +442,8 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-seri
 .tw-g7{background:linear-gradient(135deg,#6a11cb,#2575fc)}
 .tw-g8{background:linear-gradient(135deg,#11998e,#38ef7d)}
 /* 图像 grid（较窄列）与设计 grid（标准列）*/
-.img-works-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(158px,1fr));gap:10px}
-.design-works-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:14px}
+.img-works-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(158px,1fr));gap:10px;grid-column:1/-1}
+.design-works-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:14px;grid-column:1/-1;margin-bottom:16px}
 .midtai-canvas-shell{flex:1;min-height:0;overflow:hidden;display:flex;flex-direction:column}
 .midtai-canvas-frame{flex:1;min-height:0;display:flex;flex-direction:column}
 .midtai-canvas-title{font-size:20px;font-weight:700;color:#1c1917;margin-bottom:10px}
@@ -1192,11 +1192,14 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-seri
             <div id="midtai-canvas-empty" class="midtai-canvas-title" style="display:flex;align-items:center;justify-content:center;flex:1;color:#a8998a;font-size:13px">暂无设计内容</div>
           </div>
         </div>
-        <div id="midtai-node-panel" style="display:none;width:220px;flex-shrink:0;background:#fff;border-left:1px solid #e5ddd0;padding:16px;overflow-y:auto">
-          <div id="mnp-tag" style="font-size:11px;color:#a8998a;margin-bottom:8px"></div>
-          <div style="font-weight:600;margin-bottom:12px">替换图片</div>
-          <button onclick="goReplaceInImageLab()" class="btn-red" style="width:100%;margin-bottom:8px">✦ 去 Image Lab 生成图</button>
-          <button onclick="goReplaceInWorks()" class="btn-secondary" style="width:100%">🗂 从我的作品选择</button>
+        <div id="midtai-node-panel" style="display:none;position:fixed;z-index:9999;width:190px;background:#fff;border:1px solid #e5ddd0;border-radius:10px;box-shadow:0 8px 24px rgba(0,0,0,.12);padding:12px">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
+            <div id="mnp-tag" style="font-size:11px;color:#a8998a;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:140px"></div>
+            <button onclick="hideMidtaiNodePanel();setMidtaiCanvasMode('view')" style="border:none;background:none;cursor:pointer;color:#a8998a;font-size:16px;line-height:1;padding:0 2px;flex-shrink:0">×</button>
+          </div>
+          <div style="font-size:11px;font-weight:600;color:#78716c;margin-bottom:8px">替换图片</div>
+          <button onclick="goReplaceInImageLab()" class="btn-red" style="width:100%;margin-bottom:6px;font-size:11px;padding:6px 8px">✦ 去 Image Lab 生成图</button>
+          <button onclick="goReplaceInWorks()" class="btn-secondary" style="width:100%;font-size:11px;padding:6px 8px">从我的作品选择</button>
         </div>
       </div>
     </div>
@@ -1542,8 +1545,8 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-seri
             <div class="imglab-loader-square alt s5"></div>
             <div class="imglab-loader-square alt s6"></div>
           </div>
-          <div class="dgo-title" id="dgo-title">KainClaw 正在生成设计...</div>
-          <div class="dgo-counter" id="dgo-counter"></div>
+          <div class="dgo-title" id="dgo-title">正在生成设计稿...</div>
+          <div class="dgo-counter" id="dgo-counter" style="font-size:11px;color:#a8a29e">通常需要 10~30 秒</div>
         </div>
       </div>
       <div id="design-patch-popover" class="design-patch-popover" style="display:none;border:1px solid #eadfd2;border-radius:16px;background:#fff7f0;padding:12px 14px">
@@ -2453,13 +2456,7 @@ function handleMessage(msg) {
       break;
     case 'design:token': {
       const overlay = document.getElementById('design-generating-overlay');
-      const counter = document.getElementById('dgo-counter');
       if (overlay) overlay.classList.add('active');
-      if (counter && typeof msg.count === 'number') {
-        counter.textContent = isEnglishUi()
-          ? `${msg.count.toLocaleString()} chars generated...`
-          : `已生成 ${msg.count.toLocaleString()} 字符...`;
-      }
       break;
     }
     case 'design:progress':
@@ -3209,9 +3206,13 @@ function renderMidtaiWorks() {
   function cardHtml(item) {
     const action = isReplace
       ? `<button class="btn-red" style="width:100%;margin-top:4px" onclick="insertToDesign('${escapeHtml(String(item.thumbnail || item.name || item.id))}')">✓ 选用此图</button>`
-      : `<button class="btn-secondary" style="width:100%;margin-top:4px" onclick="openCanvas('${escapeHtml(String(item.name || 'Untitled Design'))}')">打开编辑</button>`;
+      : `<button class="btn-secondary" style="width:100%;margin-top:4px" onclick="openDesignProjectFromHome('${escapeHtml(String(item.projectId || item.id))}')">打开编辑</button>`;
+    let thumbInner = '';
+    if (item.thumbnail && (item.thumbnail.startsWith('data:') || item.thumbnail.startsWith('http'))) {
+      thumbInner = `<img src="${item.thumbnail}" style="width:100%;height:100%;object-fit:cover;display:block" />`;
+    }
     return `<div class="design-wcard">
-      <div class="design-wcard-thumb ${thumbClass(item)}"></div>
+      <div class="design-wcard-thumb ${thumbClass(item)}">${thumbInner}</div>
       <div class="design-wcard-footer">
         <div class="design-wcard-title">${escapeHtml(String(item.name || 'Untitled'))}</div>
         <div class="design-wcard-meta">
@@ -3327,19 +3328,33 @@ function buildMidtaiCanvasSrcdoc(html) {
   }
 
   document.addEventListener('click', function(e) {
+    if (!window.__kcSelectMode) return;
     const target = e.target;
-    const img = target && target.closest ? target.closest('img, [style*="background-image"]') : null;
-    if (!img || !window.__kcSelectMode) return;
+    let found = null;
+    let node = target;
+    for (let i = 0; i < 6 && node && node !== document.documentElement; i++) {
+      if (node.tagName === 'IMG') { found = node; break; }
+      const bg = window.getComputedStyle(node).backgroundImage;
+      if (bg && bg !== 'none' && bg !== '') { found = node; break; }
+      node = node.parentElement;
+    }
+    if (!found) return;
     e.preventDefault();
     e.stopPropagation();
-    const rect = img.getBoundingClientRect();
+    if (window.__kcPrevSelected) {
+      try { window.__kcPrevSelected.style.outline = ''; window.__kcPrevSelected.style.outlineOffset = ''; } catch(err) {}
+    }
+    found.style.outline = '2px solid rgba(201,76,46,0.9)';
+    found.style.outlineOffset = '2px';
+    window.__kcPrevSelected = found;
+    const rect = found.getBoundingClientRect();
     window.parent.postMessage({
       type: '__midtai_node_selected',
-      tagName: img.tagName,
-      src: img.src || readBackgroundImageUrl(img) || '',
-      selector: img.id ? '#' + img.id : img.className ? '.' + String(img.className).split(' ')[0] : img.tagName.toLowerCase(),
-      outerHTML: (img.outerHTML || '').slice(0, 300),
-      fullOuterHTML: img.outerHTML || '',
+      tagName: found.tagName,
+      src: found.src || readBackgroundImageUrl(found) || '',
+      selector: found.id ? '#' + found.id : found.className ? '.' + String(found.className).trim().split(/\s+/)[0] : found.tagName.toLowerCase(),
+      outerHTML: (found.outerHTML || '').slice(0, 300),
+      fullOuterHTML: found.outerHTML || '',
       rect: {
         top: rect.top,
         left: rect.left,
@@ -3432,6 +3447,17 @@ function handleMidtaiCanvasFrameMessage(event) {
   designBridgeState.selectedNode = node;
   if (node) {
     showMidtaiNodePanel(node);
+    const mcFrame = document.getElementById('midtai-canvas-iframe');
+    const panel = document.getElementById('midtai-node-panel');
+    if (panel && mcFrame && node.rect) {
+      const fr = mcFrame.getBoundingClientRect();
+      let top = fr.top + node.rect.top + node.rect.height + 10;
+      let left = fr.left + node.rect.left;
+      top = Math.max(60, Math.min(top, window.innerHeight - 170));
+      left = Math.max(0, Math.min(left, window.innerWidth - 200));
+      panel.style.top = top + 'px';
+      panel.style.left = left + 'px';
+    }
   } else {
     hideMidtaiNodePanel();
   }
@@ -3536,7 +3562,11 @@ function hydrateDesignProjectIntoBridge(project, activeVersion) {
   designBridgeState.canvasMode = 'view';
   designBridgeState.renderToken = Date.now();
   designBridgeRenderedToken = 0;
-  showDesignPage();
+  if (document.getElementById('page-midtai')?.classList.contains('active') && designBridgeState.html) {
+    openCanvas(designBridgeState.title);
+  } else {
+    showDesignPage();
+  }
 }
 
 function openMidtai(payload) {
@@ -4569,10 +4599,8 @@ function renderDesignBridgePage() {
   if (genOverlay) {
     const isGenerating = !!designBridgeState.loading && !designBridgeState.patchLoading;
     genOverlay.classList.toggle('active', isGenerating);
-    if (!isGenerating) {
-      if (dgoCounter) dgoCounter.textContent = '';
-    } else if (dgoTitle) {
-      dgoTitle.textContent = isEnglishUi() ? 'KainClaw is generating design...' : 'KainClaw 正在生成设计...';
+    if (dgoTitle) {
+      dgoTitle.textContent = isEnglishUi() ? 'Generating design...' : '正在生成设计稿...';
     }
   }
   generateBtn.disabled = !!designBridgeState.loading;
