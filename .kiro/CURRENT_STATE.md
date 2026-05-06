@@ -7,8 +7,8 @@
 
 | Metric | Value | Last Updated |
 |--------|-------|--------------|
-| Test files | 170 | 2026-05-05 |
-| Tests passing | 1320 | 2026-05-05 |
+| Test files | 170 | 2026-05-06 |
+| Tests passing | 1322 | 2026-05-06 |
 | Last verified commit | see `git log --oneline -1` | — |
 
 **Required passing commands:**
@@ -24,6 +24,10 @@ npm run build:electron   # only when Electron behavior changed
 | Beads ID | Title | Status | Primer |
 |----------|-------|--------|--------|
 | vscode-extension-f4v | extension.ts 宿主总控继续下沉 | IN_PROGRESS | `.kiro/primers/vscode-extension-f4v.md` |
+| vscode-extension-lca | Hooks: 用户配置接入触发链 | OPEN | `.kiro/primers/vscode-extension-lca.md` |
+| vscode-extension-vwq | Hooks: 官方事件名兼容 + Notification/SessionStart | OPEN | `.kiro/primers/vscode-extension-vwq.md` |
+| vscode-extension-pnz | Fast mode: state persistence | OPEN | `.kiro/primers/vscode-extension-pnz.md` |
+| vscode-extension-e0i | Midtai 图像整合：左侧表单 + 生成预览 + 提示词库 | ✓ CLOSED | — |
 | vscode-extension-0pq | ~~Design Home UI（阶段 1）~~ | ✓ CLOSED | — |
 | vscode-extension-0pq-2 | Tweaks 右侧抽屉 | ✓ CLOSED | — |
 | vscode-extension-w0i | design_versions 缺列迁移补丁 | ✓ CLOSED | — |
@@ -37,8 +41,13 @@ npm run build:electron   # only when Electron behavior changed
 | vscode-extension-a4o | Design 项目删除 + 重命名 | ✓ CLOSED | — |
 | vscode-extension-pmh | Design Home UI 升级（缩略图+网格） | ✓ CLOSED | — |
 | vscode-extension-175 | Design 生成流式输出（onToken + shimmer）| ✓ CLOSED | — |
+| vscode-extension-e38 | My Works 真实数据接入 | ✓ CLOSED | — |
+| vscode-extension-o6a | My Works UI 对齐设计稿（design-wcard 样式）| ✓ CLOSED | — |
+| vscode-extension-fo7 | Midtai 画布选择模式 + Replace 流 | ✓ CLOSED | — |
+| vscode-extension-aw5 | Design Prompt 质量升级（Anti-Slop + Direction Spec）| ✓ CLOSED | — |
+| vscode-extension-mjj | 中台设计表单：输出类型 + 视觉方向选择器 | ✓ CLOSED | — |
 
-**→ Design UX 下一个:** `.kiro/primers/vscode-extension-pmh.md`
+**→ Design UX 全部已完成。下一批由 Claude PM 按需拆解。**
 
 ## Stable Capabilities (don't need re-verification)
 
@@ -60,6 +69,11 @@ npm run build:electron   # only when Electron behavior changed
 - Electron artifact panel persistence (collapse / restore strip / per-session collapsed state / version navigation)
 - Image Lab chain (generate / edit / Prompt Library / reference image search)
 - Midtai P0 foundations (explicit `midtai:open` routing, library DTO aggregation, deterministic design image replacement IPC)
+- Midtai My Works (design-wcard 卡片：gradient thumb / hover lift / dark version badge / source color badges / 图片网格 158px + 设计网格 210px)
+- Midtai Canvas Selection (fo7 bridge: 选择模式 crosshair → node panel → Replace 图片 / 去 Image Lab / 从我的作品选择)
+- KainClaw Design Prompt 质量升级 (Anti-Slop 9 条规则 + DesignDirectionSpec OKLch 调色板 + posture 注入，4 套方向含完整 spec)
+- Midtai 设计表单 (输出类型 select + 视觉方向卡片选择器，按输出类型动态渲染，选中值传入 generateDesignWorkbench)
+- Midtai 图像整合 (左侧图像表单 + 比例/数量控件 + 生成预览 shimmer/结果卡片 + 静态提示词库 + 插入到对话)
 - Local Bridge / Word Add-in (read + write-back + Track Changes + comments)
 - Electron i18n (shellStrings covering all surfaces)
 

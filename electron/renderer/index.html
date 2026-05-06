@@ -366,6 +366,9 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-seri
 .midtai-chip-row{display:flex;flex-wrap:wrap;gap:5px}
 .midtai-filter-chip{padding:4px 11px;border:1.5px solid #e5ddd0;background:#fff;border-radius:20px;font-size:11px;color:#78716c}
 .midtai-filter-chip.active{background:#1c1917;color:#fff;border-color:#1c1917}
+.midtai-ratio-row,.midtai-qty-row{display:flex;gap:6px}
+.midtai-ratio-btn,.midtai-qty-btn{flex:1;padding:5px 0;border:1.5px solid #e5ddd0;border-radius:7px;background:none;font-size:12px;color:#57534e;cursor:pointer}
+.midtai-ratio-btn.active,.midtai-qty-btn.active{border-color:#c0392b;color:#c0392b;background:#fff5f5}
 .midtai-cta-wrap{padding:12px;display:flex;flex-direction:column;gap:8px}
 .midtai-form-select{padding:7px 10px;border:1.5px solid #e5ddd0;border-radius:8px;font-size:12px;background:#fff;font-family:inherit;color:#1c1917;appearance:none;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1l5 5 5-5' stroke='%2378716c' stroke-width='1.5' fill='none' stroke-linecap='round'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 10px center;cursor:pointer}
 .midtai-form-select:focus{outline:none;border-color:#c94c2e}
@@ -432,6 +435,19 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-seri
 .s-mid{background:#fef3c7;color:#92400e}
 .s-blank{background:#f1f5f9;color:#475569}
 .wcard-time{font-size:11px;color:#a8a29e;margin-left:auto}
+.midtai-img-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(158px,1fr));gap:12px}
+.midtai-img-card{background:#fff;border:1px solid #eadfd2;border-radius:18px;overflow:hidden;box-shadow:0 12px 24px rgba(77,49,24,.07)}
+.midtai-img-thumb{width:100%;aspect-ratio:1/1;object-fit:cover;display:block;background:#f5efe8}
+.midtai-img-card-body{padding:12px 12px 10px}
+.midtai-img-card-copy{font-size:12px;color:#5f4f43;line-height:1.6;min-height:58px}
+.midtai-img-actions{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:10px}
+.midtai-img-chip{display:inline-flex;align-items:center;padding:2px 7px;border-radius:999px;background:#f5f0e8;color:#57534e;font-size:10px;font-weight:700}
+.midtai-plib-cats{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:14px}
+.midtai-plib-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:12px}
+.midtai-plib-card{background:#fff;border:1px solid #e5ddd0;border-radius:12px;padding:14px;display:flex;flex-direction:column;gap:8px;min-height:182px}
+.midtai-plib-title{font-size:13px;font-weight:600;color:#1c1917}
+.midtai-plib-copy{font-size:12px;color:#78716c;line-height:1.6;flex:1}
+.midtai-plib-actions{display:flex;justify-content:flex-end}
 /* thumb 渐变调色板 */
 .tw-g1{background:linear-gradient(135deg,#0f0c29,#302b63)}
 .tw-g2{background:linear-gradient(135deg,#1a1a2e,#e94560)}
@@ -1055,12 +1071,28 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-seri
         <div id="midtai-form-img" style="display:flex;flex-direction:column">
           <div class="midtai-form">
             <div class="midtai-form-group">
-              <label class="midtai-form-label" for="imglab-prompt">图像描述</label>
-              <textarea class="midtai-form-textarea" placeholder="在这里生成图片，右侧切换视图。"></textarea>
+              <label class="midtai-form-label" for="midtai-img-prompt">图像描述</label>
+              <textarea id="midtai-img-prompt" class="midtai-form-textarea" placeholder="描述你想要的图像..."></textarea>
+            </div>
+            <div class="midtai-form-group">
+              <label class="midtai-form-label">比例</label>
+              <div class="midtai-ratio-row">
+                <button class="midtai-ratio-btn active" type="button" data-size="1024x1024" onclick="setMidtaiImageSize('1024x1024')">方形</button>
+                <button class="midtai-ratio-btn" type="button" data-size="1536x1024" onclick="setMidtaiImageSize('1536x1024')">横版</button>
+                <button class="midtai-ratio-btn" type="button" data-size="1024x1536" onclick="setMidtaiImageSize('1024x1536')">竖版</button>
+              </div>
+            </div>
+            <div class="midtai-form-group">
+              <label class="midtai-form-label">数量</label>
+              <div class="midtai-qty-row">
+                <button class="midtai-qty-btn active" type="button" data-count="1" onclick="setMidtaiImageCount(1)">1</button>
+                <button class="midtai-qty-btn" type="button" data-count="2" onclick="setMidtaiImageCount(2)">2</button>
+                <button class="midtai-qty-btn" type="button" data-count="4" onclick="setMidtaiImageCount(4)">4</button>
+              </div>
             </div>
           </div>
           <div class="midtai-cta-wrap">
-            <button class="btn-red">生成图片</button>
+            <button class="btn-red" onclick="runMidtaiImage()">✦ 生成图片</button>
           </div>
         </div>
         <div id="midtai-form-design" style="display:none;flex-direction:column">
@@ -1100,15 +1132,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-seri
         <button id="mt-design-works" class="mtab active" onclick="designSwitchView('works')">我的作品</button>
         <button id="mt-design-plib" class="mtab" onclick="designSwitchView('plib')">提示词库</button>
       </div>
-      <div id="canvas-toolbar" class="canvas-toolbar" style="display:none">
-        <button id="canvas-toolbar-view" class="canvas-mode-btn active">查看</button>
-        <button id="canvas-toolbar-select" class="canvas-mode-btn">选择</button>
-        <button id="canvas-toolbar-tweaks" class="canvas-mode-btn">调节</button>
-        <div class="canvas-toolbar-spacer"></div>
-        <button class="canvas-toolbar-btn" onclick="exitCanvas()">返回</button>
-        <button class="canvas-toolbar-btn">版本历史</button>
-        <button class="canvas-toolbar-btn">导出</button>
-      </div>
+
       <div id="replace-ctx" class="replace-ctx">
         <span class="replace-ctx-icon">🎆</span>
         <span id="replace-ctx-text" class="replace-ctx-text">替换目标：项目 · 元素</span>
@@ -1179,7 +1203,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-seri
       <div id="view-canvas" class="midtai-view">
         <div class="midtai-canvas-shell">
           <div class="midtai-canvas-frame">
-            <div class="canvas-toolbar">
+            <div id="canvas-toolbar" class="canvas-toolbar">
               <button id="midtai-canvas-view-btn" class="canvas-mode-btn active" onclick="setMidtaiCanvasMode('view')">查看</button>
               <button id="midtai-canvas-select-btn" class="canvas-mode-btn" onclick="setMidtaiCanvasMode('select')">选择</button>
               <button id="midtai-canvas-tweak-btn" class="canvas-mode-btn" disabled title="调节模式即将支持" style="opacity:.45;cursor:not-allowed">调节</button>
@@ -1712,7 +1736,40 @@ let midtaiState = {
   replaceCtx: null,
   selectedCanvasNode: null,
   designDirection: '',
+  imgSize: '1024x1024',
+  imgCount: 1,
 };
+const MIDTAI_PLIB_IMG = [
+  {
+    cat: '人像',
+    prompts: [
+      { title: '电影感人像', text: 'cinematic portrait, soft rim light, shallow depth of field, film grain, premium editorial mood' },
+      { title: '极简白底', text: 'minimal portrait, pure white background, high key lighting, clean commercial styling' },
+    ],
+  },
+  {
+    cat: '产品',
+    prompts: [
+      { title: '电商主图', text: 'premium product hero shot, centered composition, soft shadow, clean gradient backdrop, glossy detail' },
+      { title: '科技器件', text: 'futuristic device render, brushed metal texture, dramatic rim light, dark studio background' },
+    ],
+  },
+  {
+    cat: '场景',
+    prompts: [
+      { title: '品牌空间', text: 'editorial interior scene, warm ambient lighting, premium material palette, clean architectural framing' },
+      { title: '城市街景', text: 'cinematic urban street scene, neon reflections, moody atmosphere, realistic depth and motion' },
+    ],
+  },
+  {
+    cat: '插画',
+    prompts: [
+      { title: '扁平信息插画', text: 'flat vector illustration, clean geometry, brand-friendly palette, modern infographic composition' },
+      { title: '杂志拼贴', text: 'editorial collage illustration, layered paper texture, bold typography accents, experimental composition' },
+    ],
+  },
+];
+let midtaiPromptLibraryCategory = 'all';
 
 function resolveInferredImageRatio(node) {
   const width = Number(node?.rect?.width || 0);
@@ -2615,6 +2672,9 @@ function handleMessage(msg) {
       break;
     case 'image:state':
       applyImageLabState(msg);
+      if (document.getElementById('page-midtai')?.classList.contains('active') && midtaiState.type === 'img') {
+        renderMidtaiImagePreview();
+      }
       break;
     case 'image:result':
       imageLabState.pendingBatch = null;
@@ -2633,6 +2693,9 @@ function handleMessage(msg) {
             ? `已新增 ${latestBatchCount} 张${sourceLabel}，并保留之前的图片批次。`
             : `已新增 1 张${sourceLabel}，并保留之前的图片批次。`,
         );
+      }
+      if (document.getElementById('page-midtai')?.classList.contains('active') && midtaiState.type === 'img') {
+        renderMidtaiImagePreview();
       }
       break;
     case 'design:patchImageNode:result':
@@ -2660,11 +2723,17 @@ function handleMessage(msg) {
       if (currentGalleryTab === 'library') renderPromptLibrary();
       if (productDrawerState.open && productDrawerState.mode === 'materials') renderProductDrawer();
       setImageLabStatus(String(msg.error || '图片任务失败'), true);
+      if (document.getElementById('page-midtai')?.classList.contains('active') && midtaiState.type === 'img') {
+        renderMidtaiImagePreview();
+      }
       break;
     case 'image:aborted':
       imageLabState.pendingBatch = null;
       renderImageLabResults();
       setImageLabStatus(String(msg.message || '已停止当前图片生成。'));
+      if (document.getElementById('page-midtai')?.classList.contains('active') && midtaiState.type === 'img') {
+        renderMidtaiImagePreview();
+      }
       break;
     case 'image:promptInferred':
       if (chatImageEditorState.open) {
@@ -3287,10 +3356,12 @@ function imgSwitchView(view) {
   if (view === 'plib') {
     showOnlyMidtaiView('plib');
     setImgTabActive('mt-img-plib');
+    renderMidtaiPromptLibrary();
     return;
   }
   showOnlyMidtaiView('img-preview');
   setImgTabActive('mt-img-preview');
+  renderMidtaiImagePreview();
 }
 
 function designSwitchView(view) {
@@ -3325,6 +3396,7 @@ function designSwitchView(view) {
   showOnlyMidtaiView('works');
   setDesignTabActive('mt-design-works');
   send({ type: 'image:loadState' });
+  send({ type: 'midtai:request-library' });
   renderMidtaiWorks();
 }
 
@@ -3555,7 +3627,247 @@ function switchType(type) {
     designSwitchView('works');
     return;
   }
+  renderMidtaiImagePreview();
   imgSwitchView('preview');
+}
+
+function setMidtaiImageSize(size) {
+  midtaiState.imgSize = size || '1024x1024';
+  document.querySelectorAll('#midtai-form-img .midtai-ratio-btn').forEach(button => {
+    button.classList.toggle('active', button.dataset.size === midtaiState.imgSize);
+  });
+}
+
+function setMidtaiImageCount(count) {
+  const nextCount = Math.max(1, Math.min(4, Number(count || 1)));
+  midtaiState.imgCount = nextCount;
+  document.querySelectorAll('#midtai-form-img .midtai-qty-btn').forEach(button => {
+    button.classList.toggle('active', Number(button.dataset.count || 0) === nextCount);
+  });
+}
+
+function runMidtaiImage() {
+  const prompt = document.getElementById('midtai-img-prompt')?.value.trim();
+  if (!prompt) {
+    setImageLabStatus('请先输入图像描述。', true);
+    renderMidtaiImagePreview();
+    return;
+  }
+  const promptEl = document.getElementById('imglab-prompt');
+  const sizeEl = document.getElementById('imglab-size-preset');
+  const batchEl = document.getElementById('imglab-batchcount');
+  if (promptEl) {
+    promptEl.value = prompt;
+  }
+  if (sizeEl) {
+    sizeEl.value = midtaiState.imgSize || '1024x1024';
+  }
+  if (batchEl) {
+    batchEl.value = String(midtaiState.imgCount || 1);
+  }
+  imgSwitchView('preview');
+  runImageLab();
+}
+
+function renderMidtaiImagePreview() {
+  const container = document.getElementById('view-img-preview');
+  if (!container) return;
+
+  const batches = imageLabState.resultBatches || [];
+  const pendingBatch = imageLabState.busy
+    ? (imageLabState.pendingBatch || createPendingImageLabBatch(
+        imageLabState.lastRequest?.referenceImages?.length ? 'edit' : 'generate',
+        imageLabState.lastRequest?.batchCount || imageLabState.config.batchCount || 1,
+      ))
+    : null;
+
+  if (!batches.length && !pendingBatch) {
+    container.innerHTML = `
+      <div class="midtai-empty-view">
+        <div class="midtai-empty-icon">✦</div>
+        <div class="midtai-empty-title">图像生成预览</div>
+        <div class="midtai-empty-copy">先在左侧输入描述，点击生成图片，结果会立即出现在这里。</div>
+      </div>
+    `;
+    return;
+  }
+
+  const loadingHtml = pendingBatch ? (() => {
+    const sourceMeta = getImageResultSourceMeta(pendingBatch.source);
+    const placeholderCards = Array.from({ length: pendingBatch.count }, (_, index) => `
+      <div class="imglab-loading-card" style="border:1px solid #eadfd2;border-radius:18px;overflow:hidden;box-shadow:0 12px 24px rgba(77,49,24,.07)">
+        <div class="imglab-loading-media">
+          <div class="imglab-loader-stage">
+            <div class="imglab-loader-grid" aria-hidden="true">
+              <span class="imglab-loader-square s1"></span>
+              <span class="imglab-loader-square alt s2"></span>
+              <span class="imglab-loader-square s3"></span>
+              <span class="imglab-loader-square alt s4"></span>
+              <span class="imglab-loader-square s5"></span>
+              <span class="imglab-loader-square alt s6"></span>
+              <span class="imglab-loader-square s7"></span>
+              <span class="imglab-loader-square alt s8"></span>
+              <span class="imglab-loader-square s9"></span>
+            </div>
+            <div class="imglab-loader-copy">
+              <div class="imglab-loader-title">${escapeHtml(shellText(pendingBatch.source === 'edit' ? 'imagePendingLoaderTitleEdit' : 'imagePendingLoaderTitleGenerate'))} #${index + 1}</div>
+              <div class="imglab-loader-subtitle">${escapeHtml(shellText('imagePendingLoaderSubtitle'))}</div>
+            </div>
+          </div>
+        </div>
+        <div style="padding:12px 12px 10px">
+          <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:8px">
+            <span class="${sourceMeta.badgeClass}">${translateSurfaceText(sourceMeta.label)}</span>
+            <span style="font-size:11px;color:#9b8a7b">#${index + 1}</span>
+          </div>
+          <div style="display:flex;flex-direction:column;gap:8px;min-height:58px">
+            <div class="imglab-loading-line long"></div>
+            <div class="imglab-loading-line medium"></div>
+            <div class="imglab-loading-line short"></div>
+          </div>
+        </div>
+      </div>
+    `).join('');
+    return `
+      <div class="midtai-works-scroll" style="padding-top:16px">
+        <div class="midtai-img-grid">${placeholderCards}</div>
+      </div>
+    `;
+  })() : '';
+
+  const imageCards = batches
+    .flatMap(batch => (batch.items || []).map(result => ({ batch, result })))
+    .map(({ batch, result }) => {
+      const prompt = escapeHtml(result.revisedPrompt || result.prompt || batch.prompt || '');
+      const sourceMeta = getImageResultSourceMeta(result.source || batch.source);
+      return `
+        <div class="midtai-img-card">
+          <img src="${result.src}" class="midtai-img-thumb" alt="generated">
+          <div class="midtai-img-card-body">
+            <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:6px">
+              <span class="${sourceMeta.badgeClass}">${translateSurfaceText(sourceMeta.label)}</span>
+              <span style="font-size:11px;color:#9b8a7b">#${escapeHtml(String(result.id).split('-').slice(-1)[0] || '1')}</span>
+            </div>
+            <div class="midtai-img-card-copy">${prompt.slice(0, 96)}</div>
+            <div class="midtai-img-actions">
+              <a class="btn-secondary" href="${result.src}" download="kainclaw-image-${result.id}.png" style="text-decoration:none">下载</a>
+              ${midtaiState.replaceCtx
+                ? `<button class="btn-red" style="justify-content:center" onclick="insertToDesign('${result.src}')">✓ 插入到设计</button>`
+                : `<button class="btn-secondary" style="justify-content:center" onclick="appendMidtaiImageToConversation('${result.id}')">插入到对话</button>`}
+            </div>
+          </div>
+        </div>
+      `;
+    }).join('');
+
+  container.innerHTML = `
+    <div class="midtai-works-shell">
+      <div class="midtai-works-toolbar">
+        <span class="midtai-works-title">${midtaiState.replaceCtx ? '替换图像预览' : '图像生成预览'}</span>
+        <span class="midtai-works-count">${batches.reduce((total, batch) => total + ((batch.items || []).length || 0), 0)}</span>
+      </div>
+      ${loadingHtml || `
+        <div class="midtai-works-scroll">
+          <div class="midtai-img-grid">${imageCards}</div>
+        </div>
+      `}
+    </div>
+  `;
+}
+
+function appendMidtaiImageToConversation(id) {
+  const result = (imageLabState.resultBatches || [])
+    .flatMap(batch => batch.items || [])
+    .find(item => item.id === id);
+  if (!result?.src) {
+    setImageLabStatus('未找到要插入的图片结果。', true);
+    return;
+  }
+  pendingAttachments.push({
+    dataUrl: result.src,
+    mimeType: 'image/png',
+    name: `midtai-${result.id}.png`,
+  });
+  renderAttPreview();
+  showPage('chat');
+}
+
+function setMidtaiPromptLibraryCategory(category) {
+  midtaiPromptLibraryCategory = category || 'all';
+  renderMidtaiPromptLibrary();
+}
+
+function useMidtaiPromptLibraryPrompt(text) {
+  const promptInput = document.getElementById('midtai-img-prompt');
+  if (promptInput) {
+    promptInput.value = String(text || '').trim();
+  }
+  imgSwitchView('preview');
+}
+
+function renderMidtaiPromptLibrary() {
+  const container = document.getElementById('view-plib');
+  if (!container) return;
+  const isImageMode = midtaiState.type === 'img';
+  if (!isImageMode) {
+    container.innerHTML = `
+      <div class="midtai-plib-shell">
+        <div class="midtai-works-toolbar">
+          <span class="midtai-works-title">提示词库</span>
+        </div>
+        <div class="midtai-plib-scroll">
+          <div class="midtai-card-grid">
+            <div class="midtai-card">
+              <div class="midtai-card-title">提示词库内容将在这里接入</div>
+              <div class="midtai-card-copy">ha8 只先把统一壳层和双 tab bar 路由起来。</div>
+              <div class="midtai-card-meta"><span class="midtai-card-badge">Shell</span></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    `;
+    return;
+  }
+
+  const categories = ['all', ...MIDTAI_PLIB_IMG.map(group => group.cat)];
+  if (!categories.includes(midtaiPromptLibraryCategory)) {
+    midtaiPromptLibraryCategory = 'all';
+  }
+  const cards = MIDTAI_PLIB_IMG
+    .filter(group => midtaiPromptLibraryCategory === 'all' || group.cat === midtaiPromptLibraryCategory)
+    .flatMap(group => group.prompts.map(prompt => ({ ...prompt, cat: group.cat })));
+
+  container.innerHTML = `
+    <div class="midtai-plib-shell">
+      <div class="midtai-works-toolbar">
+        <span class="midtai-works-title">提示词库</span>
+      </div>
+      <div class="midtai-plib-scroll">
+        <div class="midtai-plib-cats">
+          ${categories.map(category => `
+            <button
+              class="midtai-filter-chip${category === midtaiPromptLibraryCategory ? ' active' : ''}"
+              onclick="setMidtaiPromptLibraryCategory('${escapeHtml(category)}')"
+            >${category === 'all' ? '全部' : escapeHtml(category)}</button>
+          `).join('')}
+        </div>
+        <div class="midtai-plib-grid">
+          ${cards.map(card => `
+            <div class="midtai-plib-card">
+              <div style="display:flex;align-items:center;justify-content:space-between;gap:8px">
+                <div class="midtai-plib-title">${escapeHtml(card.title)}</div>
+                <span class="midtai-card-badge">${escapeHtml(card.cat)}</span>
+              </div>
+              <div class="midtai-plib-copy">${escapeHtml(card.text)}</div>
+              <div class="midtai-plib-actions">
+                <button class="btn-secondary" onclick="useMidtaiPromptLibraryPrompt('${escapeHtml(card.text)}')">使用</button>
+              </div>
+            </div>
+          `).join('')}
+        </div>
+      </div>
+    </div>
+  `;
 }
 
 function hydrateDesignProjectIntoBridge(project, activeVersion) {
