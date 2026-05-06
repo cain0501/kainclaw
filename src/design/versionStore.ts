@@ -398,7 +398,16 @@ export class DesignVersionStore {
       return row ? this.rowToVersionRecord(row) : null;
     });
 
-    return version ?? this.readLegacyVersionById(versionId);
+    if (version?.html) {
+      return version;
+    }
+    // SQLite 里 html 为空（旧版本用 ALTER TABLE DEFAULT '' 迁移过来的记录）
+    // 尝试从 legacy JSON 获取 html 补全
+    const legacy = await this.readLegacyVersionById(versionId);
+    if (legacy?.html) {
+      return legacy;
+    }
+    return version ?? null;
   }
 
   async getVersionHtml(versionId: string): Promise<string | null> {

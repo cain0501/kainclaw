@@ -3949,14 +3949,14 @@ function createNewDesignProject() {
 function openDesignProjectFromHome(projectId) {
   if (!projectId) return;
   if (document.getElementById('page-midtai')?.classList.contains('active')) {
-    // 立即切到预览 tab 并显示 loading，避免点击后无反馈
+    // 直接切到画布视图等待 IPC 回复，不改 type tab（图像/设计由用户控制）
     midtaiState.canvasOpen = false;
-    showOnlyMidtaiView('design-preview');
-    setDesignTabActive('mt-design-preview');
-    const loading = document.getElementById('dpv-loading');
-    const empty = document.getElementById('dpv-empty');
-    if (empty) empty.style.display = 'none';
-    if (loading) { loading.style.display = ''; loading.classList.add('active'); }
+    showOnlyMidtaiView('canvas');
+    showTabBar('design');
+    const mcEmpty = document.getElementById('midtai-canvas-empty');
+    const mcFrame = document.getElementById('midtai-canvas-iframe');
+    if (mcEmpty) { mcEmpty.style.display = 'flex'; mcEmpty.textContent = '正在加载...'; }
+    if (mcFrame) mcFrame.style.display = 'none';
   }
   send({ type: 'design:openProject', projectId });
 }
