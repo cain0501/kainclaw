@@ -1587,6 +1587,27 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-seri
 </div>
 </div>
 
+<!-- MIDTAI IMAGE EDIT OVERLAY -->
+<div id="midtai-img-edit-overlay" class="overlay" onclick="if(event.target===this)closeMidtaiImageEdit()">
+  <div style="width:min(440px,calc(100vw - 32px));background:#fff;border-radius:16px;box-shadow:0 24px 64px rgba(0,0,0,.18);overflow:hidden">
+    <div style="padding:14px 16px;border-bottom:1px solid #f1ede7;display:flex;align-items:center">
+      <div style="font-size:15px;font-weight:700;color:#2d1f14">二次编辑</div>
+      <button onclick="closeMidtaiImageEdit()" style="margin-left:auto;background:transparent;border:none;font-size:18px;line-height:1;cursor:pointer;color:#9b8a7b;padding:4px 6px">×</button>
+    </div>
+    <div style="padding:16px;display:flex;flex-direction:column;gap:14px">
+      <img id="midtai-img-edit-preview" src="" alt="" style="width:100%;border-radius:10px;max-height:240px;object-fit:contain;background:#f5f0e8;display:block">
+      <div>
+        <div style="font-size:12px;font-weight:600;color:#8b7969;margin-bottom:6px;letter-spacing:.03em">修改描述</div>
+        <textarea id="midtai-img-edit-prompt" rows="3" placeholder="描述你想要的修改，或直接重新描述整张图..." style="width:100%;box-sizing:border-box;border:1px solid #e5ddd0;border-radius:8px;padding:10px 12px;font-size:13px;outline:none;font-family:inherit;color:#2d1f14;resize:vertical;background:#fdfaf7"></textarea>
+      </div>
+      <div style="display:flex;justify-content:flex-end;gap:8px">
+        <button onclick="closeMidtaiImageEdit()" style="background:transparent;border:1px solid #e4e4e7;border-radius:6px;padding:7px 14px;font-size:13px;cursor:pointer;font-family:inherit;color:#52525b">取消</button>
+        <button class="btn-red" onclick="submitMidtaiImageEdit()" style="padding:7px 16px">重新生成</button>
+      </div>
+    </div>
+  </div>
+</div>
+
 <!-- RENAME SESSION OVERLAY -->
 <div id="rename-session-overlay" class="overlay" onclick="handleRenameOverlayClick(event)">
   <div style="width:360px;max-width:calc(100vw - 32px);background:#fff;border-radius:12px;padding:18px 18px 16px;box-shadow:0 16px 48px rgba(0,0,0,.18)">
@@ -1711,6 +1732,8 @@ let midtaiState = {
   imgCount: 1,
 };
 const thumbnailCache = new Map();
+const imageThumbCache = new Map(); // imageId → src (defers large data-url decoding)
+let midtaiImageEditState = { id: null, src: null, originalPrompt: '' };
 const MIDTAI_PLIB_IMG = [
   {
     cat: '人像',
@@ -3249,11 +3272,13 @@ function renderMidtaiImageWorks() {
   const isReplace = !!midtaiState.replaceCtx;
   const results = [...(imageLabState.resultBatches || [])]
     .sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0))
-    .flatMap(batch => batch.items || []);
+    .flatMap(batch => batch.images || []);
   if (!results.length) {
     container.innerHTML = `<div class="midtai-empty-view"><div class="midtai-empty-title">${isReplace ? '还没有可用图片' : '还没有生成过图像'}</div></div>`;
     return;
   }
+  results.forEach(r => imageThumbCache.set(r.id, r.src));
+
   container.innerHTML = `
     <div class="midtai-works-shell">
       <div class="midtai-works-toolbar">
@@ -3264,7 +3289,7 @@ function renderMidtaiImageWorks() {
         <div class="midtai-img-grid">
           ${results.map(result => `
             <div class="midtai-img-card">
-              <img src="${result.src}" class="midtai-img-thumb" alt="generated" loading="lazy" />
+              <img data-src="${result.src}" class="midtai-img-thumb" alt="generated" style="background:#f0ebe3" />
               <div class="midtai-img-card-body">
                 <div class="midtai-img-card-copy">${escapeHtml(String(result.revisedPrompt || result.prompt || '')).slice(0, 96)}</div>
                 <div class="midtai-img-actions">
@@ -3284,20 +3309,67 @@ function renderMidtaiImageWorks() {
       </div>
     </div>
   `;
+  observeMidtaiImageThumbs(container);
 }
 
 function beginMidtaiImageEdit(id) {
-  const result = (imageLabState.resultBatches || []).flatMap(b => b.items || []).find(i => i.id === id);
-  if (!result) return;
-  const promptEl = document.getElementById('midtai-img-prompt');
-  if (promptEl) promptEl.value = String(result.revisedPrompt || result.prompt || '').trim();
-  setImageLabReferenceFromSource(result.src, `edit-${result.id}.png`, { mode: 'prepend' });
-  showImgView('img-preview');
+  openMidtaiImageEdit(id);
 }
 
 function makeMidtaiImageVariant(id) {
   showImgView('img-preview');
   makeImageVariant(id);
+}
+
+function openMidtaiImageEdit(id) {
+  const result = (imageLabState.resultBatches || []).flatMap(b => b.images || []).find(i => i.id === id);
+  if (!result) return;
+  midtaiImageEditState = { id, src: result.src, originalPrompt: result.revisedPrompt || result.prompt || '' };
+  const previewEl = document.getElementById('midtai-img-edit-preview');
+  const promptEl = document.getElementById('midtai-img-edit-prompt');
+  if (previewEl) previewEl.src = result.src;
+  if (promptEl) promptEl.value = String(result.revisedPrompt || result.prompt || '').trim();
+  document.getElementById('midtai-img-edit-overlay')?.classList.add('show');
+  requestAnimationFrame(() => promptEl?.focus());
+}
+
+function closeMidtaiImageEdit() {
+  midtaiImageEditState = { id: null, src: null, originalPrompt: '' };
+  document.getElementById('midtai-img-edit-overlay')?.classList.remove('show');
+}
+
+function submitMidtaiImageEdit() {
+  const prompt = document.getElementById('midtai-img-edit-prompt')?.value.trim();
+  if (!prompt || !midtaiImageEditState.src) return;
+  const promptEl = document.getElementById('imglab-prompt');
+  const sizeEl = document.getElementById('imglab-size-preset');
+  const batchEl = document.getElementById('imglab-batchcount');
+  if (promptEl) promptEl.value = prompt;
+  if (sizeEl) sizeEl.value = midtaiState.imgSize || '1024x1024';
+  if (batchEl) batchEl.value = String(midtaiState.imgCount || 1);
+  setImageLabReferenceFromSource(midtaiImageEditState.src, `edit-${midtaiImageEditState.id}.png`, { mode: 'prepend' });
+  closeMidtaiImageEdit();
+  showImgView('img-preview');
+  runImageLab();
+}
+
+function observeMidtaiImageThumbs(container) {
+  const imgs = container.querySelectorAll('img[data-src]');
+  if (!imgs.length) return;
+  if (!('IntersectionObserver' in window)) {
+    imgs.forEach(img => { img.src = img.dataset.src; delete img.dataset.src; });
+    return;
+  }
+  const observer = new IntersectionObserver((entries) => {
+    entries.forEach(entry => {
+      if (!entry.isIntersecting) return;
+      const img = entry.target;
+      img.src = img.dataset.src;
+      delete img.dataset.src;
+      observer.unobserve(img);
+    });
+  }, { rootMargin: '200px' });
+  imgs.forEach(img => observer.observe(img));
 }
 
 function scheduleDesignThumbnailLoads(items) {
@@ -3730,50 +3802,45 @@ function renderMidtaiImagePreview() {
     `;
   })() : '';
 
-  const imageCards = [...batches]
-    .sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0))
-    .flatMap(batch => (batch.items || []).map(result => ({ batch, result })))
-    .map(({ batch, result }) => {
-      const prompt = escapeHtml(result.revisedPrompt || result.prompt || batch.prompt || '');
-      const sourceMeta = getImageResultSourceMeta(result.source || batch.source);
-      return `
-        <div class="midtai-img-card">
-          <img src="${result.src}" class="midtai-img-thumb" alt="generated">
-          <div class="midtai-img-card-body">
-            <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:6px">
-              <span class="${sourceMeta.badgeClass}">${translateSurfaceText(sourceMeta.label)}</span>
-              <span style="font-size:11px;color:#9b8a7b">#${escapeHtml(String(result.id).split('-').slice(-1)[0] || '1')}</span>
-            </div>
-            <div class="midtai-img-card-copy">${prompt.slice(0, 96)}</div>
-            <div class="midtai-img-actions">
-              <a class="btn-secondary" href="${result.src}" download="kainclaw-image-${result.id}.png" style="text-decoration:none">下载</a>
-              ${midtaiState.replaceCtx
-                ? `<button class="btn-red" style="justify-content:center" onclick="insertToDesign('${result.src}')">✓ 插入到设计</button>`
-                : `<button class="btn-secondary" style="justify-content:center" onclick="appendMidtaiImageToConversation('${result.id}')">插入到对话</button>`}
-            </div>
+  const sortedBatches = [...batches].sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
+  const latestBatch = sortedBatches[0];
+  const latestImages = latestBatch ? (latestBatch.images || []) : [];
+
+  const imageCards = latestImages.map(result => {
+    const prompt = escapeHtml(result.revisedPrompt || result.prompt || latestBatch.prompt || '');
+    return `
+      <div class="midtai-img-card">
+        <img src="${result.src}" class="midtai-img-thumb" alt="generated">
+        <div class="midtai-img-card-body">
+          <div class="midtai-img-card-copy">${prompt.slice(0, 96)}</div>
+          <div class="midtai-img-actions">
+            <a class="btn-secondary" href="${result.src}" download="kainclaw-image-${result.id}.png" style="text-decoration:none">下载</a>
+            ${midtaiState.replaceCtx
+              ? `<button class="btn-red" style="justify-content:center" onclick="insertToDesign('${result.src}')">✓ 插入到设计</button>`
+              : `<button class="btn-secondary" style="justify-content:center" onclick="appendMidtaiImageToConversation('${result.id}')">插入到对话</button>`}
+          </div>
+          <div class="midtai-img-actions" style="margin-top:6px">
+            <button class="btn-secondary" style="justify-content:center" onclick="beginMidtaiImageEdit('${result.id}')">二次编辑</button>
+            <button class="btn-secondary" style="justify-content:center" onclick="makeMidtaiImageVariant('${result.id}')">变体</button>
           </div>
         </div>
-      `;
-    }).join('');
-
-  container.innerHTML = `
-    <div class="midtai-works-shell">
-      <div class="midtai-works-toolbar">
-        <span class="midtai-works-title">${midtaiState.replaceCtx ? '替换图像预览' : '图像生成预览'}</span>
-        <span class="midtai-works-count">${batches.reduce((total, batch) => total + ((batch.items || []).length || 0), 0)}</span>
       </div>
-      ${loadingHtml || `
-        <div class="midtai-works-scroll">
-          <div class="midtai-img-grid">${imageCards}</div>
-        </div>
-      `}
+    `;
+  }).join('');
+
+  const colCount = latestImages.length === 1 ? 1 : latestImages.length === 2 ? 2 : latestImages.length === 3 ? 3 : 2;
+  const gridStyle = `display:grid;grid-template-columns:repeat(${colCount},1fr);gap:12px;padding:16px`;
+
+  container.innerHTML = loadingHtml || `
+    <div class="midtai-works-scroll">
+      <div style="${gridStyle}">${imageCards}</div>
     </div>
   `;
 }
 
 function appendMidtaiImageToConversation(id) {
   const result = (imageLabState.resultBatches || [])
-    .flatMap(batch => batch.items || [])
+    .flatMap(batch => batch.images || [])
     .find(item => item.id === id);
   if (!result?.src) {
     setImageLabStatus('未找到要插入的图片结果。', true);
