@@ -3272,7 +3272,7 @@ function renderMidtaiImageWorks() {
   const isReplace = !!midtaiState.replaceCtx;
   const results = [...(imageLabState.resultBatches || [])]
     .sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0))
-    .flatMap(batch => batch.images || []);
+    .flatMap(batch => batch.items || []);
   if (!results.length) {
     container.innerHTML = `<div class="midtai-empty-view"><div class="midtai-empty-title">${isReplace ? '还没有可用图片' : '还没有生成过图像'}</div></div>`;
     return;
@@ -3322,7 +3322,7 @@ function makeMidtaiImageVariant(id) {
 }
 
 function openMidtaiImageEdit(id) {
-  const result = (imageLabState.resultBatches || []).flatMap(b => b.images || []).find(i => i.id === id);
+  const result = (imageLabState.resultBatches || []).flatMap(b => b.items || []).find(i => i.id === id);
   if (!result) return;
   midtaiImageEditState = { id, src: result.src, originalPrompt: result.revisedPrompt || result.prompt || '' };
   const previewEl = document.getElementById('midtai-img-edit-preview');
@@ -3804,7 +3804,7 @@ function renderMidtaiImagePreview() {
 
   const sortedBatches = [...batches].sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
   const latestBatch = sortedBatches[0];
-  const latestImages = latestBatch ? (latestBatch.images || []) : [];
+  const latestImages = latestBatch ? (latestBatch.items || []) : [];
 
   const imageCards = latestImages.map(result => {
     const prompt = escapeHtml(result.revisedPrompt || result.prompt || latestBatch.prompt || '');
@@ -3840,7 +3840,7 @@ function renderMidtaiImagePreview() {
 
 function appendMidtaiImageToConversation(id) {
   const result = (imageLabState.resultBatches || [])
-    .flatMap(batch => batch.images || [])
+    .flatMap(batch => batch.items || [])
     .find(item => item.id === id);
   if (!result?.src) {
     setImageLabStatus('未找到要插入的图片结果。', true);
