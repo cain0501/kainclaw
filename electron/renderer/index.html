@@ -381,10 +381,11 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-seri
 .midtai-dir-name{font-size:12px;font-weight:600;color:#1c1917}
 .midtai-dir-summary{font-size:10px;color:#78716c;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .midtai-main-area{flex:1;min-width:0;display:flex;flex-direction:column;overflow:hidden}
-.main-tabs-bar{display:flex;align-items:center;padding:0 16px;background:#fff;border-bottom:1px solid #e5ddd0;flex-shrink:0;height:44px}
-.mtab{padding:0 14px;height:44px;border:none;background:none;font-size:13px;color:#78716c;position:relative;border-bottom:2px solid transparent;margin-bottom:-1px}
-.mtab:hover{color:#1c1917}
-.mtab.active{color:#1c1917;font-weight:600;border-bottom-color:#c94c2e}
+.midtai-panel{display:flex;flex-direction:column;height:100%;min-height:0}
+.main-tabs-bar,.midtai-tabbar{display:flex;align-items:center;padding:0 16px;background:#fff;border-bottom:1px solid #e5ddd0;flex-shrink:0;height:44px}
+.mtab,.mt-tab{padding:0 14px;height:44px;border:none;background:none;font-size:13px;color:#78716c;position:relative;border-bottom:2px solid transparent;margin-bottom:-1px}
+.mtab:hover,.mt-tab:hover{color:#1c1917}
+.mtab.active,.mt-tab.active{color:#1c1917;font-weight:600;border-bottom-color:#c94c2e}
 .canvas-toolbar{display:flex;align-items:center;gap:6px;padding:7px 14px;background:#fff;border-bottom:1px solid #e5ddd0;flex-shrink:0}
 .canvas-mode-btn{padding:4px 11px;border:1.5px solid #e5ddd0;background:none;border-radius:7px;font-size:12px;color:#78716c}
 .canvas-mode-btn.active{background:#1c1917;color:#fff;border-color:#1c1917}
@@ -397,7 +398,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-seri
 .replace-ctx-text{font-size:12px;color:#78350f;font-weight:500;flex:1}
 .replace-ctx-cancel{padding:2px 9px;border:1px solid #fbbf24;background:none;border-radius:5px;font-size:11px;color:#92400e;cursor:pointer}
 .replace-ctx-cancel:hover{background:#fef9c3}
-.midtai-view{flex:1;min-height:0;display:none}
+.midtai-view{flex:1;min-height:0;display:flex;flex-direction:column;overflow-y:auto}
 .midtai-view.active{display:flex}
 .midtai-empty-view{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;background:#f5f0e8;color:#a8a29e;padding:40px;text-align:center}
 .midtai-empty-icon{font-size:42px;opacity:.35}
@@ -464,6 +465,8 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-seri
 .midtai-canvas-frame{flex:1;min-height:0;display:flex;flex-direction:column}
 .midtai-canvas-title{font-size:20px;font-weight:700;color:#1c1917;margin-bottom:10px}
 .midtai-canvas-copy{font-size:13px;color:#78716c;line-height:1.7;max-width:420px}
+.thumb-shimmer{width:100%;height:100%;background:linear-gradient(90deg,#f0ebe3 25%,#e8e2da 50%,#f0ebe3 75%);background-size:200% 100%;animation:shimmer 1.4s infinite}
+@keyframes shimmer{0%{background-position:200% 0}100%{background-position:-200% 0}}
 .midtai-shell-close{margin-left:auto}
 .sess-item .sess-action{width:20px;height:20px;border:none;border-radius:4px;background:transparent;cursor:pointer;display:flex;align-items:center;justify-content:center;color:#71717a}
 .sess-item .sess-action:hover{background:#d4d4d8}
@@ -1060,14 +1063,14 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-seri
     <div style="flex:1"></div>
     <button class="btn-secondary midtai-shell-close" onclick="showPage('chat')">返回对话</button>
   </div>
-  <div class="midtai-shell-body">
-    <aside class="midtai-left-panel">
-      <div class="midtai-type-tabs">
-        <button id="midtai-type-img" class="midtai-type-tab active" onclick="switchType('img')">图像</button>
-        <button id="midtai-type-design" class="midtai-type-tab" onclick="switchType('design')">设计</button>
-      </div>
-      <div class="midtai-type-divider"></div>
-      <div class="midtai-left-scroll">
+    <div class="midtai-shell-body">
+      <aside class="midtai-left-panel">
+        <div class="midtai-type-tabs">
+        <button id="midtai-type-img" class="midtai-type-tab active" onclick="switchMidtaiType('img')">图像</button>
+        <button id="midtai-type-design" class="midtai-type-tab" onclick="switchMidtaiType('design')">设计</button>
+        </div>
+        <div class="midtai-type-divider"></div>
+        <div class="midtai-left-scroll">
         <div id="midtai-form-img" style="display:flex;flex-direction:column">
           <div class="midtai-form">
             <div class="midtai-form-group">
@@ -1121,113 +1124,81 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-seri
         </div>
       </div>
     </aside>
-    <div class="midtai-main-area">
-      <div id="mtbar-img" class="main-tabs-bar">
-        <button id="mt-img-preview" class="mtab active" onclick="imgSwitchView('preview')">生成预览</button>
-        <button id="mt-img-works" class="mtab" onclick="imgSwitchView('works')">我的作品</button>
-        <button id="mt-img-plib" class="mtab" onclick="imgSwitchView('plib')">提示词库</button>
-      </div>
-      <div id="mtbar-design" class="main-tabs-bar" style="display:none">
-        <button id="mt-design-preview" class="mtab" onclick="designSwitchView('preview')">生成预览</button>
-        <button id="mt-design-works" class="mtab active" onclick="designSwitchView('works')">我的作品</button>
-        <button id="mt-design-plib" class="mtab" onclick="designSwitchView('plib')">提示词库</button>
-      </div>
-
-      <div id="replace-ctx" class="replace-ctx">
-        <span class="replace-ctx-icon">🎆</span>
-        <span id="replace-ctx-text" class="replace-ctx-text">替换目标：项目 · 元素</span>
-        <button class="replace-ctx-cancel" onclick="cancelReplace()">× 取消替换</button>
-      </div>
-      <div id="view-img-preview" class="midtai-view active">
-        <div class="midtai-empty-view">
-          <div class="midtai-empty-icon">✦</div>
-          <div class="midtai-empty-title">图像生成预览</div>
-          <div class="midtai-empty-copy">先在左侧输入图像描述，再生成预览结果。</div>
+      <div id="midtai-content" class="midtai-main-area">
+        <div id="replace-ctx" class="replace-ctx">
+          <span class="replace-ctx-icon">🎆</span>
+          <span id="replace-ctx-text" class="replace-ctx-text">替换目标：项目 · 元素</span>
+          <button class="replace-ctx-cancel" onclick="cancelReplace()">× 取消替换</button>
         </div>
-      </div>
-      <div id="view-design-preview" class="midtai-view">
-        <div id="dpv-empty" class="midtai-empty-view">
-          <div class="midtai-empty-icon">◌</div>
-          <div class="midtai-empty-title">新建设计稿</div>
-          <div class="midtai-empty-copy">在左侧填写设计需求、选择风格和输出类型
+        <div id="midtai-panel-img" class="midtai-panel">
+          <div id="mtbar-img" class="midtai-tabbar">
+            <button class="mt-tab active" data-view="img-preview" onclick="showImgView('img-preview')">生成预览</button>
+            <button class="mt-tab" data-view="img-works" onclick="showImgView('img-works')">我的作品</button>
+            <button class="mt-tab" data-view="img-plib" onclick="showImgView('img-plib')">提示词库</button>
+          </div>
+          <div id="view-img-preview" class="midtai-view">
+            <div class="midtai-empty-view">
+              <div class="midtai-empty-icon">✦</div>
+              <div class="midtai-empty-title">图像生成预览</div>
+              <div class="midtai-empty-copy">先在左侧输入图像描述，再生成预览结果。</div>
+            </div>
+          </div>
+          <div id="view-img-works" class="midtai-view" style="display:none"></div>
+          <div id="view-img-plib" class="midtai-view" style="display:none"></div>
+        </div>
+        <div id="midtai-panel-design" class="midtai-panel" style="display:none">
+          <div id="mtbar-design" class="midtai-tabbar">
+            <button class="mt-tab active" data-view="design-preview" onclick="showDesignView('design-preview')">生成预览</button>
+            <button class="mt-tab" data-view="design-works" onclick="showDesignView('design-works')">我的作品</button>
+            <button class="mt-tab" data-view="design-plib" onclick="showDesignView('design-plib')">提示词库</button>
+          </div>
+          <div id="view-design-preview" class="midtai-view">
+            <div id="dpv-empty" class="midtai-empty-view">
+              <div class="midtai-empty-icon">◌</div>
+              <div class="midtai-empty-title">新建设计稿</div>
+              <div class="midtai-empty-copy">在左侧填写设计需求、选择风格和输出类型
 点击「生成设计」开始创作
 
 或者从「我的作品」打开已有设计继续编辑。</div>
-          <button class="midtai-empty-cta" onclick="designSwitchView('works')">查看我的作品 →</button>
-        </div>
-        <div id="dpv-loading" class="midtai-loading-view">
-          <div class="midtai-loading-spin">◴</div>
-          <div style="font-size:13px;color:#78716c">正在生成设计稿...</div>
-          <div id="dpv-loading-counter" style="font-size:11px;color:#a8a29e">通常需要 10~30 秒</div>
-        </div>
-      </div>
-      <div id="view-works" class="midtai-view">
-        <div class="midtai-works-shell">
-          <div class="midtai-works-toolbar">
-            <span id="midtai-works-title" class="midtai-works-title">我的作品</span>
-            <span id="midtai-works-count" class="midtai-works-count">0</span>
-            <div id="midtai-works-filters" class="midtai-chip-row">
-              <button class="midtai-filter-chip active">全部</button>
-              <button class="midtai-filter-chip">图像</button>
-              <button class="midtai-filter-chip">设计</button>
+              <button class="midtai-empty-cta" onclick="designSwitchView('works')">查看我的作品 →</button>
             </div>
-            <input id="midtai-works-search" class="midtai-works-search" placeholder="搜索..." oninput="renderMidtaiWorks()" />
+            <div id="dpv-loading" class="midtai-loading-view">
+              <div class="midtai-loading-spin">◴</div>
+              <div style="font-size:13px;color:#78716c">正在生成设计稿...</div>
+              <div id="dpv-loading-counter" style="font-size:11px;color:#a8a29e">通常需要 10~30 秒</div>
+            </div>
           </div>
-          <div class="midtai-works-scroll">
-            <div class="midtai-card-grid">
-              <div class="midtai-card">
-                <div class="midtai-card-title">作品内容将在这里接入</div>
-                <div class="midtai-card-copy">ha8 只先把统一壳层、标签栏和画布接管结构落好。</div>
-                <div class="midtai-card-meta"><span class="midtai-card-badge">Shell</span></div>
+          <div id="view-design-works" class="midtai-view" style="display:none"></div>
+          <div id="view-canvas" class="midtai-view" style="display:none">
+            <div class="midtai-canvas-shell">
+              <div class="midtai-canvas-frame">
+                <div id="canvas-toolbar" class="canvas-toolbar">
+                  <button id="midtai-canvas-view-btn" class="canvas-mode-btn active" onclick="setMidtaiCanvasMode('view')">查看</button>
+                  <button id="midtai-canvas-select-btn" class="canvas-mode-btn" onclick="setMidtaiCanvasMode('select')">选择</button>
+                  <button id="midtai-canvas-tweak-btn" class="canvas-mode-btn" disabled title="调节模式即将支持" style="opacity:.45;cursor:not-allowed">调节</button>
+                  <div class="canvas-toolbar-spacer"></div>
+                  <button class="canvas-toolbar-btn" onclick="exitCanvas()">退出画布</button>
+                  <button class="canvas-toolbar-btn" disabled style="opacity:.45;cursor:not-allowed">版本历史</button>
+                  <button class="canvas-toolbar-btn" disabled style="opacity:.45;cursor:not-allowed">导出</button>
+                </div>
+                <iframe id="midtai-canvas-iframe" sandbox="allow-scripts" style="flex:1;min-height:0;border:none;width:100%;display:none"></iframe>
+                <div id="midtai-canvas-empty" class="midtai-canvas-title" style="display:flex;align-items:center;justify-content:center;flex:1;color:#a8998a;font-size:13px">暂无设计内容</div>
               </div>
             </div>
-          </div>
-        </div>
-      </div>
-      <div id="view-plib" class="midtai-view">
-        <div class="midtai-plib-shell">
-          <div class="midtai-works-toolbar">
-            <span class="midtai-works-title">提示词库</span>
-          </div>
-          <div class="midtai-plib-scroll">
-            <div class="midtai-card-grid">
-              <div class="midtai-card">
-                <div class="midtai-card-title">提示词库内容将在这里接入</div>
-                <div class="midtai-card-copy">ha8 只先把统一壳层和双 tab bar 路由起来。</div>
-                <div class="midtai-card-meta"><span class="midtai-card-badge">Shell</span></div>
+            <div id="midtai-node-panel" style="display:none;position:fixed;z-index:9999;width:190px;background:#fff;border:1px solid #e5ddd0;border-radius:10px;box-shadow:0 8px 24px rgba(0,0,0,.12);padding:12px">
+              <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
+                <div id="mnp-tag" style="font-size:11px;color:#a8998a;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:140px"></div>
+                <button onclick="hideMidtaiNodePanel();setMidtaiCanvasMode('view')" style="border:none;background:none;cursor:pointer;color:#a8998a;font-size:16px;line-height:1;padding:0 2px;flex-shrink:0">×</button>
               </div>
+              <div style="font-size:11px;font-weight:600;color:#78716c;margin-bottom:8px">替换图片</div>
+              <button onclick="goReplaceInImageLab()" class="btn-red" style="width:100%;margin-bottom:6px;font-size:11px;padding:6px 8px">✦ 去 Image Lab 生成图</button>
+              <button onclick="goReplaceInWorks()" class="btn-secondary" style="width:100%;font-size:11px;padding:6px 8px">从我的作品选择</button>
             </div>
           </div>
-        </div>
-      </div>
-      <div id="view-canvas" class="midtai-view">
-        <div class="midtai-canvas-shell">
-          <div class="midtai-canvas-frame">
-            <div id="canvas-toolbar" class="canvas-toolbar">
-              <button id="midtai-canvas-view-btn" class="canvas-mode-btn active" onclick="setMidtaiCanvasMode('view')">查看</button>
-              <button id="midtai-canvas-select-btn" class="canvas-mode-btn" onclick="setMidtaiCanvasMode('select')">选择</button>
-              <button id="midtai-canvas-tweak-btn" class="canvas-mode-btn" disabled title="调节模式即将支持" style="opacity:.45;cursor:not-allowed">调节</button>
-              <div class="canvas-toolbar-spacer"></div>
-              <button class="canvas-toolbar-btn" onclick="exitCanvas()">退出画布</button>
-              <button class="canvas-toolbar-btn" disabled style="opacity:.45;cursor:not-allowed">版本历史</button>
-              <button class="canvas-toolbar-btn" disabled style="opacity:.45;cursor:not-allowed">导出</button>
-            </div>
-            <iframe id="midtai-canvas-iframe" sandbox="allow-scripts" style="flex:1;min-height:0;border:none;width:100%;display:none"></iframe>
-            <div id="midtai-canvas-empty" class="midtai-canvas-title" style="display:flex;align-items:center;justify-content:center;flex:1;color:#a8998a;font-size:13px">暂无设计内容</div>
-          </div>
-        </div>
-        <div id="midtai-node-panel" style="display:none;position:fixed;z-index:9999;width:190px;background:#fff;border:1px solid #e5ddd0;border-radius:10px;box-shadow:0 8px 24px rgba(0,0,0,.12);padding:12px">
-          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
-            <div id="mnp-tag" style="font-size:11px;color:#a8998a;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:140px"></div>
-            <button onclick="hideMidtaiNodePanel();setMidtaiCanvasMode('view')" style="border:none;background:none;cursor:pointer;color:#a8998a;font-size:16px;line-height:1;padding:0 2px;flex-shrink:0">×</button>
-          </div>
-          <div style="font-size:11px;font-weight:600;color:#78716c;margin-bottom:8px">替换图片</div>
-          <button onclick="goReplaceInImageLab()" class="btn-red" style="width:100%;margin-bottom:6px;font-size:11px;padding:6px 8px">✦ 去 Image Lab 生成图</button>
-          <button onclick="goReplaceInWorks()" class="btn-secondary" style="width:100%;font-size:11px;padding:6px 8px">从我的作品选择</button>
+          <div id="view-design-plib" class="midtai-view" style="display:none"></div>
         </div>
       </div>
     </div>
-  </div>
 </div>
 
 <div id="page-images" class="page" style="flex-direction:column;background:#f6f1ea">
@@ -1727,18 +1698,19 @@ const MIDTAI_DIRECTIONS = {
 
 let midtaiState = {
   type: 'img',
-  imgView: 'preview',
-  designView: 'works',
+  imgTabView: 'img-preview',
+  designTabView: 'design-preview',
   canvasOpen: false,
   canvasMode: 'view',
   currentProject: '',
-  libraryItems: [],
+  designLibraryItems: [],
   replaceCtx: null,
   selectedCanvasNode: null,
   designDirection: '',
   imgSize: '1024x1024',
   imgCount: 1,
 };
+const thumbnailCache = new Map();
 const MIDTAI_PLIB_IMG = [
   {
     cat: '人像',
@@ -2493,10 +2465,34 @@ function handleMessage(msg) {
     case 'midtai:open':
       openMidtai(msg.payload || {});
       break;
-    case 'midtai:library-update':
-      midtaiState.libraryItems = Array.isArray(msg.items) ? msg.items : [];
-      renderMidtaiWorks();
+    case 'midtai:design-library-update':
+      midtaiState.designLibraryItems = Array.isArray(msg.items) ? msg.items : [];
+      for (const item of midtaiState.designLibraryItems) {
+        if (item?.thumbnail && item?.versionId && !thumbnailCache.has(item.versionId)) {
+          thumbnailCache.set(item.versionId, item.thumbnail);
+        }
+      }
+      if (midtaiState.designTabView === 'design-works') {
+        renderMidtaiDesignWorks();
+      }
       break;
+    case 'design:thumbnail': {
+      if (msg.versionId && msg.dataUrl) {
+        thumbnailCache.set(msg.versionId, msg.dataUrl);
+        const card = document.querySelector(`[data-version-id="${msg.versionId}"]`);
+        if (card) {
+          const thumb = card.querySelector('.wcard-thumb');
+          if (thumb && !thumb.querySelector('img')) {
+            thumb.innerHTML = `<img src="${msg.dataUrl}" style="width:100%;height:100%;object-fit:cover;display:block" />`;
+          }
+        }
+      }
+      midtaiState._thumbInFlight = Math.max(0, (midtaiState._thumbInFlight || 1) - 1);
+      if (typeof midtaiState._thumbNext === 'function') {
+        midtaiState._thumbNext();
+      }
+      break;
+    }
     case 'kainclawDesign:error':
       showArtifactToast(msg.message || '当前无法打开 KainClaw Design。');
       designBridgeState.loading = false;
@@ -3094,9 +3090,9 @@ function applyMidtaiRouteState(payload) {
   const nextView = payload?.view === 'works' || payload?.view === 'plib' ? payload.view : 'preview';
   midtaiState.type = contentType;
   if (contentType === 'design') {
-    midtaiState.designView = nextView;
+    midtaiState.designTabView = `design-${nextView}`;
   } else {
-    midtaiState.imgView = nextView;
+    midtaiState.imgTabView = `img-${nextView}`;
   }
   midtaiState.replaceCtx = payload?.replaceCtx && typeof payload.replaceCtx === 'object'
     ? {
@@ -3111,34 +3107,69 @@ function applyMidtaiRouteState(payload) {
     : null;
 }
 
-const MIDTAI_ALL_VIEWS = ['img-preview', 'design-preview', 'works', 'plib', 'canvas'];
+function switchMidtaiType(type) {
+  midtaiState.type = type === 'design' ? 'design' : 'img';
+  document.getElementById('midtai-panel-img').style.display = midtaiState.type === 'img' ? '' : 'none';
+  document.getElementById('midtai-panel-design').style.display = midtaiState.type === 'design' ? '' : 'none';
+  document.querySelectorAll('.midtai-type-tab').forEach(button => {
+    button.classList.toggle('active', button.dataset.type === midtaiState.type || button.id === `midtai-type-${midtaiState.type}`);
+  });
+  const imgForm = document.getElementById('midtai-form-img');
+  const designForm = document.getElementById('midtai-form-design');
+  if (imgForm) imgForm.style.display = midtaiState.type === 'img' ? 'flex' : 'none';
+  if (designForm) designForm.style.display = midtaiState.type === 'design' ? 'flex' : 'none';
+  if (midtaiState.type !== 'design') {
+    midtaiState.canvasOpen = false;
+    midtaiState.canvasMode = 'view';
+    hideMidtaiNodePanel();
+    postMidtaiCanvasSelectMode(false);
+  }
+  updateStateChip();
+}
 
-function showOnlyMidtaiView(view) {
-  MIDTAI_ALL_VIEWS.forEach(id => {
-    const element = document.getElementById('view-' + id);
+function showImgView(view) {
+  midtaiState.imgTabView = view;
+  ['img-preview', 'img-works', 'img-plib'].forEach(currentView => {
+    const element = document.getElementById('view-' + currentView);
     if (element) {
-      element.classList.toggle('active', id === view);
+      element.style.display = currentView === view ? '' : 'none';
     }
   });
+  document.querySelectorAll('#mtbar-img .mt-tab').forEach(button => {
+    button.classList.toggle('active', button.dataset.view === view);
+  });
+  if (view === 'img-works') {
+    send({ type: 'image:loadState' });
+    renderMidtaiImageWorks();
+    return;
+  }
+  if (view === 'img-plib') {
+    renderMidtaiPromptLibrary();
+    return;
+  }
+  renderMidtaiImagePreview();
 }
 
-function setImgTabActive(id) {
-  document.querySelectorAll('#mtbar-img .mtab').forEach(button => button.classList.remove('active'));
-  document.getElementById(id)?.classList.add('active');
-}
-
-function setDesignTabActive(id) {
-  document.querySelectorAll('#mtbar-design .mtab').forEach(button => button.classList.remove('active'));
-  document.getElementById(id)?.classList.add('active');
-}
-
-function showTabBar(which) {
-  const imgBar = document.getElementById('mtbar-img');
-  const designBar = document.getElementById('mtbar-design');
-  if (imgBar) imgBar.style.display = 'none';
-  if (designBar) designBar.style.display = 'none';
-  if (which === 'img' && imgBar) imgBar.style.display = 'flex';
-  if (which === 'design' && designBar) designBar.style.display = 'flex';
+function showDesignView(view) {
+  midtaiState.designTabView = view;
+  ['design-preview', 'design-works', 'canvas', 'design-plib'].forEach(currentView => {
+    const element = document.getElementById('view-' + currentView);
+    if (element) {
+      element.style.display = currentView === view ? '' : 'none';
+    }
+  });
+  document.querySelectorAll('#mtbar-design .mt-tab').forEach(button => {
+    button.classList.toggle('active', button.dataset.view === view);
+  });
+  document.getElementById('mtbar-design').style.display = view === 'canvas' ? 'none' : '';
+  if (view === 'design-works') {
+    send({ type: 'midtai:request-design-library' });
+    renderMidtaiDesignWorks();
+    return;
+  }
+  if (view === 'design-plib') {
+    renderMidtaiPromptLibrary();
+  }
 }
 
 function updateStateChip() {
@@ -3172,7 +3203,11 @@ function showReplaceCtx(project, element) {
 function cancelReplace() {
   midtaiState.replaceCtx = null;
   document.getElementById('replace-ctx')?.classList.remove('visible');
-  renderMidtaiWorks();
+  if (midtaiState.type === 'design') {
+    renderMidtaiDesignWorks();
+  } else {
+    renderMidtaiImagePreview();
+  }
 }
 
 function renderMidtaiDirectionPicker() {
@@ -3206,198 +3241,160 @@ function selectMidtaiDirection(stylePrompt) {
   renderMidtaiDirectionPicker();
 }
 
-function updateWorksForContext() {
-  const title = document.getElementById('midtai-works-title');
-  const filters = document.getElementById('midtai-works-filters');
-  const grid = document.querySelector('#view-works .midtai-card-grid');
-  const isReplace = !!midtaiState.replaceCtx;
-
-  if (title) {
-    title.textContent = isReplace
-      ? `为「${midtaiState.replaceCtx.project} · ${midtaiState.replaceCtx.element}」选图`
-      : '我的作品';
-    title.style.color = isReplace ? '#92400e' : '#1c1917';
-  }
-  if (filters) {
-    filters.style.display = isReplace ? 'none' : 'flex';
-  }
-  if (grid) {
-    grid.innerHTML = isReplace
-      ? `<div class="midtai-card">
-          <div class="midtai-card-title">替换模式：仅显示可用图片</div>
-          <div class="midtai-card-copy">后续 7z2 真实接入作品数据后，这里会显示图片卡片，并在悬停时提供“选用此图”。</div>
-          <div class="midtai-card-meta"><span class="midtai-card-badge">Replace</span></div>
-        </div>`
-      : `<div class="midtai-card">
-          <div class="midtai-card-title">作品内容将在这里接入</div>
-          <div class="midtai-card-copy">ha8/7z2 阶段先把统一壳层、上下文化标题和替换流状态接上。</div>
-          <div class="midtai-card-meta"><span class="midtai-card-badge">Shell</span></div>
-        </div>`;
-  }
-}
-
-function renderMidtaiWorks() {
-  const title = document.getElementById('midtai-works-title');
-  const filters = document.getElementById('midtai-works-filters');
-  const count = document.getElementById('midtai-works-count');
-  const search = document.getElementById('midtai-works-search');
-  const grid = document.querySelector('#view-works .midtai-card-grid');
-  const isReplace = !!midtaiState.replaceCtx;
-  const query = String(search?.value || '').trim().toLowerCase();
-  const allItems = Array.isArray(midtaiState.libraryItems) ? midtaiState.libraryItems : [];
-  const isDesignItem = item => item?.contentType === 'design' || item?.type === 'design';
-  const visibleItems = allItems
-    .filter(item => item && typeof item === 'object')
-    .filter(item => !isReplace || !isDesignItem(item))
-    .filter(item => !query || String(item.name || '').toLowerCase().includes(query));
-
-  if (title) {
-    title.textContent = isReplace
-      ? `为「${midtaiState.replaceCtx.project} · ${midtaiState.replaceCtx.element}」选图`
-      : '我的作品';
-    title.style.color = isReplace ? '#92400e' : '#1c1917';
-  }
-  if (count) {
-    count.textContent = String(visibleItems.length);
-  }
-  if (filters) {
-    filters.style.display = isReplace ? 'none' : 'flex';
-  }
-  if (!grid) {
+function renderMidtaiImageWorks() {
+  const container = document.getElementById('view-img-works');
+  if (!container) {
     return;
   }
-  const designs = visibleItems.filter(item => isDesignItem(item));
-  const images = visibleItems.filter(item => !isDesignItem(item));
-  const gradients = ['tw-g1','tw-g2','tw-g3','tw-g4','tw-g5','tw-g6','tw-g7','tw-g8'];
-
-  function thumbClass(item) {
-    const hash = String(item.id || item.projectId || item.name || '')
-      .split('')
-      .reduce((total, char) => total + char.charCodeAt(0), 0);
-    return gradients[hash % gradients.length];
+  const isReplace = !!midtaiState.replaceCtx;
+  const results = (imageLabState.resultBatches || []).flatMap(batch => batch.items || []);
+  if (!results.length) {
+    container.innerHTML = `<div class="midtai-empty-view"><div class="midtai-empty-title">${isReplace ? '还没有可用图片' : '还没有生成过图像'}</div></div>`;
+    return;
   }
-
-  function sourceBadge(item) {
-    if (item.source === 'chat') return '<span class="source-badge s-chat">来自对话</span>';
-    if (item.source === 'midtai') return '<span class="source-badge s-mid">来自中台</span>';
-    return '<span class="source-badge s-blank">空白</span>';
-  }
-
-  function cardHtml(item) {
-    const action = isReplace
-      ? `<button class="btn-red" style="width:100%;margin-top:4px" onclick="insertToDesign('${escapeHtml(String(item.thumbnail || item.name || item.id))}')">✓ 选用此图</button>`
-      : `<button class="btn-secondary" style="width:100%;margin-top:4px" onclick="openDesignProjectFromHome('${escapeHtml(String(item.projectId || item.id))}')">打开编辑</button>`;
-    let thumbInner = '';
-    if (item.thumbnail && (item.thumbnail.startsWith('data:') || item.thumbnail.startsWith('http'))) {
-      thumbInner = `<img src="${item.thumbnail}" style="width:100%;height:100%;object-fit:cover;display:block" />`;
-    }
-    return `<div class="design-wcard">
-      <div class="design-wcard-thumb ${thumbClass(item)}">${thumbInner}</div>
-      <div class="design-wcard-footer">
-        <div class="design-wcard-title">${escapeHtml(String(item.name || 'Untitled'))}</div>
-        <div class="design-wcard-meta">
-          ${item.version ? `<span class="ver-badge">${escapeHtml(String(item.version))}</span>` : ''}
-          ${sourceBadge(item)}
-        </div>
-        ${action}
+  container.innerHTML = `
+    <div class="midtai-works-shell">
+      <div class="midtai-works-toolbar">
+        <span class="midtai-works-title">${isReplace ? `为「${escapeHtml(midtaiState.replaceCtx.project)} · ${escapeHtml(midtaiState.replaceCtx.element)}」选图` : '我的作品'}</span>
+        <span class="midtai-works-count">${results.length}</span>
       </div>
-    </div>`;
-  }
+      <div class="midtai-works-scroll">
+        <div class="midtai-img-grid">
+          ${results.map(result => `
+            <div class="midtai-img-card">
+              <img src="${result.src}" class="midtai-img-thumb" alt="generated" loading="lazy" />
+              <div class="midtai-img-card-body">
+                <div class="midtai-img-card-copy">${escapeHtml(String(result.revisedPrompt || result.prompt || '')).slice(0, 96)}</div>
+                <div class="midtai-img-actions">
+                  ${isReplace
+                    ? `<button class="btn-red" style="justify-content:center" onclick="insertToDesign('${result.src}')">插入到设计</button>`
+                    : `<button class="btn-secondary" style="justify-content:center" onclick="appendMidtaiImageToConversation('${result.id}')">插入到对话</button>`}
+                </div>
+              </div>
+            </div>
+          `).join('')}
+        </div>
+      </div>
+    </div>
+  `;
+}
 
-  let html = '';
-  if (!isReplace && designs.length) {
-    html += `<div class="design-works-grid" style="margin-bottom:${images.length ? '20px' : '0'}">${designs.map(cardHtml).join('')}</div>`;
+function scheduleDesignThumbnailLoads(items) {
+  if (!Array.isArray(items) || items.length === 0) {
+    midtaiState._thumbQueue = [];
+    midtaiState._thumbInFlight = 0;
+    midtaiState._thumbNext = null;
+    return;
   }
-  if (images.length) {
-    html += `<div class="img-works-grid">${images.map(cardHtml).join('')}</div>`;
+  const queue = [...items];
+  const MAX_CONCURRENT = 3;
+  const next = () => {
+    while ((midtaiState._thumbInFlight || 0) < MAX_CONCURRENT && queue.length > 0) {
+      const item = queue.shift();
+      if (!item?.versionId) {
+        continue;
+      }
+      midtaiState._thumbInFlight = (midtaiState._thumbInFlight || 0) + 1;
+      send({ type: 'design:getThumbnail', versionId: item.versionId });
+    }
+    midtaiState._thumbQueue = queue;
+    if (!queue.length && (midtaiState._thumbInFlight || 0) === 0) {
+      midtaiState._thumbNext = null;
+    }
+  };
+  midtaiState._thumbQueue = queue;
+  midtaiState._thumbInFlight = 0;
+  midtaiState._thumbNext = next;
+  next();
+}
+
+function renderMidtaiDesignWorks() {
+  const container = document.getElementById('view-design-works');
+  if (!container) {
+    return;
   }
-  if (!designs.length && !images.length) {
-    html = `<div class="midtai-card">
-      <div class="midtai-card-title">${isReplace ? '还没有可用图片' : '还没有作品'}</div>
-      <div class="midtai-card-copy">${isReplace ? '先去生成预览或打开已有图片，再回来替换。' : '先去生成预览创建设计稿，再回来看这里。'}</div>
-      <div class="midtai-card-meta"><span class="midtai-card-badge">${isReplace ? 'Replace' : 'Empty'}</span></div>
-    </div>`;
+  const items = Array.isArray(midtaiState.designLibraryItems) ? midtaiState.designLibraryItems : [];
+  if (!items.length) {
+    container.innerHTML = '<div class="midtai-empty-view"><div class="midtai-empty-title">还没有生成过设计</div></div>';
+    return;
   }
-  grid.innerHTML = html;
+  container.innerHTML = `
+    <div class="midtai-works-shell">
+      <div class="midtai-works-toolbar">
+        <span class="midtai-works-title">我的作品</span>
+        <span class="midtai-works-count">${items.length}</span>
+      </div>
+      <div class="midtai-works-scroll">
+        <div class="design-works-grid">
+          ${items.map(item => {
+            const versionId = escapeHtml(String(item.versionId || ''));
+            const projectId = escapeHtml(String(item.projectId || item.id || ''));
+            const title = escapeHtml(String(item.title || item.name || '未命名'));
+            const sourceClass = escapeHtml(String(item.source || 'generate'));
+            const sourceLabel = item.source === 'midtai' ? '来自中台' : '来自设计台';
+            const cachedThumbnail = item.versionId ? thumbnailCache.get(item.versionId) : '';
+            return `
+              <div class="design-wcard" data-version-id="${versionId}">
+                <div class="wcard-thumb design-wcard-thumb">
+                  ${cachedThumbnail
+                    ? `<img src="${cachedThumbnail}" style="width:100%;height:100%;object-fit:cover;display:block" />`
+                    : '<div class="thumb-shimmer"></div>'}
+                </div>
+                <div class="design-wcard-footer">
+                  <div class="design-wcard-title">${title}</div>
+                  <div class="design-wcard-meta">
+                    <span class="source-badge source-${sourceClass}">${sourceLabel}</span>
+                  </div>
+                  <button class="btn-secondary" style="width:100%;margin-top:4px" onclick="openDesignProjectFromHome('${projectId}')">打开编辑</button>
+                </div>
+              </div>
+            `;
+          }).join('')}
+        </div>
+      </div>
+    </div>
+  `;
+  scheduleDesignThumbnailLoads(items.filter(item => item?.versionId && !thumbnailCache.has(item.versionId)));
 }
 
 function goReplaceInImageLab() {
   const node = midtaiState.selectedCanvasNode;
   showReplaceCtx(midtaiState.currentProject || 'KainClaw Design', node?.selector || '图片元素');
-  midtaiState.type = 'img';
-  document.getElementById('midtai-type-img')?.classList.add('active');
-  document.getElementById('midtai-type-design')?.classList.remove('active');
-  document.getElementById('midtai-form-img').style.display = 'flex';
-  document.getElementById('midtai-form-design').style.display = 'none';
+  switchMidtaiType('img');
   imgSwitchView('preview');
 }
 
 function goReplaceInWorks() {
   const node = midtaiState.selectedCanvasNode;
   showReplaceCtx(midtaiState.currentProject || 'KainClaw Design', node?.selector || '图片元素');
-  midtaiState.type = 'img';
-  document.getElementById('midtai-type-img')?.classList.add('active');
-  document.getElementById('midtai-type-design')?.classList.remove('active');
-  document.getElementById('midtai-form-img').style.display = 'flex';
-  document.getElementById('midtai-form-design').style.display = 'none';
+  switchMidtaiType('img');
   imgSwitchView('works');
 }
 
 function imgSwitchView(view) {
-  midtaiState.imgView = view;
-  showTabBar('img');
-  if (view === 'works') {
-    showOnlyMidtaiView('works');
-    setImgTabActive('mt-img-works');
-    send({ type: 'image:loadState' });
-    renderMidtaiWorks();
-    return;
-  }
-  if (view === 'plib') {
-    showOnlyMidtaiView('plib');
-    setImgTabActive('mt-img-plib');
-    renderMidtaiPromptLibrary();
-    return;
-  }
-  showOnlyMidtaiView('img-preview');
-  setImgTabActive('mt-img-preview');
-  renderMidtaiImagePreview();
+  showImgView(`img-${view}`);
 }
 
 function designSwitchView(view) {
-  midtaiState.designView = view;
-  showTabBar('design');
   if (view === 'preview') {
-    if (midtaiState.canvasOpen) {
-      showOnlyMidtaiView('canvas');
-      setDesignTabActive('mt-design-preview');
-    } else if (designBridgeState.html) {
-      // html 存在但 canvasOpen 被 switchType 重置了——直接恢复画布
-      openCanvas(designBridgeState.title || midtaiState.currentProject || 'KainClaw Design');
-      setDesignTabActive('mt-design-preview');
-    } else if (designBridgeState.loading) {
-      showOnlyMidtaiView('design-preview');
-      setDesignTabActive('mt-design-preview');
-    } else {
-      showOnlyMidtaiView('design-preview');
-      setDesignTabActive('mt-design-preview');
-      document.getElementById('dpv-empty')?.classList.remove('hidden');
-      document.getElementById('dpv-empty').style.display = 'flex';
-      document.getElementById('dpv-loading').classList.remove('active');
-      document.getElementById('dpv-loading').style.display = 'none';
+    showDesignView('design-preview');
+    document.getElementById('dpv-empty')?.classList.remove('hidden');
+    if (designBridgeState.loading) {
+      document.getElementById('dpv-empty').style.display = 'none';
+      document.getElementById('dpv-loading').style.display = 'flex';
+      document.getElementById('dpv-loading').classList.add('active');
+      return;
     }
+    document.getElementById('dpv-empty').style.display = 'flex';
+    document.getElementById('dpv-loading').classList.remove('active');
+    document.getElementById('dpv-loading').style.display = 'none';
     return;
   }
   if (view === 'plib') {
-    showOnlyMidtaiView('plib');
-    setDesignTabActive('mt-design-plib');
+    showDesignView('design-plib');
     return;
   }
-  showOnlyMidtaiView('works');
-  setDesignTabActive('mt-design-works');
-  send({ type: 'image:loadState' });
-  send({ type: 'midtai:request-library' });
-  renderMidtaiWorks();
+  showDesignView('design-works');
 }
 
 function buildMidtaiCanvasSrcdoc(html) {
@@ -3563,8 +3560,7 @@ function openCanvas(projectName) {
   }
   hideMidtaiNodePanel();
   updateStateChip();
-  showTabBar('design');
-  showOnlyMidtaiView('canvas');
+  showDesignView('canvas');
   document.getElementById('dpv-loading').classList.remove('active');
   document.getElementById('dpv-loading').style.display = 'none';
   document.getElementById('dpv-empty').style.display = 'flex';
@@ -3606,29 +3602,7 @@ function exitCanvas() {
   hideMidtaiNodePanel();
   postMidtaiCanvasSelectMode(false);
   updateStateChip();
-  showOnlyMidtaiView('works');
   designSwitchView('works');
-}
-
-function switchType(type) {
-  midtaiState.type = type === 'design' ? 'design' : 'img';
-  document.getElementById('midtai-type-img')?.classList.toggle('active', midtaiState.type === 'img');
-  document.getElementById('midtai-type-design')?.classList.toggle('active', midtaiState.type === 'design');
-  const imgForm = document.getElementById('midtai-form-img');
-  const designForm = document.getElementById('midtai-form-design');
-  if (imgForm) imgForm.style.display = midtaiState.type === 'img' ? 'flex' : 'none';
-  if (designForm) designForm.style.display = midtaiState.type === 'design' ? 'flex' : 'none';
-  midtaiState.canvasOpen = false;
-  midtaiState.canvasMode = 'view';
-  hideMidtaiNodePanel();
-  postMidtaiCanvasSelectMode(false);
-  updateStateChip();
-  if (midtaiState.type === 'design') {
-    designSwitchView('works');
-    return;
-  }
-  renderMidtaiImagePreview();
-  imgSwitchView('preview');
 }
 
 function setMidtaiImageSize(size) {
@@ -3806,7 +3780,7 @@ function useMidtaiPromptLibraryPrompt(text) {
 }
 
 function renderMidtaiPromptLibrary() {
-  const container = document.getElementById('view-plib');
+  const container = document.getElementById(midtaiState.type === 'img' ? 'view-img-plib' : 'view-design-plib');
   if (!container) return;
   const isImageMode = midtaiState.type === 'img';
   if (!isImageMode) {
@@ -3902,7 +3876,7 @@ function hydrateDesignProjectIntoBridge(project, activeVersion) {
 function openMidtai(payload) {
   applyMidtaiRouteState(payload || {});
   const contentType = payload?.contentType === 'design' ? 'design' : 'img';
-  const nextView = contentType === 'design' ? midtaiState.designView : midtaiState.imgView;
+  const nextView = contentType === 'design' ? midtaiState.designTabView : midtaiState.imgTabView;
   showPage('midtai');
   updateStateChip();
   renderMidtaiDirectionPicker();
@@ -3912,25 +3886,25 @@ function openMidtai(payload) {
     } else if (payload?.artifact?.title) {
       midtaiState.currentProject = String(payload.artifact.title || '').trim();
     }
-    switchType('design');
-    if (nextView === 'preview' || nextView === 'plib') {
-      designSwitchView(nextView);
+    switchMidtaiType('design');
+    if (nextView === 'design-preview' || nextView === 'design-plib') {
+      designSwitchView(nextView.replace('design-', ''));
     } else {
       designSwitchView('works');
     }
     return;
   }
 
-  switchType('img');
-  if (nextView === 'works' || nextView === 'plib') {
-    imgSwitchView(nextView);
+  switchMidtaiType('img');
+  if (nextView === 'img-works' || nextView === 'img-plib') {
+    imgSwitchView(nextView.replace('img-', ''));
   } else {
     imgSwitchView('preview');
   }
 }
 
 function openDesignHub() {
-  openMidtai({ contentType: 'design', view: midtaiState.designView || 'preview', replaceCtx: midtaiState.replaceCtx });
+  openMidtai({ contentType: 'design', view: (midtaiState.designTabView || 'design-preview').replace('design-', ''), replaceCtx: midtaiState.replaceCtx });
 }
 
 function setDesignMode(mode) {
@@ -3951,8 +3925,7 @@ function openDesignProjectFromHome(projectId) {
   if (document.getElementById('page-midtai')?.classList.contains('active')) {
     // 直接切到画布视图等待 IPC 回复，不改 type tab（图像/设计由用户控制）
     midtaiState.canvasOpen = false;
-    showOnlyMidtaiView('canvas');
-    showTabBar('design');
+    showDesignView('canvas');
     const mcEmpty = document.getElementById('midtai-canvas-empty');
     const mcFrame = document.getElementById('midtai-canvas-iframe');
     if (mcEmpty) { mcEmpty.style.display = 'flex'; mcEmpty.textContent = '正在加载...'; }
@@ -5256,9 +5229,7 @@ function generateDesignWorkbench() {
   designBridgeState.error = '';
   designBridgeState.suggestionVisible = false;
   renderDesignBridgePage();
-  showOnlyMidtaiView('design-preview');
-  showTabBar('design');
-  setDesignTabActive('mt-design-preview');
+  showDesignView('design-preview');
   document.getElementById('dpv-empty').style.display = 'none';
   document.getElementById('dpv-loading').style.display = 'flex';
   document.getElementById('dpv-loading').classList.add('active');
@@ -6722,7 +6693,7 @@ function handleRenameOverlayClick(event) {
 }
 
 function openImageLab() {
-  openMidtai({ contentType: 'img', view: midtaiState.imgView || 'preview', replaceCtx: midtaiState.replaceCtx });
+  openMidtai({ contentType: 'img', view: (midtaiState.imgTabView || 'img-preview').replace('img-', ''), replaceCtx: midtaiState.replaceCtx });
 }
 
 function insertToDesign(imageUrl) {

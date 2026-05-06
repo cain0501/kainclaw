@@ -714,6 +714,14 @@ export class ElectronChatPanel {
     await this.recordCommandAssistantReply(sessionId, warning, false);
   }
 
+  private async postMidtaiDesignLibrary(): Promise<void> {
+    const items = await this.midtaiLibraryHost.getLibraryItems("design");
+    this.sendToRenderer({
+      type: "midtai:design-library-update",
+      items,
+    });
+  }
+
   // ─── IPC entry point ────────────────────────────────────────────────────────
 
   async handleMessage(message: Record<string, unknown>): Promise<void> {
@@ -908,8 +916,24 @@ export class ElectronChatPanel {
       );
       return;
     }
-    if (type === "midtai:request-library") {
-      await this.postMidtaiLibrary();
+    if (type === "midtai:request-design-library") {
+      await this.postMidtaiDesignLibrary();
+      return;
+    }
+    if (type === "design:getThumbnail") {
+      const versionId = typeof message.versionId === "string" ? message.versionId.trim() : "";
+      if (!versionId) {
+        return;
+      }
+      try {
+        const version = await this.designVersionStore.getVersion(versionId);
+        if (version?.html) {
+          const dataUrl = await captureDesignThumbnail(version.html);
+          this.sendToRenderer({ type: "design:thumbnail", versionId, dataUrl });
+        }
+      } catch {
+        // Keep the renderer shimmer placeholder when thumbnail generation fails.
+      }
       return;
     }
     if (type === "design:createProject") {
