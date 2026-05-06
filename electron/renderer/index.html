@@ -1134,7 +1134,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-seri
         <div id="dpv-loading" class="midtai-loading-view">
           <div class="midtai-loading-spin">◴</div>
           <div style="font-size:13px;color:#78716c">正在生成设计稿...</div>
-          <div style="font-size:11px;color:#a8a29e">通常需要 10~30 秒</div>
+          <div id="dpv-loading-counter" style="font-size:11px;color:#a8a29e">通常需要 10~30 秒</div>
         </div>
       </div>
       <div id="view-works" class="midtai-view">
@@ -2458,10 +2458,13 @@ function handleMessage(msg) {
       const overlay = document.getElementById('design-generating-overlay');
       const counter = document.getElementById('dgo-counter');
       if (overlay) overlay.classList.add('active');
-      if (counter && typeof msg.count === 'number') {
-        counter.textContent = isEnglishUi()
+      if (typeof msg.count === 'number') {
+        const countText = isEnglishUi()
           ? `${msg.count.toLocaleString()} chars...`
           : `已生成 ${msg.count.toLocaleString()} 字符...`;
+        if (counter) counter.textContent = countText;
+        const dpvCounter = document.getElementById('dpv-loading-counter');
+        if (dpvCounter) dpvCounter.textContent = countText;
       }
       break;
     }
@@ -2487,6 +2490,7 @@ function handleMessage(msg) {
       designBridgeState.loading = false;
       designBridgeState.error = '';
       designBridgeState.editModeAvailable = false;
+      { const dpvC = document.getElementById('dpv-loading-counter'); if (dpvC) dpvC.textContent = isEnglishUi() ? 'Usually takes 10~30 seconds' : '通常需要 10~30 秒'; }
       designBridgeState.editModeActive = false;
       designBridgeState.lastEdits = null;
       designBridgeState.selectedNode = null;
@@ -2540,6 +2544,7 @@ function handleMessage(msg) {
       designBridgeState.loading = false;
       designBridgeState.patchLoading = false;
       designBridgeState.error = String(msg.message || (isEnglishUi() ? 'Design generation failed.' : '设计生成失败。'));
+      { const dpvC = document.getElementById('dpv-loading-counter'); if (dpvC) dpvC.textContent = isEnglishUi() ? 'Usually takes 10~30 seconds' : '通常需要 10~30 秒'; }
       if (document.getElementById('page-midtai')?.classList.contains('active')) {
         document.getElementById('dpv-loading')?.classList.remove('active');
         const dpvLoading = document.getElementById('dpv-loading');
@@ -3568,7 +3573,7 @@ function hydrateDesignProjectIntoBridge(project, activeVersion) {
   designBridgeState.canvasMode = 'view';
   designBridgeState.renderToken = Date.now();
   designBridgeRenderedToken = 0;
-  if (document.getElementById('page-midtai')?.classList.contains('active') && designBridgeState.html) {
+  if (document.getElementById('page-midtai')?.classList.contains('active')) {
     openCanvas(designBridgeState.title);
   } else {
     showDesignPage();
