@@ -3655,7 +3655,9 @@ function handleMidtaiCanvasFrameMessage(event) {
     : null;
   midtaiState.selectedCanvasNode = node;
   designBridgeState.selectedNode = node;
-  if (node) {
+  const isImgNode = String(payload.tagName || '').toUpperCase() === 'IMG' ||
+    (typeof payload.src === 'string' && payload.src.length > 0);
+  if (node && isImgNode) {
     showMidtaiNodePanel(node);
     const mcFrame = document.getElementById('midtai-canvas-iframe');
     const panel = document.getElementById('midtai-node-panel');
@@ -3670,6 +3672,7 @@ function handleMidtaiCanvasFrameMessage(event) {
     }
   } else {
     hideMidtaiNodePanel();
+    renderDesignBridgePage();
   }
 }
 
