@@ -1186,14 +1186,24 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-seri
                 <div id="midtai-canvas-empty" class="midtai-canvas-title" style="display:flex;align-items:center;justify-content:center;flex:1;color:#a8998a;font-size:13px">暂无设计内容</div>
               </div>
             </div>
-            <div id="midtai-node-panel" style="display:none;position:fixed;z-index:9999;width:190px;background:#fff;border:1px solid #e5ddd0;border-radius:10px;box-shadow:0 8px 24px rgba(0,0,0,.12);padding:12px">
+            <div id="midtai-node-panel" style="display:none;position:fixed;z-index:9999;width:220px;background:#fff;border:1px solid #e5ddd0;border-radius:10px;box-shadow:0 8px 24px rgba(0,0,0,.12);padding:12px">
               <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
-                <div id="mnp-tag" style="font-size:11px;color:#a8998a;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:140px"></div>
+                <div id="mnp-tag" style="font-size:11px;color:#a8998a;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:170px"></div>
                 <button onclick="hideMidtaiNodePanel();setMidtaiCanvasMode('view')" style="border:none;background:none;cursor:pointer;color:#a8998a;font-size:16px;line-height:1;padding:0 2px;flex-shrink:0">×</button>
               </div>
-              <div style="font-size:11px;font-weight:600;color:#78716c;margin-bottom:8px">替换图片</div>
-              <button onclick="goReplaceInImageLab()" class="btn-red" style="width:100%;margin-bottom:6px;font-size:11px;padding:6px 8px">✦ 去 Image Lab 生成图</button>
-              <button onclick="goReplaceInWorks()" class="btn-secondary" style="width:100%;font-size:11px;padding:6px 8px">从我的作品选择</button>
+              <div id="mnp-image-actions">
+                <div style="font-size:11px;font-weight:600;color:#78716c;margin-bottom:8px">替换图片</div>
+                <button onclick="goReplaceInImageLab()" class="btn-red" style="width:100%;margin-bottom:6px;font-size:11px;padding:6px 8px">✦ 去 Image Lab 生成图</button>
+                <button onclick="goReplaceInWorks()" class="btn-secondary" style="width:100%;font-size:11px;padding:6px 8px">从我的作品选择</button>
+              </div>
+              <div id="mnp-patch-actions" style="display:none">
+                <div style="font-size:11px;font-weight:600;color:#78716c;margin-bottom:8px">改写元素</div>
+                <textarea id="mnp-patch-comment" placeholder="描述改写要求…" style="width:100%;min-height:72px;border:1px solid #eadfd2;border-radius:8px;padding:8px;background:#fff;color:#2d1f14;font-family:inherit;font-size:12px;resize:vertical;line-height:1.5;box-sizing:border-box;margin-bottom:8px"></textarea>
+                <div style="display:flex;gap:6px;justify-content:flex-end">
+                  <button class="btn-secondary" style="font-size:11px;padding:5px 10px" onclick="hideMidtaiNodePanel()">取消</button>
+                  <button id="mnp-patch-apply-btn" class="btn-red" style="font-size:11px;padding:5px 10px" onclick="applyMidtaiCanvasPatch()">应用改写</button>
+                </div>
+              </div>
             </div>
           </div>
           <div id="view-design-plib" class="midtai-view" style="display:none"></div>
@@ -2597,8 +2607,17 @@ function handleMessage(msg) {
       {
         const commentInput = document.getElementById('design-patch-comment');
         if (commentInput) commentInput.value = '';
+        const mnpComment = document.getElementById('mnp-patch-comment');
+        if (mnpComment) mnpComment.value = '';
+        const mnpBtn = document.getElementById('mnp-patch-apply-btn');
+        if (mnpBtn) { mnpBtn.disabled = false; mnpBtn.textContent = '应用改写'; }
       }
-      renderDesignBridgePage();
+      if (document.getElementById('page-midtai')?.classList.contains('active')) {
+        hideMidtaiNodePanel();
+        openCanvas(designBridgeState.title);
+      } else {
+        renderDesignBridgePage();
+      }
       loadDesignVersions();
       break;
     case 'design:versions':
@@ -3595,9 +3614,11 @@ function postMidtaiCanvasSelectMode(active) {
   );
 }
 
-function showMidtaiNodePanel(node) {
+function showMidtaiNodePanel(node, isImg) {
   const panel = document.getElementById('midtai-node-panel');
   const tag = document.getElementById('mnp-tag');
+  const imageActions = document.getElementById('mnp-image-actions');
+  const patchActions = document.getElementById('mnp-patch-actions');
   if (tag) {
     const pieces = [
       typeof node?.tagName === 'string' && node.tagName ? String(node.tagName).toUpperCase() : '',
@@ -3605,9 +3626,9 @@ function showMidtaiNodePanel(node) {
     ].filter(Boolean);
     tag.textContent = pieces.join(' · ');
   }
-  if (panel) {
-    panel.style.display = 'block';
-  }
+  if (imageActions) imageActions.style.display = isImg ? 'block' : 'none';
+  if (patchActions) patchActions.style.display = isImg ? 'none' : 'block';
+  if (panel) panel.style.display = 'block';
 }
 
 function hideMidtaiNodePanel() {
@@ -3619,6 +3640,20 @@ function hideMidtaiNodePanel() {
   if (tag) {
     tag.textContent = '';
   }
+}
+
+function applyMidtaiCanvasPatch() {
+  const comment = document.getElementById('mnp-patch-comment')?.value?.trim() || '';
+  if (!comment || !designBridgeState.selectedNode) return;
+  const applyBtn = document.getElementById('mnp-patch-apply-btn');
+  if (applyBtn) { applyBtn.disabled = true; applyBtn.textContent = '改写中…'; }
+  send({
+    type: 'design:patch',
+    html: designBridgeState.html,
+    selector: designBridgeState.selectedNode.selector,
+    targetOuterHtml: designBridgeState.selectedNode.outerHTML,
+    comment,
+  });
 }
 
 function handleMidtaiCanvasFrameMessage(event) {
@@ -3657,22 +3692,21 @@ function handleMidtaiCanvasFrameMessage(event) {
   designBridgeState.selectedNode = node;
   const isImgNode = String(payload.tagName || '').toUpperCase() === 'IMG' ||
     (typeof payload.src === 'string' && payload.src.length > 0);
-  if (node && isImgNode) {
-    showMidtaiNodePanel(node);
+  if (node) {
+    showMidtaiNodePanel(node, isImgNode);
     const mcFrame = document.getElementById('midtai-canvas-iframe');
     const panel = document.getElementById('midtai-node-panel');
     if (panel && mcFrame && node.rect) {
       const fr = mcFrame.getBoundingClientRect();
       let top = fr.top + node.rect.top + node.rect.height + 10;
       let left = fr.left + node.rect.left;
-      top = Math.max(60, Math.min(top, window.innerHeight - 170));
-      left = Math.max(0, Math.min(left, window.innerWidth - 200));
+      top = Math.max(60, Math.min(top, window.innerHeight - 230));
+      left = Math.max(0, Math.min(left, window.innerWidth - 230));
       panel.style.top = top + 'px';
       panel.style.left = left + 'px';
     }
   } else {
     hideMidtaiNodePanel();
-    renderDesignBridgePage();
   }
 }
 
