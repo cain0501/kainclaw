@@ -1734,7 +1734,8 @@ let midtaiState = {
   imgPreviewSession: false,
 };
 const thumbnailCache = new Map();
-const imageThumbCache = new Map(); // imageId → src (defers large data-url decoding)
+const imageThumbCache = new Map(); // imageId → src
+const imageDecodeCache = new Set(); // IDs already decoded by browser (second visit = instant)
 let midtaiImageEditState = { id: null, src: null, originalPrompt: '' };
 const MIDTAI_PLIB_IMG = [
   {
@@ -2425,6 +2426,7 @@ let imageLabState = {
   promptLibraryLoaded: false,
   workflowPlan: null,
   pendingBatch: null,
+  hasLoadedOnce: false,
   promptLibrary: {
     entries: [],
     favoriteIds: [],
@@ -2693,6 +2695,7 @@ function handleMessage(msg) {
       break;
     case 'image:state':
       applyImageLabState(msg);
+      imageLabState.hasLoadedOnce = true;
       if (document.getElementById('page-midtai')?.classList.contains('active') && midtaiState.type === 'img') {
         if (midtaiState.imgTabView === 'img-works') {
           renderMidtaiImageWorks();
@@ -3152,6 +3155,9 @@ function switchMidtaiType(type) {
     midtaiState.canvasMode = 'view';
     hideMidtaiNodePanel();
     postMidtaiCanvasSelectMode(false);
+    if (!imageLabState.hasLoadedOnce) {
+      send({ type: 'image:loadState' }); // 预加载，确保点我的作品时数据已就绪
+    }
   }
   updateStateChip();
 }
@@ -3280,7 +3286,20 @@ function renderMidtaiImageWorks() {
     .sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0))
     .flatMap(batch => batch.items || []);
   if (!results.length) {
-    container.innerHTML = `<div class="midtai-empty-view"><div class="midtai-empty-title">${isReplace ? '还没有可用图片' : '还没有生成过图像'}</div></div>`;
+    if (!imageLabState.hasLoadedOnce) {
+      // 数据还在路上，显示骨架占位
+      const skeletonCards = Array.from({ length: 8 }, () => `
+        <div class="midtai-img-card">
+          <div class="midtai-img-thumb-wrap"><div class="thumb-shimmer"></div></div>
+          <div class="midtai-img-card-body">
+            <div class="imglab-loading-line long" style="margin-bottom:8px"></div>
+            <div class="imglab-loading-line medium"></div>
+          </div>
+        </div>`).join('');
+      container.innerHTML = `<div class="midtai-works-shell"><div class="midtai-works-scroll"><div class="midtai-img-grid">${skeletonCards}</div></div></div>`;
+    } else {
+      container.innerHTML = `<div class="midtai-empty-view"><div class="midtai-empty-title">${isReplace ? '还没有可用图片' : '还没有生成过图像'}</div></div>`;
+    }
     return;
   }
   results.forEach(r => imageThumbCache.set(r.id, r.src));
@@ -3294,8 +3313,8 @@ function renderMidtaiImageWorks() {
       <div class="midtai-works-scroll">
         <div class="midtai-img-grid">
           ${results.map(result => `
-            <div class="midtai-img-card" data-imgid="${result.id}">
-              <div class="midtai-img-thumb-wrap"><div class="thumb-shimmer"></div></div>
+            <div class="midtai-img-card" ${imageDecodeCache.has(result.id) ? '' : `data-imgid="${result.id}"`}>
+              <div class="midtai-img-thumb-wrap">${imageDecodeCache.has(result.id) && imageThumbCache.has(result.id) ? `<img src="${imageThumbCache.get(result.id)}" class="midtai-img-thumb" alt="generated">` : '<div class="thumb-shimmer"></div>'}</div>
               <div class="midtai-img-card-body">
                 <div class="midtai-img-card-copy">${escapeHtml(String(result.revisedPrompt || result.prompt || '')).slice(0, 96)}</div>
                 <div class="midtai-img-actions">
@@ -3377,7 +3396,7 @@ function observeMidtaiImageThumbs(container) {
       const img = new Image();
       img.className = 'midtai-img-thumb';
       img.alt = 'generated';
-      img.onload = () => { wrap.innerHTML = ''; wrap.appendChild(img); };
+      img.onload = () => { imageDecodeCache.add(id); wrap.innerHTML = ''; wrap.appendChild(img); };
       img.src = src;
     }
     if (i < cards.length) requestAnimationFrame(loadChunk);
