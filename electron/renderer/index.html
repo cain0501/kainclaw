@@ -1757,6 +1757,7 @@ let midtaiState = {
 const thumbnailCache = new Map();
 const imageThumbCache = new Map(); // imageId → src
 const imageDecodeCache = new Set(); // IDs already decoded by browser (second visit = instant)
+let midtaiThumbsToken = 0; // incremented on tab-switch to cancel in-flight rAF thumb loads
 let midtaiImageEditState = { id: null, src: null, originalPrompt: '' };
 const MIDTAI_PLIB_IMG = [
   {
@@ -2660,6 +2661,7 @@ function handleMessage(msg) {
       designBridgeState.loading = false;
       designBridgeState.patchLoading = false;
       designBridgeState.error = String(msg.message || (isEnglishUi() ? 'Design generation failed.' : '设计生成失败。'));
+      { const mnpBtnE = document.getElementById('mnp-patch-apply-btn'); if (mnpBtnE) { mnpBtnE.disabled = false; mnpBtnE.textContent = '应用改写'; } }
       { const dpvC = document.getElementById('dpv-loading-counter'); if (dpvC) dpvC.textContent = isEnglishUi() ? 'Usually takes 10~30 seconds' : '通常需要 10~30 秒'; }
       if (document.getElementById('page-midtai')?.classList.contains('active')) {
         document.getElementById('dpv-loading')?.classList.remove('active');
@@ -2731,6 +2733,15 @@ function handleMessage(msg) {
       break;
     case 'image:state':
       applyImageLabState(msg);
+      if (Array.isArray(msg.resultBatches)) {
+        for (const batch of msg.resultBatches) {
+          for (const item of (batch.items || [])) {
+            if (item?.id && item?.thumbnail && !thumbnailCache.has(item.id)) {
+              thumbnailCache.set(item.id, item.thumbnail);
+            }
+          }
+        }
+      }
       imageLabState.hasLoadedOnce = true;
       if (document.getElementById('page-midtai')?.classList.contains('active') && midtaiState.type === 'img') {
         if (midtaiState.imgTabView === 'img-works') {
@@ -2743,6 +2754,15 @@ function handleMessage(msg) {
     case 'image:result':
       imageLabState.pendingBatch = null;
       imageLabState.resultBatches = Array.isArray(msg.resultBatches) ? msg.resultBatches : imageLabState.resultBatches;
+      if (Array.isArray(msg.resultBatches)) {
+        for (const batch of msg.resultBatches) {
+          for (const item of (batch.items || [])) {
+            if (item?.id && item?.thumbnail && !thumbnailCache.has(item.id)) {
+              thumbnailCache.set(item.id, item.thumbnail);
+            }
+          }
+        }
+      }
       renderImageLabResults();
       {
         const latestBatchCount = Number(msg.latestBatchCount || 0);
@@ -3199,6 +3219,7 @@ function switchMidtaiType(type) {
 }
 
 function showImgView(view) {
+  if (view !== 'img-works') midtaiThumbsToken++;
   midtaiState.imgTabView = view;
   ['img-preview', 'img-works', 'img-plib'].forEach(currentView => {
     const element = document.getElementById('view-' + currentView);
@@ -3210,7 +3231,9 @@ function showImgView(view) {
     button.classList.toggle('active', button.dataset.view === view);
   });
   if (view === 'img-works') {
-    send({ type: 'image:loadState' });
+    if (!imageLabState.hasLoadedOnce) {
+      send({ type: 'image:loadState' });
+    }
     renderMidtaiImageWorks();
     return;
   }
@@ -3348,9 +3371,11 @@ function renderMidtaiImageWorks() {
       </div>
       <div class="midtai-works-scroll">
         <div class="midtai-img-grid">
-          ${results.map(result => `
-            <div class="midtai-img-card" ${imageDecodeCache.has(result.id) ? '' : `data-imgid="${result.id}"`}>
-              <div class="midtai-img-thumb-wrap">${imageDecodeCache.has(result.id) && imageThumbCache.has(result.id) ? `<img src="${imageThumbCache.get(result.id)}" class="midtai-img-thumb" alt="generated">` : '<div class="thumb-shimmer"></div>'}</div>
+          ${results.map(result => {
+            const cachedThumb = thumbnailCache.get(result.id) || (imageDecodeCache.has(result.id) ? imageThumbCache.get(result.id) : null);
+            return `
+            <div class="midtai-img-card" ${cachedThumb ? '' : `data-imgid="${result.id}"`}>
+              <div class="midtai-img-thumb-wrap">${cachedThumb ? `<img loading="lazy" src="${cachedThumb}" class="midtai-img-thumb" alt="generated">` : '<div class="thumb-shimmer"></div>'}</div>
               <div class="midtai-img-card-body">
                 <div class="midtai-img-card-copy">${escapeHtml(String(result.revisedPrompt || result.prompt || '')).slice(0, 96)}</div>
                 <div class="midtai-img-actions">
@@ -3365,7 +3390,8 @@ function renderMidtaiImageWorks() {
                 </div>
               </div>
             </div>
-          `).join('')}
+          `;
+          }).join('')}
         </div>
       </div>
     </div>
@@ -3419,7 +3445,9 @@ function observeMidtaiImageThumbs(container) {
   if (!cards.length) return;
   let i = 0;
   const CHUNK = 4;
+  const myToken = ++midtaiThumbsToken;
   function loadChunk() {
+    if (myToken !== midtaiThumbsToken) return;
     const end = Math.min(i + CHUNK, cards.length);
     while (i < end) {
       const card = cards[i++];
@@ -3432,7 +3460,22 @@ function observeMidtaiImageThumbs(container) {
       const img = new Image();
       img.className = 'midtai-img-thumb';
       img.alt = 'generated';
-      img.onload = () => { imageDecodeCache.add(id); wrap.innerHTML = ''; wrap.appendChild(img); };
+      img.onload = () => {
+        if (myToken !== midtaiThumbsToken) return;
+        try {
+          const SIZE = 320;
+          const scale = Math.min(SIZE / img.naturalWidth, SIZE / img.naturalHeight, 1);
+          const canvas = document.createElement('canvas');
+          canvas.width = Math.round(img.naturalWidth * scale) || SIZE;
+          canvas.height = Math.round(img.naturalHeight * scale) || SIZE;
+          canvas.getContext('2d').drawImage(img, 0, 0, canvas.width, canvas.height);
+          const thumbDataUrl = canvas.toDataURL('image/jpeg', 0.65);
+          imageThumbCache.set(id, thumbDataUrl);
+          thumbnailCache.set(id, thumbDataUrl);
+          send({ type: 'image:saveThumbnail', id, dataUrl: thumbDataUrl });
+        } catch (_) {}
+        imageDecodeCache.add(id); wrap.innerHTML = ''; wrap.appendChild(img);
+      };
       img.src = src;
     }
     if (i < cards.length) requestAnimationFrame(loadChunk);
@@ -3580,6 +3623,11 @@ function buildMidtaiCanvasSrcdoc(html) {
       let part = current.tagName.toLowerCase();
       if (current.id) { part += '#' + current.id; parts.unshift(part); break; }
       if (current.classList.length) { part += '.' + Array.from(current.classList).slice(0, 2).join('.'); }
+      const par = current.parentElement;
+      if (par) {
+        const sameTag = Array.from(par.children).filter(s => s.tagName === current.tagName);
+        if (sameTag.length > 1) { part += ':nth-of-type(' + (sameTag.indexOf(current) + 1) + ')'; }
+      }
       parts.unshift(part);
       current = current.parentElement;
     }
@@ -3803,6 +3851,7 @@ function openCanvas(projectName) {
     freshFrame.srcdoc = buildMidtaiCanvasSrcdoc(html);
     if (oldFrame) oldFrame.replaceWith(freshFrame);
     if (mcEmpty) mcEmpty.style.display = 'none';
+    loadDesignVersions();
   } else {
     const mcFrame = document.getElementById('midtai-canvas-iframe');
     if (mcFrame) mcFrame.style.display = 'none';
@@ -3976,7 +4025,7 @@ function renderMidtaiImagePreview() {
     const prompt = escapeHtml(result.revisedPrompt || result.prompt || latestBatch.prompt || '');
     return `
       <div class="midtai-img-card">
-        <img src="${result.src}" class="midtai-img-thumb" alt="generated">
+        <img loading="lazy" src="${result.src}" class="midtai-img-thumb" alt="generated">
         <div class="midtai-img-card-body">
           <div class="midtai-img-card-copy">${prompt.slice(0, 96)}</div>
           <div class="midtai-img-actions">
@@ -4747,6 +4796,11 @@ function buildDesignPatchableSrcdoc(html) {
       if (current.classList.length) {
         part += '.' + Array.from(current.classList).slice(0, 2).join('.');
       }
+      const par = current.parentElement;
+      if (par) {
+        const sameTag = Array.from(par.children).filter(s => s.tagName === current.tagName);
+        if (sameTag.length > 1) { part += ':nth-of-type(' + (sameTag.indexOf(current) + 1) + ')'; }
+      }
       parts.unshift(part);
       current = current.parentElement;
     }
@@ -5397,9 +5451,11 @@ function renderDesignVersionsPanel(panel) {
     ...visibleVersions.map(version => {
       const active = version.id === designBridgeState.versionId;
       const time = new Date(version.createdAt).toLocaleTimeString(isEnglishUi() ? 'en-US' : 'zh-CN', { hour: '2-digit', minute: '2-digit' });
-      const label = version.prompt
-        ? String(version.prompt).slice(0, 28)
-        : (isEnglishUi() ? 'Untitled version' : '未命名版本');
+      const label = version.title && String(version.title).trim()
+        ? String(version.title).trim()
+        : version.prompt
+          ? String(version.prompt).slice(0, 28)
+          : (isEnglishUi() ? 'Untitled version' : '未命名版本');
       return `<button class="btn-secondary" style="width:100%;justify-content:space-between;margin-bottom:8px;border-color:${active ? '#E84040' : '#d4d4d8'};background:${active ? '#fff5f5' : '#fff'}" onclick="restoreDesignVersion('${version.id}')">
         <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:180px">${escapeHtml(label)}</span>
         <span style="font-size:11px;color:#8b7969">${escapeHtml(time)}</span>
@@ -5414,8 +5470,7 @@ function getMidtaiVisibleVersions() {
   if (!currentProjectId) {
     return versions;
   }
-  const filtered = versions.filter(version => !version?.projectId || version.projectId === currentProjectId);
-  return filtered.length > 0 ? filtered : versions;
+  return versions.filter(version => version?.projectId === currentProjectId);
 }
 
 function makeDraggable(el) {
@@ -5458,9 +5513,11 @@ function renderMidtaiVersionsPanel(panel) {
   panel.innerHTML = [
     '<div style="font-size:12px;font-weight:700;color:#7b4a2e;letter-spacing:.04em;text-transform:uppercase;margin-bottom:10px">版本历史</div>',
     ...versions.map((version, index) => {
-      const label = version.prompt
-        ? String(version.prompt).slice(0, 28)
-        : (version.title || `版本 ${index + 1}`);
+      const label = version.title && String(version.title).trim()
+        ? String(version.title).trim()
+        : version.prompt
+          ? String(version.prompt).slice(0, 28)
+          : `版本 ${index + 1}`;
       const createdAt = version.createdAt || version.ts;
       const time = createdAt
         ? new Date(createdAt).toLocaleTimeString(isEnglishUi() ? 'en-US' : 'zh-CN', { hour: '2-digit', minute: '2-digit' })
@@ -5743,6 +5800,8 @@ function toggleMidtaiVersionsPanel() {
   }
   panel.style.display = isOpen ? 'none' : 'block';
   if (!isOpen) {
+    panel.innerHTML = '<div style="font-size:12px;color:#a8998a;padding:8px 0">正在加载版本记录...</div>';
+    loadDesignVersions();
     renderMidtaiVersionsPanel(panel);
   }
 }
@@ -9052,7 +9111,7 @@ function renderImageLabResults() {
     const itemsHtml = (batch.items || []).map(result => {
       const resultPrompt = escapeHtml(result.revisedPrompt || result.prompt || '');
       return `<div style="background:#fff;border:1px solid #eadfd2;border-radius:18px;overflow:hidden;box-shadow:0 12px 24px rgba(77,49,24,.07)">
-        <img src="${result.src}" alt="generated" style="width:100%;aspect-ratio:1/1;object-fit:cover;display:block;background:#f5efe8">
+        <img loading="lazy" src="${result.src}" alt="generated" style="width:100%;aspect-ratio:1/1;object-fit:cover;display:block;background:#f5efe8">
         <div style="padding:12px 12px 10px">
           <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:6px">
             <span class="${sourceMeta.badgeClass}">${translateSurfaceText(sourceMeta.label)}</span>

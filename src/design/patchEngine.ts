@@ -74,7 +74,7 @@ const VOID_TAGS = new Set([
 
 function parseSelector(selector: string): SelectorSegment[] {
   return selector.split(">").map(seg => {
-    const normalized = seg.trim();
+    const normalized = seg.trim().replace(/:nth-of-type\(\d+\)/g, "");
     const hashIndex = normalized.indexOf("#");
     const dotIndex = normalized.indexOf(".");
     const boundaryIndex = [hashIndex, dotIndex]
