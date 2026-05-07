@@ -21,7 +21,7 @@
 
 ## 当前整体判断
 
-- `vscode-extension/` 仍然是本地验证壳，不是最终产品形态。
+- 代码目录名为 `vscode-extension/`（历史命名，不代表产品形态）。kainclaw 当前运行在 **Electron 桌面壳**里，不是 VS Code 扩展。
 - 当前能打包、能验证的是 Electron 内测壳，不是完整 Windows 正式客户端。
 - 核心能力仍然必须优先落在 `src/` 的 runtime / service / adapter 层，Electron 只做桌面壳、权限、IPC、UI。
 - 项目主线仍是"官方 Claude Code 能力对齐优先，KainClaw 扩展第二"。

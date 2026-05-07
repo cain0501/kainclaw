@@ -1,4 +1,6 @@
-# Current State — KainClaw vscode-extension
+# Current State — KainClaw
+
+> 代码目录名为 `vscode-extension/`（历史原因保留，不代表产品形态）。kainclaw 当前运行在 **Electron 桌面壳**里，不是 VS Code 扩展。
 
 > **Single source of truth for project-level current state.**
 > Update this file after every verified checkpoint. Do NOT scatter state across CLAUDE_HANDOFF.md and implementation-memory.md.
@@ -10,6 +12,7 @@
 | Test files | 171 | 2026-05-06 |
 | Tests passing | 1325 | 2026-05-06 |
 | Last verified commit | see `git log --oneline -1` | — |
+| Last clean verification | 2026-05-07 — Midtai slider overlay + project-scoped version history verified (`npm test`, `npm run check`, `npm run build`, `npm run build:electron`, UTF-8 + inline JS check) | — |
 
 **Required passing commands:**
 ```bash
@@ -24,6 +27,10 @@ npm run build:electron   # only when Electron behavior changed
 | Beads ID | Title | Status | Primer |
 |----------|-------|--------|--------|
 | vscode-extension-f4v | extension.ts 宿主总控继续下沉 | IN_PROGRESS | `.kiro/primers/vscode-extension-f4v.md` |
+| vscode-extension-3q7 | Midtai 画布：调节/导出/版本历史三项能力接入 | ✓ CLOSED | `.kiro/primers/vscode-extension-3q7.md` |
+| vscode-extension-wnz | Midtai 画布：滑块面板浮层化 + 版本历史按项目过滤 | ✓ CLOSED | `.kiro/primers/vscode-extension-wnz.md` |
+| vscode-extension-ahb | Hooks: Stop + SessionEnd + UserPromptSubmit | OPEN | `.kiro/primers/vscode-extension-ahb.md` |
+| vscode-extension-a41 | Hooks: PostToolUseFailure + PreCompact + PostCompact | OPEN | `.kiro/primers/vscode-extension-a41.md` |
 | vscode-extension-lca | Hooks: 用户配置接入触发链 | ✓ CLOSED | — |
 | vscode-extension-vwq | Hooks: 官方事件名兼容 + Notification/SessionStart | ✓ CLOSED | — |
 | vscode-extension-pnz | Fast mode: state persistence | ✓ CLOSED | — |
@@ -71,6 +78,7 @@ npm run build:electron   # only when Electron behavior changed
 - Midtai P0 foundations (explicit `midtai:open` routing, library DTO aggregation, deterministic design image replacement IPC)
 - Midtai My Works (design-wcard 卡片：gradient thumb / hover lift / dark version badge / source color badges / 图片网格 158px + 设计网格 210px)
 - Midtai Canvas Selection (fo7 bridge: 选择模式 crosshair → node panel → Replace 图片 / 去 Image Lab / 从我的作品选择)
+- Midtai Canvas Controls (3q7/wnz bridge: 调节 sliders → `__kc_apply_slider_values` iframe bridge / 调节浮层可拖拽 / 导出 HTML+PDF+PPTX 菜单 / 版本历史按当前项目过滤并可恢复)
 - KainClaw Design Prompt 质量升级 (Anti-Slop 9 条规则 + DesignDirectionSpec OKLch 调色板 + posture 注入，4 套方向含完整 spec)
 - Midtai 设计表单 (输出类型 select + 视觉方向卡片选择器，按输出类型动态渲染，选中值传入 generateDesignWorkbench)
 - Midtai 图像整合 (左侧图像表单 + 比例/数量控件 + 生成预览 shimmer/结果卡片 + 静态提示词库 + 插入到对话)

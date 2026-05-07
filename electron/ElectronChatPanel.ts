@@ -3645,11 +3645,9 @@ export class ElectronChatPanel {
     return version;
   }
 
-  private async loadDesignVersions(message: Record<string, unknown>): Promise<void> {
+  private async loadDesignVersions(_message: Record<string, unknown>): Promise<void> {
     await this.ensureSession();
-    const projectId = typeof message.projectId === "string" && message.projectId.trim()
-      ? message.projectId.trim()
-      : this.currentDesignProjectId ?? "design-default";
+    const projectId = this.currentDesignProjectId ?? "design-default";
     const versions = await this.designVersionStore.listVersions(projectId);
     this.sendToRenderer({
       type: "design:versions",

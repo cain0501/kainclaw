@@ -71,10 +71,10 @@
 ## Project
 
 - Name: KainClaw
-- Type: VS Code sidebar AI coding assistant
+- Type: Electron 桌面 AI 编程助手（代码目录名为 `vscode-extension/`，历史原因保留，**不代表产品形态**）
 - Spec baseline: `.kiro/specs/v1-product-spec.md`
 - Product ownership: Claude writes planning/specs, User makes final decisions, Codex implements and reviews code
-- Strategic target: the current VS Code implementation is a local validation shell; the final core deliverable is a Windows program, not the VS Code extension itself
+- Strategic target: kainclaw 现在运行在 **Electron 桌面壳**里；`vscode-extension/` 是代码仓库目录结构，不是最终产品；目标是完整 Windows 正式客户端
 
 ## Tech Stack
 
@@ -112,12 +112,13 @@
 ## Codex Working Boundary
 
 - Implement against the current spec; do not rewrite product logic on your own.
-- Treat the VS Code extension as a staging and local test environment. When making architectural choices, prefer options that preserve or improve the path to a Windows desktop deliverable.
+- Treat the `vscode-extension/` codebase as a staging and local test environment. When making architectural choices, prefer options that preserve or improve the path to a Windows desktop deliverable.
 - Do not change business rules or pricing rules unless the user explicitly asks for it.
 - Do not modify spec documents as part of implementation work unless explicitly requested.
 - If a requirement is unclear, contradictory, or has hidden product tradeoffs, raise a blocker instead of silently redefining behavior.
 - Prefer the smallest change that satisfies the approved scope.
 - Scope smell: if a task is drifting beyond about 8 files, stop and re-check whether the change is still aligned with spec.
+- **Windows shell constraint**: PowerShell on this machine is unreliable at startup. For file reading, symbol search, and code navigation, always prefer the direct file tools (Read, Grep, Glob) over shell commands (`cat`, `grep`, `find`). Use Bash only when shell output is strictly required and no file-tool alternative exists.
 
 ## Claude Source Parity Rule
 
@@ -336,7 +337,8 @@ Claude 出 primer 时应一次批量出 3–5 个，覆盖一条任务线的完�
 
 ### Git Push 规则
 
-- 每完成 5 个用户可感知事项，push 一次到 GitHub
-- 阶段性功能收口时（如一条任务线全部完成），必须 push
-- 不等用户问，Codex 自己判断是否到达 push 节点
+- **git push 由 Claude PM 负责，不是 Codex，不是用户。**
+- PM 验收通过后，直接执行 `git add + commit + push`，不需要用户转发指令
+- Codex 只负责：写代码 + 跑验证命令 + `bd close`
+- push 节点：每完成 5 个用户可感知事项，或阶段性功能收口时
 <!-- END BEADS INTEGRATION -->

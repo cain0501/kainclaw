@@ -1176,15 +1176,26 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-seri
                 <div id="canvas-toolbar" class="canvas-toolbar">
                   <button id="midtai-canvas-view-btn" class="canvas-mode-btn active" onclick="setMidtaiCanvasMode('view')">查看</button>
                   <button id="midtai-canvas-select-btn" class="canvas-mode-btn" onclick="setMidtaiCanvasMode('select')">选择</button>
-                  <button id="midtai-canvas-tweak-btn" class="canvas-mode-btn" disabled title="调节模式即将支持" style="opacity:.45;cursor:not-allowed">调节</button>
+                  <button id="midtai-canvas-tweak-btn" class="canvas-mode-btn" onclick="setMidtaiCanvasMode('tweak')">调节</button>
                   <div class="canvas-toolbar-spacer"></div>
                   <button class="canvas-toolbar-btn" onclick="exitCanvas()">退出画布</button>
-                  <button class="canvas-toolbar-btn" disabled style="opacity:.45;cursor:not-allowed">版本历史</button>
-                  <button class="canvas-toolbar-btn" disabled style="opacity:.45;cursor:not-allowed">导出</button>
+                  <div style="position:relative;display:inline-block">
+                    <button class="canvas-toolbar-btn" onclick="toggleMidtaiVersionsPanel()">版本历史 ▼</button>
+                    <div id="midtai-versions-panel" style="display:none;position:absolute;top:100%;right:0;background:#fff;border:1px solid #eadfd2;border-radius:8px;box-shadow:0 4px 12px rgba(0,0,0,.12);z-index:200;width:280px;max-height:360px;overflow-y:auto;padding:12px"></div>
+                  </div>
+                  <div style="position:relative;display:inline-block">
+                    <button class="canvas-toolbar-btn" onclick="toggleMidtaiExportMenu()">导出 ▼</button>
+                    <div id="midtai-export-menu" style="display:none;position:absolute;top:100%;right:0;background:#fff;border:1px solid #eadfd2;border-radius:8px;box-shadow:0 4px 12px rgba(0,0,0,.1);z-index:100;min-width:120px;overflow:hidden">
+                      <button onclick="exportDesign('html');toggleMidtaiExportMenu(false)" style="display:block;width:100%;text-align:left;padding:8px 14px;border:none;background:none;cursor:pointer;font-size:12px;color:#2d1f14" onmouseover="this.style.background='#f6f1ea'" onmouseout="this.style.background='none'">导出 HTML</button>
+                      <button onclick="exportDesign('pdf');toggleMidtaiExportMenu(false)" style="display:block;width:100%;text-align:left;padding:8px 14px;border:none;background:none;cursor:pointer;font-size:12px;color:#2d1f14" onmouseover="this.style.background='#f6f1ea'" onmouseout="this.style.background='none'">导出 PDF</button>
+                      <button onclick="exportDesign('pptx');toggleMidtaiExportMenu(false)" style="display:block;width:100%;text-align:left;padding:8px 14px;border:none;background:none;cursor:pointer;font-size:12px;color:#2d1f14" onmouseover="this.style.background='#f6f1ea'" onmouseout="this.style.background='none'">导出 PPTX</button>
+                    </div>
+                  </div>
                 </div>
                 <iframe id="midtai-canvas-iframe" sandbox="allow-scripts" style="flex:1;min-height:0;border:none;width:100%;display:none"></iframe>
                 <div id="midtai-canvas-empty" class="midtai-canvas-title" style="display:flex;align-items:center;justify-content:center;flex:1;color:#a8998a;font-size:13px">暂无设计内容</div>
               </div>
+              <div id="midtai-sliders-panel" style="display:none;position:fixed;z-index:9998;width:260px;max-height:70vh;background:rgba(255,255,255,.97);border:1px solid #eadfd2;border-radius:12px;padding:0;overflow:hidden;box-shadow:0 8px 24px rgba(0,0,0,.14);top:80px;right:24px"></div>
             </div>
             <div id="midtai-node-panel" style="display:none;position:fixed;z-index:9999;width:220px;background:#fff;border:1px solid #e5ddd0;border-radius:10px;box-shadow:0 8px 24px rgba(0,0,0,.12);padding:12px">
               <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
@@ -2623,6 +2634,12 @@ function handleMessage(msg) {
     case 'design:versions':
       designBridgeState.versions = Array.isArray(msg.versions) ? msg.versions : [];
       renderDesignBridgePage();
+      if (document.getElementById('page-midtai')?.classList.contains('active')) {
+        const panel = document.getElementById('midtai-versions-panel');
+        if (panel && panel.style.display !== 'none') {
+          renderMidtaiVersionsPanel(panel);
+        }
+      }
       break;
     case 'design:directions':
       designBridgeState.directionSuggestions = Array.isArray(msg.suggestions) ? msg.suggestions : [];
@@ -3608,10 +3625,20 @@ function buildMidtaiCanvasSrcdoc(html) {
   }, true);
 
   window.addEventListener('message', function(e) {
-    if (e.data && e.data.type === '__midtai_set_select_mode') {
-      window.__kcSelectMode = !!e.data.active;
-      document.body.style.cursor = e.data.active ? 'crosshair' : '';
+    const payload = e.data || {};
+    if (payload.type === '__midtai_set_select_mode') {
+      window.__kcSelectMode = !!payload.active;
+      document.body.style.cursor = payload.active ? 'crosshair' : '';
+      return;
     }
+    if (payload.type !== '__kc_apply_slider_values' || !payload.values || typeof payload.values !== 'object') {
+      return;
+    }
+    const root = document.documentElement;
+    Object.entries(payload.values).forEach(function(entry) {
+      if (!entry[0]) return;
+      root.style.setProperty(String(entry[0]), String(entry[1]));
+    });
   });
 })();
 `;
@@ -3729,6 +3756,7 @@ function openCanvas(projectName) {
   midtaiState.canvasMode = 'view';
   midtaiState.selectedCanvasNode = null;
   designBridgeState.selectedNode = null;
+  designBridgeState.versions = [];
   midtaiState.currentProject = String(projectName || midtaiState.currentProject || '').trim();
   const title = document.getElementById('midtai-canvas-project-title');
   if (title) {
@@ -3743,6 +3771,21 @@ function openCanvas(projectName) {
   const mcEmpty = document.getElementById('midtai-canvas-empty');
   document.getElementById('midtai-canvas-view-btn')?.classList.add('active');
   document.getElementById('midtai-canvas-select-btn')?.classList.remove('active');
+  document.getElementById('midtai-canvas-tweak-btn')?.classList.remove('active');
+  const slidersPanel = document.getElementById('midtai-sliders-panel');
+  const versionsPanel = document.getElementById('midtai-versions-panel');
+  const exportMenu = document.getElementById('midtai-export-menu');
+  if (slidersPanel) {
+    slidersPanel.style.display = 'none';
+    slidersPanel.innerHTML = '';
+  }
+  if (versionsPanel) {
+    versionsPanel.style.display = 'none';
+    versionsPanel.innerHTML = '';
+  }
+  if (exportMenu) {
+    exportMenu.style.display = 'none';
+  }
   const html = designBridgeState?.html || '';
   if (html) {
     // 每次创建新 iframe，避免 srcdoc 复用导致的偶发空白
@@ -3751,7 +3794,12 @@ function openCanvas(projectName) {
     freshFrame.id = 'midtai-canvas-iframe';
     freshFrame.sandbox = 'allow-scripts';
     freshFrame.style.cssText = 'flex:1;min-height:0;border:none;width:100%;display:block';
-    freshFrame.onload = () => { postMidtaiCanvasSelectMode(midtaiState.canvasMode === 'select'); };
+    freshFrame.onload = () => {
+      postMidtaiCanvasSelectMode(midtaiState.canvasMode === 'select');
+      if (midtaiState.canvasMode === 'tweak' && slidersPanel) {
+        renderDesignSlidersPanel(slidersPanel, freshFrame);
+      }
+    };
     freshFrame.srcdoc = buildMidtaiCanvasSrcdoc(html);
     if (oldFrame) oldFrame.replaceWith(freshFrame);
     if (mcEmpty) mcEmpty.style.display = 'none';
@@ -3763,9 +3811,31 @@ function openCanvas(projectName) {
 }
 
 function setMidtaiCanvasMode(mode) {
-  midtaiState.canvasMode = mode === 'select' ? 'select' : 'view';
+  midtaiState.canvasMode = ['select', 'tweak'].includes(mode) ? mode : 'view';
   document.getElementById('midtai-canvas-view-btn')?.classList.toggle('active', midtaiState.canvasMode === 'view');
   document.getElementById('midtai-canvas-select-btn')?.classList.toggle('active', midtaiState.canvasMode === 'select');
+  document.getElementById('midtai-canvas-tweak-btn')?.classList.toggle('active', midtaiState.canvasMode === 'tweak');
+  const slidersPanel = document.getElementById('midtai-sliders-panel');
+  const versionsPanel = document.getElementById('midtai-versions-panel');
+  const exportMenu = document.getElementById('midtai-export-menu');
+  if (versionsPanel) {
+    versionsPanel.style.display = 'none';
+  }
+  if (exportMenu) {
+    exportMenu.style.display = 'none';
+  }
+  if (midtaiState.canvasMode === 'tweak') {
+    hideMidtaiNodePanel();
+    postMidtaiCanvasSelectMode(false);
+    if (slidersPanel) {
+      const frameEl = document.getElementById('midtai-canvas-iframe');
+      renderDesignSlidersPanel(slidersPanel, frameEl);
+    }
+    return;
+  }
+  if (slidersPanel) {
+    slidersPanel.style.display = 'none';
+  }
   if (midtaiState.canvasMode === 'view') {
     hideMidtaiNodePanel();
   }
@@ -3776,6 +3846,18 @@ function exitCanvas() {
   midtaiState.canvasOpen = false;
   midtaiState.canvasMode = 'view';
   hideMidtaiNodePanel();
+  const slidersPanel = document.getElementById('midtai-sliders-panel');
+  const versionsPanel = document.getElementById('midtai-versions-panel');
+  const exportMenu = document.getElementById('midtai-export-menu');
+  if (slidersPanel) {
+    slidersPanel.style.display = 'none';
+  }
+  if (versionsPanel) {
+    versionsPanel.style.display = 'none';
+  }
+  if (exportMenu) {
+    exportMenu.style.display = 'none';
+  }
   postMidtaiCanvasSelectMode(false);
   updateStateChip();
   designSwitchView('works');
@@ -4046,6 +4128,37 @@ function hydrateDesignProjectIntoBridge(project, activeVersion) {
   }
 }
 
+function syncMidtaiDesignPayload(payload) {
+  const project = payload?.project && typeof payload.project === 'object'
+    ? payload.project
+    : null;
+  const activeVersion = payload?.activeVersion && typeof payload.activeVersion === 'object'
+    ? payload.activeVersion
+    : null;
+  const artifact = payload?.artifact && typeof payload.artifact === 'object'
+    ? payload.artifact
+    : null;
+
+  designHomeState.currentProjectId = project?.projectId || payload?.projectId || null;
+  designBridgeState.mode = project?.source === 'blank' && !activeVersion ? 'new' : 'edit';
+  designBridgeState.title = project?.name || artifact?.title || designBridgeState.title || 'KainClaw Design';
+  designBridgeState.versionId = activeVersion?.id || project?.activeVersionId || designBridgeState.versionId || null;
+  designBridgeState.prompt = activeVersion?.prompt || designBridgeState.prompt || '';
+  designBridgeState.outputType = activeVersion?.outputType || designBridgeState.outputType || 'prototype';
+  designBridgeState.style = activeVersion?.style || designBridgeState.style || '';
+  designBridgeState.html = activeVersion?.html || artifact?.content || designBridgeState.html || '';
+  designBridgeState.sliders = Array.isArray(activeVersion?.sliders) ? activeVersion.sliders : [];
+  designBridgeState.sliderValues = activeVersion?.sliderValues && typeof activeVersion.sliderValues === 'object'
+    ? activeVersion.sliderValues
+    : Object.fromEntries(designBridgeState.sliders.map(slider => [slider.id, slider.default]));
+  designBridgeState.canvasMode = 'view';
+  designBridgeState.selectedNode = null;
+  designBridgeState.patchLoading = false;
+  designBridgeState.error = '';
+  designBridgeState.renderToken = Date.now();
+  designBridgeRenderedToken = 0;
+}
+
 function openMidtai(payload) {
   applyMidtaiRouteState(payload || {});
   const contentType = payload?.contentType === 'design' ? 'design' : 'img';
@@ -4054,6 +4167,7 @@ function openMidtai(payload) {
   updateStateChip();
   renderMidtaiDirectionPicker();
   if (contentType === 'design') {
+    syncMidtaiDesignPayload(payload);
     if (payload?.project) {
       midtaiState.currentProject = String(payload.project?.name || '').trim();
     } else if (payload?.artifact?.title) {
@@ -5294,6 +5408,75 @@ function renderDesignVersionsPanel(panel) {
   ].join('');
 }
 
+function getMidtaiVisibleVersions() {
+  const versions = Array.isArray(designBridgeState.versions) ? designBridgeState.versions : [];
+  const currentProjectId = designHomeState.currentProjectId;
+  if (!currentProjectId) {
+    return versions;
+  }
+  const filtered = versions.filter(version => !version?.projectId || version.projectId === currentProjectId);
+  return filtered.length > 0 ? filtered : versions;
+}
+
+function makeDraggable(el) {
+  if (!el || el.__kcDraggable) return;
+  el.__kcDraggable = true;
+  el.addEventListener('mousedown', function(event) {
+    const target = event.target instanceof Element ? event.target : null;
+    const handle = target?.closest('[data-drag-handle]');
+    if (!handle || !el.contains(handle)) return;
+    if (target.closest('button, input, select, textarea')) return;
+    event.preventDefault();
+    const rect = el.getBoundingClientRect();
+    const startX = event.clientX;
+    const startY = event.clientY;
+    const startLeft = rect.left;
+    const startTop = rect.top;
+    el.style.left = `${rect.left}px`;
+    el.style.top = `${rect.top}px`;
+    el.style.right = 'auto';
+    function onMove(nextEvent) {
+      el.style.left = `${startLeft + nextEvent.clientX - startX}px`;
+      el.style.top = `${startTop + nextEvent.clientY - startY}px`;
+    }
+    function onUp() {
+      document.removeEventListener('mousemove', onMove);
+      document.removeEventListener('mouseup', onUp);
+    }
+    document.addEventListener('mousemove', onMove);
+    document.addEventListener('mouseup', onUp);
+  });
+}
+
+function renderMidtaiVersionsPanel(panel) {
+  const versions = getMidtaiVisibleVersions();
+  if (!versions.length) {
+    panel.innerHTML = '<div style="font-size:12px;color:#a8998a;padding:8px 0">暂无版本记录</div>';
+    return;
+  }
+
+  panel.innerHTML = [
+    '<div style="font-size:12px;font-weight:700;color:#7b4a2e;letter-spacing:.04em;text-transform:uppercase;margin-bottom:10px">版本历史</div>',
+    ...versions.map((version, index) => {
+      const label = version.prompt
+        ? String(version.prompt).slice(0, 28)
+        : (version.title || `版本 ${index + 1}`);
+      const createdAt = version.createdAt || version.ts;
+      const time = createdAt
+        ? new Date(createdAt).toLocaleTimeString(isEnglishUi() ? 'en-US' : 'zh-CN', { hour: '2-digit', minute: '2-digit' })
+        : '';
+      const active = version.id === designBridgeState.versionId;
+      return `<div style="display:flex;align-items:center;justify-content:space-between;gap:10px;padding:7px 0;border-bottom:1px solid #f0e8df">
+        <div style="min-width:0;flex:1">
+          <div style="font-size:12px;color:#2d1f14;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${escapeHtml(label)}</div>
+          ${time ? `<div style="font-size:10px;color:#a8998a">${escapeHtml(time)}</div>` : ''}
+        </div>
+        <button class="btn-secondary" style="font-size:10px;padding:3px 8px;flex-shrink:0;border-color:${active ? '#E84040' : '#d4d4d8'};background:${active ? '#fff5f5' : '#fff'}" onclick="loadMidtaiVersion(${index})">${active ? '当前' : '恢复'}</button>
+      </div>`;
+    }),
+  ].join('');
+}
+
 function renderDesignSlidersPanel(panel, frameEl) {
   const sliders = Array.isArray(designBridgeState.sliders) ? designBridgeState.sliders : [];
   if (!sliders.length) {
@@ -5304,7 +5487,11 @@ function renderDesignSlidersPanel(panel, frameEl) {
 
   panel.style.display = 'block';
   panel.innerHTML = [
-    `<div style="font-size:12px;font-weight:700;color:#7b4a2e;letter-spacing:.04em;text-transform:uppercase;margin-bottom:10px">${isEnglishUi() ? 'Design sliders' : '设计 sliders'}</div>`,
+    `<div data-drag-handle style="display:flex;align-items:center;justify-content:space-between;padding:10px 14px 8px;border-bottom:1px solid #f0e8df;cursor:move;user-select:none">
+      <span style="font-size:11px;font-weight:700;color:#7b4a2e;letter-spacing:.04em;text-transform:uppercase">${isEnglishUi() ? 'Design sliders' : '设计调节'}</span>
+      <button onclick="setMidtaiCanvasMode('view')" style="border:none;background:none;cursor:pointer;color:#a8998a;font-size:16px;padding:0 2px;line-height:1">×</button>
+    </div>`,
+    '<div style="padding:14px;max-height:calc(70vh - 44px);overflow-y:auto">',
     ...sliders.map(slider => {
       const currentValue = designBridgeState.sliderValues[slider.id] ?? slider.default;
       if (slider.type === 'color') {
@@ -5331,8 +5518,10 @@ function renderDesignSlidersPanel(panel, frameEl) {
         </select>
       </label>`;
     }),
+    '</div>',
   ].join('');
 
+  makeDraggable(panel);
   applyAllDesignSliderValues(frameEl);
 }
 
@@ -5377,9 +5566,19 @@ function applyDesignSliderValue(sliderId, nextValue) {
   const slider = (designBridgeState.sliders || []).find(candidate => candidate.id === sliderId);
   if (!slider) return;
   designBridgeState.sliderValues[sliderId] = slider.type === 'range' ? Number(nextValue) : nextValue;
-  const frameEl = document.getElementById('design-bridge-frame');
+  const isMidtai = document.getElementById('page-midtai')?.classList.contains('active');
+  const frameEl = isMidtai
+    ? document.getElementById('midtai-canvas-iframe')
+    : document.getElementById('design-bridge-frame');
   applyAllDesignSliderValues(frameEl);
-  renderDesignBridgePage();
+  if (!isMidtai) {
+    renderDesignBridgePage();
+    return;
+  }
+  const slidersPanel = document.getElementById('midtai-sliders-panel');
+  if (slidersPanel && slidersPanel.style.display !== 'none') {
+    renderDesignSlidersPanel(slidersPanel, frameEl);
+  }
 }
 
 function generateDesignWorkbench() {
@@ -5516,7 +5715,36 @@ function pickLatestImageLabResultForDesign() {
 function loadDesignVersions() {
   send({
     type: 'design:loadVersions',
+    projectId: designHomeState.currentProjectId || undefined,
   });
+}
+
+function toggleMidtaiExportMenu(forceOpen) {
+  const menu = document.getElementById('midtai-export-menu');
+  if (!menu) return;
+  if (typeof forceOpen === 'boolean') {
+    menu.style.display = forceOpen ? 'block' : 'none';
+    return;
+  }
+  menu.style.display = menu.style.display === 'none' ? 'block' : 'none';
+}
+
+function toggleMidtaiVersionsPanel() {
+  const panel = document.getElementById('midtai-versions-panel');
+  const slidersPanel = document.getElementById('midtai-sliders-panel');
+  const exportMenu = document.getElementById('midtai-export-menu');
+  if (!panel) return;
+  const isOpen = panel.style.display !== 'none';
+  if (slidersPanel) {
+    slidersPanel.style.display = 'none';
+  }
+  if (exportMenu) {
+    exportMenu.style.display = 'none';
+  }
+  panel.style.display = isOpen ? 'none' : 'block';
+  if (!isOpen) {
+    renderMidtaiVersionsPanel(panel);
+  }
 }
 
 function restoreDesignVersion(versionId) {
@@ -5525,6 +5753,17 @@ function restoreDesignVersion(versionId) {
     type: 'design:restoreVersion',
     versionId,
   });
+}
+
+function loadMidtaiVersion(index) {
+  const versions = getMidtaiVisibleVersions();
+  const version = versions[index];
+  if (!version?.id) return;
+  restoreDesignVersion(version.id);
+}
+
+function exportDesign(format) {
+  return exportDesignWorkbench(format);
 }
 
 async function exportDesignWorkbench(format) {

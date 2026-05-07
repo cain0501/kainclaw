@@ -70,13 +70,9 @@ describe("Electron renderer settings", () => {
     expect(html).toContain('id="mtbar-img"');
     expect(html).toContain('id="mtbar-design"');
     expect(html).toContain('id="canvas-toolbar"');
-    expect(html).toContain("function showTabBar(which)");
     expect(html).toContain("function updateStateChip()");
     expect(html).toContain("function openCanvas(projectName)");
     expect(html).toContain("function exitCanvas()");
-    expect(html).toContain("function switchType(type)");
-    expect(html).toContain("designSwitchView('works')");
-    expect(html).toContain("function setDesignMode(mode)");
     expect(html).toContain('id="design-sliders-panel"');
     expect(html).toContain('id="design-patch-popover"');
     expect(html).toContain('id="design-patch-comment"');
@@ -143,5 +139,16 @@ describe("Electron renderer settings", () => {
     expect(html).toContain("artifact:openKainClawDesign");
     expect(html).toContain("kainclawDesign:open");
     expect(html).toContain("__edit_mode_available");
+  });
+
+  it("hydrates Midtai design payloads into the shared design bridge state before switching views", async () => {
+    const rendererPath = path.join(__dirname, "renderer", "index.html");
+    const html = await readFile(rendererPath, "utf8");
+
+    expect(html).toContain("function syncMidtaiDesignPayload(payload)");
+    expect(html).toContain("designBridgeState.html = activeVersion?.html || artifact?.content || designBridgeState.html || '';");
+    expect(html).toContain("designBridgeState.sliders = Array.isArray(activeVersion?.sliders) ? activeVersion.sliders : [];");
+    expect(html).toContain("designBridgeState.sliderValues = activeVersion?.sliderValues && typeof activeVersion.sliderValues === 'object'");
+    expect(html).toContain("syncMidtaiDesignPayload(payload);");
   });
 });

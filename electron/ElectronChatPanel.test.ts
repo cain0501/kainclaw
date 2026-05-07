@@ -581,7 +581,7 @@ describe("ElectronChatPanel session lifecycle", () => {
 
     await harness.settings.setOnboardingDone(true);
     await harness.panel.handleMessage({ type: "ready" });
-    await harness.panel.handleMessage({ type: "midtai:request-library" });
+    await harness.panel.handleMessage({ type: "midtai:listLibrary" });
 
     const payload = getLastRendererPayloadOfType<{
       type: "midtai:library-update";
