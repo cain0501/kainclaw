@@ -67,7 +67,7 @@ describe("promptTurnHost helpers", () => {
         opts.onToolStart?.("read_file", { path: "README.md" }, "exec-1");
         opts.onToolEnd?.("exec-1", "done", false);
         expect(opts.swarm).toEqual({ id: "swarm-1" });
-        return "assistant reply";
+        return { text: "assistant reply" };
       }) as any,
     });
 
@@ -89,7 +89,7 @@ describe("promptTurnHost helpers", () => {
       provider: { runStep: vi.fn() },
       tools: [],
       toolContext: {} as any,
-      runAgentImpl: (async () => "final reply") as any,
+      runAgentImpl: (async () => ({ text: "final reply" })) as any,
     });
 
     expect(result).toEqual({
@@ -220,7 +220,7 @@ describe("promptTurnHost helpers", () => {
         opts.onToolStart?.("read_file", { path: "README.md" }, "exec-1");
         opts.onToolEnd?.("exec-1", "ok", false);
         expect(opts.swarm).toEqual({ id: "swarm-1" });
-        return "assistant reply";
+        return { text: "assistant reply" };
       }) as any,
     });
 
@@ -303,7 +303,7 @@ describe("promptTurnHost helpers", () => {
         opts.onToolStart?.("read_file", { path: "README.md" }, "exec-2");
         opts.onToolEnd?.("exec-2", "ok", false);
         expect(opts.swarm).toEqual({ id: "swarm-2" });
-        return "assistant reply";
+        return { text: "assistant reply" };
       }) as any,
     });
 

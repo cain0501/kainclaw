@@ -7,6 +7,8 @@ import {
   describeToolInput as formatToolInputPreview,
   describeToolName as formatToolDisplayName,
 } from "./hostRuntimeHelpers";
+import { triggerHooks } from "./hooks/hooksTrigger";
+import type { HookDefinition } from "./hooksRegistry";
 import type {
   BackgroundTaskRecord,
   BackgroundTaskType,
@@ -55,6 +57,8 @@ export type BuiltInAgentSessionOptions<TResult> = {
   onFailure?: (message: string) => void;
   skillStore?: SkillStore;
   skillDistillProvider?: IProviderAdapter;
+  hooks?: HookDefinition[];
+  sessionId?: string;
 };
 
 export type ReusableBackgroundCommand = {
@@ -264,6 +268,11 @@ export class BackgroundTaskHost {
     const taskRuntime = this.options.getTaskRuntime(options.workspaceRoot);
     const toolLabels = new Map<string, string>();
     const abortController = this.options.createAbortController?.() ?? new AbortController();
+    const hooks = options.hooks ?? [];
+    const hookCtx = {
+      workspaceRoot: options.workspaceRoot,
+      ...(options.sessionId ? { sessionId: options.sessionId } : {}),
+    };
 
     await taskRuntime.registerBackgroundTask({
       id: options.taskId,
@@ -281,9 +290,28 @@ export class BackgroundTaskHost {
       agentType: options.agentType,
     });
 
+    if (hooks.length > 0) {
+      await triggerHooks("TaskCreated", hooks, {
+        ...hookCtx,
+        toolName: options.taskId,
+        toolInput: {
+          agentType: options.agentType,
+          description: options.taskDescription,
+        },
+      });
+    }
+
     options.onBeforeRun?.();
 
     try {
+      if (hooks.length > 0) {
+        await triggerHooks("SubagentStart", hooks, {
+          ...hookCtx,
+          toolName: options.agentType,
+          toolInput: { taskId: options.taskId },
+        });
+      }
+
       const result = await options.run({
         onToolStart: (toolName, input, execId) => {
           const toolLabel = formatToolDisplayName(toolName);
@@ -314,6 +342,15 @@ export class BackgroundTaskHost {
         ...options.finalizeSuccess(result),
       };
       const finalStatus = finalizedSuccess.status ?? "completed";
+
+      if (hooks.length > 0) {
+        await triggerHooks("SubagentStop", hooks, {
+          ...hookCtx,
+          toolName: options.agentType,
+          toolOutput: { taskId: options.taskId, status: "success" },
+        });
+      }
+
       const mergedMetadata =
         options.taskMetadata.metadata || finalizedSuccess.metadata
           ? {
@@ -343,6 +380,18 @@ export class BackgroundTaskHost {
         ...finalizedSuccess,
         ...(mergedMetadata ? { metadata: mergedMetadata } : {}),
       });
+
+      if (hooks.length > 0) {
+        await triggerHooks("TaskCompleted", hooks, {
+          ...hookCtx,
+          toolName: options.taskId,
+          toolOutput: {
+            agentType: options.agentType,
+            status: finalStatus,
+          },
+        });
+      }
+
       void taskRuntime.appendBackgroundOutput(
         options.taskId,
         `\n${buildBuiltInAgentTerminalOutputMarker(
@@ -374,6 +423,18 @@ export class BackgroundTaskHost {
       const message = toErrorMessage(error);
       const wasCancelled =
         abortController.signal.aborted || this.cancelledBuiltInAgentTaskIds.has(options.taskId);
+
+      if (hooks.length > 0) {
+        await triggerHooks("SubagentStop", hooks, {
+          ...hookCtx,
+          toolName: options.agentType,
+          toolOutput: {
+            taskId: options.taskId,
+            status: "error",
+          },
+        });
+      }
+
       void taskRuntime.appendBackgroundOutput(
         options.taskId,
         wasCancelled

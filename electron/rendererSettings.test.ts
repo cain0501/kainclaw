@@ -151,4 +151,28 @@ describe("Electron renderer settings", () => {
     expect(html).toContain("designBridgeState.sliderValues = activeVersion?.sliderValues && typeof activeVersion.sliderValues === 'object'");
     expect(html).toContain("syncMidtaiDesignPayload(payload);");
   });
+
+  it("keeps Midtai version history scoped to the active project and refreshes it on first canvas entry", async () => {
+    const rendererPath = path.join(__dirname, "renderer", "index.html");
+    const html = await readFile(rendererPath, "utf8");
+
+    expect(html).toContain("return versions.filter(version => version?.projectId === currentProjectId);");
+    expect(html).toContain("loadDesignVersions();");
+    expect(html).toContain("正在加载版本记录...");
+  });
+
+  it("returns image replacement success back to Midtai canvas instead of the legacy design page", async () => {
+    const rendererPath = path.join(__dirname, "renderer", "index.html");
+    const html = await readFile(rendererPath, "utf8");
+    const patchResultIndex = html.indexOf("case 'design:patchImageNode:result':");
+    const patchResultSlice = patchResultIndex >= 0
+      ? html.slice(patchResultIndex, patchResultIndex + 500)
+      : "";
+
+    expect(patchResultSlice).toContain("case 'design:patchImageNode:result':");
+    expect(patchResultSlice).toContain("cancelReplace();");
+    expect(patchResultSlice).toContain("switchMidtaiType('design');");
+    expect(patchResultSlice).toContain("openCanvas(projectLabel);");
+    expect(patchResultSlice).not.toContain("showDesignPage();");
+  });
 });

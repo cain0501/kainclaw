@@ -414,7 +414,7 @@ export async function runPromptAgentTurn(options: {
   let sawStreamingToken = false;
   let latestThinkingSummary: string | undefined;
 
-  const reply = await runAgentImpl(options.history, {
+  const { text: reply } = await runAgentImpl(options.history, {
     provider: options.provider,
     tools: options.tools,
     toolContext: options.toolContext,

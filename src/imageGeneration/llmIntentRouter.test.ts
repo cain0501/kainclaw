@@ -98,6 +98,39 @@ describe("llmIntentRouter", () => {
     })).resolves.toBe("chat");
   });
 
+  it("includes recent history in the router prompt when provided", async () => {
+    const provider = createProviderReturning('{"intent":"image_generate"}');
+
+    await expect(routeIntentWithLLM({
+      prompt: "好，就按这个生成",
+      hasAttachments: false,
+      hasRecentGeneratedImageContext: false,
+      recentHistory: [
+        { role: "user", content: "帮我画一张科技风蓝色背景卡片" },
+        { role: "assistant", content: "需要确认 logo 位置、品牌字体和主标题文案。" },
+      ],
+      provider,
+    })).resolves.toBe("image_generate");
+
+    expect(vi.mocked(provider.runStep)).toHaveBeenCalledWith(
+      [
+        {
+          role: "user",
+          content: expect.stringContaining("最近对话（最多 3 轮，供判断上下文）："),
+        },
+      ],
+      [],
+      expect.any(Function),
+      undefined,
+    );
+    expect(vi.mocked(provider.runStep).mock.calls[0]?.[0]?.[0]?.content).toContain(
+      "用户：帮我画一张科技风蓝色背景卡片",
+    );
+    expect(vi.mocked(provider.runStep).mock.calls[0]?.[0]?.[0]?.content).toContain(
+      "AI：需要确认 logo 位置、品牌字体和主标题文案。",
+    );
+  });
+
   it("treats long image-heavy rewrite requests as prompt_rewrite", async () => {
     const provider = createProviderReturning('{"intent":"prompt_rewrite"}');
 

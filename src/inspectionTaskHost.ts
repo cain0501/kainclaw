@@ -11,6 +11,7 @@ import {
 } from "./agent/built-in/backgroundTask";
 import type { IProviderAdapter, ProviderConfig } from "./agent/providers/IProviderAdapter";
 import type { BackgroundTaskHost } from "./backgroundTaskHost";
+import type { HookDefinition } from "./hooksRegistry";
 import { parsePromptSlashCommand } from "./promptCommandHost";
 import type { BackgroundTaskRecord } from "./tasks/types";
 import { buildThinkingEffortSystemPrompt } from "./thinkingEffort/prompt";
@@ -83,6 +84,8 @@ export type RunBuiltInInspectionSessionOptions<TResult> = {
   finalizeFailure?: (
     message: string,
   ) => Partial<Omit<BackgroundTaskRecord, "id" | "createdAt" | "updatedAt">>;
+  hooks?: HookDefinition[];
+  sessionId?: string;
 };
 
 function getInspectionExtraGuidance(
@@ -257,6 +260,8 @@ export async function runBuiltInInspectionSession<TResult>(
     onToolEnd: options.onToolEnd,
     finalizeSuccess: options.finalizeSuccess,
     finalizeFailure: options.finalizeFailure,
+    hooks: options.hooks,
+    sessionId: options.sessionId,
   });
 
   return {

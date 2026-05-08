@@ -290,7 +290,7 @@ export async function runVerificationAgent(
   });
 
   const history: NormalizedMessage[] = [{ role: "user", content: request }];
-  const report = normalizeVerificationReportFences(await runAgent(history, {
+  const report = normalizeVerificationReportFences((await runAgent(history, {
     provider: options.provider,
     tools: options.tools,
     toolContext: options.toolContext,
@@ -299,7 +299,7 @@ export async function runVerificationAgent(
     onToolEnd: options.onToolEnd,
     abortSignal: options.abortSignal,
     maxTurns: 24,
-  }));
+  })).text);
 
   const verdict = extractVerificationVerdict(report) ?? "PARTIAL";
   const finalReport = extractVerificationVerdict(report)

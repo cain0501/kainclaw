@@ -181,7 +181,7 @@ async function runDetachedReview(configPath: string): Promise<void> {
       },
     ];
 
-    const report = await runAgent(history, {
+    const { text: report } = await runAgent(history, {
       provider,
       tools,
       toolContext,

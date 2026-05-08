@@ -17,12 +17,14 @@ export type DesignVersionRecord = {
   baseVersionId?: string;
   createdAt: number;
   prompt: string;
+  title: string;
   outputType: DesignOutputType;
   style: string;
-  html: string;
+  html?: string;
   sliders: DesignSlider[];
   sliderValues: Record<string, unknown>;
   source: DesignVersionSource;
+  deletedAt?: number;
 };
 
 type StoredDesignVersions = {
@@ -48,9 +50,10 @@ function normalizeVersionRecord(record: DesignVersionRecord): DesignVersionRecor
     ...(record.baseVersionId?.trim() ? { baseVersionId: record.baseVersionId.trim() } : {}),
     createdAt: Number(record.createdAt) || Date.now(),
     prompt: typeof record.prompt === "string" ? record.prompt.trim() : "",
+    title: typeof record.title === "string" ? record.title.trim() : "",
     outputType: record.outputType ?? "prototype",
     style: typeof record.style === "string" ? record.style.trim() : "",
-    html: record.html,
+    ...(typeof record.html === "string" ? { html: record.html } : {}),
     sliders: Array.isArray(record.sliders) ? record.sliders : [],
     sliderValues: normalizeSliderValues(record.sliderValues),
     source: (() => {
@@ -63,6 +66,7 @@ function normalizeVersionRecord(record: DesignVersionRecord): DesignVersionRecor
           return "generate";
       }
     })(),
+    ...(Number.isFinite(record.deletedAt) ? { deletedAt: Number(record.deletedAt) } : {}),
   };
 }
 
@@ -117,6 +121,7 @@ export class DesignVersionStore {
     await this.ensureDir();
     const database = new sqlite.DatabaseSync(this.sqlitePath);
     try {
+      database.exec("PRAGMA foreign_keys = ON;");
       this.initializeSchema(database);
       await this.migrateLegacyJson(database);
       return await action(database);
@@ -129,44 +134,22 @@ export class DesignVersionStore {
     database.exec(`
       CREATE TABLE IF NOT EXISTS design_versions (
         id TEXT PRIMARY KEY,
-        project_id TEXT NOT NULL,
-        base_version_id TEXT,
+        project_id TEXT NOT NULL REFERENCES design_projects(project_id) ON DELETE CASCADE,
+        base_version_id TEXT REFERENCES design_versions(id) ON DELETE SET NULL,
         created_at INTEGER NOT NULL,
         prompt TEXT NOT NULL,
+        title TEXT NOT NULL DEFAULT '',
         output_type TEXT NOT NULL,
         style TEXT NOT NULL,
         html TEXT NOT NULL,
         sliders_json TEXT NOT NULL,
         slider_values_json TEXT NOT NULL,
-        source TEXT NOT NULL
+        source TEXT NOT NULL,
+        deleted_at INTEGER
       );
       CREATE INDEX IF NOT EXISTS idx_design_versions_project_created
         ON design_versions(project_id, created_at DESC);
     `);
-
-    const cols = database.prepare("PRAGMA table_info(design_versions)").all() as { name: string }[];
-    const existingColumns = new Set(cols.map(column => column.name));
-    const requiredColumns: Array<{ name: string; addSql: string }> = [
-      { name: "id", addSql: "ALTER TABLE design_versions ADD COLUMN id TEXT DEFAULT ''" },
-      { name: "project_id", addSql: "ALTER TABLE design_versions ADD COLUMN project_id TEXT NOT NULL DEFAULT ''" },
-      { name: "base_version_id", addSql: "ALTER TABLE design_versions ADD COLUMN base_version_id TEXT" },
-      { name: "created_at", addSql: "ALTER TABLE design_versions ADD COLUMN created_at INTEGER NOT NULL DEFAULT 0" },
-      { name: "prompt", addSql: "ALTER TABLE design_versions ADD COLUMN prompt TEXT NOT NULL DEFAULT ''" },
-      { name: "output_type", addSql: "ALTER TABLE design_versions ADD COLUMN output_type TEXT NOT NULL DEFAULT 'prototype'" },
-      { name: "style", addSql: "ALTER TABLE design_versions ADD COLUMN style TEXT NOT NULL DEFAULT ''" },
-      { name: "html", addSql: "ALTER TABLE design_versions ADD COLUMN html TEXT NOT NULL DEFAULT ''" },
-      { name: "sliders_json", addSql: "ALTER TABLE design_versions ADD COLUMN sliders_json TEXT NOT NULL DEFAULT '[]'" },
-      { name: "slider_values_json", addSql: "ALTER TABLE design_versions ADD COLUMN slider_values_json TEXT NOT NULL DEFAULT '{}'" },
-      { name: "source", addSql: "ALTER TABLE design_versions ADD COLUMN source TEXT NOT NULL DEFAULT 'generate'" },
-    ];
-
-    for (const column of requiredColumns) {
-      if (existingColumns.has(column.name)) {
-        continue;
-      }
-      database.exec(column.addSql);
-      existingColumns.add(column.name);
-    }
   }
 
   private async migrateLegacyJson(
@@ -192,8 +175,8 @@ export class DesignVersionStore {
 
     const insert = database.prepare(`
       INSERT OR REPLACE INTO design_versions (
-        id, project_id, base_version_id, created_at, prompt, output_type, style, html, sliders_json, slider_values_json, source
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        id, project_id, base_version_id, created_at, prompt, title, output_type, style, html, sliders_json, slider_values_json, source, deleted_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `);
 
     const seenProjectCounts = new Map<string, number>();
@@ -209,28 +192,32 @@ export class DesignVersionStore {
         version.baseVersionId ?? null,
         version.createdAt,
         version.prompt,
+        version.title || "",
         version.outputType,
         version.style,
-        version.html,
+        version.html ?? "",
         JSON.stringify(version.sliders ?? []),
         JSON.stringify(version.sliderValues ?? {}),
         version.source,
+        version.deletedAt ?? null,
       );
     }
   }
 
-  private rowToVersionRecord(row: {
+  private parseVersionRow(row: {
     id: string;
     project_id: string;
     base_version_id: string | null;
     created_at: number;
     prompt: string;
+    title: string;
     output_type: DesignOutputType;
     style: string;
-    html: string;
+    html?: string;
     sliders_json: string;
     slider_values_json: string;
     source: DesignVersionSource;
+    deleted_at?: number | null;
   }): DesignVersionRecord {
     let sliders: DesignSlider[] = [];
     let sliderValues: Record<string, unknown> = {};
@@ -252,12 +239,14 @@ export class DesignVersionStore {
       ...(row.base_version_id ? { baseVersionId: row.base_version_id } : {}),
       createdAt: row.created_at,
       prompt: row.prompt,
+      title: row.title,
       outputType: row.output_type,
       style: row.style,
-      html: row.html,
+      ...(typeof row.html === "string" ? { html: row.html } : {}),
       sliders,
       sliderValues,
       source: row.source,
+      ...(row.deleted_at != null ? { deletedAt: row.deleted_at } : {}),
     });
   }
 
@@ -275,6 +264,7 @@ export class DesignVersionStore {
     projectId: string;
     baseVersionId?: string;
     prompt: string;
+    title?: string;
     outputType: DesignOutputType;
     style: string;
     html: string;
@@ -288,6 +278,7 @@ export class DesignVersionStore {
       ...(options.baseVersionId?.trim() ? { baseVersionId: options.baseVersionId.trim() } : {}),
       createdAt: Date.now(),
       prompt: options.prompt,
+      title: options.title?.trim() ?? "",
       outputType: options.outputType,
       style: options.style,
       html: options.html,
@@ -299,33 +290,36 @@ export class DesignVersionStore {
     const saved = await this.withDatabase(database => {
       database.prepare(`
         INSERT INTO design_versions (
-          id, project_id, base_version_id, created_at, prompt, output_type, style, html, sliders_json, slider_values_json, source
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          id, project_id, base_version_id, created_at, prompt, title, output_type, style, html, sliders_json, slider_values_json, source
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `).run(
         nextVersion.id,
         nextVersion.projectId,
         nextVersion.baseVersionId ?? null,
         nextVersion.createdAt,
         nextVersion.prompt,
+        nextVersion.title,
         nextVersion.outputType,
         nextVersion.style,
-        nextVersion.html,
+        nextVersion.html ?? "",
         JSON.stringify(nextVersion.sliders),
         JSON.stringify(nextVersion.sliderValues),
         nextVersion.source,
       );
 
       database.prepare(`
-        DELETE FROM design_versions
+        UPDATE design_versions
+        SET deleted_at = ?
         WHERE project_id = ?
+          AND deleted_at IS NULL
           AND id NOT IN (
             SELECT id
             FROM design_versions
-            WHERE project_id = ?
+            WHERE project_id = ? AND deleted_at IS NULL
             ORDER BY created_at DESC
             LIMIT ?
           )
-      `).run(nextVersion.projectId, nextVersion.projectId, MAX_STORED_VERSIONS);
+      `).run(nextVersion.createdAt, nextVersion.projectId, nextVersion.projectId, MAX_STORED_VERSIONS);
 
       return nextVersion;
     });
@@ -351,9 +345,10 @@ export class DesignVersionStore {
   async listVersions(projectId: string): Promise<DesignVersionRecord[]> {
     const versions = await this.withDatabase(database => {
       const rows = database.prepare(`
-        SELECT id, project_id, base_version_id, created_at, prompt, output_type, style, html, sliders_json, slider_values_json, source
+        SELECT id, project_id, base_version_id, created_at, prompt, title, output_type, style,
+               sliders_json, slider_values_json, source
         FROM design_versions
-        WHERE project_id = ?
+        WHERE project_id = ? AND deleted_at IS NULL
         ORDER BY created_at DESC
       `).all(projectId) as Array<{
         id: string;
@@ -361,15 +356,15 @@ export class DesignVersionStore {
         base_version_id: string | null;
         created_at: number;
         prompt: string;
+        title: string;
         output_type: DesignOutputType;
         style: string;
-        html: string;
         sliders_json: string;
         slider_values_json: string;
         source: DesignVersionSource;
       }>;
 
-      return rows.map(row => this.rowToVersionRecord(row));
+      return rows.map(row => this.parseVersionRow(row));
     });
 
     return versions ?? this.readLegacyVersionsForProject(projectId);
@@ -378,7 +373,7 @@ export class DesignVersionStore {
   async getVersion(versionId: string): Promise<DesignVersionRecord | null> {
     const version = await this.withDatabase(database => {
       const row = database.prepare(`
-        SELECT id, project_id, base_version_id, created_at, prompt, output_type, style, html, sliders_json, slider_values_json, source
+        SELECT id, project_id, base_version_id, created_at, prompt, title, output_type, style, html, sliders_json, slider_values_json, source, deleted_at
         FROM design_versions
         WHERE id = ?
       `).get(versionId) as {
@@ -387,22 +382,23 @@ export class DesignVersionStore {
         base_version_id: string | null;
         created_at: number;
         prompt: string;
+        title: string;
         output_type: DesignOutputType;
         style: string;
         html: string;
         sliders_json: string;
         slider_values_json: string;
         source: DesignVersionSource;
+        deleted_at: number | null;
       } | undefined;
 
-      return row ? this.rowToVersionRecord(row) : null;
+      return row ? this.parseVersionRow(row) : null;
     });
 
     if (version?.html) {
       return version;
     }
-    // SQLite 里 html 为空（旧版本用 ALTER TABLE DEFAULT '' 迁移过来的记录）
-    // 尝试从 legacy JSON 获取 html 补全
+
     const legacy = await this.readLegacyVersionById(versionId);
     if (legacy?.html) {
       return legacy;

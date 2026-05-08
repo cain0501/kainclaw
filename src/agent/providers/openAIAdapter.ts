@@ -20,6 +20,7 @@ type OpenAIChatMessage =
       role: "system" | "user" | "assistant";
       content: string | OpenAIContentPart[] | null;
       tool_calls?: OpenAIToolCall[];
+      reasoning_content?: string;
     }
   | { role: "tool"; tool_call_id: string; content: string };
 
@@ -82,6 +83,7 @@ export function toOpenAIMessages(
       result.push({
         role: "assistant",
         content: hasToolCalls && !msg.content ? null : msg.content,
+        ...(msg.reasoningContent ? { reasoning_content: msg.reasoningContent } : {}),
         ...(hasToolCalls
           ? {
               tool_calls: msg.toolCalls!.map(tc => ({
@@ -160,6 +162,7 @@ export function extractTextFromContent(content: unknown): string {
 export function finalizeOpenAIStep(
   fullText: string,
   toolCallAccum: Record<number, { id: string; name: string; arguments: string }>,
+  fullReasoningText?: string,
 ): NormalizedStep {
   const toolCalls = Object.values(toolCallAccum)
     .filter(tc => tc.id && tc.name)
@@ -173,6 +176,7 @@ export function finalizeOpenAIStep(
     text: fullText.trim(),
     toolCalls,
     done: toolCalls.length === 0,
+    ...(fullReasoningText ? { reasoningContent: fullReasoningText } : {}),
   };
 }
 
@@ -210,6 +214,7 @@ export class OpenAIAdapter implements IProviderAdapter {
 
       let buffer = "";
       let fullText = "";
+      let fullReasoningText = "";
       let loggedFirstChunkShape = false;
       const toolCallAccum: Record<number, { id: string; name: string; arguments: string }> = {};
 
@@ -281,6 +286,7 @@ export class OpenAIAdapter implements IProviderAdapter {
           fullText += textDelta;
           onToken(textDelta);
         } else if (reasoningDelta) {
+          fullReasoningText += reasoningDelta;
           onToken(reasoningDelta);
         }
 
@@ -341,7 +347,7 @@ export class OpenAIAdapter implements IProviderAdapter {
             if (buffer) {
               processSseLine(buffer);
             }
-            resolve(finalizeOpenAIStep(fullText, toolCallAccum));
+            resolve(finalizeOpenAIStep(fullText, toolCallAccum, fullReasoningText || undefined));
           });
         },
       );

@@ -15,6 +15,8 @@ import {
   shouldAutoCompact,
 } from "./compact/autoCompact";
 import { getPartialCompactPrompt } from "./compact/prompt";
+import { triggerHooks } from "./hooks/hooksTrigger";
+import type { HookDefinition } from "./hooksRegistry";
 import type { CompactBoundarySessionState } from "./storage/sessionRepository";
 
 type ActivityStatus = "done" | "error";
@@ -97,6 +99,8 @@ type SharedCompactionHostOptions = {
   workspaceRoot: string;
   config: ProviderConfig;
   envMap: Record<string, string>;
+  hooks?: HookDefinition[];
+  sessionId?: string;
   getConversationHistory: () => NormalizedMessage[];
   getTranscriptPath: () => string | undefined;
   replaceConversationHistory: (
@@ -159,7 +163,17 @@ export async function performConversationCompactionWithHost(
     compactTrigger?: CompactBoundarySessionState["trigger"];
   },
 ): Promise<CompactConversationResult> {
-  return performConversationCompaction({
+  const hookCtx = {
+    workspaceRoot: options.workspaceRoot,
+    ...(options.sessionId ? { sessionId: options.sessionId } : {}),
+  };
+  const hooks = options.hooks ?? [];
+
+  if (hooks.length > 0) {
+    await triggerHooks("PreCompact", hooks, hookCtx);
+  }
+
+  const result = await performConversationCompaction({
     workspaceRoot: options.workspaceRoot,
     config: options.config,
     envMap: options.envMap,
@@ -171,6 +185,22 @@ export async function performConversationCompactionWithHost(
     createProvider: providerOptions =>
       options.createProviderAdapter(providerOptions),
   });
+
+  if (hooks.length > 0) {
+    await triggerHooks("PostCompact", hooks, {
+      ...hookCtx,
+      ...(result.wasCompacted
+        ? {
+            toolOutput: {
+              tokensBefore: result.estimatedTokensBefore,
+              tokensAfter: result.estimatedTokensAfter,
+            },
+          }
+        : {}),
+    });
+  }
+
+  return result;
 }
 
 export async function maybeAutoCompactConversation(options: {

@@ -88,6 +88,16 @@ export async function triggerHooks(
     PostPrompt: ["PostPrompt"],
     Notification: ["Notification"],
     SessionStart: ["SessionStart"],
+    UserPromptSubmit: ["UserPromptSubmit"],
+    Stop: ["Stop"],
+    SessionEnd: ["SessionEnd"],
+    PostToolUseFailure: ["PostToolUseFailure"],
+    PreCompact: ["PreCompact"],
+    PostCompact: ["PostCompact"],
+    SubagentStart: ["SubagentStart"],
+    SubagentStop: ["SubagentStop"],
+    TaskCreated: ["TaskCreated"],
+    TaskCompleted: ["TaskCompleted"],
   };
   const matchQueries = resolveMatchQuery(event, context);
   const matching = hooks.filter(h => {

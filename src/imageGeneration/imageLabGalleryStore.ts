@@ -56,6 +56,27 @@ export class ImageLabGalleryStore {
     });
   }
 
+  async saveThumbnail(id: string, dataUrl: string): Promise<void> {
+    await this.enqueueWrite(async () => {
+      const results = await this.loadResults();
+      const index = results.findIndex(result => result.id === id);
+      if (index === -1) {
+        return;
+      }
+
+      results[index] = { ...results[index], thumbnail: dataUrl };
+      await this.ensureStorageDir();
+      await fs.writeFile(
+        this.galleryPath,
+        JSON.stringify({
+          updatedAt: Date.now(),
+          results,
+        }, null, 2),
+        "utf8",
+      );
+    });
+  }
+
   private async ensureStorageDir(): Promise<void> {
     await fs.mkdir(this.storageDir, { recursive: true });
   }
@@ -92,6 +113,7 @@ export class ImageLabGalleryStore {
       ...(typeof result.revisedPrompt === "string" ? { revisedPrompt: result.revisedPrompt } : {}),
       createdAt: result.createdAt,
       source,
+      ...(typeof result.thumbnail === "string" && result.thumbnail ? { thumbnail: result.thumbnail } : {}),
     };
   }
 

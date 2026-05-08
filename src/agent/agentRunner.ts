@@ -308,7 +308,7 @@ async function runForkedInstalledSkill(options: {
         options.request.installedSkillHooks ?? [],
       providerRuntimeContext: rebuilt.runtimeContext,
     },
-  );
+  ).then(result => result.text);
 }
 
 /**
@@ -319,7 +319,7 @@ async function runForkedInstalledSkill(options: {
 export async function runAgent(
   history: NormalizedMessage[],
   options: AgentRunnerOptions,
-): Promise<string> {
+): Promise<{ text: string; reasoningContent?: string }> {
   const {
     provider,
     tools,
@@ -347,6 +347,7 @@ export async function runAgent(
   let activeTools = [...allTools];
   let activeInstalledSkillHooks = [...installedSkillHooks];
   let lastText = "";
+  let lastReasoningContent: string | undefined;
   let lastToolResultContent = "";
   let turns = 0;
 
@@ -374,10 +375,14 @@ export async function runAgent(
       onThinkingSummary?.(step.thinkingText.trim());
     }
     lastText = step.text || lastText;
+    if (step.reasoningContent) {
+      lastReasoningContent = step.reasoningContent;
+    }
 
     messages.push({
       role: "assistant",
       content: step.text || "",
+      ...(step.reasoningContent ? { reasoningContent: step.reasoningContent } : {}),
       ...(step.toolCalls.length > 0 ? { toolCalls: step.toolCalls } : {}),
     });
 
@@ -489,7 +494,7 @@ export async function runAgent(
               toolContext,
               tools: activeTools,
               providerRuntimeContext: activeProviderRuntimeContext,
-            }),
+              }),
           );
         }
 
@@ -545,6 +550,22 @@ export async function runAgent(
               toolContext,
               tools: activeTools,
               providerRuntimeContext: activeProviderRuntimeContext,
+              }),
+          );
+          await triggerHooks(
+            "PostToolUseFailure",
+            activeInstalledSkillHooks,
+            {
+              workspaceRoot: toolContext.workspaceRoot,
+              toolName: toolCall.name,
+              toolInput: toolCall.input,
+              toolOutput: msg,
+            },
+            createInstalledSkillHookAgentRunner({
+              provider: activeProvider,
+              toolContext,
+              tools: activeTools,
+              providerRuntimeContext: activeProviderRuntimeContext,
             }),
           );
         }
@@ -567,5 +588,8 @@ export async function runAgent(
     }
   }
 
-  return lastText || lastToolResultContent || "[assistant returned no text]";
+  return {
+    text: lastText || lastToolResultContent || "[assistant returned no text]",
+    ...(lastReasoningContent ? { reasoningContent: lastReasoningContent } : {}),
+  };
 }

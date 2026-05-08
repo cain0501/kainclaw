@@ -15,6 +15,8 @@ export type NormalizedMessage =
   | {
       role: "assistant";
       content: string;
+      /** DeepSeek thinking mode: chain-of-thought text, must be passed back to the API. */
+      reasoningContent?: string;
       toolCalls?: Array<{
         id: string;
         name: string;
@@ -28,6 +30,8 @@ export interface NormalizedStep {
   text: string;
   /** Optional provider-supplied thinking summary for UI display only. */
   thinkingText?: string;
+  /** DeepSeek thinking mode: raw reasoning_content to be stored and passed back on next turn. */
+  reasoningContent?: string;
   /** Tool calls requested during the current step. */
   toolCalls: Array<{
     id: string;

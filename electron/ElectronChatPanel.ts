@@ -3544,19 +3544,19 @@ export class ElectronChatPanel {
         return;
       }
 
-      let patchStartedSent = false;
+      let patchTokenCount = 0;
       const result = await patchKainClawDesignNode({
         provider,
         html,
         selector,
         comment,
         targetOuterHtml,
-        onToken: () => {
-          if (patchStartedSent) {
-            return;
-          }
-          patchStartedSent = true;
-          this.sendToRenderer({ type: "design:patchStarted" });
+        onToken: (token: string) => {
+          patchTokenCount += token.length;
+          this.sendToRenderer({
+            type: "design:patchToken",
+            count: patchTokenCount,
+          });
         },
       });
       console.debug("[KC-DEBUG] design patch model result", {

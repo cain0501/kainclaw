@@ -20,6 +20,12 @@ type StoredDesignProjects = {
   projects: DesignProjectRecord[];
 };
 
+type LegacyVersionProjectSeed = {
+  projectId: string;
+  prompt: string;
+  createdAt: number;
+};
+
 type SqliteModule = typeof import("node:sqlite");
 
 function normalizeProjectRecord(record: DesignProjectRecord): DesignProjectRecord {
@@ -38,12 +44,14 @@ function normalizeProjectRecord(record: DesignProjectRecord): DesignProjectRecor
 export class DesignProjectStore {
   private readonly storeDir: string;
   private readonly legacyStorePath: string;
+  private readonly legacyVersionStorePath: string;
   private readonly sqlitePath: string;
   private sqliteModulePromise: Promise<SqliteModule | null> | null = null;
 
   constructor(storageRoot: string) {
     this.storeDir = path.join(storageRoot, "design-lab");
     this.legacyStorePath = path.join(this.storeDir, "projects.json");
+    this.legacyVersionStorePath = path.join(this.storeDir, "versions.json");
     this.sqlitePath = path.join(this.storeDir, "versions.db");
   }
 
@@ -74,6 +82,38 @@ export class DesignProjectStore {
     }
   }
 
+  private async readLegacyVersionProjectRows(): Promise<LegacyVersionProjectSeed[]> {
+    try {
+      const raw = await fs.readFile(this.legacyVersionStorePath, "utf8");
+      const parsed = JSON.parse(raw) as {
+        versions?: Array<{
+          projectId?: string;
+          prompt?: string;
+          createdAt?: number;
+        }>;
+      };
+      if (!Array.isArray(parsed.versions)) {
+        return [];
+      }
+
+      return parsed.versions
+        .map(version => {
+          const projectId = typeof version.projectId === "string" ? version.projectId.trim() : "";
+          if (!projectId) {
+            return null;
+          }
+          return {
+            projectId,
+            prompt: typeof version.prompt === "string" ? version.prompt : "",
+            createdAt: Number(version.createdAt) || Date.now(),
+          };
+        })
+        .filter((row): row is LegacyVersionProjectSeed => !!row);
+    } catch {
+      return [];
+    }
+  }
+
   private async withDatabase<T>(
     action: (database: InstanceType<SqliteModule["DatabaseSync"]>) => T | Promise<T>,
   ): Promise<T | null> {
@@ -85,7 +125,9 @@ export class DesignProjectStore {
     await this.ensureDir();
     const database = new sqlite.DatabaseSync(this.sqlitePath);
     try {
+      database.exec("PRAGMA foreign_keys = ON;");
       this.initializeSchema(database);
+      this.runMigrations(database);
       await this.migrateLegacyJson(database);
       return await action(database);
     } finally {
@@ -114,11 +156,79 @@ export class DesignProjectStore {
         key TEXT PRIMARY KEY,
         value TEXT
       );
+      CREATE TABLE IF NOT EXISTS schema_migrations (
+        version INTEGER PRIMARY KEY,
+        applied_at INTEGER NOT NULL
+      );
     `);
-    try {
-      database.exec(`ALTER TABLE design_projects ADD COLUMN thumbnail TEXT`);
-    } catch {
-      // column already exists — safe to ignore
+  }
+
+  private runMigrations(database: InstanceType<SqliteModule["DatabaseSync"]>): void {
+    this.ensureBaselineVersionSchema(database);
+
+    const applied = new Set(
+      (database.prepare("SELECT version FROM schema_migrations").all() as Array<{ version: number }>)
+        .map(row => row.version),
+    );
+
+    const migrations: Array<{ version: number; up: string }> = [
+      { version: 1, up: "ALTER TABLE design_projects ADD COLUMN thumbnail TEXT" },
+      { version: 2, up: "ALTER TABLE design_versions ADD COLUMN title TEXT NOT NULL DEFAULT ''" },
+      { version: 3, up: "ALTER TABLE design_versions ADD COLUMN deleted_at INTEGER" },
+    ];
+
+    for (const migration of migrations) {
+      if (applied.has(migration.version)) {
+        continue;
+      }
+      try {
+        database.exec(migration.up);
+      } catch {
+        // The target table or column may already exist in older local databases.
+      }
+      database.prepare(
+        "INSERT OR IGNORE INTO schema_migrations (version, applied_at) VALUES (?, ?)",
+      ).run(migration.version, Date.now());
+    }
+  }
+
+  private ensureBaselineVersionSchema(database: InstanceType<SqliteModule["DatabaseSync"]>): void {
+    const versionTableExists = (
+      database.prepare(`
+        SELECT name
+        FROM sqlite_master
+        WHERE type = 'table' AND name = 'design_versions'
+      `).get() as { name?: string } | undefined
+    )?.name === "design_versions";
+    if (!versionTableExists) {
+      return;
+    }
+
+    const cols = database.prepare("PRAGMA table_info(design_versions)").all() as Array<{ name: string }>;
+    const existingColumns = new Set(cols.map(column => column.name));
+    const requiredColumns: Array<{ name: string; addSql: string }> = [
+      { name: "id", addSql: "ALTER TABLE design_versions ADD COLUMN id TEXT DEFAULT ''" },
+      { name: "project_id", addSql: "ALTER TABLE design_versions ADD COLUMN project_id TEXT NOT NULL DEFAULT ''" },
+      { name: "base_version_id", addSql: "ALTER TABLE design_versions ADD COLUMN base_version_id TEXT" },
+      { name: "created_at", addSql: "ALTER TABLE design_versions ADD COLUMN created_at INTEGER NOT NULL DEFAULT 0" },
+      { name: "prompt", addSql: "ALTER TABLE design_versions ADD COLUMN prompt TEXT NOT NULL DEFAULT ''" },
+      { name: "output_type", addSql: "ALTER TABLE design_versions ADD COLUMN output_type TEXT NOT NULL DEFAULT 'prototype'" },
+      { name: "style", addSql: "ALTER TABLE design_versions ADD COLUMN style TEXT NOT NULL DEFAULT ''" },
+      { name: "html", addSql: "ALTER TABLE design_versions ADD COLUMN html TEXT NOT NULL DEFAULT ''" },
+      { name: "sliders_json", addSql: "ALTER TABLE design_versions ADD COLUMN sliders_json TEXT NOT NULL DEFAULT '[]'" },
+      { name: "slider_values_json", addSql: "ALTER TABLE design_versions ADD COLUMN slider_values_json TEXT NOT NULL DEFAULT '{}'" },
+      { name: "source", addSql: "ALTER TABLE design_versions ADD COLUMN source TEXT NOT NULL DEFAULT 'generate'" },
+    ];
+
+    for (const column of requiredColumns) {
+      if (existingColumns.has(column.name)) {
+        continue;
+      }
+      try {
+        database.exec(column.addSql);
+      } catch {
+        // Older local databases can have partially patched schemas.
+      }
     }
   }
 
@@ -160,7 +270,7 @@ export class DesignProjectStore {
       `).get() as { name?: string } | undefined
     )?.name === "design_versions";
 
-    const legacyVersionRows = versionTableExists
+    const legacyVersionRowsFromTable = versionTableExists
       ? database.prepare(`
           SELECT project_id, prompt, created_at
           FROM design_versions
@@ -172,18 +282,27 @@ export class DesignProjectStore {
         }>
       : [];
 
+    const legacyVersionRows: LegacyVersionProjectSeed[] = [
+      ...legacyVersionRowsFromTable.map(row => ({
+        projectId: row.project_id,
+        prompt: row.prompt,
+        createdAt: row.created_at,
+      })),
+      ...await this.readLegacyVersionProjectRows(),
+    ];
+
     const existingProjectIds = new Set(
       (database.prepare("SELECT project_id FROM design_projects").all() as Array<{ project_id: string }>)
         .map(row => row.project_id),
     );
 
     for (const row of legacyVersionRows) {
-      if (!row.project_id || existingProjectIds.has(row.project_id)) {
+      if (!row.projectId || existingProjectIds.has(row.projectId)) {
         continue;
       }
-      const createdAt = Number(row.created_at) || Date.now();
+      const createdAt = Number(row.createdAt) || Date.now();
       insert.run(
-        row.project_id,
+        row.projectId,
         (row.prompt?.trim() || "Untitled Design").slice(0, 80),
         "blank",
         null,
@@ -192,7 +311,7 @@ export class DesignProjectStore {
         createdAt,
         createdAt,
       );
-      existingProjectIds.add(row.project_id);
+      existingProjectIds.add(row.projectId);
     }
   }
 
@@ -274,13 +393,13 @@ export class DesignProjectStore {
       const versionCounts = new Map<string, number>();
       try {
         const vcRows = database.prepare(
-          "SELECT project_id, COUNT(*) AS cnt FROM design_versions GROUP BY project_id",
+          "SELECT project_id, COUNT(*) AS cnt FROM design_versions WHERE deleted_at IS NULL GROUP BY project_id",
         ).all() as Array<{ project_id: string; cnt: number }>;
         for (const row of vcRows) {
           versionCounts.set(row.project_id, Number(row.cnt) || 0);
         }
       } catch {
-        // design_versions table may not exist yet — version counts default to 0
+        // design_versions table may not exist yet; version counts default to 0
       }
 
       const rows = database.prepare(`

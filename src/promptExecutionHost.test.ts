@@ -112,6 +112,8 @@ describe("promptExecutionHost", () => {
       markPendingPlanVerificationStarted: vi.fn(),
       markPendingPlanVerificationCompleted: vi.fn(),
       resetPendingPlanVerificationToAwaitingStart: vi.fn(),
+      getSessionInstalledSkillHooks: () => [{ id: "hook-1" }] as any,
+      getCurrentSessionId: () => "session-1",
     });
 
     await expect(
@@ -182,6 +184,24 @@ describe("promptExecutionHost", () => {
     expect(handleUltrareviewCommandWithHostMock).toHaveBeenCalledTimes(1);
     expect(handleUltraverifyCommandWithHostMock).toHaveBeenCalledTimes(1);
     expect(handleVerificationCommandWithHostMock).toHaveBeenCalledTimes(1);
+    expect(handleCompactCommandWithHostMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        hooks: [{ id: "hook-1" }],
+        sessionId: "session-1",
+      }),
+    );
+    expect(handleReviewCommandWithHostMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        hooks: [{ id: "hook-1" }],
+        sessionId: "session-1",
+      }),
+    );
+    expect(handleVerificationCommandWithHostMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        hooks: [{ id: "hook-1" }],
+        sessionId: "session-1",
+      }),
+    );
   });
 
   it("returns a reply when a local prompt command handles the prompt", async () => {

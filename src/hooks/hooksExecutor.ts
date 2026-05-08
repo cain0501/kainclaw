@@ -11,10 +11,20 @@ export type HookEvent =
   | "PostToolCall"
   | "PreToolUse"
   | "PostToolUse"
+  | "PostToolUseFailure"
   | "PrePrompt"
   | "PostPrompt"
   | "Notification"
-  | "SessionStart";
+  | "SessionStart"
+  | "UserPromptSubmit"
+  | "Stop"
+  | "SessionEnd"
+  | "PreCompact"
+  | "PostCompact"
+  | "SubagentStart"
+  | "SubagentStop"
+  | "TaskCreated"
+  | "TaskCompleted";
 
 export interface HookContext {
   event: HookEvent;

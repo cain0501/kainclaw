@@ -36,7 +36,7 @@ describe("agentRunner", () => {
       toolContext: { workspaceRoot: "E:\\claudecodejingiang\\vscode-extension" },
     });
 
-    expect(result).toBe("final answer");
+    expect(result.text).toBe("final answer");
   });
 
   it("surfaces thinking summaries and executes regular tools", async () => {
@@ -84,7 +84,7 @@ describe("agentRunner", () => {
         onToolEnd,
       });
 
-      expect(result).toBe("done now");
+      expect(result.text).toBe("done now");
       expect(onThinkingSummary).toHaveBeenCalledWith("brief thinking");
       expect(onToolStart).toHaveBeenCalledTimes(1);
       expect(onToolEnd).toHaveBeenCalledTimes(1);
@@ -172,7 +172,7 @@ describe("agentRunner", () => {
       swarm: swarm as any,
     });
 
-    expect(result).toBe("all done");
+    expect(result.text).toBe("all done");
     expect(swarm.executeSwarmTool).toHaveBeenCalledWith("spawn_agent", { name: "w1" });
   });
 
@@ -243,7 +243,7 @@ describe("agentRunner", () => {
         toolContext,
       });
 
-      expect(result).toBe("Read README.md\n\n# heading");
+      expect(result.text).toBe("Read README.md\n\n# heading");
     } finally {
       executeSpy.mockRestore();
     }
@@ -304,7 +304,7 @@ describe("agentRunner", () => {
         toolContext,
       });
 
-      expect(result).toBe("done");
+      expect(result.text).toBe("done");
       expect(seenTools).toHaveLength(2);
       expect(seenTools[0]).toHaveLength(3);
       expect(seenTools[1]).toHaveLength(1);
@@ -397,7 +397,7 @@ describe("agentRunner", () => {
         toolContext,
       });
 
-      expect(result).toBe("outer finished");
+      expect(result.text).toBe("outer finished");
       expect(callCount).toBe(3);
       expect(seenMessages[1]?.at(-1)).toEqual({
         role: "user",
@@ -492,7 +492,7 @@ describe("agentRunner", () => {
         toolContext,
       });
 
-      expect(result).toBe("done");
+      expect(result.text).toBe("done");
       expect(hooksSpy).toHaveBeenCalledWith(
         "PreToolCall",
         [
@@ -586,7 +586,7 @@ describe("agentRunner", () => {
         },
       });
 
-      expect(result).toBe("done with rebuilt provider");
+      expect(result.text).toBe("done with rebuilt provider");
       expect(createRuntimeOptions).toHaveBeenCalledWith(
         {
           type: "anthropic",
@@ -706,7 +706,7 @@ describe("agentRunner", () => {
         },
       });
 
-      expect(result).toBe("done");
+      expect(result.text).toBe("done");
       expect(createRuntimeOptions).toHaveBeenCalledWith(
         {
           type: "anthropic",

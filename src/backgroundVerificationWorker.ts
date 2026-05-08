@@ -208,7 +208,7 @@ async function runDetachedVerification(configPath: string): Promise<void> {
       },
     ];
 
-    const rawReport = await runAgent(history, {
+    const { text: rawReport } = await runAgent(history, {
       provider,
       tools,
       toolContext,

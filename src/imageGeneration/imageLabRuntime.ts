@@ -39,6 +39,7 @@ export type ImageLabResultItem = {
   revisedPrompt?: string;
   createdAt: number;
   source: "generate" | "edit" | "variant";
+  thumbnail?: string;
 };
 
 function parseDataUrlAttachment(referenceImage: ImageLabReferenceImage): {

@@ -50,6 +50,12 @@ image_generate
 - Examples: "Make a minimalist black-and-white cover", "Turn these numbers into a chart", "Visualize this dataset"
 - Even when the wording is vague, choose this if the core intent is to produce a new image.
 - If the user uploaded image attachments but provided no text, choose image_generate.
+- If the image request is complex or ambiguous - for example it references external assets
+  (logos, brand materials, specific fonts), contains multiple conflicting requirements,
+  or lacks enough detail to generate a meaningful image - choose chat instead, so the
+  assistant can ask one focused clarifying question before generating.
+- A request is NOT complex if it is self-contained and specific enough to generate directly,
+  e.g. "a minimalist black cat on white background", "turn these numbers into a bar chart".
 - Do not choose image_generate when the user is asking for a prototype, page, HTML, SVG, Mermaid diagram, flowchart, architecture diagram, or other code/text artifact, even if the topic is visual.
 
 image_edit
@@ -63,18 +69,33 @@ type IntentRouterPayload = {
   intent: ChatPromptIntent;
 };
 
+type IntentRouterHistoryMessage = {
+  role: string;
+  content: string;
+};
+
 function buildRouterPrompt(options: {
   prompt: string;
   hasAttachments: boolean;
   hasRecentGeneratedImageContext: boolean;
+  recentHistory?: IntentRouterHistoryMessage[];
 }): string {
-  return [
+  const lines = [
     `用户消息：${options.prompt || "[无文字输入]"}`,
     "",
     "上下文：",
     `- 用户是否上传了图片附件：${options.hasAttachments ? "是" : "否"}`,
     `- 是否有刚生成的图片可供编辑：${options.hasRecentGeneratedImageContext ? "是" : "否"}`,
-  ].join("\n");
+  ];
+  if (options.recentHistory && options.recentHistory.length > 0) {
+    lines.push("", "最近对话（最多 3 轮，供判断上下文）：");
+    for (const message of options.recentHistory) {
+      lines.push(
+        `${message.role === "user" ? "用户" : "AI"}：${message.content.slice(0, 200)}`,
+      );
+    }
+  }
+  return lines.join("\n");
 }
 
 function cleanJsonPayload(text: string): string {
@@ -137,6 +158,7 @@ async function routeIntentCore(options: {
   prompt: string;
   hasAttachments: boolean;
   hasRecentGeneratedImageContext: boolean;
+  recentHistory?: IntentRouterHistoryMessage[];
   provider: IProviderAdapter;
   signal?: AbortSignal;
 }): Promise<ChatPromptIntent> {
@@ -162,6 +184,7 @@ export async function routeIntentWithLLM(options: {
   prompt: string;
   hasAttachments: boolean;
   hasRecentGeneratedImageContext: boolean;
+  recentHistory?: IntentRouterHistoryMessage[];
   provider: IProviderAdapter;
   signal?: AbortSignal;
 }): Promise<ChatPromptIntent> {

@@ -1080,6 +1080,27 @@ class ChatSidebarProvider implements vscode.WebviewViewProvider, vscode.Disposab
   }
 
   async dispose(): Promise<void> {
+    const workspaceRoot = getPrimaryWorkspaceFolderPath() ?? "";
+    const sessionId = this.currentSessionId;
+    const userHooks = await loadHooks(workspaceRoot);
+    const sessionEndHooks = [
+      ...(getSessionInstalledSkillHooks(
+        this.sessionInstalledSkillHooks,
+        this.conversationFeatureBindings.getConversationKey(),
+      ) ?? []),
+      ...userHooks,
+    ];
+    if (sessionEndHooks.length > 0) {
+      await triggerHooks(
+        "SessionEnd",
+        sessionEndHooks,
+        {
+          workspaceRoot,
+          sessionId,
+        },
+        undefined,
+      );
+    }
     this.disposeFastModeRuntimeListener();
     clearInterval(this.backgroundTaskNotificationTimer);
     for (const watcher of this.mcpConfigWatchers) {

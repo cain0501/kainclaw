@@ -45,6 +45,8 @@ export type PendingPlanVerificationSessionState = {
 export type PersistedConversationMessage = {
   role: "user" | "assistant";
   content: string;
+  /** DeepSeek thinking mode: stored to pass back on subsequent turns. */
+  reasoningContent?: string;
   attachments?: Array<{ data: string; mimeType: string }>;
   generatedImages?: Array<{
     id: string;

@@ -34,6 +34,7 @@ export type PromptEntryCommandBindings<TRuntime extends PromptRuntimeLike> = {
   refreshWorkspaceStatus: () => void;
   getConversationHistory: () => ConversationMessage[];
   getPendingPlanVerification: () => PendingPlanVerificationState | undefined;
+  getCurrentSessionId?: () => string | undefined;
   sessionMessages: ChatMessage[];
   blockedByPlanMode: boolean;
   getTranscriptPath: () => string | undefined;
@@ -242,6 +243,7 @@ export function createPromptEntryBindingsFromShared<
   registerSessionInstalledSkillHooks?: (
     hooks: HookDefinition[],
   ) => HookDefinition[];
+  getCurrentSessionId?: () => string | undefined;
   skillStore?: SkillStore;
   profileStore?: ProfileStore;
 }): PromptEntryHostBindings<TRuntime> {
@@ -275,6 +277,7 @@ export function createPromptEntryBindingsFromShared<
     refreshWorkspaceStatus: options.refreshWorkspaceStatus,
     getConversationHistory: options.sharedBindings.getConversationHistory,
     getPendingPlanVerification: options.getPendingPlanVerification,
+    getCurrentSessionId: options.getCurrentSessionId,
     sessionMessages: options.sessionMessages,
     blockedByPlanMode: options.blockedByPlanMode,
     getTranscriptPath: options.sharedBindings.getTranscriptPath,

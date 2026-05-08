@@ -56,4 +56,25 @@ describe("ImageLabGalleryStore", () => {
 
     await expect(store.loadResults()).resolves.toEqual([]);
   });
+
+  it("persists saved thumbnails for existing results", async () => {
+    const storagePath = await mkdtemp(path.join(os.tmpdir(), "image-lab-gallery-"));
+    tempDirs.push(storagePath);
+
+    const store = new ImageLabGalleryStore(storagePath);
+    await store.saveResults([
+      createResult({ id: "result-1", batchId: "batch-1" }),
+    ]);
+
+    await store.saveThumbnail("result-1", "data:image/jpeg;base64,thumb");
+
+    const reloadedStore = new ImageLabGalleryStore(storagePath);
+    await expect(reloadedStore.loadResults()).resolves.toEqual([
+      createResult({
+        id: "result-1",
+        batchId: "batch-1",
+        thumbnail: "data:image/jpeg;base64,thumb",
+      }),
+    ]);
+  });
 });

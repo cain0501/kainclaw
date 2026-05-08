@@ -167,7 +167,7 @@ export async function runReviewAgent(
     },
   ];
 
-  return await runAgent(history, {
+  return (await runAgent(history, {
     provider: options.provider,
     tools: options.tools,
     toolContext: options.toolContext,
@@ -176,5 +176,5 @@ export async function runReviewAgent(
     onToolEnd: options.onToolEnd,
     abortSignal: options.abortSignal,
     maxTurns: 20,
-  });
+  })).text;
 }

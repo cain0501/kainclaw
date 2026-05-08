@@ -7,6 +7,7 @@ import {
 import type { IProviderAdapter, ProviderConfig } from "./agent/providers/IProviderAdapter";
 import { REVIEW_AGENT_TYPE, VERIFICATION_AGENT_TYPE } from "./agent/constants";
 import type { BackgroundTaskHost } from "./backgroundTaskHost";
+import type { HookDefinition } from "./hooksRegistry";
 import {
   getOriginalTaskForInspection,
   runBuiltInInspectionSession,
@@ -64,6 +65,8 @@ type SharedInspectionOptions = {
   onToken?: (token: string) => void;
   onToolStart?: (toolName: string, input: Record<string, unknown>, execId: string) => void;
   onToolEnd?: (execId: string, summary: string, isError: boolean) => void;
+  hooks?: HookDefinition[];
+  sessionId?: string;
 };
 
 export async function runVerificationInspectionSession(
@@ -156,6 +159,8 @@ export async function runVerificationInspectionSession(
     },
     onToolStart: options.onToolStart,
     onToolEnd: options.onToolEnd,
+    hooks: options.hooks,
+    sessionId: options.sessionId,
     finalizeSuccess: sessionResult => ({
       status: sessionResult.verdict === "PASS" ? "completed" : "failed",
       result: sessionResult.report,
@@ -247,6 +252,8 @@ export async function runReviewInspectionSession(
       }),
     onToolStart: options.onToolStart,
     onToolEnd: options.onToolEnd,
+    hooks: options.hooks,
+    sessionId: options.sessionId,
     finalizeSuccess: sessionReport => ({
       status: "completed",
       result: sessionReport,

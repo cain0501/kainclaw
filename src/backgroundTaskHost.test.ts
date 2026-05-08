@@ -10,6 +10,8 @@ import {
   buildBackgroundCommandTaskDescription,
   getDetachedWorkerSpawnEnvironment,
 } from "./backgroundTaskHost";
+import * as hooksTrigger from "./hooks/hooksTrigger";
+import type { HookDefinition } from "./hooksRegistry";
 import { PersistentTaskRuntimeStore } from "./tasks/taskRuntime";
 
 const tempDirs: string[] = [];
@@ -131,6 +133,105 @@ describe("backgroundTaskHost helpers", () => {
     expect(storedTask?.output).toContain("[tool:end] read file done");
   });
 
+  it("fires task and subagent hook events on successful built-in agent sessions", async () => {
+    const storageRoot = await createStorageRoot("cain-background-host-");
+    const runtime = await createTaskRuntime(storageRoot);
+    const host = new BackgroundTaskHost({
+      storageRoot,
+      getTaskRuntime: () => runtime,
+    });
+    const triggerSpy = vi
+      .spyOn(hooksTrigger, "triggerHooks")
+      .mockResolvedValue({});
+    const hooks: HookDefinition[] = [
+      {
+        id: "hooks-success",
+        name: "Hooks Success",
+        type: "prompt",
+        description: "records event order",
+        events: [
+          "TaskCreated",
+          "SubagentStart",
+          "SubagentStop",
+          "TaskCompleted",
+        ],
+        prompt: "noop",
+      },
+    ];
+
+    await host.runBuiltInAgentSession({
+      workspaceRoot: "E:\\claudecodejingiang\\vscode-extension",
+      commandText: "/review current diff",
+      agentType: "review",
+      taskId: "review-hooks-1",
+      taskDescription: "Review agent",
+      taskMetadata: {
+        taskType: "built_in_agent",
+        agentType: "review",
+        agentSource: "built-in",
+        agentColor: "blue",
+      },
+      taskStartOutput: "Started review",
+      formatToolEvent: formatBuiltInAgentToolEvent,
+      run: async () => "Final review report",
+      finalizeSuccess: report => ({
+        status: "completed",
+        result: report,
+        output: report,
+      }),
+      hooks,
+      sessionId: "session-hooks-success",
+    });
+
+    expect(triggerSpy).toHaveBeenNthCalledWith(
+      1,
+      "TaskCreated",
+      hooks,
+      expect.objectContaining({
+        workspaceRoot: "E:\\claudecodejingiang\\vscode-extension",
+        sessionId: "session-hooks-success",
+        toolName: "review-hooks-1",
+        toolInput: {
+          agentType: "review",
+          description: "Review agent",
+        },
+      }),
+    );
+    expect(triggerSpy).toHaveBeenNthCalledWith(
+      2,
+      "SubagentStart",
+      hooks,
+      expect.objectContaining({
+        sessionId: "session-hooks-success",
+        toolName: "review",
+        toolInput: { taskId: "review-hooks-1" },
+      }),
+    );
+    expect(triggerSpy).toHaveBeenNthCalledWith(
+      3,
+      "SubagentStop",
+      hooks,
+      expect.objectContaining({
+        sessionId: "session-hooks-success",
+        toolName: "review",
+        toolOutput: { taskId: "review-hooks-1", status: "success" },
+      }),
+    );
+    expect(triggerSpy).toHaveBeenNthCalledWith(
+      4,
+      "TaskCompleted",
+      hooks,
+      expect.objectContaining({
+        sessionId: "session-hooks-success",
+        toolName: "review-hooks-1",
+        toolOutput: {
+          agentType: "review",
+          status: "completed",
+        },
+      }),
+    );
+  });
+
   it("stops built-in agent sessions through the host controller", async () => {
     const storageRoot = await createStorageRoot("cain-background-host-");
     const runtime = await createTaskRuntime(storageRoot);
@@ -187,6 +288,86 @@ describe("backgroundTaskHost helpers", () => {
       error: "Cancelled by TaskStop.",
       notified: true,
     });
+  });
+
+  it("fires SubagentStop on failed built-in agent sessions", async () => {
+    const storageRoot = await createStorageRoot("cain-background-host-");
+    const runtime = await createTaskRuntime(storageRoot);
+    const host = new BackgroundTaskHost({
+      storageRoot,
+      getTaskRuntime: () => runtime,
+    });
+    const triggerSpy = vi
+      .spyOn(hooksTrigger, "triggerHooks")
+      .mockResolvedValue({});
+    const hooks: HookDefinition[] = [
+      {
+        id: "hooks-failure",
+        name: "Hooks Failure",
+        type: "prompt",
+        description: "records failure event order",
+        events: ["TaskCreated", "SubagentStart", "SubagentStop"],
+        prompt: "noop",
+      },
+    ];
+
+    await expect(
+      host.runBuiltInAgentSession({
+        workspaceRoot: "E:\\claudecodejingiang\\vscode-extension",
+        commandText: "/verify",
+        agentType: "verification",
+        taskId: "verify-hooks-1",
+        taskDescription: "Verification agent",
+        taskMetadata: {
+          taskType: "built_in_agent",
+          agentType: "verification",
+          agentSource: "built-in",
+          agentColor: "red",
+        },
+        taskStartOutput: "Started verification",
+        formatToolEvent: formatBuiltInAgentToolEvent,
+        run: async () => {
+          throw new Error("verification crashed");
+        },
+        finalizeSuccess: report => ({
+          status: "completed",
+          result: report,
+          output: report,
+        }),
+        hooks,
+        sessionId: "session-hooks-failure",
+      }),
+    ).rejects.toThrow("verification crashed");
+
+    expect(triggerSpy).toHaveBeenNthCalledWith(
+      1,
+      "TaskCreated",
+      hooks,
+      expect.objectContaining({
+        sessionId: "session-hooks-failure",
+        toolName: "verify-hooks-1",
+      }),
+    );
+    expect(triggerSpy).toHaveBeenNthCalledWith(
+      2,
+      "SubagentStart",
+      hooks,
+      expect.objectContaining({
+        sessionId: "session-hooks-failure",
+        toolName: "verification",
+      }),
+    );
+    expect(triggerSpy).toHaveBeenNthCalledWith(
+      3,
+      "SubagentStop",
+      hooks,
+      expect.objectContaining({
+        sessionId: "session-hooks-failure",
+        toolName: "verification",
+        toolOutput: { taskId: "verify-hooks-1", status: "error" },
+      }),
+    );
+    expect(triggerSpy).toHaveBeenCalledTimes(3);
   });
 
   it("records failed verification terminal output and merges finalize metadata", async () => {

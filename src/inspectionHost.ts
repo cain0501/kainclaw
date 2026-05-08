@@ -6,6 +6,7 @@ import {
 import type { IProviderAdapter, ProviderConfig } from "./agent/providers/IProviderAdapter";
 import type { BackgroundTaskHost } from "./backgroundTaskHost";
 import type { PendingPlanVerificationState } from "./conversationRuntimeStateHost";
+import type { HookDefinition } from "./hooksRegistry";
 import {
   describeToolInput as formatToolInputPreview,
   describeToolName as formatToolDisplayName,
@@ -282,6 +283,8 @@ type SharedInspectionSessionHostOptions<TRuntime extends InspectionRuntimeLike> 
   onToken?: (token: string) => void;
   onToolStart?: (toolName: string, input: Record<string, unknown>, execId: string) => void;
   onToolEnd?: (execId: string, summary: string, isError: boolean) => void;
+  hooks?: HookDefinition[];
+  sessionId?: string;
 };
 
 type SharedInspectionCommandHostOptions<
@@ -347,6 +350,8 @@ type SharedInspectionCommandHostOptions<
   clearStreamingText: () => void;
   updateMood: (delta: number, countConversation?: boolean) => Promise<void>;
   isAbortLikeError: (error: unknown) => boolean;
+  hooks?: HookDefinition[];
+  sessionId?: string;
 };
 
 export async function runVerificationSessionWithHost<TRuntime extends InspectionRuntimeLike>(options: SharedInspectionSessionHostOptions<TRuntime> & {
@@ -382,6 +387,8 @@ export async function runVerificationSessionWithHost<TRuntime extends Inspection
     onToken: options.onToken,
     onToolStart: options.onToolStart,
     onToolEnd: options.onToolEnd,
+    hooks: options.hooks,
+    sessionId: options.sessionId,
   });
 }
 
@@ -411,6 +418,8 @@ export async function runReviewSessionWithHost<TRuntime extends InspectionRuntim
     onToken: options.onToken,
     onToolStart: options.onToolStart,
     onToolEnd: options.onToolEnd,
+    hooks: options.hooks,
+    sessionId: options.sessionId,
   });
 }
 
@@ -442,6 +451,8 @@ type SharedInspectionToolHostOptions<
     envMap: Record<string, string>;
     runtimeOptions: ProviderRuntimeOptions;
   }) => IProviderAdapter;
+  hooks?: HookDefinition[];
+  sessionId?: string;
 };
 
 export async function runVerificationFromToolWithHost<
@@ -475,6 +486,8 @@ export async function runVerificationFromToolWithHost<
         backgroundTaskHost: options.backgroundTaskHost,
         findActiveBuiltInAgentTask: options.findActiveBuiltInAgentTask,
         createProviderAdapter: options.createProviderAdapter,
+        hooks: options.hooks,
+        sessionId: options.sessionId,
         markPendingPlanVerificationStarted:
           options.markPendingPlanVerificationStarted,
         markPendingPlanVerificationCompleted:
@@ -513,6 +526,8 @@ export async function runReviewFromToolWithHost<
         backgroundTaskHost: options.backgroundTaskHost,
         findActiveBuiltInAgentTask: options.findActiveBuiltInAgentTask,
         createProviderAdapter: options.createProviderAdapter,
+        hooks: options.hooks,
+        sessionId: options.sessionId,
       }),
   });
 }
@@ -577,6 +592,8 @@ export async function handleVerificationCommandWithHost<
         backgroundTaskHost: options.backgroundTaskHost,
         findActiveBuiltInAgentTask: options.findActiveBuiltInAgentTask,
         createProviderAdapter: options.createProviderAdapter,
+        hooks: options.hooks,
+        sessionId: options.sessionId,
         markPendingPlanVerificationStarted:
           options.markPendingPlanVerificationStarted,
         markPendingPlanVerificationCompleted:
@@ -639,6 +656,8 @@ export async function handleReviewCommandWithHost<
         backgroundTaskHost: options.backgroundTaskHost,
         findActiveBuiltInAgentTask: options.findActiveBuiltInAgentTask,
         createProviderAdapter: options.createProviderAdapter,
+        hooks: options.hooks,
+        sessionId: options.sessionId,
       }),
     buildFollowUpMessage: (label, taskId) =>
       options.backgroundTaskHost.buildFollowUpMessage(label, taskId),
@@ -671,6 +690,8 @@ export async function handleUltrareviewCommandWithHost<
     envMap: Record<string, string>;
     runtime: TRuntime;
     tools: ToolDefinition[];
+    hooks?: HookDefinition[];
+    sessionId?: string;
   },
 ): Promise<boolean> {
   if (!/^\/ultrareview(?:\s|$)/i.test(options.commandText.trim())) {
@@ -799,6 +820,8 @@ export async function handleUltraverifyCommandWithHost<
     envMap: Record<string, string>;
     runtime: TRuntime;
     tools: ToolDefinition[];
+    hooks?: HookDefinition[];
+    sessionId?: string;
   },
 ): Promise<boolean> {
   if (!/^\/ultraverify(?:\s|$)/i.test(options.commandText.trim())) {

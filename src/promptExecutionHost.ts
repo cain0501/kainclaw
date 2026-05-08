@@ -134,6 +134,7 @@ export function createPromptExecutionCommandHandlers<
   resetPendingPlanVerificationToAwaitingStart: () => void;
   getSessionInstalledSkillHooks?: () => HookDefinition[];
   registerSessionInstalledSkillHooks?: (hooks: HookDefinition[]) => HookDefinition[];
+  getCurrentSessionId?: () => string | undefined;
   skillStore?: SkillStore;
   profileStore?: ProfileStore;
 }) {
@@ -183,6 +184,8 @@ export function createPromptExecutionCommandHandlers<
         recordAssistantReply: options.recordAssistantReply,
         setCompanionState: options.setCompanionState,
         updateMood: options.updateMood,
+        hooks: options.getSessionInstalledSkillHooks?.(),
+        sessionId: options.getCurrentSessionId?.(),
         toErrorMessage: error =>
           error instanceof Error ? error.message : String(error),
       }),
@@ -223,6 +226,8 @@ export function createPromptExecutionCommandHandlers<
         clearStreamingText: options.clearStreamingText,
         updateMood: options.updateMood,
         isAbortLikeError: options.isAbortLikeError,
+        hooks: options.getSessionInstalledSkillHooks?.(),
+        sessionId: options.getCurrentSessionId?.(),
       }),
     handleUltrareviewCommand: (
       prompt: string,
@@ -255,6 +260,8 @@ export function createPromptExecutionCommandHandlers<
         clearStreamingText: options.clearStreamingText,
         updateMood: options.updateMood,
         isAbortLikeError: options.isAbortLikeError,
+        hooks: options.getSessionInstalledSkillHooks?.(),
+        sessionId: options.getCurrentSessionId?.(),
       }),
     handleUltraverifyCommand: (
       prompt: string,
@@ -287,6 +294,8 @@ export function createPromptExecutionCommandHandlers<
         clearStreamingText: options.clearStreamingText,
         updateMood: options.updateMood,
         isAbortLikeError: options.isAbortLikeError,
+        hooks: options.getSessionInstalledSkillHooks?.(),
+        sessionId: options.getCurrentSessionId?.(),
       }),
     handleVerificationCommand: (
       prompt: string,
@@ -331,6 +340,8 @@ export function createPromptExecutionCommandHandlers<
           options.markPendingPlanVerificationCompleted,
         resetPendingPlanVerificationToAwaitingStart:
           options.resetPendingPlanVerificationToAwaitingStart,
+        hooks: options.getSessionInstalledSkillHooks?.(),
+        sessionId: options.getCurrentSessionId?.(),
         onUnexpectedError: (message, activityId) => {
           options.finishPhaseActivity(activityId, "error", message);
         },

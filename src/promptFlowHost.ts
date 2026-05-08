@@ -820,6 +820,15 @@ export async function runPromptFlowWithHost<
     [];
   const activePromptHooks = [...installedSkillHooks, ...userHooks];
   if (activePromptHooks.length > 0) {
+    await triggerHooks(
+      "UserPromptSubmit",
+      activePromptHooks,
+      {
+        workspaceRoot: continuePromptExecution.workspaceRoot,
+        prompt: effectivePrompt,
+      },
+      installedSkillAgentRunner,
+    );
     const prePromptResult = await triggerHooks(
       "PrePrompt",
       activePromptHooks,
@@ -935,5 +944,13 @@ export async function runPromptFlowWithHost<
         installedSkillAgentRunner,
       );
     }
+    await triggerHooks(
+      "Stop",
+      activePromptHooks,
+      {
+        workspaceRoot: continuePromptExecution.workspaceRoot,
+      },
+      installedSkillAgentRunner,
+    );
   }
 }
