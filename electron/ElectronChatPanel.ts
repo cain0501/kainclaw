@@ -158,7 +158,9 @@ import {
 import { buildKainClawDesignSystemPrompt } from "../src/design/designPrompt";
 import {
   buildKainClawDesignPatchSystemPrompt,
+  extractDirectTextReplacement,
   patchDesignImageNode,
+  patchDesignTextNode,
   patchKainClawDesignNode,
 } from "../src/design/patchEngine";
 import {
@@ -502,6 +504,9 @@ export class ElectronChatPanel {
       .map(message => ({
         role: message.role,
         content: message.content,
+        ...(message.role === "assistant" && message.reasoningContent
+          ? { reasoningContent: message.reasoningContent }
+          : {}),
         ...(message.role === "user" &&
         message.attachments &&
         message.attachments.length > 0
@@ -598,6 +603,7 @@ export class ElectronChatPanel {
       return {
         role: "assistant" as const,
         content: message.content,
+        ...(message.reasoningContent ? { reasoningContent: message.reasoningContent } : {}),
       };
     });
   }
@@ -746,6 +752,14 @@ export class ElectronChatPanel {
     if (type === "license:activate") { await this.activateLicense(String(message.key ?? "")); return; }
     if (type === "settings:reset") { await this.resetAllConfig(); return; }
     if (type === "image:loadState") { await this.postImageState(); return; }
+    if (type === "image:saveThumbnail") {
+      const id = typeof message.id === "string" ? message.id.trim() : "";
+      const dataUrl = typeof message.dataUrl === "string" ? message.dataUrl.trim() : "";
+      if (id && dataUrl.startsWith("data:image/")) {
+        void this.imageGalleryStore.saveThumbnail(id, dataUrl).catch(() => {});
+      }
+      return;
+    }
     if (type === "image:saveConfig") {
       await this.saveImageConfig(message);
       return;
@@ -2234,6 +2248,13 @@ export class ElectronChatPanel {
     }
 
     const latestGeneratedImage = this.getLatestGeneratedImageFromCurrentSession();
+    const recentHistory = this.sessionMessages
+      .slice(-6)
+      .filter(message => message.role === "user" || message.role === "assistant")
+      .map(message => ({
+        role: message.role,
+        content: String(message.content ?? "").slice(0, 200),
+      }));
     let intent: ChatPromptIntent;
     try {
       const workspaceRoot = this.getSelectedWorkspaceRoot();
@@ -2251,6 +2272,7 @@ export class ElectronChatPanel {
         prompt: trimmedPrompt,
         hasAttachments,
         hasRecentGeneratedImageContext: !!latestGeneratedImage,
+        recentHistory,
         provider: routerAdapter,
       });
     } catch {
@@ -2711,6 +2733,7 @@ export class ElectronChatPanel {
         return {
           role: "assistant" as const,
           content: message.content,
+          ...(message.reasoningContent ? { reasoningContent: message.reasoningContent } : {}),
         };
       });
       const adapter = buildProviderAdapter(
@@ -2722,7 +2745,7 @@ export class ElectronChatPanel {
       );
       const toolContext = activePromptRuntime.getToolContext("main");
 
-      const finalText = await runAgent(history, {
+      const { text: finalText, reasoningContent: finalReasoningContent } = await runAgent(history, {
         provider: adapter,
         tools: activeTools,
         toolContext,
@@ -2828,7 +2851,11 @@ export class ElectronChatPanel {
       );
       this.modelConversationMessages = [
         ...requestModelConversation,
-        { role: "assistant", content: finalText },
+        {
+          role: "assistant",
+          content: finalText,
+          ...(finalReasoningContent ? { reasoningContent: finalReasoningContent } : {}),
+        },
       ];
       if (detectedArtifact) {
         this.getArtifactRegistry(requestSessionId).push(detectedArtifact);
@@ -3146,6 +3173,7 @@ export class ElectronChatPanel {
       const initialVersion = await this.designVersionStore.saveVersion({
         projectId: project.projectId,
         prompt: activeArtifact.title || "",
+        title: "生成",
         outputType: "prototype",
         style: "",
         html: activeArtifact.content,
@@ -3485,12 +3513,59 @@ export class ElectronChatPanel {
     this.sendToRenderer({ type: "design:progress", step: "patching" });
 
     try {
+      const directTextReplacement = extractDirectTextReplacement(comment);
+      if (directTextReplacement) {
+        const nextHtml = patchDesignTextNode({
+          html,
+          selector,
+          targetOuterHtml,
+          nextText: directTextReplacement,
+        });
+        const version = await this.saveDesignVersion({
+          ...(typeof message.prompt === "string" ? { prompt: String(message.prompt) } : {}),
+          ...(message.outputType === "slide" ||
+          message.outputType === "infographic" ||
+          message.outputType === "animation"
+            ? { outputType: message.outputType }
+            : { outputType: "prototype" as const }),
+          ...(typeof message.style === "string" ? { style: String(message.style) } : {}),
+          html: nextHtml,
+          sliders: Array.isArray(message.sliders) ? message.sliders : [],
+          source: "patch",
+        });
+
+        this.sendToRenderer({
+          type: "design:patchResult",
+          html: nextHtml,
+          selector,
+          replacementNode: targetOuterHtml,
+          versionId: version.id,
+        });
+        return;
+      }
+
+      let patchStartedSent = false;
       const result = await patchKainClawDesignNode({
         provider,
         html,
         selector,
         comment,
         targetOuterHtml,
+        onToken: () => {
+          if (patchStartedSent) {
+            return;
+          }
+          patchStartedSent = true;
+          this.sendToRenderer({ type: "design:patchStarted" });
+        },
+      });
+      console.debug("[KC-DEBUG] design patch model result", {
+        selector,
+        comment,
+        targetOuterHtmlPreview: targetOuterHtml.slice(0, 240),
+        replacementNodePreview: result.replacementNode.slice(0, 240),
+        rawOutputPreview: result.rawOutput.slice(0, 400),
+        htmlChanged: result.html !== html,
       });
       const version = await this.saveDesignVersion({
         ...(typeof message.prompt === "string" ? { prompt: String(message.prompt) } : {}),
@@ -3513,6 +3588,12 @@ export class ElectronChatPanel {
         versionId: version.id,
       });
     } catch (error) {
+      console.debug("[KC-DEBUG] design patch failed", {
+        selector,
+        comment,
+        targetOuterHtmlPreview: targetOuterHtml.slice(0, 240),
+        error: error instanceof Error ? error.message : String(error),
+      });
       this.sendToRenderer({
         type: "design:error",
         message: error instanceof Error ? error.message : String(error),
@@ -3551,7 +3632,7 @@ export class ElectronChatPanel {
       }
 
       const html = patchDesignImageNode({
-        html: version.html,
+        html: version.html ?? "",
         selector,
         targetOuterHtml,
         imageUrl,
@@ -3616,10 +3697,19 @@ export class ElectronChatPanel {
       await this.setCurrentDesignProject(project);
     }
 
+    const titleMap: Record<DesignVersionRecord["source"], string> = {
+      generate: "生成",
+      patch: "改写元素",
+      editCurrent: "编辑",
+      restore: "恢复版本",
+    };
+    const title = titleMap[options.source] ?? "";
+
     const version = await this.designVersionStore.saveVersion({
       projectId: project.projectId,
       ...(options.baseVersionId ? { baseVersionId: options.baseVersionId } : {}),
       prompt: options.prompt?.trim() || "",
+      title,
       outputType: options.outputType ?? "prototype",
       style: options.style?.trim() || "",
       html: options.html,
@@ -3645,9 +3735,10 @@ export class ElectronChatPanel {
     return version;
   }
 
-  private async loadDesignVersions(_message: Record<string, unknown>): Promise<void> {
+  private async loadDesignVersions(message: Record<string, unknown>): Promise<void> {
     await this.ensureSession();
-    const projectId = this.currentDesignProjectId ?? "design-default";
+    const requestedProjectId = typeof message.projectId === "string" ? message.projectId.trim() : "";
+    const projectId = requestedProjectId || this.currentDesignProjectId || "design-default";
     const versions = await this.designVersionStore.listVersions(projectId);
     this.sendToRenderer({
       type: "design:versions",
@@ -4545,11 +4636,37 @@ export class ElectronChatPanel {
     );
   }
 
+  private buildEffectiveImagePrompt(rawPrompt: string): string {
+    const prompt = rawPrompt.trim();
+    const SHORT_THRESHOLD = 10;
+    if (!prompt || prompt.length > SHORT_THRESHOLD) {
+      return prompt;
+    }
+
+    const descriptionMessage = [...this.sessionMessages.slice(-8)].reverse().find(message => {
+      if (message.role !== "assistant") {
+        return false;
+      }
+      return String(message.content ?? "").trim().length > 20;
+    });
+    if (!descriptionMessage) {
+      return prompt;
+    }
+
+    const description = String(descriptionMessage.content ?? "").trim().slice(0, 500);
+    if (!description) {
+      return prompt;
+    }
+
+    return `${description}\n\n用户确认：${prompt}`;
+  }
+
   private async runChatImageJob(message: Record<string, unknown>): Promise<void> {
     const prompt = String(message.prompt ?? "").trim();
     if (!prompt) {
       return;
     }
+    const effectivePrompt = this.buildEffectiveImagePrompt(prompt);
 
     await this.ensureSession();
     const requestSessionId = this.currentSessionId;
@@ -4601,7 +4718,7 @@ export class ElectronChatPanel {
 
       await this.settings.pushImagePromptHistory(prompt);
       const rawResults = await runImageLabRequest({
-        prompt,
+        prompt: effectivePrompt,
         executionPrompt: batchExecution.executionPrompt,
         config,
         ...(referenceImages.length > 0 ? { referenceImages } : {}),

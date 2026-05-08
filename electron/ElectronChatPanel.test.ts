@@ -30,6 +30,7 @@ import type { LocalBridgeRuntimeStatus } from "../src/platform/localBridgeRuntim
 import { SettingsRepository } from "../src/storage/settingsRepository";
 import { SessionRepository } from "../src/storage/sessionRepository";
 import { ElectronChatPanel } from "./ElectronChatPanel";
+import { routeIntentWithLLM } from "../src/imageGeneration/llmIntentRouter";
 
 const execFileAsync = promisify(execFile);
 const { mockedBuiltinToolDefinitions } = vi.hoisted(() => ({
@@ -116,6 +117,16 @@ vi.mock("../src/imageGeneration/imageLabRuntime", () => ({
   createImageVariant: vi.fn(),
 }));
 
+vi.mock("../src/imageGeneration/llmIntentRouter", async () => {
+  const actual = await vi.importActual<typeof import("../src/imageGeneration/llmIntentRouter")>(
+    "../src/imageGeneration/llmIntentRouter",
+  );
+  return {
+    ...actual,
+    routeIntentWithLLM: vi.fn(actual.routeIntentWithLLM),
+  };
+});
+
 vi.mock("../src/imageGeneration/imageMaterialSearch", () => ({
   searchPublicReferenceImages: vi.fn(),
 }));
@@ -124,10 +135,14 @@ vi.mock("../src/design/designEngine", () => ({
   generateKainClawDesign: vi.fn(),
 }));
 
-vi.mock("../src/design/patchEngine", () => ({
-  buildKainClawDesignPatchSystemPrompt: vi.fn(() => "patch-system-prompt"),
-  patchKainClawDesignNode: vi.fn(),
-}));
+vi.mock("../src/design/patchEngine", async () => {
+  const actual = await vi.importActual<typeof import("../src/design/patchEngine")>("../src/design/patchEngine");
+  return {
+    ...actual,
+    buildKainClawDesignPatchSystemPrompt: vi.fn(() => "patch-system-prompt"),
+    patchKainClawDesignNode: vi.fn(),
+  };
+});
 
 class FakeHostAdapter implements IHostAdapter {
   private readonly state = new Map<string, unknown>();
@@ -309,7 +324,7 @@ describe("ElectronChatPanel session lifecycle", () => {
     const agentReply = createDeferred<string>();
     vi.mocked(runAgent).mockImplementation(async (_history, options) => {
       options.onToken?.("处理中");
-      return agentReply.promise;
+      return { text: await agentReply.promise };
     });
 
     const sendPromise = harness.panel.handleMessage({
@@ -389,7 +404,7 @@ describe("ElectronChatPanel session lifecycle", () => {
         false,
         "{\"results\":[{\"name\":\"ii cai n\"}]}",
       );
-      return "我已经读取到 1 个用户。";
+      return { text: "我已经读取到 1 个用户。" };
     });
 
     await harness.panel.handleMessage({
@@ -424,16 +439,16 @@ describe("ElectronChatPanel session lifecycle", () => {
     vi.mocked(buildProviderAdapter).mockReturnValue({} as never);
     vi.mocked(handleElectronPromptCommand).mockResolvedValue({ kind: "continue" });
     vi.mocked(runAgent)
-      .mockResolvedValueOnce(`<!DOCTYPE html>
+      .mockResolvedValueOnce({ text: `<!DOCTYPE html>
 <html>
   <head><title>Landing One</title></head>
   <body><main>one</main></body>
-</html>`)
-      .mockResolvedValueOnce(`<!DOCTYPE html>
+</html>` })
+      .mockResolvedValueOnce({ text: `<!DOCTYPE html>
 <html>
   <head><title>Landing Two</title></head>
   <body><main>two</main></body>
-</html>`);
+</html>` });
 
     await harness.panel.handleMessage({
       type: "sendPrompt",
@@ -536,11 +551,11 @@ describe("ElectronChatPanel session lifecycle", () => {
     });
     vi.mocked(buildProviderAdapter).mockReturnValue({} as never);
     vi.mocked(handleElectronPromptCommand).mockResolvedValue({ kind: "continue" });
-    vi.mocked(runAgent).mockResolvedValue(`<!DOCTYPE html>
+    vi.mocked(runAgent).mockResolvedValue({ text: `<!DOCTYPE html>
 <html>
   <head><title>Design Bridge</title></head>
   <body><main>bridge</main></body>
-</html>`);
+</html>` });
 
     await harness.panel.handleMessage({
       type: "sendPrompt",
@@ -611,7 +626,7 @@ describe("ElectronChatPanel session lifecycle", () => {
     });
     vi.mocked(buildProviderAdapter).mockReturnValue({} as never);
     vi.mocked(handleElectronPromptCommand).mockResolvedValue({ kind: "continue" });
-    vi.mocked(runAgent).mockResolvedValue("这是普通文字回复，不是 artifact。");
+    vi.mocked(runAgent).mockResolvedValue({ text: "这是普通文字回复，不是 artifact。" });
 
     await harness.panel.handleMessage({
       type: "sendPrompt",
@@ -627,6 +642,97 @@ describe("ElectronChatPanel session lifecycle", () => {
     }>(harness.rendererPayloads, "state");
     expect(state?.artifactState?.activeArtifact).toBeNull();
     expect(state?.artifactState?.artifactCount).toBe(0);
+  });
+
+  it("passes recent history to the router and expands short image confirmations before generation", async () => {
+    const harness = await createHarness();
+    tempDirs.push(harness.storagePath);
+
+    await harness.settings.setOnboardingDone(true);
+    await harness.settings.saveImageConfig({
+      id: "image-model-1",
+      baseUrl: "https://example.com/v1",
+      model: "gpt-image-2",
+      authMode: "raw",
+      size: "1024x1024",
+      batchCount: 1,
+      responseFormat: "url",
+    });
+    await harness.settings.storeImageModelApiKey("image-model-1", "image-secret");
+
+    const session = await harness.sessions.createSession(
+      "session-image-router",
+      "electron",
+      "Image Router",
+    );
+    await harness.sessions.appendMessages(session.id, [
+      { role: "user", content: "旧消息 1" },
+      { role: "assistant", content: "旧消息 2" },
+      { role: "user", content: "旧消息 3" },
+      {
+        role: "assistant",
+        content: "请确认品牌 logo 放在左上角，主标题使用高对比白字，整体保持科技风蓝色背景卡片。",
+      },
+      { role: "user", content: "旧消息 5" },
+      { role: "assistant", content: "旧消息 6" },
+      { role: "user", content: "旧消息 7" },
+    ]);
+    await harness.settings.setActiveSessionId(session.id);
+    await harness.panel.handleMessage({ type: "ready" });
+
+    vi.mocked(resolveProviderConfig).mockResolvedValue({
+      config: {
+        type: "anthropic",
+        apiKey: "test-key",
+        model: "claude-sonnet-4-6",
+      },
+      envMap: {},
+    });
+    vi.mocked(buildProviderAdapter).mockReturnValue({} as never);
+    vi.mocked(routeIntentWithLLM).mockResolvedValueOnce("image_generate");
+    vi.mocked(runImageLabRequest).mockResolvedValueOnce([
+      {
+        id: "img-1",
+        batchId: "batch-generate-1",
+        src: "https://example.com/generated-1.png",
+        prompt: "expanded prompt",
+        createdAt: Date.now(),
+        source: "generate",
+      },
+    ] as never);
+
+    await harness.panel.handleMessage({
+      type: "sendPrompt",
+      prompt: "好，就按这个生成",
+    });
+
+    expect(vi.mocked(routeIntentWithLLM)).toHaveBeenCalledWith(expect.objectContaining({
+      prompt: "好，就按这个生成",
+      hasAttachments: false,
+      hasRecentGeneratedImageContext: false,
+      recentHistory: [
+        { role: "assistant", content: "旧消息 2" },
+        { role: "user", content: "旧消息 3" },
+        {
+          role: "assistant",
+          content: "请确认品牌 logo 放在左上角，主标题使用高对比白字，整体保持科技风蓝色背景卡片。",
+        },
+        { role: "user", content: "旧消息 5" },
+        { role: "assistant", content: "旧消息 6" },
+        { role: "user", content: "旧消息 7" },
+      ],
+      provider: expect.any(Object),
+    }));
+    expect(vi.mocked(runImageLabRequest)).toHaveBeenCalledWith(expect.objectContaining({
+      prompt: "请确认品牌 logo 放在左上角，主标题使用高对比白字，整体保持科技风蓝色背景卡片。\n\n用户确认：好，就按这个生成",
+    }));
+    expect(harness.settings.getImagePromptHistory().map(entry => entry.prompt)).toEqual([
+      "好，就按这个生成",
+    ]);
+    expect(getLastRendererPayloadOfType<{ type?: string; prompt?: string }>(
+      harness.rendererPayloads,
+      "chat:imagePending",
+    )?.prompt).toBe("好，就按这个生成");
   });
 
   it("allows different sessions to run requests concurrently", async () => {
@@ -665,7 +771,7 @@ describe("ElectronChatPanel session lifecycle", () => {
     vi.mocked(runAgent).mockImplementation(async (_history, options) => {
       invocationCount += 1;
       options.onToken?.(`chunk-${invocationCount}`);
-      return invocationCount === 1 ? replyA.promise : replyB.promise;
+      return { text: await (invocationCount === 1 ? replyA.promise : replyB.promise) };
     });
 
     const sendPromiseA = harness.panel.handleMessage({
@@ -740,11 +846,11 @@ describe("ElectronChatPanel session lifecycle", () => {
     });
     vi.mocked(buildProviderAdapter).mockReturnValue({} as never);
     vi.mocked(handleElectronPromptCommand).mockResolvedValue({ kind: "continue" });
-    vi.mocked(runAgent).mockResolvedValue(`<!DOCTYPE html>
+    vi.mocked(runAgent).mockResolvedValue({ text: `<!DOCTYPE html>
 <html>
   <head><title>Session A Artifact</title></head>
   <body><main>A</main></body>
-</html>`);
+</html>` });
 
     await harness.panel.handleMessage({
       type: "sendPrompt",
@@ -829,7 +935,7 @@ describe("ElectronChatPanel session lifecycle", () => {
     vi.mocked(handleElectronPromptCommand).mockResolvedValue({ kind: "continue" });
 
     const artifactReply = createDeferred<string>();
-    vi.mocked(runAgent).mockImplementation(async () => artifactReply.promise);
+    vi.mocked(runAgent).mockImplementation(async () => ({ text: await artifactReply.promise }));
 
     const sendPromise = harness.panel.handleMessage({
       type: "sendPrompt",
@@ -887,11 +993,11 @@ describe("ElectronChatPanel session lifecycle", () => {
     });
     vi.mocked(buildProviderAdapter).mockReturnValue({} as never);
     vi.mocked(handleElectronPromptCommand).mockResolvedValue({ kind: "continue" });
-    vi.mocked(runAgent).mockResolvedValue(`<!DOCTYPE html>
+    vi.mocked(runAgent).mockResolvedValue({ text: `<!DOCTYPE html>
 <html>
   <head><title>Reloaded Artifact</title></head>
   <body><main>artifact</main></body>
-</html>`);
+</html>` });
 
     await harness.panel.handleMessage({
       type: "sendPrompt",
@@ -980,7 +1086,7 @@ describe("ElectronChatPanel session lifecycle", () => {
     const agentReply = createDeferred<string>();
     vi.mocked(runAgent).mockImplementation(async (_history, options) => {
       options.onToken?.("working");
-      return agentReply.promise;
+      return { text: await agentReply.promise };
     });
 
     const originalLoadMessages = harness.sessions.loadMessages.bind(harness.sessions);
@@ -2026,7 +2132,7 @@ describe("ElectronChatPanel session lifecycle", () => {
       } as never)
       .mockReturnValueOnce({} as never);
     vi.mocked(handleElectronPromptCommand).mockResolvedValue({ kind: "continue" });
-    vi.mocked(runAgent).mockResolvedValue("这里是一版优化后的提示词。");
+    vi.mocked(runAgent).mockResolvedValue({ text: "这里是一版优化后的提示词。" });
 
     await harness.panel.handleMessage({
       type: "sendPrompt",
@@ -2059,11 +2165,11 @@ describe("ElectronChatPanel session lifecycle", () => {
       }),
     } as never);
     vi.mocked(handleElectronPromptCommand).mockResolvedValue({ kind: "continue" });
-    vi.mocked(runAgent).mockResolvedValue(`<!DOCTYPE html>
+    vi.mocked(runAgent).mockResolvedValue({ text: `<!DOCTYPE html>
 <html>
   <head><title>Artifact Prototype</title></head>
   <body><main>Hello</main></body>
-</html>`);
+</html>` });
 
     await harness.panel.handleMessage({
       type: "sendPrompt",
@@ -2103,11 +2209,11 @@ describe("ElectronChatPanel session lifecycle", () => {
       }),
     } as never);
     vi.mocked(handleElectronPromptCommand).mockResolvedValue({ kind: "continue" });
-    vi.mocked(runAgent).mockResolvedValue(`<!DOCTYPE html>
+    vi.mocked(runAgent).mockResolvedValue({ text: `<!DOCTYPE html>
 <html>
   <head><title>Lens / 光影档案</title></head>
   <body><main>Portfolio</main></body>
-</html>`);
+</html>` });
 
     await harness.panel.handleMessage({
       type: "sendPrompt",
@@ -2139,7 +2245,7 @@ describe("ElectronChatPanel session lifecycle", () => {
       }),
     } as never);
     vi.mocked(handleElectronPromptCommand).mockResolvedValue({ kind: "continue" });
-    vi.mocked(runAgent).mockResolvedValue(`<svg xmlns="http://www.w3.org/2000/svg"><rect width="10" height="10"/></svg>`);
+    vi.mocked(runAgent).mockResolvedValue({ text: `<svg xmlns="http://www.w3.org/2000/svg"><rect width="10" height="10"/></svg>` });
 
     await harness.panel.handleMessage({
       type: "sendPrompt",
@@ -2176,7 +2282,7 @@ describe("ElectronChatPanel session lifecycle", () => {
       }),
     } as never);
     vi.mocked(handleElectronPromptCommand).mockResolvedValue({ kind: "continue" });
-    vi.mocked(runAgent).mockResolvedValue("```mermaid\ngraph TD\n  A[需求] --> B[设计]\n```");
+    vi.mocked(runAgent).mockResolvedValue({ text: "```mermaid\ngraph TD\n  A[需求] --> B[设计]\n```" });
 
     await harness.panel.handleMessage({
       type: "sendPrompt",
@@ -2261,7 +2367,7 @@ describe("ElectronChatPanel session lifecycle", () => {
     let capturedPrompt = "";
     vi.mocked(runAgent).mockImplementation(async history => {
       capturedPrompt = String(history[history.length - 1]?.content || "");
-      return "<!DOCTYPE html><html><head><title>Prompt Contract</title></head><body></body></html>";
+      return { text: "<!DOCTYPE html><html><head><title>Prompt Contract</title></head><body></body></html>" };
     });
 
     await harness.panel.handleMessage({
@@ -2297,7 +2403,7 @@ describe("ElectronChatPanel session lifecycle", () => {
     vi.mocked(runAgent).mockImplementation(async (history, options) => {
       receivedToolCount = options.tools.length;
       capturedPrompt = String(history[history.length - 1]?.content || "");
-      return "<!DOCTYPE html><html><head><title>Tweaks Bridge</title></head><body></body></html>";
+      return { text: "<!DOCTYPE html><html><head><title>Tweaks Bridge</title></head><body></body></html>" };
     });
 
     await harness.panel.handleMessage({
@@ -2334,7 +2440,7 @@ describe("ElectronChatPanel session lifecycle", () => {
     let receivedToolCount = -1;
     vi.mocked(runAgent).mockImplementation(async (_history, options) => {
       receivedToolCount = options.tools.length;
-      return "<!DOCTYPE html><html><head><title>No Tools</title></head><body></body></html>";
+      return { text: "<!DOCTYPE html><html><head><title>No Tools</title></head><body></body></html>" };
     });
 
     await harness.panel.handleMessage({
@@ -4111,6 +4217,82 @@ Freeze skill body.
     });
   });
 
+  it("handles simple text-only design patch comments through deterministic replacement without model patch output", async () => {
+    const harness = await createHarness();
+    tempDirs.push(harness.storagePath);
+
+    await harness.settings.setOnboardingDone(true);
+    await harness.panel.handleMessage({ type: "ready" });
+
+    vi.mocked(resolveProviderConfig).mockResolvedValue({
+      config: {
+        type: "anthropic",
+        apiKey: "test-key",
+        model: "claude-sonnet-4-6",
+      },
+      envMap: {},
+    });
+    vi.mocked(buildProviderAdapter).mockReturnValue({} as never);
+    vi.mocked(patchKainClawDesignNode).mockClear();
+
+    await harness.panel.handleMessage({
+      type: "design:patch",
+      html: "<!DOCTYPE html><html><body><section class=\"stats\"><div class=\"stat\"><strong>88</strong></div><div class=\"stat\"><strong>110+</strong></div></section></body></html>",
+      selector: "BODY > SECTION.STATS > DIV.STAT:nth-of-type(2) > STRONG:nth-of-type(1)",
+      targetOuterHtml: "<strong>110+</strong>",
+      comment: "改成120+",
+    });
+
+    expect(patchKainClawDesignNode).not.toHaveBeenCalled();
+    const patchPayload = getLastRendererPayloadOfType<{
+      type: "design:patchResult";
+      html: string;
+    }>(harness.rendererPayloads, "design:patchResult");
+
+    expect(patchPayload?.html).toContain("<strong>120+</strong>");
+    expect(patchPayload?.html).not.toContain("<strong>110+</strong>");
+  });
+
+  it("surfaces a model patch no-op as design:error instead of saving an unchanged patch version", async () => {
+    const harness = await createHarness();
+    tempDirs.push(harness.storagePath);
+
+    await harness.settings.setOnboardingDone(true);
+    await harness.panel.handleMessage({ type: "ready" });
+
+    vi.mocked(resolveProviderConfig).mockResolvedValue({
+      config: {
+        type: "anthropic",
+        apiKey: "test-key",
+        model: "claude-sonnet-4-6",
+      },
+      envMap: {},
+    });
+    vi.mocked(buildProviderAdapter).mockReturnValue({} as never);
+    vi.mocked(patchKainClawDesignNode).mockRejectedValue(
+      new Error("KainClaw Design patch returned the original node unchanged."),
+    );
+
+    await harness.panel.handleMessage({
+      type: "design:patch",
+      html: "<!DOCTYPE html><html><body><div class=\"hero-actions\"><a class=\"btn btn-primary\" href=\"#contact\">立即预约拍摄</a><a class=\"btn btn-secondary\" href=\"#portfolio\">查看作品集</a></div></body></html>",
+      selector: "BODY > DIV.HERO-ACTIONS > A.BTN.BTN-PRIMARY:nth-of-type(1)",
+      targetOuterHtml: "<a class=\"btn btn-primary\" href=\"#contact\">立即预约拍摄</a>",
+      comment: "换个颜色",
+    });
+
+    const patchPayload = getLastRendererPayloadOfType<{
+      type: "design:patchResult";
+    }>(harness.rendererPayloads, "design:patchResult");
+    expect(patchPayload).toBeUndefined();
+
+    const errorPayload = getLastRendererPayloadOfType<{
+      type: "design:error";
+      message: string;
+    }>(harness.rendererPayloads, "design:error");
+    expect(errorPayload?.message).toContain("original node unchanged");
+  });
+
   it("lists and restores saved design versions for the current session", async () => {
     const harness = await createHarness();
     tempDirs.push(harness.storagePath);
@@ -4177,6 +4359,84 @@ Freeze skill body.
       prompt: "Make version A",
       versionId: firstResult?.versionId,
     });
+  });
+
+  it("filters design:loadVersions by the requested projectId instead of the current project pointer", async () => {
+    const harness = await createHarness();
+    tempDirs.push(harness.storagePath);
+
+    await harness.settings.setOnboardingDone(true);
+    await harness.panel.handleMessage({ type: "ready" });
+
+    vi.mocked(resolveProviderConfig).mockResolvedValue({
+      config: {
+        type: "anthropic",
+        apiKey: "test-key",
+        model: "claude-sonnet-4-6",
+      },
+      envMap: {},
+    });
+    vi.mocked(buildProviderAdapter).mockReturnValue({} as never);
+    vi.mocked(generateKainClawDesign)
+      .mockResolvedValueOnce({
+        html: "<!DOCTYPE html><html><body><main>Project A</main></body></html>",
+        sliders: [
+          { id: "primary", label: "Primary", type: "color", cssVar: "--color-primary", default: "#111111" },
+        ],
+        rawOutput: "raw",
+        systemPrompt: "system",
+        userPrompt: "user",
+      })
+      .mockResolvedValueOnce({
+        html: "<!DOCTYPE html><html><body><main>Project B</main></body></html>",
+        sliders: [
+          { id: "accent", label: "Accent", type: "color", cssVar: "--color-accent", default: "#222222" },
+        ],
+        rawOutput: "raw",
+        systemPrompt: "system",
+        userPrompt: "user",
+      });
+
+    await harness.panel.handleMessage({
+      type: "design:generate",
+      prompt: "Project A",
+      outputType: "prototype",
+      style: "minimal",
+    });
+    const firstResult = getLastRendererPayloadOfType<{
+      type: "design:result";
+      versionId?: string;
+    }>(harness.rendererPayloads, "design:result");
+    const firstProject = (harness.panel as any).currentDesignProjectId as string | undefined;
+
+    await harness.panel.handleMessage({
+      type: "design:createProject",
+      name: "Project B",
+    });
+    await harness.panel.handleMessage({
+      type: "design:generate",
+      prompt: "Project B",
+      outputType: "prototype",
+      style: "editorial",
+    });
+
+    expect(firstProject).toBeTruthy();
+    expect(firstResult?.versionId).toBeTruthy();
+
+    await harness.panel.handleMessage({
+      type: "design:loadVersions",
+      projectId: firstProject,
+    });
+
+    const versionsPayload = getLastRendererPayloadOfType<{
+      type: "design:versions";
+      versions: Array<{ id: string; prompt?: string; projectId?: string }>;
+    }>(harness.rendererPayloads, "design:versions");
+
+    expect(versionsPayload?.versions.length).toBeGreaterThan(0);
+    expect(versionsPayload?.versions.every(version => version.projectId === firstProject)).toBe(true);
+    expect(versionsPayload?.versions.some(version => version.id === firstResult?.versionId)).toBe(true);
+    expect(versionsPayload?.versions.some(version => version.prompt === "Project B")).toBe(false);
   });
 
   it("returns direction suggestions for ambiguous design prompts before generation", async () => {
@@ -4330,11 +4590,11 @@ Freeze skill body.
       })) ?? [],
     );
     vi.mocked(handleElectronPromptCommand).mockResolvedValue({ kind: "continue" });
-    vi.mocked(runAgent).mockResolvedValue(`<!DOCTYPE html>
+    vi.mocked(runAgent).mockResolvedValue({ text: `<!DOCTYPE html>
 <html>
   <head><title>Derived Prototype</title></head>
   <body><main>Prototype</main></body>
-</html>`);
+</html>` });
 
     await harness.panel.handleMessage({
       type: "sendPrompt",

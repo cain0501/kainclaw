@@ -10,9 +10,9 @@
 | Metric | Value | Last Updated |
 |--------|-------|--------------|
 | Test files | 171 | 2026-05-06 |
-| Tests passing | 1325 | 2026-05-06 |
+| Tests passing | 1333 | 2026-05-08 |
 | Last verified commit | see `git log --oneline -1` | — |
-| Last clean verification | 2026-05-07 — Midtai slider overlay + project-scoped version history verified (`npm test`, `npm run check`, `npm run build`, `npm run build:electron`, UTF-8 + inline JS check) | — |
+| Last clean verification | 2026-05-08 — Midtai patch no-op 回归修复：DOM 归一化 no-op 检测 + debug 日志 + 回归测试 (`npm test`, `npm run check`, `npm run build:electron`) | — |
 
 **Required passing commands:**
 ```bash
@@ -22,15 +22,20 @@ npm run build
 npm run build:electron   # only when Electron behavior changed
 ```
 
+Latest verification note: 2026-05-07 - codebase-memory-mcp integration verified (`codebase-memory-mcp --version`, MCP `index_repository` / `list_projects` / `search_graph`, `npm test`, `npm run check`, `npm run build`).
+
 ## Active Tasks
 
 | Beads ID | Title | Status | Primer |
 |----------|-------|--------|--------|
+| vscode-extension-9pz | codebase-memory-mcp integration | CLOSED | `.kiro/primers/vscode-extension-9pz.md` |
+| vscode-extension-u7w | 图像我的作品：缩略图持久化（对齐设计列表机制） | ✓ CLOSED | `.kiro/primers/vscode-extension-u7w.md` |
 | vscode-extension-f4v | extension.ts 宿主总控继续下沉 | IN_PROGRESS | `.kiro/primers/vscode-extension-f4v.md` |
 | vscode-extension-3q7 | Midtai 画布：调节/导出/版本历史三项能力接入 | ✓ CLOSED | `.kiro/primers/vscode-extension-3q7.md` |
 | vscode-extension-wnz | Midtai 画布：滑块面板浮层化 + 版本历史按项目过滤 | ✓ CLOSED | `.kiro/primers/vscode-extension-wnz.md` |
-| vscode-extension-ahb | Hooks: Stop + SessionEnd + UserPromptSubmit | OPEN | `.kiro/primers/vscode-extension-ahb.md` |
-| vscode-extension-a41 | Hooks: PostToolUseFailure + PreCompact + PostCompact | OPEN | `.kiro/primers/vscode-extension-a41.md` |
+| vscode-extension-ahb | Hooks: Stop + SessionEnd + UserPromptSubmit | ✓ CLOSED | — |
+| vscode-extension-a41 | Hooks: PostToolUseFailure + PreCompact + PostCompact | ✓ CLOSED | — |
+| vscode-extension-7vl | Hooks: SubagentStart/Stop + TaskCreated/TaskCompleted | OPEN | `.kiro/primers/vscode-extension-7vl.md` |
 | vscode-extension-lca | Hooks: 用户配置接入触发链 | ✓ CLOSED | — |
 | vscode-extension-vwq | Hooks: 官方事件名兼容 + Notification/SessionStart | ✓ CLOSED | — |
 | vscode-extension-pnz | Fast mode: state persistence | ✓ CLOSED | — |
@@ -71,6 +76,7 @@ npm run build:electron   # only when Electron behavior changed
 - Worktree phase 1
 - Hooks execution chain (user .cain/hooks.json 接入触发链 / PreToolUse 官方别名 / Notification + SessionStart 事件)
 - Custom Agents registry / Skills registry
+- codebase-memory-mcp integration (global install, project indexed as `E-claudecodejingiang-vscode-extension`, `auto_index=true`, repo `AGENTS.md` index-first guidance)
 - User modeling
 - KainClaw Design (generate / iframe / sliders 右侧抽屉 / canvas toolbar / patch popover 贴近元素 + selector 定位 / 左侧面板 A/B / version history / export HTML+PDF+PPTX / lastOpenedProjectId 跨 session)
 - Electron artifact panel persistence (collapse / restore strip / per-session collapsed state / version navigation)
