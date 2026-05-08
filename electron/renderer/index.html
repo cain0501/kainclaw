@@ -5930,11 +5930,11 @@ function renderDesignCritiqueChip(state) {
     </div>
     <div id="design-critique-detail" style="display:none;padding:0 12px 12px;border-top:1px solid #f0ebe4">
       ${dimensions.map(item => `
-        <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;padding:5px 0;border-bottom:1px solid #f5f0eb">
-          <span style="color:#57534e">${escapeHtml(String(item.name || ''))}</span>
-          <div style="display:flex;align-items:center;gap:6px;min-width:0">
-            <span style="color:${Number(item.score || 0) >= 4 ? '#16a34a' : Number(item.score || 0) >= 3 ? '#d97706' : '#dc2626'};font-weight:600">${escapeHtml(String(item.score || 0))}/5</span>
-            <span style="color:#a8a29e;font-size:11px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:120px">${escapeHtml(String(item.comment || ''))}</span>
+        <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:6px;padding:6px 0;border-bottom:1px solid #f5f0eb">
+          <span style="color:#57534e;flex-shrink:0">${escapeHtml(String(item.name || ''))}</span>
+          <div style="display:flex;flex-direction:column;align-items:flex-end;gap:2px;min-width:0">
+            <span style="color:${Number(item.score || 0) >= 4 ? '#16a34a' : Number(item.score || 0) >= 3 ? '#d97706' : '#dc2626'};font-weight:600;flex-shrink:0">${escapeHtml(String(item.score || 0))}/5</span>
+            <span style="color:#a8a29e;font-size:11px;line-height:1.4;text-align:right">${escapeHtml(String(item.comment || ''))}</span>
           </div>
         </div>`).join('')}
       ${suggestion ? `
@@ -5955,6 +5955,12 @@ function toggleCritiqueChip() {
 function applyDesignCritiqueSuggestion(stylePrompt) {
   if (!stylePrompt) return;
   midtaiState.designDirection = stylePrompt;
+  renderMidtaiDirectionPicker();
+  // 清空旧评审，新生成完成后会触发新一轮评审
+  designBridgeState.critique = null;
+  designBridgeState.critiqueLoading = false;
+  const chip = document.getElementById('design-critique-chip');
+  if (chip) chip.style.display = 'none';
   generateDesignWorkbench();
 }
 
