@@ -1233,6 +1233,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-seri
                 <div id="midtai-canvas-empty" class="midtai-canvas-title" style="display:flex;align-items:center;justify-content:center;flex:1;color:#a8998a;font-size:13px">暂无设计内容</div>
               </div>
               <div id="midtai-sliders-panel" style="display:none;position:fixed;z-index:9998;width:260px;max-height:70vh;background:rgba(255,255,255,.97);border:1px solid #eadfd2;border-radius:12px;padding:0;overflow:hidden;box-shadow:0 8px 24px rgba(0,0,0,.14);top:80px;right:24px"></div>
+              <div id="design-canvas-critique-float" style="display:none;position:fixed;z-index:9999;width:288px;max-height:calc(100vh - 100px);overflow-y:auto;background:#fffdfb;border:1px solid #e5ddd0;border-radius:12px;box-shadow:0 4px 20px rgba(0,0,0,.16);top:80px;right:24px;font-size:12px"></div>
             </div>
             <div id="midtai-node-panel" style="display:none;position:fixed;z-index:9999;width:220px;background:#fff;border:1px solid #e5ddd0;border-radius:10px;box-shadow:0 8px 24px rgba(0,0,0,.12);padding:12px">
               <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
@@ -1993,6 +1994,7 @@ const designBridgeState = {
   versionId: null,
   critique: null,
   critiqueLoading: false,
+  critiqueSource: 'auto',
   directionSuggestions: [],
   suggestionVisible: false,
   referenceImage: null,
@@ -2833,15 +2835,29 @@ function handleMessage(msg) {
       renderDesignBridgePage();
       break;
     case 'design:critiqueStarted':
-      renderDesignCritiqueChip({ loading: true });
+      if (designBridgeState.critiqueSource === 'manual') {
+        renderDesignCritiqueFloat({ loading: true });
+      } else {
+        renderDesignCritiqueChip({ loading: true });
+      }
       break;
     case 'design:critiqueResult':
-      renderDesignCritiqueChip({ loading: false, critique: msg.critique });
+      if (designBridgeState.critiqueSource === 'manual') {
+        renderDesignCritiqueFloat({ loading: false, critique: msg.critique });
+      } else {
+        renderDesignCritiqueChip({ loading: false, critique: msg.critique });
+      }
       break;
     case 'design:critiqueError':
       designBridgeState.critiqueLoading = false;
       designBridgeState.critique = null;
-      renderDesignBridgePage();
+      if (designBridgeState.critiqueSource === 'manual') {
+        const floatEl = document.getElementById('design-canvas-critique-float');
+        if (floatEl) floatEl.style.display = 'none';
+        designBridgeState.critiqueSource = 'auto';
+      } else {
+        renderDesignBridgePage();
+      }
       break;
     case 'design:error':
       console.log('[KC-R] design:error received', { message: String(msg.message || '') });
@@ -3487,6 +3503,18 @@ function showImgView(view) {
 }
 
 function showDesignView(view) {
+  // 有已生成内容且非加载中时，"生成预览"直接显示 canvas（不重建 iframe）
+  if (view === 'design-preview' && designBridgeState.html && !designBridgeState.loading) {
+    midtaiState.designTabView = 'canvas';
+    ['design-preview', 'design-works', 'canvas', 'design-plib'].forEach(v => {
+      const el = document.getElementById('view-' + v);
+      if (el) el.style.display = v === 'canvas' ? '' : 'none';
+    });
+    document.querySelectorAll('#mtbar-design .mt-tab').forEach(btn => {
+      btn.classList.toggle('active', btn.dataset.view === 'design-preview');
+    });
+    return;
+  }
   midtaiState.designTabView = view;
   ['design-preview', 'design-works', 'canvas', 'design-plib'].forEach(currentView => {
     const element = document.getElementById('view-' + currentView);
@@ -3495,7 +3523,9 @@ function showDesignView(view) {
     }
   });
   document.querySelectorAll('#mtbar-design .mt-tab').forEach(button => {
-    button.classList.toggle('active', button.dataset.view === view);
+    // canvas 视图时高亮「生成预览」tab
+    const activeView = view === 'canvas' ? 'design-preview' : view;
+    button.classList.toggle('active', button.dataset.view === activeView);
   });
   // tab bar 在 canvas 视图也保持可见，让用户能切回生成预览/我的作品
   if (view === 'design-works') {
@@ -5970,13 +6000,71 @@ function requestManualCritique() {
   if (!html) return;
   const prompt = designBridgeState.prompt || '';
   const outputType = designBridgeState.outputType || 'prototype';
-  // 清空旧评审，显示 loading chip
-  designBridgeState.critique = null;
-  designBridgeState.critiqueLoading = false;
-  renderDesignCritiqueChip({ loading: true });
-  // 切回生成预览 Tab 让用户看到 chip
-  showDesignView('design-preview');
+  designBridgeState.critiqueSource = 'manual';
+  renderDesignCritiqueFloat({ loading: true });
   send({ type: 'design:requestCritique', html, prompt, outputType });
+}
+
+function renderDesignCritiqueFloat(state) {
+  const nextState = state && typeof state === 'object' ? state : {};
+  const container = document.getElementById('design-canvas-critique-float');
+  if (!container) return;
+
+  if (nextState.loading) {
+    container.style.display = 'block';
+    container.innerHTML = `
+      <div style="padding:12px 14px;display:flex;align-items:center;justify-content:space-between">
+        <span style="font-size:11px;color:#a8a29e">✦ AI 质量评审中…</span>
+        <button onclick="closeDesignCritiqueFloat()" style="border:none;background:none;cursor:pointer;color:#a8a29e;font-size:18px;padding:0 2px;line-height:1">×</button>
+      </div>`;
+    return;
+  }
+
+  const critique = nextState.critique;
+  if (!critique || !Array.isArray(critique.dimensions) || critique.dimensions.length === 0) {
+    container.style.display = 'none';
+    return;
+  }
+
+  const dimensions = critique.dimensions.filter(item => item && typeof item === 'object');
+  const avgValue = dimensions.reduce((sum, item) => sum + Number(item.score || 0), 0) / dimensions.length;
+  const avgScore = avgValue.toFixed(1);
+  const scoreColor = avgValue >= 4 ? '#16a34a' : avgValue >= 3 ? '#d97706' : '#dc2626';
+  const lowestDimension = String(critique.lowestDimension || '').trim();
+  const suggestion = String(critique.suggestion || '').trim();
+  const suggestedStyle = typeof critique.suggestedStyle === 'string' ? critique.suggestedStyle : '';
+
+  container.style.display = 'block';
+  container.innerHTML = `
+    <div style="padding:10px 14px;display:flex;align-items:center;justify-content:space-between;background:#fdfcfb;border-bottom:1px solid #f0ebe4;border-radius:12px 12px 0 0;position:sticky;top:0">
+      <span style="font-size:11px;color:#78716c;font-weight:600">✦ AI 质量评审</span>
+      <div style="display:flex;align-items:center;gap:8px">
+        <span style="font-size:13px;font-weight:700;color:${scoreColor}">${avgScore}/5</span>
+        <button onclick="closeDesignCritiqueFloat()" style="border:none;background:none;cursor:pointer;color:#a8a29e;font-size:18px;padding:0 2px;line-height:1">×</button>
+      </div>
+    </div>
+    <div style="padding:8px 14px 12px">
+      ${dimensions.map(item => `
+        <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:6px;padding:6px 0;border-bottom:1px solid #f5f0eb">
+          <span style="color:#57534e;flex-shrink:0">${escapeHtml(String(item.name || ''))}</span>
+          <div style="display:flex;flex-direction:column;align-items:flex-end;gap:2px;min-width:0">
+            <span style="color:${Number(item.score || 0) >= 4 ? '#16a34a' : Number(item.score || 0) >= 3 ? '#d97706' : '#dc2626'};font-weight:600;flex-shrink:0">${escapeHtml(String(item.score || 0))}/5</span>
+            <span style="color:#a8a29e;font-size:11px;line-height:1.4;text-align:right">${escapeHtml(String(item.comment || ''))}</span>
+          </div>
+        </div>`).join('')}
+      ${suggestion ? `
+        <div style="margin-top:10px;padding:8px 10px;background:#fff8f5;border-radius:7px;border:1px solid #fde8d8">
+          <div style="font-size:11px;color:#a8a29e;margin-bottom:4px">改进建议 · ${escapeHtml(lowestDimension)}</div>
+          <div style="color:#2d1f14;line-height:1.5">${escapeHtml(suggestion)}</div>
+          ${suggestedStyle ? `<button onclick="applyDesignCritiqueSuggestion('${escapeHtml(suggestedStyle)}')" style="margin-top:8px;font-size:11px;color:#c9502e;border:1px solid #c9502e;background:#fff;border-radius:6px;padding:3px 10px;cursor:pointer">试试这个方向</button>` : ''}
+        </div>` : ''}
+    </div>`;
+}
+
+function closeDesignCritiqueFloat() {
+  const container = document.getElementById('design-canvas-critique-float');
+  if (container) container.style.display = 'none';
+  designBridgeState.critiqueSource = 'auto';
 }
 
 function renderDesignDirectionPanel(panel) {
