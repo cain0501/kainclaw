@@ -440,6 +440,8 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-seri
 .midtai-img-card{background:#fff;border:1px solid #eadfd2;border-radius:18px;overflow:hidden;box-shadow:0 12px 24px rgba(77,49,24,.07)}
 .midtai-img-thumb-wrap{width:100%;aspect-ratio:1/1;overflow:hidden;background:#f5efe8}
 .midtai-img-thumb{width:100%;height:100%;object-fit:cover;display:block}
+.midtai-img-card.single-result{max-width:320px;margin:0 auto}
+.midtai-img-card.single-result .midtai-img-thumb-wrap{width:100%;max-width:220px;margin:18px auto 0;border-radius:14px;aspect-ratio:1/1;background:#f5efe8}
 .midtai-img-card-body{padding:12px 12px 10px}
 .midtai-img-card-copy{font-size:12px;color:#5f4f43;line-height:1.6;min-height:58px}
 .midtai-img-actions{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:10px}
@@ -1078,6 +1080,20 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-seri
               <label class="midtai-form-label" for="midtai-img-prompt">图像描述</label>
               <textarea id="midtai-img-prompt" class="midtai-form-textarea" placeholder="描述你想要的图像..."></textarea>
             </div>
+            <div style="display:flex;justify-content:flex-end;margin-top:4px;margin-bottom:8px">
+              <button type="button" onclick="toggleMidtaiPromptHistory()" style="font-size:11px;color:#78716c;background:none;border:none;cursor:pointer;padding:0">历史提示词 ▾</button>
+            </div>
+            <div id="midtai-prompt-history" style="display:none;max-height:160px;overflow-y:auto;border:1px solid #eadfd2;border-radius:8px;background:#fff;margin-bottom:8px"></div>
+            <div id="midtai-img-refs" style="margin-bottom:10px">
+              <div style="font-size:11px;color:#78716c;margin-bottom:6px">参考图（可选，最多 4 张）</div>
+              <div id="midtai-img-ref-list" style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:6px"></div>
+              <label id="midtai-img-ref-trigger" style="cursor:pointer;font-size:11px;color:#c9502e;border:1px dashed #c9502e;border-radius:6px;padding:4px 10px;display:inline-block">
+                <span id="midtai-img-ref-trigger-text">+ 上传参考图</span>
+                <input type="file" id="midtai-img-ref-input" accept="image/*" multiple style="display:none" onchange="handleMidtaiImageRefUpload(event)">
+              </label>
+              <button id="midtai-infer-prompt-btn" type="button" onclick="inferMidtaiPrompt()" style="font-size:11px;color:#78716c;border:1px solid #eadfd2;background:#fff;border-radius:6px;padding:4px 10px;cursor:pointer;display:none">✦ AI 反推描述</button>
+              <div id="midtai-img-ref-meta" style="margin-top:6px;font-size:11px;color:#8b7969;line-height:1.5">未上传参考图，最多 4 张。</div>
+            </div>
             <div class="midtai-form-group">
               <label class="midtai-form-label">比例</label>
               <div class="midtai-ratio-row">
@@ -1113,6 +1129,17 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-seri
             <div class="midtai-form-group">
               <label class="midtai-form-label">设计需求</label>
               <textarea id="midtai-design-prompt" class="midtai-form-textarea" placeholder="在这里填写设计需求…"></textarea>
+            </div>
+            <div style="margin-bottom:10px">
+              <div style="font-size:11px;color:#78716c;margin-bottom:6px">参考图（可选）</div>
+              <div id="midtai-design-ref-preview" style="display:none;margin-bottom:6px;position:relative;width:80px;height:60px">
+                <img id="midtai-design-ref-img" alt="design reference" style="width:80px;height:60px;object-fit:cover;border-radius:6px;border:1px solid #eadfd2">
+                <button type="button" onclick="clearMidtaiDesignRef()" style="position:absolute;top:-4px;right:-4px;width:16px;height:16px;border-radius:50%;background:#c9502e;color:#fff;border:none;cursor:pointer;font-size:10px;line-height:1;padding:0">×</button>
+              </div>
+              <label id="midtai-design-ref-label" style="cursor:pointer;font-size:11px;color:#c9502e;border:1px dashed #c9502e;border-radius:6px;padding:4px 10px;display:inline-block">
+                + 上传参考图
+                <input type="file" id="midtai-design-ref-input" accept="image/*" style="display:none" onchange="handleMidtaiDesignRefUpload(event)">
+              </label>
             </div>
             <div class="midtai-form-group">
               <label class="midtai-form-label">视觉方向 <span style="color:#a8a29e;font-weight:400;text-transform:none">（可不选）</span></label>
@@ -1210,6 +1237,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-seri
               <div id="mnp-patch-actions" style="display:none">
                 <div style="font-size:11px;font-weight:600;color:#78716c;margin-bottom:8px">改写元素</div>
                 <textarea id="mnp-patch-comment" placeholder="描述改写要求…" style="width:100%;min-height:72px;border:1px solid #eadfd2;border-radius:8px;padding:8px;background:#fff;color:#2d1f14;font-family:inherit;font-size:12px;resize:vertical;line-height:1.5;box-sizing:border-box;margin-bottom:8px"></textarea>
+                <div id="mnp-patch-status" style="display:none;margin-bottom:8px;font-size:11px;line-height:1.5;color:#7b4a2e"></div>
                 <div style="display:flex;gap:6px;justify-content:flex-end">
                   <button class="btn-secondary" style="font-size:11px;padding:5px 10px" onclick="hideMidtaiNodePanel()">取消</button>
                   <button id="mnp-patch-apply-btn" class="btn-red" style="font-size:11px;padding:5px 10px" onclick="applyMidtaiCanvasPatch()">应用改写</button>
@@ -1914,12 +1942,30 @@ function getDesignPatchGeneratingStatusText() {
   return isEnglishUi() ? '✦ Generating the rewrite...' : '✦ 正在生成改写内容...';
 }
 
+function getDesignPatchTokenStatusText(count) {
+  if (typeof count !== 'number' || !Number.isFinite(count)) {
+    return getDesignPatchGeneratingStatusText();
+  }
+  const formattedCount = Math.max(0, Math.floor(count)).toLocaleString();
+  return isEnglishUi()
+    ? `✦ Generating... ${formattedCount} chars`
+    : `✦ 生成中... 已生成 ${formattedCount} 字符`;
+}
+
 function setDesignPatchStatus(message) {
   designBridgeState.patchStatusText = String(message || '');
 }
 
 function clearDesignPatchStatus() {
   designBridgeState.patchStatusText = '';
+}
+
+function syncMidtaiPatchStatus() {
+  const statusEl = document.getElementById('mnp-patch-status');
+  if (!statusEl) return;
+  const patchStatusText = String(designBridgeState.patchStatusText || '').trim();
+  statusEl.textContent = patchStatusText;
+  statusEl.style.display = patchStatusText ? 'block' : 'none';
 }
 
 const designHomeState = {
@@ -2635,6 +2681,15 @@ function handleMessage(msg) {
         break;
       }
       setDesignPatchStatus(getDesignPatchGeneratingStatusText());
+      syncMidtaiPatchStatus();
+      renderDesignBridgePage();
+      break;
+    case 'design:patchToken':
+      if (!designBridgeState.patchLoading) {
+        break;
+      }
+      setDesignPatchStatus(getDesignPatchTokenStatusText(msg.count));
+      syncMidtaiPatchStatus();
       renderDesignBridgePage();
       break;
     case 'design:patchResult':
@@ -2649,7 +2704,8 @@ function handleMessage(msg) {
       designBridgeState.patchLoading = false;
       designBridgeState.selectedNode = null;
       designBridgeState.error = '';
-      clearDesignPatchStatus();
+      const patchCompleteStatus = isEnglishUi() ? '✓ Rewrite complete' : '✓ 改写完成';
+      setDesignPatchStatus(patchCompleteStatus);
       designBridgeState.canvasMode = 'view';
       designBridgeState.versionId = msg.versionId || designBridgeState.versionId || null;
       designBridgeState.renderToken = Date.now();
@@ -2662,11 +2718,22 @@ function handleMessage(msg) {
         if (mnpBtn) { mnpBtn.disabled = false; mnpBtn.textContent = '应用改写'; }
       }
       if (document.getElementById('page-midtai')?.classList.contains('active')) {
-        hideMidtaiNodePanel();
+        syncMidtaiPatchStatus();
         openCanvas(designBridgeState.title);
       } else {
         renderDesignBridgePage();
       }
+      setTimeout(() => {
+        if (designBridgeState.patchStatusText !== patchCompleteStatus) {
+          return;
+        }
+        clearDesignPatchStatus();
+        syncMidtaiPatchStatus();
+        if (document.getElementById('page-midtai')?.classList.contains('active')) {
+          hideMidtaiNodePanel();
+        }
+        renderDesignBridgePage();
+      }, 800);
       loadDesignVersions();
       break;
     case 'design:versions':
@@ -2699,6 +2766,7 @@ function handleMessage(msg) {
       designBridgeState.loading = false;
       designBridgeState.patchLoading = false;
       clearDesignPatchStatus();
+      syncMidtaiPatchStatus();
       designBridgeState.error = String(msg.message || (isEnglishUi() ? 'Design generation failed.' : '设计生成失败。'));
       { const mnpBtnE = document.getElementById('mnp-patch-apply-btn'); if (mnpBtnE) { mnpBtnE.disabled = false; mnpBtnE.textContent = '应用改写'; } }
       { const dpvC = document.getElementById('dpv-loading-counter'); if (dpvC) dpvC.textContent = isEnglishUi() ? 'Usually takes 10~30 seconds' : '通常需要 10~30 秒'; }
@@ -2792,6 +2860,7 @@ function handleMessage(msg) {
       break;
     case 'image:result':
       imageLabState.pendingBatch = null;
+      midtaiState.imgPreviewRequestNonce = 0;
       imageLabState.resultBatches = Array.isArray(msg.resultBatches) ? msg.resultBatches : imageLabState.resultBatches;
       if (Array.isArray(msg.resultBatches)) {
         for (const batch of msg.resultBatches) {
@@ -2835,6 +2904,7 @@ function handleMessage(msg) {
       break;
     case 'image:error':
       imageLabState.pendingBatch = null;
+      midtaiState.imgPreviewRequestNonce = 0;
       promptLibraryInference.loading = false;
       if (
         msg.requestId &&
@@ -2854,6 +2924,7 @@ function handleMessage(msg) {
       break;
     case 'image:aborted':
       imageLabState.pendingBatch = null;
+      midtaiState.imgPreviewRequestNonce = 0;
       renderImageLabResults();
       setImageLabStatus(String(msg.message || '已停止当前图片生成。'));
       if (document.getElementById('page-midtai')?.classList.contains('active') && midtaiState.type === 'img') {
@@ -2866,7 +2937,18 @@ function handleMessage(msg) {
         document.getElementById('chat-image-editor-input').focus();
       } else {
         document.getElementById('imglab-prompt').value = String(msg.prompt || '').trim();
+        const midtaiPromptEl = document.getElementById('midtai-img-prompt');
+        if (midtaiPromptEl && typeof msg.prompt === 'string') {
+          midtaiPromptEl.value = msg.prompt.trim();
+        }
         document.getElementById('imglab-prompt').focus();
+      }
+      {
+        const btn = document.getElementById('midtai-infer-prompt-btn');
+        if (btn) {
+          btn.disabled = false;
+          btn.textContent = '✦ AI 反推描述';
+        }
       }
       setImageLabStatus('已根据参考图反推出提示词。');
       break;
@@ -3262,6 +3344,7 @@ function switchMidtaiType(type) {
 function showImgView(view) {
   if (view !== 'img-works') midtaiThumbsToken++;
   midtaiState.imgTabView = view;
+  renderMidtaiImageRefList();
   ['img-preview', 'img-works', 'img-plib'].forEach(currentView => {
     const element = document.getElementById('view-' + currentView);
     if (element) {
@@ -3677,17 +3760,8 @@ function buildMidtaiCanvasSrcdoc(html) {
 
   document.addEventListener('click', function(e) {
     if (!window.__kcSelectMode) return;
-    const target = e.target;
-    if (!target || target === document.documentElement) return;
-    // Prefer image/bg-image elements; fall back to the clicked target
-    let found = target;
-    let node = target;
-    for (let i = 0; i < 6 && node && node !== document.documentElement; i++) {
-      if (node.tagName === 'IMG') { found = node; break; }
-      const bg = window.getComputedStyle(node).backgroundImage;
-      if (bg && bg !== 'none' && bg !== '') { found = node; break; }
-      node = node.parentElement;
-    }
+    const found = e.target instanceof Element ? e.target.closest('body *') : null;
+    if (!found) return;
     e.preventDefault();
     e.stopPropagation();
     if (window.__kcPrevSelected) {
@@ -3697,9 +3771,12 @@ function buildMidtaiCanvasSrcdoc(html) {
     found.style.outlineOffset = '2px';
     window.__kcPrevSelected = found;
     const rect = found.getBoundingClientRect();
+    const isImg = found.tagName === 'IMG' ||
+      (window.getComputedStyle(found).backgroundImage || '').includes('url(');
     window.parent.postMessage({
       type: '__midtai_node_selected',
       tagName: found.tagName,
+      isImg: isImg,
       src: found.src || readBackgroundImageUrl(found) || '',
       selector: buildSelector(found),
       outerHTML: (found.outerHTML || '').slice(0, 300),
@@ -3758,17 +3835,23 @@ function showMidtaiNodePanel(node, isImg) {
   }
   if (imageActions) imageActions.style.display = isImg ? 'block' : 'none';
   if (patchActions) patchActions.style.display = isImg ? 'none' : 'block';
+  syncMidtaiPatchStatus();
   if (panel) panel.style.display = 'block';
 }
 
 function hideMidtaiNodePanel() {
   const panel = document.getElementById('midtai-node-panel');
   const tag = document.getElementById('mnp-tag');
+  const statusEl = document.getElementById('mnp-patch-status');
   if (panel) {
     panel.style.display = 'none';
   }
   if (tag) {
     tag.textContent = '';
+  }
+  if (statusEl) {
+    statusEl.textContent = '';
+    statusEl.style.display = 'none';
   }
 }
 
@@ -3777,6 +3860,10 @@ function applyMidtaiCanvasPatch() {
   if (!comment || !designBridgeState.selectedNode) return;
   const applyBtn = document.getElementById('mnp-patch-apply-btn');
   if (applyBtn) { applyBtn.disabled = true; applyBtn.textContent = '改写中…'; }
+  designBridgeState.patchLoading = true;
+  designBridgeState.error = '';
+  setDesignPatchStatus(getDesignPatchAnalyzingStatusText());
+  syncMidtaiPatchStatus();
   send({
     type: 'design:patch',
     html: designBridgeState.html,
@@ -3820,8 +3907,10 @@ function handleMidtaiCanvasFrameMessage(event) {
     : null;
   midtaiState.selectedCanvasNode = node;
   designBridgeState.selectedNode = node;
-  const isImgNode = String(payload.tagName || '').toUpperCase() === 'IMG' ||
-    (typeof payload.src === 'string' && payload.src.length > 0);
+  const isImgNode = typeof payload.isImg === 'boolean'
+    ? payload.isImg
+    : String(payload.tagName || '').toUpperCase() === 'IMG' ||
+      (typeof payload.src === 'string' && payload.src.length > 0);
   if (node) {
     showMidtaiNodePanel(node, isImgNode);
     const mcFrame = document.getElementById('midtai-canvas-iframe');
@@ -3987,9 +4076,203 @@ function runMidtaiImage() {
   if (batchEl) {
     batchEl.value = String(midtaiState.imgCount || 1);
   }
+  midtaiState.imgPreviewRequestNonce = Date.now();
   midtaiState.imgPreviewSession = true;
   imgSwitchView('preview');
   runImageLab();
+}
+
+function stopMidtaiImage() {
+  stopImageLab();
+}
+
+function rerunMidtaiImage() {
+  if (!imageLabState.lastRequest) {
+    setImageLabStatus('还没有可重生成的图片请求。', true);
+    return;
+  }
+
+  const promptEl = document.getElementById('midtai-img-prompt');
+  if (promptEl && imageLabState.lastRequest.prompt) {
+    promptEl.value = imageLabState.lastRequest.prompt;
+  }
+
+  const size = String(imageLabState.lastRequest.size || midtaiState.imgSize || '1024x1024').trim();
+  const batchCount = Math.max(1, Math.min(4, Number(imageLabState.lastRequest.batchCount || midtaiState.imgCount || 1)));
+  setMidtaiImageSize(size);
+  setMidtaiImageCount(batchCount);
+  runMidtaiImage();
+}
+
+function handleMidtaiImageRefUpload(event) {
+  const files = Array.from(event.target?.files || []);
+  if (files.length === 0) {
+    return;
+  }
+
+  const remainingSlots = Math.max(0, 4 - imageLabState.referenceImages.length);
+  if (remainingSlots === 0) {
+    event.target.value = '';
+    setImageLabStatus('参考图组最多保留 4 张。请先移除一张再继续添加。', true);
+    renderMidtaiImageRefList();
+    return;
+  }
+
+  const nextFiles = files.slice(0, remainingSlots);
+  const ignoredCount = files.length - nextFiles.length;
+  Promise.all(nextFiles.map(file => new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = loadEvent => resolve({
+      dataUrl: loadEvent.target?.result,
+      mimeType: file.type || 'image/png',
+      name: file.name || 'reference.png',
+    });
+    reader.onerror = () => reject(reader.error);
+    reader.readAsDataURL(file);
+  })))
+    .then(referenceImages => {
+      imageLabState.referenceImages = mergeImageLabReferenceImages(
+        imageLabState.referenceImages,
+        referenceImages.filter(referenceImage => typeof referenceImage?.dataUrl === 'string'),
+      );
+      invalidateImageWorkflowPlan();
+      event.target.value = '';
+      renderMidtaiImageRefList();
+      setImageLabStatus(
+        ignoredCount > 0
+          ? `已加入 ${nextFiles.length} 张参考图；最多保留 4 张，另外 ${ignoredCount} 张未加入。`
+          : `已加入 ${nextFiles.length} 张参考图，现在可按多图参考继续改图。`,
+      );
+    })
+    .catch(error => {
+      event.target.value = '';
+      setImageLabStatus(`载入参考图失败：${error instanceof Error ? error.message : String(error)}`, true);
+    });
+}
+
+function renderMidtaiImageRefList() {
+  const list = document.getElementById('midtai-img-ref-list');
+  const meta = document.getElementById('midtai-img-ref-meta');
+  const trigger = document.getElementById('midtai-img-ref-trigger');
+  const triggerText = document.getElementById('midtai-img-ref-trigger-text');
+  const inferBtn = document.getElementById('midtai-infer-prompt-btn');
+  if (!list) return;
+  const refs = imageLabState.referenceImages || [];
+  if (meta) {
+    meta.textContent = refs.length
+      ? `当前已添加 ${refs.length} 张参考图。点击缩略图右上角 × 可移除。`
+      : '未上传参考图，最多 4 张。';
+  }
+  if (triggerText) {
+    triggerText.textContent = refs.length >= 4 ? '已达 4 张上限' : '+ 上传参考图';
+  }
+  if (trigger) {
+    trigger.style.opacity = refs.length >= 4 ? '.6' : '1';
+  }
+  if (inferBtn) {
+    inferBtn.style.display = refs.length > 0 ? 'inline-block' : 'none';
+    if (!imageLabState.promptInferenceBusy) {
+      inferBtn.disabled = false;
+      inferBtn.textContent = '✦ AI 反推描述';
+    }
+  }
+  list.innerHTML = refs.map((ref, index) => `
+    <div title="${escapeHtml(ref.name || `参考图 ${index + 1}`)}" style="position:relative;width:48px;height:48px">
+      <img src="${ref.dataUrl}" alt="${escapeHtml(ref.name || `reference-${index + 1}`)}" style="width:48px;height:48px;object-fit:cover;border-radius:4px;border:1px solid #eadfd2">
+      <button type="button" title="移除这张参考图" aria-label="移除参考图 ${index + 1}" onclick="removeMidtaiImageRef(${index})" style="position:absolute;top:-6px;right:-6px;width:18px;height:18px;border-radius:50%;background:#c9502e;color:#fff;border:1px solid #fff;box-shadow:0 1px 4px rgba(0,0,0,.18);cursor:pointer;font-size:12px;font-weight:700;line-height:1;padding:0;display:flex;align-items:center;justify-content:center;z-index:2">×</button>
+    </div>
+  `).join('');
+}
+
+function removeMidtaiImageRef(index) {
+  if (index < 0 || index >= imageLabState.referenceImages.length) return;
+  const removed = imageLabState.referenceImages[index];
+  imageLabState.referenceImages = imageLabState.referenceImages.filter((_, currentIndex) => currentIndex !== index);
+  invalidateImageWorkflowPlan();
+  const input = document.getElementById('midtai-img-ref-input');
+  if (input) input.value = '';
+  renderMidtaiImageRefList();
+  setImageLabStatus(`已移除参考图：${removed?.name || `第 ${index + 1} 张`}`);
+}
+
+function inferMidtaiPrompt() {
+  const refs = imageLabState.referenceImages || [];
+  if (!refs.length) return;
+  const imglabPromptEl = document.getElementById('imglab-prompt');
+  const midtaiPromptEl = document.getElementById('midtai-img-prompt');
+  if (imglabPromptEl && midtaiPromptEl) {
+    imglabPromptEl.value = String(midtaiPromptEl.value || '').trim();
+  }
+  const btn = document.getElementById('midtai-infer-prompt-btn');
+  if (btn) {
+    btn.disabled = true;
+    btn.textContent = '分析中…';
+  }
+  inferImageLabPrompt();
+}
+
+function toggleMidtaiPromptHistory() {
+  const panel = document.getElementById('midtai-prompt-history');
+  if (!panel) return;
+  if (panel.style.display === 'none') {
+    renderMidtaiPromptHistory();
+    panel.style.display = 'block';
+  } else {
+    panel.style.display = 'none';
+  }
+}
+
+function renderMidtaiPromptHistory() {
+  const panel = document.getElementById('midtai-prompt-history');
+  if (!panel) return;
+  const history = imageLabState.promptHistory || [];
+  if (!history.length) {
+    panel.innerHTML = '<div style="padding:12px;font-size:12px;color:#a8a29e;text-align:center">暂无历史提示词</div>';
+    return;
+  }
+  panel.innerHTML = [
+    `<div style="display:flex;justify-content:flex-end;padding:6px 8px 0">
+      <button onclick="clearMidtaiPromptHistory()" style="font-size:11px;color:#a8a29e;background:none;border:none;cursor:pointer">清空</button>
+    </div>`,
+    ...history.map((item, index) => {
+      const text = typeof item === 'string' ? item : (item?.prompt || '');
+      const preview = escapeHtml(text.slice(0, 40) + (text.length > 40 ? '…' : ''));
+      return `<div style="display:flex;align-items:center;padding:6px 10px;gap:6px;border-bottom:1px solid #f5f0eb;cursor:pointer" onclick="useMidtaiPromptHistory(${index})">
+        <span style="flex:1;font-size:12px;color:#2d1f14">${preview}</span>
+        <button onclick="event.stopPropagation();deleteMidtaiPromptHistory(${index})" style="font-size:11px;color:#a8a29e;background:none;border:none;cursor:pointer;padding:0 4px">×</button>
+      </div>`;
+    }),
+  ].join('');
+}
+
+function useMidtaiPromptHistory(index) {
+  const history = imageLabState.promptHistory || [];
+  const item = history[index];
+  const text = typeof item === 'string' ? item : (item?.prompt || '');
+  const promptEl = document.getElementById('midtai-img-prompt');
+  if (promptEl && text) {
+    promptEl.value = text;
+  }
+  const panel = document.getElementById('midtai-prompt-history');
+  if (panel) {
+    panel.style.display = 'none';
+  }
+}
+
+function deleteMidtaiPromptHistory(index) {
+  const history = imageLabState.promptHistory || [];
+  const item = history[index];
+  const text = typeof item === 'string' ? item : (item?.prompt || '');
+  if (!text) return;
+  send({ type: 'image:deleteHistoryPrompt', prompt: text });
+  imageLabState.promptHistory = history.filter((_, currentIndex) => currentIndex !== index);
+  renderMidtaiPromptHistory();
+}
+
+function clearMidtaiPromptHistory() {
+  send({ type: 'image:clearHistory' });
+  imageLabState.promptHistory = [];
+  renderMidtaiPromptHistory();
 }
 
 function renderMidtaiImagePreview() {
@@ -4059,14 +4342,31 @@ function renderMidtaiImagePreview() {
   })() : '';
 
   const sortedBatches = [...batches].sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
-  const latestBatch = sortedBatches[0];
+  const latestBatch = pendingBatch
+    ? sortedBatches[0]
+    : (midtaiState.imgPreviewRequestNonce ? null : sortedBatches[0]);
   const latestImages = latestBatch ? (latestBatch.items || []) : [];
+  const actionBarHtml = imageLabState.busy
+    ? `
+      <div style="display:flex;justify-content:flex-end;padding:8px 16px 0">
+        <button onclick="stopMidtaiImage()" style="font-size:12px;color:#c9502e;border:1px solid #c9502e;background:#fff;border-radius:6px;padding:4px 12px;cursor:pointer">■ 停止生成</button>
+      </div>
+    `
+    : (batches.length > 0
+      ? `
+        <div style="display:flex;justify-content:flex-end;padding:8px 16px 0">
+          <button onclick="rerunMidtaiImage()" style="font-size:12px;color:#78716c;border:1px solid #eadfd2;background:#fff;border-radius:6px;padding:4px 12px;cursor:pointer">↻ 重新生成</button>
+        </div>
+      `
+      : '');
 
   const imageCards = latestImages.map(result => {
     const prompt = escapeHtml(result.revisedPrompt || result.prompt || latestBatch.prompt || '');
     return `
-      <div class="midtai-img-card">
-        <img loading="lazy" src="${result.src}" class="midtai-img-thumb" alt="generated">
+      <div class="midtai-img-card${latestImages.length === 1 ? ' single-result' : ''}">
+        <div class="midtai-img-thumb-wrap">
+          <img loading="lazy" src="${result.src}" class="midtai-img-thumb" alt="generated">
+        </div>
         <div class="midtai-img-card-body">
           <div class="midtai-img-card-copy">${prompt.slice(0, 96)}</div>
           <div class="midtai-img-actions">
@@ -4085,13 +4385,17 @@ function renderMidtaiImagePreview() {
   }).join('');
 
   const colCount = latestImages.length === 1 ? 1 : latestImages.length === 2 ? 2 : latestImages.length === 3 ? 3 : 2;
-  const gridStyle = `display:grid;grid-template-columns:repeat(${colCount},1fr);gap:12px;padding:16px`;
+  const gridStyle = latestImages.length === 1
+    ? 'display:grid;grid-template-columns:minmax(0,360px);justify-content:center;gap:12px;padding:16px'
+    : `display:grid;grid-template-columns:repeat(${colCount},1fr);gap:12px;padding:16px`;
 
-  container.innerHTML = loadingHtml || `
-    <div class="midtai-works-scroll">
-      <div style="${gridStyle}">${imageCards}</div>
-    </div>
-  `;
+  container.innerHTML = loadingHtml
+    ? `${actionBarHtml}${loadingHtml}`
+    : `${actionBarHtml}
+      <div class="midtai-works-scroll">
+        <div style="${gridStyle}">${imageCards}</div>
+      </div>
+    `;
 }
 
 function appendMidtaiImageToConversation(id) {
@@ -5165,6 +5469,9 @@ function renderDesignBridgePage() {
   const directionPanel = document.getElementById('design-direction-panel');
   const referenceMeta = document.getElementById('design-reference-meta');
   const referencePreview = document.getElementById('design-reference-preview');
+  const midtaiReferencePreview = document.getElementById('midtai-design-ref-preview');
+  const midtaiReferenceImg = document.getElementById('midtai-design-ref-img');
+  const midtaiReferenceLabel = document.getElementById('midtai-design-ref-label');
   const styleFieldWrap = document.getElementById('design-style-field-wrap');
   const styleDetails = document.getElementById('design-style-details');
   const referenceDetails = document.getElementById('design-reference-details');
@@ -5180,7 +5487,7 @@ function renderDesignBridgePage() {
   const promptHelper = document.getElementById('design-prompt-helper');
   const generateHint = document.getElementById('design-generate-hint');
 
-  if (!titleEl || !statusEl || !subtitleEl || !sourceLabelEl || !editsEl || !emptyEl || !frameEl || !generateStatusEl || !generateBtn || !editModeBtn || !newModeBtn || !editModeDescEl || !newModeDescEl || !slidersPanel || !promptInput || !outputTypeSelect || !styleInput || !patchPopover || !patchTarget || !patchComment || !patchStatus || !patchApplyBtn || !imageLabBtn || !imageUploadBtn || !versionsPanel || !directionPanel || !referenceMeta || !referencePreview || !styleFieldWrap || !styleDetails || !referenceDetails || !versionsDetails || !exportDetails || !stageA || !stageB || !stageATitle || !stageACopy || !stageBTitle || !stageBMeta || !promptLabel || !promptHelper || !generateHint) {
+  if (!titleEl || !statusEl || !subtitleEl || !sourceLabelEl || !editsEl || !emptyEl || !frameEl || !generateStatusEl || !generateBtn || !editModeBtn || !newModeBtn || !editModeDescEl || !newModeDescEl || !slidersPanel || !promptInput || !outputTypeSelect || !styleInput || !patchPopover || !patchTarget || !patchComment || !patchStatus || !patchApplyBtn || !imageLabBtn || !imageUploadBtn || !versionsPanel || !directionPanel || !referenceMeta || !referencePreview || !midtaiReferencePreview || !midtaiReferenceImg || !midtaiReferenceLabel || !styleFieldWrap || !styleDetails || !referenceDetails || !versionsDetails || !exportDetails || !stageA || !stageB || !stageATitle || !stageACopy || !stageBTitle || !stageBMeta || !promptLabel || !promptHelper || !generateHint) {
     return;
   }
 
@@ -5350,6 +5657,15 @@ function renderDesignBridgePage() {
   renderDesignVersionsPanel(versionsPanel);
   renderDesignDirectionPanel(directionPanel);
   renderDesignReferencePanel(referenceMeta, referencePreview);
+  if (designBridgeState.referenceImage?.dataUrl) {
+    midtaiReferenceImg.src = designBridgeState.referenceImage.dataUrl;
+    midtaiReferencePreview.style.display = 'block';
+    midtaiReferenceLabel.style.display = 'none';
+  } else {
+    midtaiReferenceImg.removeAttribute('src');
+    midtaiReferencePreview.style.display = 'none';
+    midtaiReferenceLabel.style.display = 'inline-block';
+  }
 
   if (!designBridgeState.html) {
     titleEl.textContent = isEnglishUi() ? 'No design loaded' : '未加载设计内容';
@@ -5774,12 +6090,34 @@ function clearDesignReference() {
   renderDesignBridgePage();
 }
 
+function clearMidtaiDesignRef() {
+  clearDesignReference();
+}
+
 function handleDesignReferenceUpload(event) {
   const file = Array.from(event.target?.files || [])[0];
   if (!file) return;
   const reader = new FileReader();
   reader.onload = ev => {
     const dataUrl = ev.target?.result;
+    if (typeof dataUrl !== 'string') return;
+    designBridgeState.referenceImage = {
+      dataUrl,
+      mimeType: file.type || 'image/png',
+      name: file.name || 'reference.png',
+    };
+    renderDesignBridgePage();
+  };
+  reader.readAsDataURL(file);
+  event.target.value = '';
+}
+
+function handleMidtaiDesignRefUpload(event) {
+  const file = Array.from(event.target?.files || [])[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = loadEvent => {
+    const dataUrl = loadEvent.target?.result;
     if (typeof dataUrl !== 'string') return;
     designBridgeState.referenceImage = {
       dataUrl,
@@ -7290,6 +7628,10 @@ function applyImageLabState(state) {
       imageLabState.lastRequest?.batchCount || imageLabState.config.batchCount || 1,
     );
   }
+  renderMidtaiImageRefList();
+  if (document.getElementById('midtai-prompt-history')?.style.display === 'block') {
+    renderMidtaiPromptHistory();
+  }
 
   const presetSelect = document.getElementById('imglab-size-preset');
   const customInput = document.getElementById('imglab-size');
@@ -7474,6 +7816,7 @@ function renderImageLabReference() {
     wrap.style.display = 'none';
     previewGrid.innerHTML = '';
     meta.textContent = '当前还没有参考图。上传 1-4 张后可做多图编辑，或先用“识图反推提示词”生成草稿 prompt。';
+    renderMidtaiImageRefList();
     return;
   }
 
@@ -7488,6 +7831,7 @@ function renderImageLabReference() {
   `).join('');
   wrap.style.display = '';
   meta.textContent = `当前共有 ${imageLabState.referenceImages.length} 张参考图。系统会按顺序一起作为编辑参考，你也可以继续追加新的参考图。`;
+  renderMidtaiImageRefList();
 }
 
 function removeImageLabReference(index) {
