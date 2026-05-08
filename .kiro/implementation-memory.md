@@ -502,14 +502,20 @@
   - 这类 prompt 允许继续走 chat/sendPrompt 主链，但在宿主侧必须传 `tools = []` 给 `runAgent()`。
   - 目标是避免 Electron 壳显示 `Tool Use / Tool Result`、`.beads`、`list_files / read_file / write_file` 这类实现细节。
 
-### 8. `electron/renderer/index.html` 的高风险经验
 
-- 这个单文件 renderer 已经出现过几类真实回归：
-  - 重复定义 session / design 函数块，导致点击链混乱
-  - patch 过程中误删仍被 `onclick` 使用的函数，导致新建/切会话失效
-  - 设置页渲染链局部改坏，出现只剩标题或整块空白
-  - 内联 `<script>` 模板字符串边界断裂，直接触发白屏
-- 继续修改这个文件前必须先做三件事：
-  - 搜同名函数是否有重复定义
-  - 搜所有 `onclick="..."` 是否仍指向存在的函数
-  - 必要时先做脚本级语法检查，再跑 Electron build
+### 9. KainClaw Design patch prompt 的长期结论（2026-05-08）
+
+- **不要把全量 HTML 塞进 patch prompt。**
+  - 设计 HTML 可以达到 16MB+，直接超出任何模型的 context window。
+  - 模型做节点改写只需要三样东西：`targetOuterHtml`（目标节点的完整 outerHTML）、`selector`（定位路径）、用户指令。
+  - 全量 HTML 对改写没有帮助，反而让 DeepSeek 等小 context 模型完全无法使用。
+- **patch 的定位靠 `applyDesignPatch()` 的字符串替换，不靠模型理解 HTML 结构。**
+  - 模型只负责生成替换节点，`applyDesignPatch()` 负责在原始 HTML 里找到并替换它。
+  - 所以 prompt 里不需要 HTML 上下文，模型不需要"知道"节点在哪里。
+- **no-op 检测要用 DOM 归一化比较，不能只比字符串。**
+  - 模型可能返回 class 顺序不同、空白不同但语义等价的节点，exact-string 比较会漏过。
+  - 当前实现：`normalizeHtmlForComparison()`（折叠空白 + class 名排序）后再比较。
+- **renderer 侧的 `[KC-R]` 日志比主进程 `[KC-DEBUG]` 更容易调试。**
+  - 主进程 `console.debug` 只出现在启动 Electron 的终端，不出现在 renderer DevTools。
+  - 调试 patch 链路时，在 renderer 的 `applyDesignPatchRequest()`、`design:patchResult`、`design:error` handler 里加 `console.log` 是最快的诊断路径。
+
