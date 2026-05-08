@@ -1213,6 +1213,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-seri
                   <button id="midtai-canvas-view-btn" class="canvas-mode-btn active" onclick="setMidtaiCanvasMode('view')">查看</button>
                   <button id="midtai-canvas-select-btn" class="canvas-mode-btn" onclick="setMidtaiCanvasMode('select')">选择</button>
                   <button id="midtai-canvas-tweak-btn" class="canvas-mode-btn" onclick="setMidtaiCanvasMode('tweak')">调节</button>
+                  <button id="midtai-canvas-critique-btn" class="canvas-mode-btn" onclick="requestManualCritique()">评审</button>
                   <div class="canvas-toolbar-spacer"></div>
                   <button class="canvas-toolbar-btn" onclick="exitCanvas()">退出画布</button>
                   <div style="position:relative;display:inline-block">
@@ -5962,6 +5963,20 @@ function applyDesignCritiqueSuggestion(stylePrompt) {
   const chip = document.getElementById('design-critique-chip');
   if (chip) chip.style.display = 'none';
   generateDesignWorkbench();
+}
+
+function requestManualCritique() {
+  const html = designBridgeState.html;
+  if (!html) return;
+  const prompt = designBridgeState.prompt || '';
+  const outputType = designBridgeState.outputType || 'prototype';
+  // 清空旧评审，显示 loading chip
+  designBridgeState.critique = null;
+  designBridgeState.critiqueLoading = false;
+  renderDesignCritiqueChip({ loading: true });
+  // 切回生成预览 Tab 让用户看到 chip
+  showDesignView('design-preview');
+  send({ type: 'design:requestCritique', html, prompt, outputType });
 }
 
 function renderDesignDirectionPanel(panel) {

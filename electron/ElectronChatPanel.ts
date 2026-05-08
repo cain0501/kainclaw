@@ -155,7 +155,10 @@ import {
   generateKainClawDesign,
   type DesignGenerateOptions,
 } from "../src/design/designEngine";
-import { buildKainClawDesignSystemPrompt } from "../src/design/designPrompt";
+import {
+  buildKainClawDesignSystemPrompt,
+  DESIGN_CRITIQUE_SYSTEM_PROMPT,
+} from "../src/design/designPrompt";
 import {
   buildKainClawDesignPatchSystemPrompt,
   extractDirectTextReplacement,
@@ -186,6 +189,17 @@ import {
   getDirectionByStylePrompt,
   isAmbiguousDesignPrompt,
 } from "../src/design/showcaseIndex";
+
+function extractJsonFromText(text: string): Record<string, unknown> | null {
+  try {
+    const match = text.match(/\{[\s\S]*\}/);
+    if (!match) return null;
+    const parsed = JSON.parse(match[0]);
+    return parsed && typeof parsed === "object" ? parsed as Record<string, unknown> : null;
+  } catch {
+    return null;
+  }
+}
 
 const SUPPORTED_ELECTRON_TOOL_NAMES = new Set([
   "AskUserQuestion",
@@ -982,6 +996,13 @@ export class ElectronChatPanel {
     }
     if (type === "design:generate") {
       await this.generateDesignWorkbench(message);
+      return;
+    }
+    if (type === "design:requestCritique") {
+      const html = String(message.html ?? "");
+      const prompt = String(message.prompt ?? "");
+      const outputType = String(message.outputType ?? "prototype");
+      if (html) void this.runDesignCritique(html, prompt, outputType);
       return;
     }
     if (type === "design:editCurrent") {
@@ -3357,11 +3378,69 @@ export class ElectronChatPanel {
         ...(style ? { style } : {}),
         versionId: version.id,
       });
+      void this.runDesignCritique(result.html, prompt, outputType);
     } catch (error) {
       this.sendToRenderer({
         type: "design:error",
         message: error instanceof Error ? error.message : String(error),
       });
+    }
+  }
+
+  private async runDesignCritique(
+    html: string,
+    prompt: string,
+    outputType: string,
+  ): Promise<void> {
+    this.sendToRenderer({ type: "design:critiqueStarted" });
+    const workspaceRoot = this.getSelectedWorkspaceRoot();
+    const { config, envMap } = await resolveProviderConfig(
+      this.settings,
+      workspaceRoot,
+    );
+    const provider = this.createProviderForSystemPrompt(
+      config,
+      workspaceRoot,
+      envMap,
+      DESIGN_CRITIQUE_SYSTEM_PROMPT,
+    );
+
+    try {
+      const userPrompt = `
+设计需求：${prompt}
+输出类型：${outputType}
+
+以下是生成的 HTML 设计稿（截取前 8000 字符）：
+\`\`\`html
+${html.slice(0, 8000)}
+\`\`\`
+
+请按五个维度评审，返回 JSON。
+`.trim();
+
+      const critiqueRun = await runAgent(
+        [
+          {
+            role: "user",
+            content: userPrompt,
+          },
+        ],
+        {
+          provider,
+          tools: [],
+          toolContext: {
+            workspaceRoot,
+          } as never,
+        },
+      );
+      const critique = extractJsonFromText(critiqueRun.text);
+      if (critique) {
+        this.sendToRenderer({ type: "design:critiqueResult", critique });
+        return;
+      }
+      this.sendToRenderer({ type: "design:critiqueError" });
+    } catch {
+      this.sendToRenderer({ type: "design:critiqueError" });
     }
   }
 
