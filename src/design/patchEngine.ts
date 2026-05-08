@@ -21,7 +21,6 @@ export function buildKainClawDesignPatchSystemPrompt(): string {
 }
 
 export function buildKainClawDesignPatchPrompt(options: {
-  html: string;
   selector: string;
   comment: string;
   targetOuterHtml: string;
@@ -31,7 +30,9 @@ export function buildKainClawDesignPatchPrompt(options: {
     "Return only the replacement node for the selected target.",
     "",
     `Target selector: ${options.selector}`,
-    `Current target node outer HTML: ${options.targetOuterHtml}`,
+    `Current target node outer HTML:`,
+    options.targetOuterHtml,
+    "",
     `User comment: ${options.comment.trim()}`,
     "",
     "Rules:",
@@ -44,9 +45,6 @@ export function buildKainClawDesignPatchPrompt(options: {
     "- Keep existing CSS variable usage whenever possible.",
     `- Wrap the returned node with ${KAINCLAW_DESIGN_PATCH_NODE_START} and ${KAINCLAW_DESIGN_PATCH_NODE_END}.`,
     "- Do not include markdown fences or explanation.",
-    "",
-    "Current full HTML:",
-    options.html,
   ].join("\n");
 }
 
@@ -444,7 +442,6 @@ export async function patchKainClawDesignNode(options: {
   rawOutput: string;
 }> {
   const prompt = buildKainClawDesignPatchPrompt({
-    html: options.html,
     selector: options.selector,
     comment: options.comment,
     targetOuterHtml: options.targetOuterHtml,

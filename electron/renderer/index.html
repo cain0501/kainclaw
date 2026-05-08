@@ -1569,6 +1569,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-seri
       <div id="design-patch-popover" class="design-patch-popover" style="display:none;border:1px solid #eadfd2;border-radius:16px;background:#fff7f0;padding:12px 14px">
         <div id="design-patch-target" style="font-size:11px;font-weight:700;color:#7b4a2e;letter-spacing:.04em;text-transform:uppercase;margin-bottom:8px">未选中元素</div>
         <textarea id="design-patch-comment" placeholder="例如：把这个标题改成渐变暖色，并保留现有布局节奏。" style="width:100%;min-height:88px;border:1px solid #eadfd2;border-radius:12px;padding:10px 12px;background:#fff;color:#2d1f14;font-family:inherit;resize:vertical;line-height:1.6"></textarea>
+        <div id="design-patch-status" style="display:none;margin-top:10px;font-size:12px;line-height:1.5;color:#7b4a2e"></div>
         <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:10px">
           <button id="design-image-lab-btn" class="btn-secondary" onclick="sendDesignImageNodeToImageLab()">去 Image Lab 生成图</button>
           <button class="btn-secondary" onclick="cancelDesignPatchSelection()">取消</button>
@@ -1891,6 +1892,7 @@ const designBridgeState = {
   error: '',
   selectedNode: null,
   patchLoading: false,
+  patchStatusText: '',
   versions: [],
   versionId: null,
   directionSuggestions: [],
@@ -1903,6 +1905,23 @@ const designBridgeState = {
 };
 let designBridgeRenderedToken = 0;
 let designBridgeFrameLoading = false;
+
+function getDesignPatchAnalyzingStatusText() {
+  return isEnglishUi() ? '✦ AI is analyzing the selected element...' : '✦ AI 正在分析节点...';
+}
+
+function getDesignPatchGeneratingStatusText() {
+  return isEnglishUi() ? '✦ Generating the rewrite...' : '✦ 正在生成改写内容...';
+}
+
+function setDesignPatchStatus(message) {
+  designBridgeState.patchStatusText = String(message || '');
+}
+
+function clearDesignPatchStatus() {
+  designBridgeState.patchStatusText = '';
+}
+
 const designHomeState = {
   projects: [],
   previews: {},
@@ -2574,6 +2593,9 @@ function handleMessage(msg) {
       designBridgeState.loading = msg.step === 'patching' ? designBridgeState.loading : true;
       designBridgeState.patchLoading = msg.step === 'patching';
       designBridgeState.error = '';
+      if (msg.step === 'patching') {
+        setDesignPatchStatus(getDesignPatchAnalyzingStatusText());
+      }
       renderDesignBridgePage();
       break;
     case 'design:result':
@@ -2597,6 +2619,7 @@ function handleMessage(msg) {
       designBridgeState.lastEdits = null;
       designBridgeState.selectedNode = null;
       designBridgeState.patchLoading = false;
+      clearDesignPatchStatus();
       designBridgeState.canvasMode = 'view';
       designBridgeState.versionId = msg.versionId || null;
       designBridgeState.renderToken = Date.now();
@@ -2607,12 +2630,26 @@ function handleMessage(msg) {
       }
       loadDesignVersions();
       break;
+    case 'design:patchStarted':
+      if (!designBridgeState.patchLoading) {
+        break;
+      }
+      setDesignPatchStatus(getDesignPatchGeneratingStatusText());
+      renderDesignBridgePage();
+      break;
     case 'design:patchResult':
+      console.log('[KC-R] design:patchResult received', {
+        htmlChanged: msg.html !== designBridgeState.html,
+        selector: msg.selector,
+        replacementNodePreview: String(msg.replacementNode || '').slice(0, 120),
+        versionId: msg.versionId,
+      });
       designBridgeState.html = String(msg.html || designBridgeState.html || '');
       designBridgeState.loading = false;
       designBridgeState.patchLoading = false;
       designBridgeState.selectedNode = null;
       designBridgeState.error = '';
+      clearDesignPatchStatus();
       designBridgeState.canvasMode = 'view';
       designBridgeState.versionId = msg.versionId || designBridgeState.versionId || null;
       designBridgeState.renderToken = Date.now();
@@ -2658,8 +2695,10 @@ function handleMessage(msg) {
       renderDesignBridgePage();
       break;
     case 'design:error':
+      console.log('[KC-R] design:error received', { message: String(msg.message || '') });
       designBridgeState.loading = false;
       designBridgeState.patchLoading = false;
+      clearDesignPatchStatus();
       designBridgeState.error = String(msg.message || (isEnglishUi() ? 'Design generation failed.' : '设计生成失败。'));
       { const mnpBtnE = document.getElementById('mnp-patch-apply-btn'); if (mnpBtnE) { mnpBtnE.disabled = false; mnpBtnE.textContent = '应用改写'; } }
       { const dpvC = document.getElementById('dpv-loading-counter'); if (dpvC) dpvC.textContent = isEnglishUi() ? 'Usually takes 10~30 seconds' : '通常需要 10~30 秒'; }
@@ -2785,8 +2824,10 @@ function handleMessage(msg) {
     case 'design:patchImageNode:result':
       designBridgeState.patchLoading = false;
       if (msg.payload?.success) {
-        midtaiState.replaceCtx = null;
-        showDesignPage();
+        const projectLabel = midtaiState.currentProject || designBridgeState.title || 'KainClaw Design';
+        cancelReplace();
+        switchMidtaiType('design');
+        openCanvas(projectLabel);
         showArtifactToast(isEnglishUi() ? 'Image replaced in the current design.' : '已将图片回写到当前设计。');
       } else if (msg.payload?.error) {
         setImageLabStatus(String(msg.payload.error), true);
@@ -5116,6 +5157,7 @@ function renderDesignBridgePage() {
   const patchPopover = document.getElementById('design-patch-popover');
   const patchTarget = document.getElementById('design-patch-target');
   const patchComment = document.getElementById('design-patch-comment');
+  const patchStatus = document.getElementById('design-patch-status');
   const patchApplyBtn = document.getElementById('design-patch-apply-btn');
   const imageLabBtn = document.getElementById('design-image-lab-btn');
   const { imageUploadBtn } = ensureDesignImageUploadControls();
@@ -5138,7 +5180,7 @@ function renderDesignBridgePage() {
   const promptHelper = document.getElementById('design-prompt-helper');
   const generateHint = document.getElementById('design-generate-hint');
 
-  if (!titleEl || !statusEl || !subtitleEl || !sourceLabelEl || !editsEl || !emptyEl || !frameEl || !generateStatusEl || !generateBtn || !editModeBtn || !newModeBtn || !editModeDescEl || !newModeDescEl || !slidersPanel || !promptInput || !outputTypeSelect || !styleInput || !patchPopover || !patchTarget || !patchComment || !patchApplyBtn || !imageLabBtn || !imageUploadBtn || !versionsPanel || !directionPanel || !referenceMeta || !referencePreview || !styleFieldWrap || !styleDetails || !referenceDetails || !versionsDetails || !exportDetails || !stageA || !stageB || !stageATitle || !stageACopy || !stageBTitle || !stageBMeta || !promptLabel || !promptHelper || !generateHint) {
+  if (!titleEl || !statusEl || !subtitleEl || !sourceLabelEl || !editsEl || !emptyEl || !frameEl || !generateStatusEl || !generateBtn || !editModeBtn || !newModeBtn || !editModeDescEl || !newModeDescEl || !slidersPanel || !promptInput || !outputTypeSelect || !styleInput || !patchPopover || !patchTarget || !patchComment || !patchStatus || !patchApplyBtn || !imageLabBtn || !imageUploadBtn || !versionsPanel || !directionPanel || !referenceMeta || !referencePreview || !styleFieldWrap || !styleDetails || !referenceDetails || !versionsDetails || !exportDetails || !stageA || !stageB || !stageATitle || !stageACopy || !stageBTitle || !stageBMeta || !promptLabel || !promptHelper || !generateHint) {
     return;
   }
 
@@ -5289,6 +5331,9 @@ function renderDesignBridgePage() {
     ? `${isEnglishUi() ? 'Selected element' : '当前元素'} · ${selectedNodeLabel}${isImageNode && supportedImageSpec ? `\n${isEnglishUi() ? 'Generated spec' : '生成规格'}: ${supportedImageSpec.label} (${isEnglishUi() ? 'nearest supported size' : '最近支持规格'})` : ''}`
     : (isEnglishUi() ? 'No element selected' : '未选中元素');
   patchComment.style.display = isImageNode ? 'none' : '';
+  const patchStatusText = String(designBridgeState.patchStatusText || '').trim();
+  patchStatus.textContent = patchStatusText;
+  patchStatus.style.display = !isImageNode && patchStatusText ? 'block' : 'none';
   patchApplyBtn.style.display = isImageNode ? 'none' : 'inline-flex';
   imageLabBtn.style.display = isImageNode ? 'inline-flex' : 'none';
   imageUploadBtn.style.display = isImageNode ? 'inline-flex' : 'none';
@@ -5296,7 +5341,7 @@ function renderDesignBridgePage() {
   imageLabBtn.disabled = !!designBridgeState.patchLoading;
   imageUploadBtn.disabled = !!designBridgeState.patchLoading;
   patchApplyBtn.textContent = designBridgeState.patchLoading
-    ? (isEnglishUi() ? 'Applying...' : '应用中...')
+    ? (isEnglishUi() ? 'Rewriting...' : '改写中...')
     : (isEnglishUi() ? 'Apply patch' : '应用改写');
   if (designBridgeState.selectedNode) {
     positionDesignPatchPopover(patchPopover, frameEl);
@@ -5890,6 +5935,7 @@ async function exportDesignWorkbench(format) {
 function cancelDesignPatchSelection() {
   designBridgeState.selectedNode = null;
   designBridgeState.patchLoading = false;
+  clearDesignPatchStatus();
   const commentInput = document.getElementById('design-patch-comment');
   if (commentInput) commentInput.value = '';
   renderDesignBridgePage();
@@ -5997,14 +6043,22 @@ function applyDesignPatchRequest() {
 
   designBridgeState.patchLoading = true;
   designBridgeState.error = '';
+  setDesignPatchStatus(getDesignPatchAnalyzingStatusText());
   renderDesignBridgePage();
-  send({
+  const _patchMsg = {
     type: 'design:patch',
     html: designBridgeState.html,
     selector: designBridgeState.selectedNode.selector,
     targetOuterHtml: designBridgeState.selectedNode.outerHTML,
     comment,
+  };
+  console.log('[KC-R] design:patch sending', {
+    selector: _patchMsg.selector,
+    comment: _patchMsg.comment,
+    targetOuterHtmlPreview: _patchMsg.targetOuterHtml.slice(0, 120),
+    htmlLen: _patchMsg.html.length,
   });
+  send(_patchMsg);
 }
 
 function handleDesignImageNodeUpload(event) {
@@ -6129,6 +6183,7 @@ function handleKainClawDesignFrameMessage(event) {
         }
       : null;
     designBridgeState.patchLoading = false;
+    clearDesignPatchStatus();
     renderDesignBridgePage();
     return;
   }
@@ -7180,10 +7235,7 @@ function insertToDesign(imageUrl) {
     targetOuterHtml: designBridgeState.selectedNode.outerHTML,
     imageUrl: String(imageUrl || '').trim(),
   });
-  const elementLabel = midtaiState.replaceCtx?.element || '当前图片位';
-  cancelReplace();
-  openCanvas(midtaiState.currentProject || designBridgeState.title || 'KainClaw Design');
-  showArtifactToast(`已替换 ${elementLabel}`);
+  setImageLabStatus(isEnglishUi() ? 'Replacing image in the current design...' : '正在将图片回写到当前设计...');
 }
 
 function openImageModelSettings() {

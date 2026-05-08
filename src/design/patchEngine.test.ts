@@ -27,14 +27,14 @@ function createProviderReturning(text: string): IProviderAdapter {
 describe("patchEngine", () => {
   it("builds a focused patch prompt for one selector", () => {
     const prompt = buildKainClawDesignPatchPrompt({
-      html: "<html><body><h1>Hello</h1></body></html>",
       selector: ".hero > h1",
       comment: "Make the title warmer.",
       targetOuterHtml: "<h1>Hello</h1>",
     });
 
     expect(prompt).toContain("Target selector: .hero > h1");
-    expect(prompt).toContain("Current target node outer HTML: <h1>Hello</h1>");
+    expect(prompt).toContain("Current target node outer HTML:");
+    expect(prompt).toContain("<h1>Hello</h1>");
     expect(prompt).toContain("User comment: Make the title warmer.");
     expect(prompt).toContain("Return only one replacement HTML node.");
     expect(prompt).toContain("Do not return the original node unchanged.");
