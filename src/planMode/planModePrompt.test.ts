@@ -12,6 +12,8 @@ describe("planMode prompt", () => {
     expect(prompt).toContain(".cain-artifacts/plans/test.md");
     expect(prompt).toContain("already exists");
     expect(prompt).toContain("ExitPlanMode");
+    expect(prompt).toContain("Phase 1");
+    expect(prompt).toContain("Phase 2");
   });
 
   it("describes a reserved plan file when the file is still empty", () => {
@@ -20,8 +22,11 @@ describe("planMode prompt", () => {
       planHasContent: false,
     });
 
-    expect(prompt).toContain("reserved");
+    expect(prompt).toContain("No plan file exists yet");
+    expect(prompt).toContain(".cain-artifacts/plans/test.md");
     expect(prompt).toContain("read-only tools");
     expect(prompt).toContain("Do not ask for plan approval in plain text");
+    expect(prompt).toContain("Phase 1");
+    expect(prompt).toContain("Phase 2");
   });
 });
