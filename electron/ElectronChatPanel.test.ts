@@ -324,7 +324,7 @@ describe("ElectronChatPanel session lifecycle", () => {
     const agentReply = createDeferred<string>();
     vi.mocked(runAgent).mockImplementation(async (_history, options) => {
       options.onToken?.("处理中");
-      return { text: await agentReply.promise };
+      return { text: await agentReply.promise, messages: [] };
     });
 
     const sendPromise = harness.panel.handleMessage({
@@ -404,7 +404,7 @@ describe("ElectronChatPanel session lifecycle", () => {
         false,
         "{\"results\":[{\"name\":\"ii cai n\"}]}",
       );
-      return { text: "我已经读取到 1 个用户。" };
+      return { text: "我已经读取到 1 个用户。", messages: [] };
     });
 
     await harness.panel.handleMessage({
@@ -443,12 +443,12 @@ describe("ElectronChatPanel session lifecycle", () => {
 <html>
   <head><title>Landing One</title></head>
   <body><main>one</main></body>
-</html>` })
+</html>`, messages: [] })
       .mockResolvedValueOnce({ text: `<!DOCTYPE html>
 <html>
   <head><title>Landing Two</title></head>
   <body><main>two</main></body>
-</html>` });
+</html>`, messages: [] });
 
     await harness.panel.handleMessage({
       type: "sendPrompt",
@@ -555,7 +555,7 @@ describe("ElectronChatPanel session lifecycle", () => {
 <html>
   <head><title>Design Bridge</title></head>
   <body><main>bridge</main></body>
-</html>` });
+</html>`, messages: [] });
 
     await harness.panel.handleMessage({
       type: "sendPrompt",
@@ -626,7 +626,7 @@ describe("ElectronChatPanel session lifecycle", () => {
     });
     vi.mocked(buildProviderAdapter).mockReturnValue({} as never);
     vi.mocked(handleElectronPromptCommand).mockResolvedValue({ kind: "continue" });
-    vi.mocked(runAgent).mockResolvedValue({ text: "这是普通文字回复，不是 artifact。" });
+    vi.mocked(runAgent).mockResolvedValue({ text: "这是普通文字回复，不是 artifact。", messages: [] });
 
     await harness.panel.handleMessage({
       type: "sendPrompt",
@@ -771,7 +771,7 @@ describe("ElectronChatPanel session lifecycle", () => {
     vi.mocked(runAgent).mockImplementation(async (_history, options) => {
       invocationCount += 1;
       options.onToken?.(`chunk-${invocationCount}`);
-      return { text: await (invocationCount === 1 ? replyA.promise : replyB.promise) };
+      return { text: await (invocationCount === 1 ? replyA.promise : replyB.promise), messages: [] };
     });
 
     const sendPromiseA = harness.panel.handleMessage({
@@ -850,7 +850,7 @@ describe("ElectronChatPanel session lifecycle", () => {
 <html>
   <head><title>Session A Artifact</title></head>
   <body><main>A</main></body>
-</html>` });
+</html>`, messages: [] });
 
     await harness.panel.handleMessage({
       type: "sendPrompt",
@@ -935,7 +935,7 @@ describe("ElectronChatPanel session lifecycle", () => {
     vi.mocked(handleElectronPromptCommand).mockResolvedValue({ kind: "continue" });
 
     const artifactReply = createDeferred<string>();
-    vi.mocked(runAgent).mockImplementation(async () => ({ text: await artifactReply.promise }));
+    vi.mocked(runAgent).mockImplementation(async () => ({ text: await artifactReply.promise, messages: [] }));
 
     const sendPromise = harness.panel.handleMessage({
       type: "sendPrompt",
@@ -997,7 +997,7 @@ describe("ElectronChatPanel session lifecycle", () => {
 <html>
   <head><title>Reloaded Artifact</title></head>
   <body><main>artifact</main></body>
-</html>` });
+</html>`, messages: [] });
 
     await harness.panel.handleMessage({
       type: "sendPrompt",
@@ -1086,7 +1086,7 @@ describe("ElectronChatPanel session lifecycle", () => {
     const agentReply = createDeferred<string>();
     vi.mocked(runAgent).mockImplementation(async (_history, options) => {
       options.onToken?.("working");
-      return { text: await agentReply.promise };
+      return { text: await agentReply.promise, messages: [] };
     });
 
     const originalLoadMessages = harness.sessions.loadMessages.bind(harness.sessions);
@@ -2132,7 +2132,7 @@ describe("ElectronChatPanel session lifecycle", () => {
       } as never)
       .mockReturnValueOnce({} as never);
     vi.mocked(handleElectronPromptCommand).mockResolvedValue({ kind: "continue" });
-    vi.mocked(runAgent).mockResolvedValue({ text: "这里是一版优化后的提示词。" });
+    vi.mocked(runAgent).mockResolvedValue({ text: "这里是一版优化后的提示词。", messages: [] });
 
     await harness.panel.handleMessage({
       type: "sendPrompt",
@@ -2169,7 +2169,7 @@ describe("ElectronChatPanel session lifecycle", () => {
 <html>
   <head><title>Artifact Prototype</title></head>
   <body><main>Hello</main></body>
-</html>` });
+</html>`, messages: [] });
 
     await harness.panel.handleMessage({
       type: "sendPrompt",
@@ -2213,7 +2213,7 @@ describe("ElectronChatPanel session lifecycle", () => {
 <html>
   <head><title>Lens / 光影档案</title></head>
   <body><main>Portfolio</main></body>
-</html>` });
+</html>`, messages: [] });
 
     await harness.panel.handleMessage({
       type: "sendPrompt",
@@ -2245,7 +2245,7 @@ describe("ElectronChatPanel session lifecycle", () => {
       }),
     } as never);
     vi.mocked(handleElectronPromptCommand).mockResolvedValue({ kind: "continue" });
-    vi.mocked(runAgent).mockResolvedValue({ text: `<svg xmlns="http://www.w3.org/2000/svg"><rect width="10" height="10"/></svg>` });
+    vi.mocked(runAgent).mockResolvedValue({ text: `<svg xmlns="http://www.w3.org/2000/svg"><rect width="10" height="10"/></svg>`, messages: [] });
 
     await harness.panel.handleMessage({
       type: "sendPrompt",
@@ -2282,7 +2282,7 @@ describe("ElectronChatPanel session lifecycle", () => {
       }),
     } as never);
     vi.mocked(handleElectronPromptCommand).mockResolvedValue({ kind: "continue" });
-    vi.mocked(runAgent).mockResolvedValue({ text: "```mermaid\ngraph TD\n  A[需求] --> B[设计]\n```" });
+    vi.mocked(runAgent).mockResolvedValue({ text: "```mermaid\ngraph TD\n  A[需求] --> B[设计]\n```", messages: [] });
 
     await harness.panel.handleMessage({
       type: "sendPrompt",
@@ -2367,7 +2367,7 @@ describe("ElectronChatPanel session lifecycle", () => {
     let capturedPrompt = "";
     vi.mocked(runAgent).mockImplementation(async history => {
       capturedPrompt = String(history[history.length - 1]?.content || "");
-      return { text: "<!DOCTYPE html><html><head><title>Prompt Contract</title></head><body></body></html>" };
+      return { text: "<!DOCTYPE html><html><head><title>Prompt Contract</title></head><body></body></html>", messages: [] };
     });
 
     await harness.panel.handleMessage({
@@ -2403,7 +2403,7 @@ describe("ElectronChatPanel session lifecycle", () => {
     vi.mocked(runAgent).mockImplementation(async (history, options) => {
       receivedToolCount = options.tools.length;
       capturedPrompt = String(history[history.length - 1]?.content || "");
-      return { text: "<!DOCTYPE html><html><head><title>Tweaks Bridge</title></head><body></body></html>" };
+      return { text: "<!DOCTYPE html><html><head><title>Tweaks Bridge</title></head><body></body></html>", messages: [] };
     });
 
     await harness.panel.handleMessage({
@@ -2440,7 +2440,7 @@ describe("ElectronChatPanel session lifecycle", () => {
     let receivedToolCount = -1;
     vi.mocked(runAgent).mockImplementation(async (_history, options) => {
       receivedToolCount = options.tools.length;
-      return { text: "<!DOCTYPE html><html><head><title>No Tools</title></head><body></body></html>" };
+      return { text: "<!DOCTYPE html><html><head><title>No Tools</title></head><body></body></html>", messages: [] };
     });
 
     await harness.panel.handleMessage({
@@ -4598,7 +4598,7 @@ Freeze skill body.
 <html>
   <head><title>Derived Prototype</title></head>
   <body><main>Prototype</main></body>
-</html>` });
+</html>`, messages: [] });
 
     await harness.panel.handleMessage({
       type: "sendPrompt",
