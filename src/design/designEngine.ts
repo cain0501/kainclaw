@@ -63,6 +63,7 @@ export async function generateKainClawDesign(
     outputType: options.outputType,
     ...(options.style?.trim() ? { style: options.style.trim() } : {}),
     ...(options.userContext?.trim() ? { userContext: options.userContext.trim() } : {}),
+    ...(options.brandContext?.trim() ? { brandContext: options.brandContext.trim() } : {}),
     ...(options.referenceImageDataUrl ? { referenceImageDataUrl: options.referenceImageDataUrl } : {}),
   });
 

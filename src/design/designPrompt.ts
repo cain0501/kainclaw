@@ -172,7 +172,8 @@ function getSkillPatch(outputType: DesignOutputType): string {
 - One slide = one focal point. Do not crowd multiple ideas into the same screen.
 - Use oversized display headlines suitable for mobile reading.
 - Do not include navigation bars, desktop chrome, or sidebars.
-- Favor bold color blocks or full-bleed imagery with high text contrast.`;
+- Favor bold color blocks or full-bleed imagery with high text contrast.
+- Do NOT render the user's structural instructions (e.g. "封面大标题 + 7页干货 + 结尾CTA") as visible subtitle or caption text in the design. These are instructions for you, not content to display.`;
     case "email":
       return `## Skill: Email Template
 - Max layout width: 600px and centered.
@@ -238,10 +239,14 @@ export function buildKainClawDesignSystemPrompt(options?: {
   const brandBlock = options?.brandContext?.trim()
     ? [
         "",
-        "## Brand Design System",
+        "## Brand Design System (HIGHEST PRIORITY — overrides everything else)",
         options.brandContext.trim(),
         "",
-        "Apply this brand's visual language strictly. It overrides generic craft defaults where they conflict.",
+        "MANDATORY brand color rules (override the generic Color Rules above):",
+        "- Use the brand's primary accent color freely — the '3 times max' craft rule does NOT apply when a brand is specified.",
+        "- The brand accent color MAY be used as background fill for cards, headers, and CTA sections.",
+        "- All interactive elements (buttons, links, highlights, tags) MUST use the brand accent color.",
+        "- Do NOT substitute the brand accent with warm neutrals, beige, or off-white.",
       ]
     : [];
 
@@ -266,10 +271,10 @@ export function buildKainClawDesignSystemPrompt(options?: {
     "- If a direction spec is provided below, bind its :root values verbatim and honour its posture rules.",
     ...(CRAFT_ANTI_SLOP ? ["", CRAFT_ANTI_SLOP] : []),
     ...(CRAFT_TYPOGRAPHY ? ["", CRAFT_TYPOGRAPHY] : []),
-    ...(CRAFT_COLOR ? ["", CRAFT_COLOR] : []),
-    ...(CRAFT_LAYOUT ? ["", CRAFT_LAYOUT] : []),
     ...brandBlock,
     ...directionBlock,
+    ...(CRAFT_COLOR ? ["", CRAFT_COLOR] : []),
+    ...(CRAFT_LAYOUT ? ["", CRAFT_LAYOUT] : []),
     "",
     "Slider schema:",
     '- color: { "id", "label", "type":"color", "cssVar", "default" }',
@@ -286,15 +291,24 @@ export function buildKainClawDesignUserPrompt(options: {
   outputType: DesignOutputType;
   style?: string;
   userContext?: string;
+  brandContext?: string;
   referenceImageDataUrl?: string;
 }): string {
   const skillPatch = getSkillPatch(options.outputType);
+  const hasBrand = !!options.brandContext?.trim();
   return [
     `Output type: ${options.outputType}`,
     ...(skillPatch ? ["", skillPatch] : []),
     `User request: ${options.prompt.trim() || "Create a design direction."}`,
     ...(options.style?.trim() ? [`Requested style: ${options.style.trim()}`] : []),
-    ...(options.userContext?.trim() ? ["", "User context:", options.userContext.trim()] : []),
+    ...(options.userContext?.trim()
+      ? [
+          "",
+          "User context (use as content inspiration and audience guidance — do NOT copy these as literal labels or tags into the design):",
+          options.userContext.trim(),
+          ...(hasBrand ? ["(Note: visual style above is for content direction only; brand color/typography from Brand Design System takes precedence)"] : []),
+        ]
+      : []),
     ...(options.referenceImageDataUrl
       ? [
           "A reference image is attached separately or available in context. Use it as a visual direction input when present.",

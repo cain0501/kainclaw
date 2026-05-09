@@ -2295,6 +2295,8 @@ function openGuideForm() {
   toggleShowcase(false);
   fieldsEl.innerHTML = config.map(renderGuideField).join('');
   formEl.style.display = 'block';
+  const ctaWrap = document.getElementById('midtai-design-cta-wrap');
+  if (ctaWrap) ctaWrap.style.display = 'none';
 }
 
 function toggleGuideChip(btn) {
@@ -2317,9 +2319,9 @@ function toggleGuideChip(btn) {
 
 function closeGuideForm() {
   const formEl = document.getElementById('midtai-guide-form');
-  if (formEl) {
-    formEl.style.display = 'none';
-  }
+  if (formEl) formEl.style.display = 'none';
+  const ctaWrap = document.getElementById('midtai-design-cta-wrap');
+  if (ctaWrap) ctaWrap.style.display = 'flex';
 }
 
 function submitGuideForm() {
@@ -3942,7 +3944,7 @@ function switchDirectionTab(tab) {
     tabDir.style.color = '#fff';
     tabBrand.style.background = '#fff';
     tabBrand.style.color = '#78716c';
-    selectedBrandId = null;
+    // 不清空 selectedBrandId，保留选择
     return;
   }
 
@@ -3952,10 +3954,7 @@ function switchDirectionTab(tab) {
   tabDir.style.color = '#78716c';
   tabBrand.style.background = '#c9502e';
   tabBrand.style.color = '#fff';
-  if (midtaiState.designDirection) {
-    midtaiState.designDirection = '';
-    renderMidtaiDirectionPicker();
-  }
+  // 不清空 designDirection，保留选择
   renderBrandPicker();
 }
 
@@ -6736,13 +6735,36 @@ function applyDesignSliderValue(sliderId, nextValue) {
   }
 }
 
+function inferOutputTypeFromPrompt(prompt) {
+  const p = prompt.toLowerCase();
+  if (p.includes('小红书') || p.includes('图文') || p.includes('carousel') || p.includes('轮播')) return 'social-carousel';
+  if (p.includes('落地页') || p.includes('landing') || p.includes('官网') || p.includes('homepage')) return 'landing-page';
+  if (p.includes('看板') || p.includes('dashboard') || p.includes('数据') || p.includes('仪表')) return 'dashboard';
+  if (p.includes('ppt') || p.includes('幻灯片') || p.includes('slide') || p.includes('deck') || p.includes('pitch')) return 'slide';
+  if (p.includes('移动') || p.includes('手机') || p.includes('app') || p.includes('mobile')) return 'mobile-app';
+  if (p.includes('邮件') || p.includes('email') || p.includes('newsletter')) return 'email';
+  if (p.includes('报告') || p.includes('report') || p.includes('文档') || p.includes('doc')) return 'doc-report';
+  if (p.includes('海报') || p.includes('poster') || p.includes('杂志') || p.includes('magazine')) return 'magazine-poster';
+  if (p.includes('定价') || p.includes('pricing')) return 'pricing-page';
+  return null;
+}
+
 function generateDesignWorkbench() {
   const promptInput = document.getElementById('midtai-design-prompt') || document.getElementById('design-prompt-input');
   const outputTypeSelect = document.getElementById('midtai-output-type') || document.getElementById('design-output-type');
   const style = midtaiState.designDirection !== undefined
     ? midtaiState.designDirection
     : (document.getElementById('design-style-input')?.value?.trim() || '');
-  const brand = selectedBrandId ? BRAND_SYSTEMS.find(item => item.id === selectedBrandId) : null;
+  const isBrandTabActive = document.getElementById('tab-brand')?.style.background === 'rgb(201, 80, 46)';
+  const brand = (isBrandTabActive && selectedBrandId) ? BRAND_SYSTEMS.find(item => item.id === selectedBrandId) : null;
+  const effectiveStyle = isBrandTabActive ? '' : style;
+  function buildBrandContext(b) {
+    if (!b) return '';
+    const paletteDesc = b.palette.length >= 3
+      ? `Primary accent: ${b.palette[0]}. Secondary/background: ${b.palette[1]}. Surface: ${b.palette[2]}.`
+      : `Primary accent: ${b.palette[0]}.`;
+    return `${b.stylePrompt}\n\nExact palette hex values — use these literally in CSS:\n${paletteDesc}\nSet --accent: ${b.palette[0]} in :root. Do NOT substitute with any other color.`;
+  }
   const prompt = promptInput?.value?.trim() || '';
   if (!prompt) {
     designBridgeState.error = isEnglishUi() ? 'Enter a design request first.' : '\u8bf7\u5148\u8f93\u5165\u8bbe\u8ba1\u9700\u6c42\u3002';
@@ -6751,8 +6773,11 @@ function generateDesignWorkbench() {
   }
 
   designBridgeState.prompt = prompt;
-  designBridgeState.outputType = outputTypeSelect?.value || 'prototype';
-  designBridgeState.style = style;
+  const isSimpleMode = (midtaiState.designMode || 'simple') === 'simple';
+  const rawOutputType = outputTypeSelect?.value || 'prototype';
+  const inferredOutputType = isSimpleMode ? (inferOutputTypeFromPrompt(prompt) || rawOutputType) : rawOutputType;
+  designBridgeState.outputType = inferredOutputType;
+  designBridgeState.style = effectiveStyle;
   designBridgeState.loading = true;
   designBridgeState.error = '';
   designBridgeState.suggestionVisible = false;
@@ -6771,7 +6796,7 @@ function generateDesignWorkbench() {
       outputType: designBridgeState.outputType,
       style: designBridgeState.style,
       userContext,
-      brandContext: brand ? brand.stylePrompt : '',
+      brandContext: buildBrandContext(brand),
       html: designBridgeState.html,
       sliders: designBridgeState.sliders,
       ...(designBridgeState.referenceImage ? {
@@ -6787,7 +6812,8 @@ function generateDesignWorkbench() {
     prompt: designBridgeState.prompt,
     outputType: designBridgeState.outputType,
     style: designBridgeState.style,
-    brandContext: brand ? brand.stylePrompt : '',
+    brandContext: buildBrandContext(brand),
+    userContext: designBridgeState.userContext || '',
     ...(designBridgeState.referenceImage ? {
       referenceImageDataUrl: designBridgeState.referenceImage.dataUrl,
       referenceImageMimeType: designBridgeState.referenceImage.mimeType,
@@ -6803,13 +6829,15 @@ function chooseDesignDirection(directionId) {
   designBridgeState.suggestionVisible = false;
   designBridgeState.userContext = '';
   renderDesignBridgePage();
+  const isBrandTab = document.getElementById('tab-brand')?.style.background === 'rgb(201, 80, 46)';
+  const activeBrandContext = (isBrandTab && selectedBrandId) ? buildBrandContext(BRAND_SYSTEMS.find(item => item.id === selectedBrandId)) : '';
   send({
     type: 'design:generate',
     prompt: designBridgeState.prompt,
     outputType: designBridgeState.outputType,
     style: designBridgeState.style,
     userContext,
-    brandContext: selectedBrandId ? (BRAND_SYSTEMS.find(item => item.id === selectedBrandId)?.stylePrompt || '') : '',
+    brandContext: activeBrandContext,
     ...(designBridgeState.referenceImage ? {
       referenceImageDataUrl: designBridgeState.referenceImage.dataUrl,
       referenceImageMimeType: designBridgeState.referenceImage.mimeType,
@@ -6822,13 +6850,15 @@ function skipDesignDirectionSuggestions() {
   designBridgeState.suggestionVisible = false;
   designBridgeState.userContext = '';
   renderDesignBridgePage();
+  const isBrandTab = document.getElementById('tab-brand')?.style.background === 'rgb(201, 80, 46)';
+  const activeBrandContext = (isBrandTab && selectedBrandId) ? buildBrandContext(BRAND_SYSTEMS.find(item => item.id === selectedBrandId)) : '';
   send({
     type: 'design:generate',
     prompt: designBridgeState.prompt,
     outputType: designBridgeState.outputType,
     style: designBridgeState.style,
     userContext,
-    brandContext: selectedBrandId ? (BRAND_SYSTEMS.find(item => item.id === selectedBrandId)?.stylePrompt || '') : '',
+    brandContext: activeBrandContext,
     ...(designBridgeState.referenceImage ? {
       referenceImageDataUrl: designBridgeState.referenceImage.dataUrl,
       referenceImageMimeType: designBridgeState.referenceImage.mimeType,

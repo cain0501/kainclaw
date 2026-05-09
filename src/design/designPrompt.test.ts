@@ -49,7 +49,7 @@ describe("designPrompt", () => {
       userContext: "product: SaaS工具；cta: 免费试用",
     });
 
-    expect(prompt).toContain("User context:");
+    expect(prompt).toContain("User context (use as content inspiration");
     expect(prompt).toContain("product: SaaS工具；cta: 免费试用");
   });
 
@@ -60,6 +60,6 @@ describe("designPrompt", () => {
 
     expect(prompt).toContain("## Brand Design System");
     expect(prompt).toContain("Brand: Linear. Design language: engineering precision.");
-    expect(prompt).toContain("overrides generic craft defaults");
+    expect(prompt).toContain("MANDATORY");
   });
 });
