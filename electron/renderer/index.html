@@ -464,8 +464,8 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-seri
 /* 图像 grid（较窄列）与设计 grid（标准列）*/
 .img-works-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(158px,1fr));gap:10px;grid-column:1/-1}
 .design-works-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:14px;grid-column:1/-1;margin-bottom:16px}
-.midtai-canvas-shell{flex:1;min-height:0;overflow:hidden;display:flex;flex-direction:column}
-.midtai-canvas-frame{flex:1;min-height:0;display:flex;flex-direction:column}
+.midtai-canvas-shell{flex:1;min-height:0;display:flex;flex-direction:column}
+.midtai-canvas-frame{flex:1;min-height:0;display:flex;flex-direction:column;position:relative;overflow:hidden}
 .midtai-canvas-title{font-size:20px;font-weight:700;color:#1c1917;margin-bottom:10px}
 .midtai-canvas-copy{font-size:13px;color:#78716c;line-height:1.7;max-width:420px}
 .thumb-shimmer{width:100%;height:100%;background:linear-gradient(90deg,#f0ebe3 25%,#e8e2da 50%,#f0ebe3 75%);background-size:200% 100%;animation:shimmer 1.4s infinite}
@@ -1231,9 +1231,9 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-seri
                 </div>
                 <iframe id="midtai-canvas-iframe" sandbox="allow-scripts" style="flex:1;min-height:0;border:none;width:100%;display:none"></iframe>
                 <div id="midtai-canvas-empty" class="midtai-canvas-title" style="display:flex;align-items:center;justify-content:center;flex:1;color:#a8998a;font-size:13px">暂无设计内容</div>
+                <div id="midtai-sliders-panel" style="display:none;position:absolute;z-index:100;width:260px;max-height:calc(100% - 56px);background:rgba(255,255,255,.97);border:1px solid #eadfd2;border-radius:12px;padding:0;overflow:hidden;box-shadow:0 8px 24px rgba(0,0,0,.14);bottom:16px;right:16px"></div>
+                <div id="design-canvas-critique-float" style="display:none;position:absolute;z-index:100;width:288px;max-height:calc(100% - 56px);overflow-y:auto;background:#fffdfb;border:1px solid #e5ddd0;border-radius:12px;box-shadow:0 4px 20px rgba(0,0,0,.16);bottom:16px;right:16px;font-size:12px"></div>
               </div>
-              <div id="midtai-sliders-panel" style="display:none;position:fixed;z-index:9998;width:260px;max-height:70vh;background:rgba(255,255,255,.97);border:1px solid #eadfd2;border-radius:12px;padding:0;overflow:hidden;box-shadow:0 8px 24px rgba(0,0,0,.14);top:80px;right:24px"></div>
-              <div id="design-canvas-critique-float" style="display:none;position:fixed;z-index:9999;width:288px;max-height:calc(100vh - 100px);overflow-y:auto;background:#fffdfb;border:1px solid #e5ddd0;border-radius:12px;box-shadow:0 4px 20px rgba(0,0,0,.16);top:80px;right:24px;font-size:12px"></div>
             </div>
             <div id="midtai-node-panel" style="display:none;position:fixed;z-index:9999;width:220px;background:#fff;border:1px solid #e5ddd0;border-radius:10px;box-shadow:0 8px 24px rgba(0,0,0,.12);padding:12px">
               <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
@@ -2835,29 +2835,15 @@ function handleMessage(msg) {
       renderDesignBridgePage();
       break;
     case 'design:critiqueStarted':
-      if (designBridgeState.critiqueSource === 'manual') {
-        renderDesignCritiqueFloat({ loading: true });
-      } else {
-        renderDesignCritiqueChip({ loading: true });
-      }
+      renderDesignCritiqueFloat({ loading: true });
       break;
     case 'design:critiqueResult':
-      if (designBridgeState.critiqueSource === 'manual') {
-        renderDesignCritiqueFloat({ loading: false, critique: msg.critique });
-      } else {
-        renderDesignCritiqueChip({ loading: false, critique: msg.critique });
-      }
+      renderDesignCritiqueFloat({ loading: false, critique: msg.critique });
       break;
     case 'design:critiqueError':
       designBridgeState.critiqueLoading = false;
       designBridgeState.critique = null;
-      if (designBridgeState.critiqueSource === 'manual') {
-        const floatEl = document.getElementById('design-canvas-critique-float');
-        if (floatEl) floatEl.style.display = 'none';
-        designBridgeState.critiqueSource = 'auto';
-      } else {
-        renderDesignBridgePage();
-      }
+      { const floatEl = document.getElementById('design-canvas-critique-float'); if (floatEl) floatEl.style.display = 'none'; }
       break;
     case 'design:error':
       console.log('[KC-R] design:error received', { message: String(msg.message || '') });
@@ -4154,6 +4140,9 @@ function setMidtaiCanvasMode(mode) {
   if (midtaiState.canvasMode === 'tweak') {
     hideMidtaiNodePanel();
     postMidtaiCanvasSelectMode(false);
+    // 关闭评审面板，避免两个面板同时显示
+    const critiqueFloat = document.getElementById('design-canvas-critique-float');
+    if (critiqueFloat) critiqueFloat.style.display = 'none';
     if (slidersPanel) {
       const frameEl = document.getElementById('midtai-canvas-iframe');
       renderDesignSlidersPanel(slidersPanel, frameEl);
@@ -5887,11 +5876,9 @@ function renderDesignBridgePage() {
   }
   applyAllDesignSliderValues(frameEl);
   if (designBridgeState.critiqueLoading) {
-    renderDesignCritiqueChip({ loading: true });
+    renderDesignCritiqueFloat({ loading: true });
   } else if (designBridgeState.critique) {
-    renderDesignCritiqueChip({ loading: false, critique: designBridgeState.critique });
-  } else {
-    renderDesignCritiqueChip({ loading: false, critique: null });
+    renderDesignCritiqueFloat({ loading: false, critique: designBridgeState.critique });
   }
 }
 
@@ -5987,11 +5974,10 @@ function applyDesignCritiqueSuggestion(stylePrompt) {
   if (!stylePrompt) return;
   midtaiState.designDirection = stylePrompt;
   renderMidtaiDirectionPicker();
-  // 清空旧评审，新生成完成后会触发新一轮评审
   designBridgeState.critique = null;
   designBridgeState.critiqueLoading = false;
-  const chip = document.getElementById('design-critique-chip');
-  if (chip) chip.style.display = 'none';
+  const floatEl = document.getElementById('design-canvas-critique-float');
+  if (floatEl) floatEl.style.display = 'none';
   generateDesignWorkbench();
 }
 
@@ -6000,7 +5986,9 @@ function requestManualCritique() {
   if (!html) return;
   const prompt = designBridgeState.prompt || '';
   const outputType = designBridgeState.outputType || 'prototype';
-  designBridgeState.critiqueSource = 'manual';
+  // 关闭调节面板，避免两个面板同时显示
+  const slidersPanel = document.getElementById('midtai-sliders-panel');
+  if (slidersPanel) { slidersPanel.style.display = 'none'; }
   renderDesignCritiqueFloat({ loading: true });
   send({ type: 'design:requestCritique', html, prompt, outputType });
 }
@@ -6139,13 +6127,15 @@ function makeDraggable(el) {
     if (target.closest('button, input, select, textarea')) return;
     event.preventDefault();
     const rect = el.getBoundingClientRect();
+    const parentRect = el.offsetParent ? el.offsetParent.getBoundingClientRect() : { left: 0, top: 0 };
     const startX = event.clientX;
     const startY = event.clientY;
-    const startLeft = rect.left;
-    const startTop = rect.top;
-    el.style.left = `${rect.left}px`;
-    el.style.top = `${rect.top}px`;
+    const startLeft = rect.left - parentRect.left;
+    const startTop = rect.top - parentRect.top;
+    el.style.left = `${startLeft}px`;
+    el.style.top = `${startTop}px`;
     el.style.right = 'auto';
+    el.style.bottom = 'auto';
     function onMove(nextEvent) {
       el.style.left = `${startLeft + nextEvent.clientX - startX}px`;
       el.style.top = `${startTop + nextEvent.clientY - startY}px`;
