@@ -35,6 +35,12 @@ Latest verification note: 2026-05-09 - ZIP export integrated (`npx vitest run sr
 | vscode-extension-8ib | 导出 ZIP：HTML + 资源打包下载 | ✓ CLOSED | `.kiro/primers/vscode-extension-8ib.md` |
 | vscode-extension-26q | Kanban 视图：我的作品看板模式 | OPEN P3 | — |
 | vscode-extension-0z5 | 画布草图标注工具：iframe 上层 canvas overlay | OPEN P3 | — |
+| vscode-extension-8jn | postCompactCleanup: 压缩后状态清理 | OPEN P1 | `.kiro/primers/vscode-extension-8jn.md` |
+| vscode-extension-vrw | AgentTool: 通用子 Agent 派发工具 | OPEN P1 | `.kiro/primers/vscode-extension-vrw.md` |
+| vscode-extension-yck | PowerShellTool: Windows PowerShell 专用工具 | OPEN P2 | — |
+| vscode-extension-qhf | SleepTool: 自主循环等待工具 | OPEN P2 | — |
+| vscode-extension-zje | SessionMemory: 会话内笔记服务 | OPEN P2 | — |
+| vscode-extension-kqy | ConfigTool: 设置读写工具 | OPEN P2 | — |
 | vscode-extension-650 | Micro-compact：长会话工具结果轻量清理 | ✓ CLOSED | `.kiro/primers/vscode-extension-650.md` |
 | vscode-extension-tgx | CronCreate / CronDelete / CronList 工具 | ✓ CLOSED | `.kiro/primers/vscode-extension-tgx.md` |
 | vscode-extension-uyl | Plan Mode V2 多阶段规划提示词升级 | ✓ CLOSED | `.kiro/primers/vscode-extension-uyl.md` |
