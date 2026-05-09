@@ -7,6 +7,7 @@ import {
   SessionRepository,
   type ChatMessage,
   type CompactBoundarySessionState,
+  type DesignFlowState,
   type PersistedConversationMessage,
   type SessionRuntimeState,
 } from "../src/storage/sessionRepository";
@@ -156,11 +157,14 @@ import {
   type DesignGenerateOptions,
 } from "../src/design/designEngine";
 import {
+  buildDesignChatSystemPrompt,
+  buildDesignChatUserPrompt,
   buildKainClawDesignSystemPrompt,
   DESIGN_CRITIQUE_SYSTEM_PROMPT,
   normalizeDesignOutputType,
   type DesignOutputType,
 } from "../src/design/designPrompt";
+import type { DesignSlider } from "../src/design/slidersExtractor";
 import {
   buildKainClawDesignPatchSystemPrompt,
   extractDirectTextReplacement,
@@ -284,10 +288,42 @@ type InspectionConversationMessage = {
 };
 
 type ActiveRequestKind = "background" | "chat" | "image";
+type ChatRequestLane = "default" | "design";
 type PendingQuestionState = {
   request: AskUserQuestionRequest & { id: string };
   resolve: (response: AskUserQuestionResponse | null) => void;
 };
+
+type SendPromptOptions = {
+  modelPrompt?: string;
+  lane?: ChatRequestLane;
+  designFlowId?: string;
+};
+
+type DesignLaneRequestContext = {
+  flow: DesignFlowState;
+  prompt: string;
+  requestedFlowId?: string;
+};
+
+type DesignChatHistoryMessage = {
+  role: "user" | "assistant";
+  content: string;
+};
+
+type DesignChatRunResult =
+  | {
+      kind: "question-form";
+      content: string;
+      history: DesignChatHistoryMessage[];
+    }
+  | {
+      kind: "artifact";
+      rawOutput: string;
+      html: string;
+      sliders: DesignSlider[];
+      history: DesignChatHistoryMessage[];
+    };
 
 /**
  * Electron equivalent of ChatSidebarProvider.
@@ -333,6 +369,7 @@ export class ElectronChatPanel {
   private readonly sessionInstalledSkillHooks = new Map<string, HookDefinition[]>();
   private readonly artifactRegistries = new Map<string, InMemoryArtifactRegistry>();
   private currentDesignProjectId: string | undefined;
+  private currentDesignFlowState: DesignFlowState | undefined;
   private pendingQuestion: PendingQuestionState | undefined;
   private sessionMessageWriteQueue: Promise<void> = Promise.resolve();
   private backgroundTaskNotificationTimer: NodeJS.Timeout | undefined;
@@ -547,12 +584,19 @@ export class ElectronChatPanel {
         : this.toPersistedConversationMessages(this.sessionMessages);
   }
 
+  private restoreDesignFlowStateFromRuntime(
+    runtimeState: SessionRuntimeState,
+  ): void {
+    this.currentDesignFlowState = runtimeState.designFlowState;
+  }
+
   private async restoreCurrentSessionRuntimeState(
     sessionId: string,
   ): Promise<void> {
     const runtimeState = await this.loadSessionRuntimeState(sessionId);
     this.restoreArtifactRegistryFromSessionMessages(sessionId, runtimeState);
     this.restoreModelConversationFromRuntime(runtimeState);
+    this.restoreDesignFlowStateFromRuntime(runtimeState);
   }
 
   private async saveCurrentSessionRuntimeState(sessionId: string): Promise<void> {
@@ -572,6 +616,12 @@ export class ElectronChatPanel {
       nextRuntimeState.compactBoundary = this.compactBoundary;
     } else {
       delete nextRuntimeState.compactBoundary;
+    }
+
+    if (this.currentDesignFlowState) {
+      nextRuntimeState.designFlowState = this.currentDesignFlowState;
+    } else {
+      delete nextRuntimeState.designFlowState;
     }
 
     const artifactRegistry = this.artifactRegistries.get(sessionId);
@@ -753,6 +803,7 @@ export class ElectronChatPanel {
     if (type === "sessions:load") { await this.loadSessions(); return; }
     if (type === "sessions:close") { this.sendToRenderer({ type: "hideSessions" }); return; }
     if (type === "sessions:new") { await this.createNewSession(); return; }
+    if (type === "sessions:new-design") { await this.createNewDesignSession(); return; }
     if (type === "sessions:switch") { await this.switchSession(String(message.id ?? "")); return; }
     if (type === "sessions:rename") { await this.renameSession(String(message.id ?? ""), String(message.title ?? "")); return; }
     if (type === "sessions:delete") { await this.deleteSession(String(message.id ?? "")); return; }
@@ -888,6 +939,10 @@ export class ElectronChatPanel {
     if (type === "ready") { await this.handleReady(); return; }
     if (type === "clearChat") { await this.clearChat(); return; }
     if (type === "sendPrompt") {
+      if (await this.isCurrentSessionDesignType()) {
+        await this.handleDesignChatLane(message);
+        return;
+      }
       await this.routePrompt(
         String(message.prompt ?? ""),
         message.attachments as WebviewAttachment[] | undefined,
@@ -1098,6 +1153,9 @@ export class ElectronChatPanel {
           this.getDefaultSessionTitle(),
         );
         id = session.id;
+        await this.sessions.saveRuntimeState(session.id, {
+          sessionType: "default",
+        });
       }
       await this.settings.setActiveSessionId(id);
     }
@@ -1127,11 +1185,30 @@ export class ElectronChatPanel {
 
   private async loadSessions(): Promise<void> {
     const index = await this.sessions.readIndex();
+    const sessions = await Promise.all(index.sessions.map(async session => {
+      const runtimeState = await this.loadSessionRuntimeState(session.id);
+      return {
+        ...session,
+        sessionType: runtimeState.sessionType === "design" ? "design" : "default",
+      };
+    }));
     this.sendToRenderer({
       type: "sessions:data",
-      sessions: index.sessions,
+      sessions,
       activeId: this.currentSessionId ?? null,
     });
+  }
+
+  private async getCurrentSessionType(): Promise<"design" | "default"> {
+    if (!this.currentSessionId) {
+      return "default";
+    }
+    const runtimeState = await this.loadSessionRuntimeState(this.currentSessionId);
+    return runtimeState.sessionType === "design" ? "design" : "default";
+  }
+
+  private async isCurrentSessionDesignType(): Promise<boolean> {
+    return (await this.getCurrentSessionType()) === "design";
   }
 
   private async switchSession(id: string): Promise<void> {
@@ -1159,8 +1236,26 @@ export class ElectronChatPanel {
       getWorkspaceHash(workspaceRoot),
       this.getDefaultSessionTitle(),
     );
-    await this.sessions.saveRuntimeState(session.id, { workspaceRoot });
+    await this.sessions.saveRuntimeState(session.id, {
+      workspaceRoot,
+      sessionType: "default",
+    });
     await this.switchSession(session.id);
+  }
+
+  private async createNewDesignSession(): Promise<void> {
+    const workspaceRoot = this.getSelectedWorkspaceRoot();
+    const session = await this.sessions.createSession(
+      randomUUID(),
+      getWorkspaceHash(workspaceRoot),
+      this.settings.getLanguage() === "en-US" ? "Design chat" : "设计对话",
+    );
+    await this.sessions.saveRuntimeState(session.id, {
+      workspaceRoot,
+      sessionType: "design",
+    });
+    await this.switchSession(session.id);
+    this.sendToRenderer({ type: "sessions:switch-to-chat" });
   }
 
   private isViewingSession(sessionId: string): boolean {
@@ -1261,6 +1356,7 @@ export class ElectronChatPanel {
     clearSessionInstalledSkillHooks(this.sessionInstalledSkillHooks, id);
     if (this.currentSessionId === id) {
       this.pendingQuestion = undefined;
+      this.currentDesignFlowState = undefined;
     }
 
     if (wasActiveSession) {
@@ -2184,6 +2280,7 @@ export class ElectronChatPanel {
     this.sessionMessages = [];
     this.modelConversationMessages = [];
     this.compactBoundary = undefined;
+    this.currentDesignFlowState = undefined;
     this.currentSessionId = undefined;
     this.currentSessionWorkspaceRoot = "";
     this.imageResults = [];
@@ -2228,7 +2325,10 @@ export class ElectronChatPanel {
       getWorkspaceHash(workspaceRoot),
       this.getDefaultSessionTitle(),
     );
-    await this.sessions.saveRuntimeState(session.id, { workspaceRoot });
+    await this.sessions.saveRuntimeState(session.id, {
+      workspaceRoot,
+      sessionType: "default",
+    });
     this.currentSessionId = session.id;
     this.modelConversationMessages = [];
     this.compactBoundary = undefined;
@@ -2236,6 +2336,313 @@ export class ElectronChatPanel {
     this.currentSessionWorkspaceRoot = workspaceRoot;
     await this.postState();
     await this.loadSessions();
+  }
+
+  private buildDesignFlowId(sessionId: string): string {
+    return `design-flow-${sessionId}-${Date.now()}`;
+  }
+
+  private async createDesignFlowState(
+    sessionId: string,
+    prompt: string,
+  ): Promise<DesignFlowState> {
+    const project = await this.designProjectStore.createProject({
+      name: (prompt.trim() || "KainClaw Design").slice(0, 80),
+      source: "blank",
+      activeVersionId: "pending-version",
+    });
+    const flow: DesignFlowState = {
+      flowId: this.buildDesignFlowId(sessionId),
+      projectId: project.projectId,
+      conversationId: sessionId,
+      createdAt: Date.now(),
+      conversationHistory: [],
+    };
+    this.currentDesignFlowState = flow;
+    await this.setCurrentDesignProject(project);
+    await this.saveCurrentSessionRuntimeState(sessionId);
+    return flow;
+  }
+
+  private async resolveDesignLaneRequestContext(
+    sessionId: string,
+    prompt: string,
+    requestedFlowId?: string,
+  ): Promise<DesignLaneRequestContext> {
+    const activeFlow = this.currentDesignFlowState;
+    if (activeFlow && (!requestedFlowId || requestedFlowId === activeFlow.flowId)) {
+      const project = await this.designProjectStore.getProject(activeFlow.projectId);
+      if (project) {
+        await this.setCurrentDesignProject(project);
+        return {
+          flow: {
+            ...activeFlow,
+            conversationHistory: Array.isArray(activeFlow.conversationHistory)
+              ? activeFlow.conversationHistory
+              : [],
+          },
+          prompt,
+          requestedFlowId,
+        };
+      }
+    }
+
+    const nextFlow = await this.createDesignFlowState(sessionId, prompt);
+    return {
+      flow: nextFlow,
+      prompt,
+      requestedFlowId,
+    };
+  }
+
+  private extractArtifactHtmlFromDesignChatOutput(rawOutput: string): {
+    html: string;
+    title: string;
+  } {
+    const match = rawOutput.match(
+      /<artifact\b([^>]*)>([\s\S]*?)<\/artifact>/i,
+    );
+    if (!match) {
+      throw new Error("Design chat output did not contain an <artifact> block.");
+    }
+
+    const attrs = match[1] ?? "";
+    const body = (match[2] ?? "").trim();
+    const typeMatch = attrs.match(/\btype="([^"]+)"/i);
+    const titleMatch = attrs.match(/\btitle="([^"]+)"/i);
+    const type = typeMatch?.[1]?.trim().toLowerCase();
+    if (type !== "text/html") {
+      throw new Error("Design chat artifact must use type=\"text/html\".");
+    }
+    if (!body.startsWith("<!DOCTYPE html>")) {
+      throw new Error("Design chat artifact HTML must start with <!DOCTYPE html>.");
+    }
+
+    return {
+      html: body,
+      title: titleMatch?.[1]?.trim() || "KainClaw Design",
+    };
+  }
+
+  private async runDesignChatTurn(options: {
+    sessionId: string;
+    prompt: string;
+    outputType: DesignOutputType;
+    brandContext?: string;
+    flow: DesignFlowState;
+    signal: AbortSignal;
+  }): Promise<DesignChatRunResult> {
+    const workspaceRoot = this.getSelectedWorkspaceRoot();
+    const { config, envMap } = await resolveProviderConfig(
+      this.settings,
+      workspaceRoot,
+    );
+    const provider = this.createProviderForSystemPrompt(
+      config,
+      workspaceRoot,
+      envMap,
+      buildDesignChatSystemPrompt({
+        ...(options.brandContext?.trim()
+          ? { brandContext: options.brandContext.trim() }
+          : {}),
+      }),
+    );
+
+    const isFormAnswerTurn = /^\[form answers\s*-\s*discovery\]/i.test(options.prompt);
+    const userPrompt = isFormAnswerTurn
+      ? [
+          options.prompt,
+          "",
+          `Output type: ${options.outputType}`,
+          ...(options.brandContext?.trim()
+            ? [
+                "",
+                "Brand context:",
+                options.brandContext.trim(),
+              ]
+            : []),
+        ].join("\n")
+      : buildDesignChatUserPrompt({
+          prompt: options.prompt,
+          outputType: options.outputType,
+          ...(options.brandContext?.trim()
+            ? { brandContext: options.brandContext.trim() }
+            : {}),
+        });
+    const conversationHistory = Array.isArray(options.flow.conversationHistory)
+      ? options.flow.conversationHistory
+      : [];
+    const history: NormalizedMessage[] = [
+      ...conversationHistory.map(message => ({
+        role: message.role,
+        content: message.content,
+      })),
+      {
+        role: "user" as const,
+        content: userPrompt,
+      },
+    ];
+
+    let streamedText = "";
+    const step = await provider.runStep(
+      history,
+      [],
+      token => {
+        streamedText += token;
+        this.appendStreamingToken(options.sessionId, token);
+      },
+      options.signal,
+    );
+    const rawOutput = (step.text || streamedText).trim();
+    if (!rawOutput) {
+      throw new Error("Design chat returned an empty response.");
+    }
+    if (step.toolCalls.length > 0) {
+      throw new Error("Design chat lane does not support tool calls.");
+    }
+
+    const nextHistory: DesignChatHistoryMessage[] = [
+      ...conversationHistory,
+      {
+        role: "user",
+        content: options.prompt,
+      },
+      {
+        role: "assistant",
+        content: rawOutput,
+      },
+    ];
+
+    if (/<question-form\b/i.test(rawOutput)) {
+      return {
+        kind: "question-form",
+        content: rawOutput,
+        history: nextHistory,
+      };
+    }
+
+    const artifact = this.extractArtifactHtmlFromDesignChatOutput(rawOutput);
+
+    return {
+      kind: "artifact",
+      rawOutput,
+      html: artifact.html,
+      sliders: [],
+      history: nextHistory,
+    };
+  }
+
+  private async handleDesignChatLane(message: Record<string, unknown>): Promise<void> {
+    const prompt = String(message.prompt ?? "").trim();
+    if (!prompt) {
+      return;
+    }
+
+    await this.ensureSession();
+    if (!this.currentSessionId) {
+      return;
+    }
+
+    const context = await this.resolveDesignLaneRequestContext(
+      this.currentSessionId,
+      prompt,
+      typeof message.designFlowId === "string" ? message.designFlowId.trim() : undefined,
+    );
+    const outputType = normalizeDesignOutputType(message.outputType);
+    const brandContext =
+      typeof message.brandContext === "string" ? message.brandContext.trim() : "";
+
+    const requestSessionId = this.currentSessionId;
+    if (this.inFlightRequests.has(requestSessionId)) {
+      return;
+    }
+
+    const abortController = new AbortController();
+    this.inFlightRequests.set(requestSessionId, {
+      abortController,
+      streamingText: "",
+      kind: "chat",
+    });
+
+    const userMessage: ChatMessage = {
+      role: "user",
+      content: prompt,
+      timestamp: Date.now(),
+    };
+    this.sessionMessages = [...this.sessionMessages, userMessage];
+    await this.sessions.appendMessages(requestSessionId, [userMessage]);
+    await this.postState();
+
+    try {
+      const result = await this.runDesignChatTurn({
+        sessionId: requestSessionId,
+        prompt,
+        outputType,
+        ...(brandContext ? { brandContext } : {}),
+        flow: context.flow,
+        signal: abortController.signal,
+      });
+
+      this.currentDesignFlowState = {
+        ...context.flow,
+        conversationHistory: result.history,
+      };
+
+      if (result.kind === "question-form") {
+        await this.appendAssistantMessageToSession(requestSessionId, {
+          role: "assistant",
+          content: result.content,
+          timestamp: Date.now(),
+        });
+        await this.saveCurrentSessionRuntimeState(requestSessionId);
+        return;
+      }
+
+      const version = await this.saveDesignVersion({
+        prompt,
+        outputType,
+        html: result.html,
+        sliders: result.sliders,
+        source: "generate",
+        projectId: context.flow.projectId,
+      });
+
+      await this.appendAssistantMessageToSession(requestSessionId, {
+        role: "assistant",
+        content: result.rawOutput,
+        timestamp: Date.now(),
+      });
+      await this.saveCurrentSessionRuntimeState(requestSessionId);
+
+      this.sendToRenderer({
+        type: "design:result",
+        html: result.html,
+        sliders: result.sliders,
+        prompt,
+        outputType,
+        versionId: version.id,
+        projectId: version.projectId,
+        activeVersionId: version.id,
+      });
+    } catch (error) {
+      if (abortController.signal.aborted) {
+        return;
+      }
+      await this.appendAssistantMessageToSession(requestSessionId, {
+        role: "assistant",
+        content: `设计任务失败：${error instanceof Error ? error.message : String(error)}`,
+        kind: "error",
+        timestamp: Date.now(),
+      });
+      this.sendToRenderer({
+        type: "design:error",
+        message: error instanceof Error ? error.message : String(error),
+      });
+    } finally {
+      this.inFlightRequests.delete(requestSessionId);
+      this.clearStreamingForSession(requestSessionId);
+      await this.postState();
+    }
   }
 
   private async routePrompt(
@@ -2363,9 +2770,7 @@ export class ElectronChatPanel {
   private async sendPrompt(
     prompt: string,
     attachments?: WebviewAttachment[],
-    options?: {
-      modelPrompt?: string;
-    },
+    options?: SendPromptOptions,
   ): Promise<void> {
     if (!prompt.trim()) return;
     await this.ensureSession();
@@ -3328,6 +3733,10 @@ export class ElectronChatPanel {
         message.referenceImageMimeType.trim()
         ? message.referenceImageMimeType.trim()
         : undefined;
+    const requestedProjectId =
+      typeof message.projectId === "string" && message.projectId.trim()
+        ? message.projectId.trim()
+        : undefined;
     const workspaceRoot = this.getSelectedWorkspaceRoot();
       const { config, envMap } = await resolveProviderConfig(
         this.settings,
@@ -3370,6 +3779,7 @@ export class ElectronChatPanel {
         html: result.html,
         sliders: result.sliders,
         source: "generate",
+        ...(requestedProjectId ? { projectId: requestedProjectId } : {}),
         ...(activeArtifact?.type === "html" ? { sourceArtifactId: activeArtifact.id } : {}),
       });
 
@@ -3749,11 +4159,14 @@ ${html.slice(0, 8000)}
     html: string;
     sliders: unknown[];
     source: "generate" | "patch" | "editCurrent" | "restore";
+    projectId?: string;
     sourceArtifactId?: string;
     baseVersionId?: string;
   }): Promise<DesignVersionRecord> {
     await this.ensureSession();
-    let project = await this.getCurrentDesignProject();
+    let project = options.projectId
+      ? await this.designProjectStore.getProject(options.projectId)
+      : await this.getCurrentDesignProject();
     if (!project) {
       project = await this.designProjectStore.createProject({
         name: (options.prompt?.trim() || "KainClaw Design").slice(0, 80),
@@ -3793,6 +4206,12 @@ ${html.slice(0, 8000)}
     });
     const captureProject = updatedProject ?? project;
     await this.setCurrentDesignProject(captureProject);
+    if (this.currentDesignFlowState && this.currentDesignFlowState.projectId === captureProject.projectId) {
+      this.currentDesignFlowState = {
+        ...this.currentDesignFlowState,
+        projectId: captureProject.projectId,
+      };
+    }
 
     // Async thumbnail capture — doesn't block the response
     void captureDesignThumbnail(options.html)
@@ -4910,9 +5329,12 @@ ${html.slice(0, 8000)}
         currentProjectId: currentDesignProject?.projectId ?? null,
         currentProjectName: currentDesignProject?.name ?? null,
         activeVersionId: currentDesignProject?.activeVersionId ?? null,
+        currentFlowId: this.currentDesignFlowState?.flowId ?? null,
+        currentFlowProjectId: this.currentDesignFlowState?.projectId ?? null,
       },
       workspaceRoot,
       workspaceInfo,
+      sessionType: currentRuntimeState?.sessionType === "design" ? "design" : "default",
     });
   }
 

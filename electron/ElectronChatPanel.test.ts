@@ -3122,6 +3122,34 @@ Freeze skill body.
     });
   });
 
+  it("creates a dedicated design session with sessionType design and switches the renderer to chat", async () => {
+    const harness = await createHarness();
+    tempDirs.push(harness.storagePath);
+
+    await harness.settings.setOnboardingDone(true);
+    await harness.panel.handleMessage({ type: "ready" });
+
+    await harness.panel.handleMessage({ type: "sessions:new-design" });
+
+    const designSessionId = harness.settings.getActiveSessionId();
+    expect(designSessionId).toBeTruthy();
+    await expect(harness.sessions.loadRuntimeState(designSessionId!)).resolves.toMatchObject({
+      sessionType: "design",
+    });
+
+    const switchPayload = getLastRendererPayloadOfType<{ type: string }>(
+      harness.rendererPayloads,
+      "sessions:switch-to-chat",
+    );
+    expect(switchPayload?.type).toBe("sessions:switch-to-chat");
+
+    const statePayload = getLastRendererPayloadOfType<{
+      type: "state";
+      sessionType: string;
+    }>(harness.rendererPayloads, "state");
+    expect(statePayload?.sessionType).toBe("design");
+  });
+
   it("uses the legacy global workspace only to migrate the initially active session", async () => {
     const harness = await createHarness();
     tempDirs.push(harness.storagePath);
@@ -4441,6 +4469,331 @@ Freeze skill body.
     expect(versionsPayload?.versions.every(version => version.projectId === firstProject)).toBe(true);
     expect(versionsPayload?.versions.some(version => version.id === firstResult?.versionId)).toBe(true);
     expect(versionsPayload?.versions.some(version => version.prompt === "Project B")).toBe(false);
+  });
+
+  it("creates and persists a design flow when sendPrompt uses the design lane", async () => {
+    const harness = await createHarness();
+    tempDirs.push(harness.storagePath);
+
+    await harness.settings.setOnboardingDone(true);
+    await harness.panel.handleMessage({ type: "ready" });
+    await harness.panel.handleMessage({ type: "sessions:new-design" });
+
+    vi.mocked(resolveProviderConfig).mockResolvedValue({
+      config: {
+        type: "anthropic",
+        apiKey: "test-key",
+        model: "claude-sonnet-4-6",
+      },
+      envMap: {},
+    });
+    vi.mocked(buildProviderAdapter).mockReturnValue({} as never);
+    vi.mocked(generateKainClawDesign).mockResolvedValue({
+      html: "<!DOCTYPE html><html><body><main>Flow A</main></body></html>",
+      sliders: [],
+      rawOutput: "raw",
+      systemPrompt: "system",
+      userPrompt: "user",
+    });
+
+    await harness.panel.handleMessage({
+      type: "sendPrompt",
+      prompt: "Design a robotics landing page",
+      outputType: "landing-page",
+    });
+
+    const currentSessionId = harness.settings.getActiveSessionId();
+    const runtimeState = await harness.sessions.loadRuntimeState(currentSessionId!);
+    expect(runtimeState.designFlowState).toMatchObject({
+      flowId: expect.stringContaining(`design-flow-${currentSessionId}`),
+      projectId: expect.any(String),
+      conversationId: currentSessionId,
+    });
+
+    const statePayload = getLastRendererPayloadOfType<{
+      type: "state";
+      designState: {
+        currentFlowId: string | null;
+        currentFlowProjectId: string | null;
+      };
+    }>(harness.rendererPayloads, "state");
+    expect(statePayload?.designState.currentFlowId).toBe(runtimeState.designFlowState?.flowId ?? null);
+    expect(statePayload?.designState.currentFlowProjectId).toBe(runtimeState.designFlowState?.projectId ?? null);
+  });
+
+  it("routes all prompts through the design lane when the current sessionType is design", async () => {
+    const harness = await createHarness();
+    tempDirs.push(harness.storagePath);
+
+    await harness.settings.setOnboardingDone(true);
+    await harness.panel.handleMessage({ type: "ready" });
+    await harness.panel.handleMessage({ type: "sessions:new-design" });
+
+    vi.mocked(resolveProviderConfig).mockResolvedValue({
+      config: {
+        type: "anthropic",
+        apiKey: "test-key",
+        model: "claude-sonnet-4-6",
+      },
+      envMap: {},
+    });
+    const providerRunStep = vi.fn().mockResolvedValue({
+      text: [
+        "Got it — I need a few design choices first.",
+        '<question-form id="discovery" title="Quick brief">',
+        '{"questions":[{"id":"tone","label":"Tone","type":"radio","options":["Editorial","Minimal"]}]}',
+        "</question-form>",
+      ].join("\n"),
+      toolCalls: [],
+      done: true,
+    });
+    vi.mocked(buildProviderAdapter).mockReturnValue({
+      runStep: providerRunStep,
+    } as never);
+
+    await harness.panel.handleMessage({
+      type: "sendPrompt",
+      prompt: "Design a fintech landing page",
+      outputType: "landing-page",
+    });
+
+    const messages = await harness.sessions.loadMessages(harness.settings.getActiveSessionId()!);
+    expect(messages.at(-1)?.content).toContain("<question-form");
+    expect(providerRunStep).toHaveBeenCalledTimes(1);
+  });
+
+  it("reuses the same design flow and project for repeated design lane requests in one session", async () => {
+    const harness = await createHarness();
+    tempDirs.push(harness.storagePath);
+
+    await harness.settings.setOnboardingDone(true);
+    await harness.panel.handleMessage({ type: "ready" });
+    await harness.panel.handleMessage({ type: "sessions:new-design" });
+
+    vi.mocked(resolveProviderConfig).mockResolvedValue({
+      config: {
+        type: "anthropic",
+        apiKey: "test-key",
+        model: "claude-sonnet-4-6",
+      },
+      envMap: {},
+    });
+    vi.mocked(buildProviderAdapter).mockReturnValue({} as never);
+    vi.mocked(generateKainClawDesign)
+      .mockResolvedValueOnce({
+        html: "<!DOCTYPE html><html><body><main>Flow First</main></body></html>",
+        sliders: [],
+        rawOutput: "raw",
+        systemPrompt: "system",
+        userPrompt: "user",
+      })
+      .mockResolvedValueOnce({
+        html: "<!DOCTYPE html><html><body><main>Flow Second</main></body></html>",
+        sliders: [],
+        rawOutput: "raw",
+        systemPrompt: "system",
+        userPrompt: "user",
+      });
+
+    await harness.panel.handleMessage({
+      type: "sendPrompt",
+      prompt: "Design version one",
+      outputType: "prototype",
+    });
+
+    const currentSessionId = harness.settings.getActiveSessionId();
+    const firstRuntimeState = await harness.sessions.loadRuntimeState(currentSessionId!);
+    const firstFlowId = firstRuntimeState.designFlowState?.flowId;
+    const firstProjectId = firstRuntimeState.designFlowState?.projectId;
+
+    await harness.panel.handleMessage({
+      type: "sendPrompt",
+      prompt: "Design version two",
+      designFlowId: firstFlowId,
+      outputType: "prototype",
+    });
+
+    const secondRuntimeState = await harness.sessions.loadRuntimeState(currentSessionId!);
+    expect(secondRuntimeState.designFlowState?.flowId).toBe(firstFlowId);
+    expect(secondRuntimeState.designFlowState?.projectId).toBe(firstProjectId);
+  });
+
+  it("keeps design flows isolated across different chat sessions", async () => {
+    const harness = await createHarness();
+    tempDirs.push(harness.storagePath);
+
+    await harness.settings.setOnboardingDone(true);
+    await harness.panel.handleMessage({ type: "ready" });
+    await harness.panel.handleMessage({ type: "sessions:new-design" });
+
+    vi.mocked(resolveProviderConfig).mockResolvedValue({
+      config: {
+        type: "anthropic",
+        apiKey: "test-key",
+        model: "claude-sonnet-4-6",
+      },
+      envMap: {},
+    });
+    vi.mocked(buildProviderAdapter).mockReturnValue({} as never);
+    vi.mocked(generateKainClawDesign)
+      .mockResolvedValueOnce({
+        html: "<!DOCTYPE html><html><body><main>Session One</main></body></html>",
+        sliders: [],
+        rawOutput: "raw",
+        systemPrompt: "system",
+        userPrompt: "user",
+      })
+      .mockResolvedValueOnce({
+        html: "<!DOCTYPE html><html><body><main>Session Two</main></body></html>",
+        sliders: [],
+        rawOutput: "raw",
+        systemPrompt: "system",
+        userPrompt: "user",
+      });
+
+    await harness.panel.handleMessage({
+      type: "sendPrompt",
+      prompt: "Session one design",
+      outputType: "prototype",
+    });
+    const firstSessionId = harness.settings.getActiveSessionId()!;
+    const firstRuntimeState = await harness.sessions.loadRuntimeState(firstSessionId);
+
+    await harness.panel.handleMessage({ type: "sessions:new-design" });
+
+    await harness.panel.handleMessage({
+      type: "sendPrompt",
+      prompt: "Session two design",
+      outputType: "prototype",
+    });
+    const secondSessionId = harness.settings.getActiveSessionId()!;
+    const secondRuntimeState = await harness.sessions.loadRuntimeState(secondSessionId);
+
+    expect(secondSessionId).not.toBe(firstSessionId);
+    expect(firstRuntimeState.designFlowState?.flowId).toBeTruthy();
+    expect(secondRuntimeState.designFlowState?.flowId).toBeTruthy();
+    expect(secondRuntimeState.designFlowState?.flowId).not.toBe(firstRuntimeState.designFlowState?.flowId);
+    expect(secondRuntimeState.designFlowState?.projectId).not.toBe(firstRuntimeState.designFlowState?.projectId);
+  });
+
+  it("returns a question-form on the first design-lane turn instead of generating HTML immediately", async () => {
+    const harness = await createHarness();
+    tempDirs.push(harness.storagePath);
+
+    await harness.settings.setOnboardingDone(true);
+    await harness.panel.handleMessage({ type: "ready" });
+    await harness.panel.handleMessage({ type: "sessions:new-design" });
+
+    vi.mocked(resolveProviderConfig).mockResolvedValue({
+      config: {
+        type: "anthropic",
+        apiKey: "test-key",
+        model: "claude-sonnet-4-6",
+      },
+      envMap: {},
+    });
+    const providerRunStep = vi.fn().mockResolvedValue({
+      text: [
+        "Got it — I need a few design choices first.",
+        '<question-form id="discovery" title="Quick brief">',
+        '{"questions":[{"id":"tone","label":"Tone","type":"radio","options":["Editorial","Minimal"]}]}',
+        "</question-form>",
+      ].join("\n"),
+      toolCalls: [],
+      done: true,
+    });
+    vi.mocked(buildProviderAdapter).mockReturnValue({
+      runStep: providerRunStep,
+    } as never);
+
+    await harness.panel.handleMessage({
+      type: "sendPrompt",
+      prompt: "Design a premium robotics landing page",
+      outputType: "landing-page",
+    });
+
+    const messages = await harness.sessions.loadMessages(harness.settings.getActiveSessionId()!);
+    expect(messages.at(-1)?.role).toBe("assistant");
+    expect(messages.at(-1)?.content).toContain("<question-form");
+
+    const resultPayload = getLastRendererPayloadOfType<{ type: "design:result" }>(
+      harness.rendererPayloads,
+      "design:result",
+    );
+    expect(resultPayload).toBeUndefined();
+
+    const runtimeState = await harness.sessions.loadRuntimeState(harness.settings.getActiveSessionId()!);
+    expect(runtimeState.designFlowState?.conversationHistory?.at(-1)?.content).toContain("<question-form");
+  });
+
+  it("generates a design artifact on the second design-lane turn when form answers are provided", async () => {
+    const harness = await createHarness();
+    tempDirs.push(harness.storagePath);
+
+    await harness.settings.setOnboardingDone(true);
+    await harness.panel.handleMessage({ type: "ready" });
+    await harness.panel.handleMessage({ type: "sessions:new-design" });
+
+    vi.mocked(resolveProviderConfig).mockResolvedValue({
+      config: {
+        type: "anthropic",
+        apiKey: "test-key",
+        model: "claude-sonnet-4-6",
+      },
+      envMap: {},
+    });
+    const providerRunStep = vi.fn()
+      .mockResolvedValueOnce({
+        text: [
+          "Got it — I need a few design choices first.",
+          '<question-form id="discovery" title="Quick brief">',
+          '{"questions":[{"id":"tone","label":"Tone","type":"radio","options":["Editorial","Minimal"]}]}',
+          "</question-form>",
+        ].join("\n"),
+        toolCalls: [],
+        done: true,
+      })
+      .mockResolvedValueOnce({
+        text: [
+          '<artifact identifier="robotics-landing" type="text/html" title="Robotics Landing">',
+          "<!DOCTYPE html>",
+          "<html><head><title>Robotics Landing</title></head><body><main>Robotics Landing</main></body></html>",
+          "</artifact>",
+        ].join("\n"),
+        toolCalls: [],
+        done: true,
+      });
+    vi.mocked(buildProviderAdapter).mockReturnValue({
+      runStep: providerRunStep,
+    } as never);
+
+    await harness.panel.handleMessage({
+      type: "sendPrompt",
+      prompt: "Design a premium robotics landing page",
+      outputType: "landing-page",
+    });
+
+    await harness.panel.handleMessage({
+      type: "sendPrompt",
+      prompt: "[form answers - discovery]\n- Tone: Editorial",
+      outputType: "landing-page",
+      designFlowId: (await harness.sessions.loadRuntimeState(harness.settings.getActiveSessionId()!)).designFlowState?.flowId,
+    });
+
+    const resultPayload = getLastRendererPayloadOfType<{
+      type: "design:result";
+      html: string;
+      outputType: string;
+    }>(harness.rendererPayloads, "design:result");
+    expect(resultPayload).toMatchObject({
+      type: "design:result",
+      html: expect.stringContaining("Robotics Landing"),
+      outputType: "landing-page",
+    });
+
+    const runtimeState = await harness.sessions.loadRuntimeState(harness.settings.getActiveSessionId()!);
+    expect(runtimeState.designFlowState?.conversationHistory?.length).toBeGreaterThanOrEqual(4);
+    expect(runtimeState.designFlowState?.conversationHistory?.at(-1)?.content).toContain("<artifact");
   });
 
   it("returns direction suggestions for ambiguous design prompts before generation", async () => {

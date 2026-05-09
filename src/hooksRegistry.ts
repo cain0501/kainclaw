@@ -97,6 +97,8 @@ const SUPPORTED_HOOK_EVENTS: HookEventDefinition[] = [
   { id: "TaskCreated", summary: "When a background task is registered." },
   { id: "TaskUpdated", summary: "A structured task was updated." },
   { id: "TaskCompleted", summary: "When a background task completes successfully." },
+  { id: "WorktreeCreate", summary: "When a worktree is created via EnterWorktree." },
+  { id: "WorktreeRemove", summary: "When a worktree is removed via ExitWorktree." },
   { id: "BackgroundTaskStarted", summary: "A background task started." },
   { id: "BackgroundTaskCompleted", summary: "A background task reached a terminal state." },
   { id: "SessionSwitched", summary: "The active session switched to another saved session." },

@@ -1779,6 +1779,7 @@ window.addEventListener('mouseleave', () => {
 let appState = {
   isBusy: false,
   activeRequestKind: null,
+  sessionType: 'default',
   messages: [],
   streamingText: '',
   providerLabel: '加载中...',
@@ -2985,6 +2986,12 @@ function handleMessage(msg) {
     case 'sessions:data':
       renderSessions(msg.sessions || [], msg.activeId);
       break;
+    case 'sessions:switch-to-chat':
+      showPage('chat');
+      requestAnimationFrame(() => {
+        document.getElementById('prompt-input')?.focus();
+      });
+      break;
     case 'hideSessions':
       break;
     case 'sessions:exported':
@@ -3464,6 +3471,7 @@ function applyState(state) {
 
   appState.isBusy = state.isBusy;
   appState.activeRequestKind = state.activeRequestKind || null;
+  appState.sessionType = state.sessionType === 'design' ? 'design' : 'default';
   if (!appState.isBusy || appState.activeRequestKind !== 'image') {
     chatPendingImageRequest = null;
   }
@@ -3776,6 +3784,10 @@ function switchMidtaiType(type) {
 }
 
 function setMidtaiDesignMode(mode) {
+  if (mode === 'pro') {
+    send({ type: 'sessions:new-design' });
+    return;
+  }
   midtaiState.designMode = mode === 'pro' ? 'pro' : 'simple';
   localStorage.setItem('kc_design_mode', midtaiState.designMode);
   applyMidtaiDesignMode();
@@ -5644,6 +5656,9 @@ function updateBusyUi() {
   const composerStatus = document.getElementById('composer-status');
   const isImagePending = !!chatPendingImageRequest || appState.activeRequestKind === 'image';
   const isBackgroundPending = appState.activeRequestKind === 'background';
+  const idlePlaceholder = appState.sessionType === 'design'
+    ? '描述你想要的设计…'
+    : '给 KainClaw 发消息... (/ 打开命令)';
   if (appState.isBusy) {
     if (isBackgroundPending) {
       sendBtn.style.display = 'flex';
@@ -5670,7 +5685,7 @@ function updateBusyUi() {
     sendBtn.disabled = false;
     sendBtn.style.opacity = '1';
     sendBtn.style.cursor = 'pointer';
-    input.placeholder = '给 KainClaw 发消息... (/ 打开命令)';
+    input.placeholder = idlePlaceholder;
     composerStatus.style.display = 'none';
   }
 }
@@ -8910,6 +8925,9 @@ function updateChatComposerUi() {
   const copy = document.getElementById('chat-image-mode-copy');
   const input = document.getElementById('prompt-input');
   const imageButton = document.getElementById('chat-action-image');
+  const idlePlaceholder = appState.sessionType === 'design'
+    ? '描述你想要的设计…'
+    : shellText('composerPlaceholder');
 
   if (chatComposerState.intent === 'image') {
     banner.style.display = 'flex';
@@ -8958,8 +8976,12 @@ function renderSessions(sessions, activeId) {
   for (const session of sessions) {
     const active = session.id === activeId;
     const displayTitle = displaySessionTitle(session.title || '');
+    const sessionType = session.sessionType === 'design' ? 'design' : 'default';
+    const leadingIcon = sessionType === 'design'
+      ? `<span title="Design session" style="flex-shrink:0;font-size:12px;line-height:1;color:#c9502e">✦</span>`
+      : `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="flex-shrink:0"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>`;
     html += `<div class="sess-item${active ? ' active' : ''}" onclick="switchSession('${session.id}')">
-      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="flex-shrink:0"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+      ${leadingIcon}
       <span class="sess-item-title">${escapeHtml(displayTitle)}</span>
       <div class="sess-actions">
         <button class="sess-action" title="${escapeHtml(shellText('renameSessionTitle'))}" onclick="event.stopPropagation();renameSession('${session.id}', '${encodeURIComponent(session.title || '')}')">
@@ -9318,7 +9340,7 @@ function updateChatComposerUi() {
   }
 
   banner.style.display = 'none';
-  input.placeholder = shellText('composerPlaceholder');
+  input.placeholder = idlePlaceholder;
   imageButton.textContent = shellText('imageModeActivate');
   imageButton.className = 'btn-secondary';
 }

@@ -98,6 +98,8 @@ export async function triggerHooks(
     SubagentStop: ["SubagentStop"],
     TaskCreated: ["TaskCreated"],
     TaskCompleted: ["TaskCompleted"],
+    WorktreeCreate: ["WorktreeCreate"],
+    WorktreeRemove: ["WorktreeRemove"],
   };
   const matchQueries = resolveMatchQuery(event, context);
   const matching = hooks.filter(h => {

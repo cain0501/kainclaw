@@ -4,7 +4,12 @@ import { promises as fs } from "node:fs";
 
 import { afterEach, describe, expect, it } from "vitest";
 
-import { buildDesignExportPath, exportDesignHtml, exportDesignPptx } from "./exporters";
+import {
+  buildDesignExportPath,
+  exportDesignHtml,
+  exportDesignPptx,
+  exportDesignZip,
+} from "./exporters";
 
 const tempDirs: string[] = [];
 
@@ -82,5 +87,23 @@ describe("design exporters", () => {
     expect(exported.includes(Buffer.from("ppt/slides/slide2.xml"))).toBe(true);
     expect(exported.includes(Buffer.from("ppt/media/slide-1.png"))).toBe(true);
     expect(exported.includes(Buffer.from("ppt/media/slide-2.png"))).toBe(true);
+  });
+
+  it("writes a zip export package with html and extracted embedded assets", async () => {
+    const storageRoot = await fs.mkdtemp(path.join(os.tmpdir(), "kc-design-export-"));
+    tempDirs.push(storageRoot);
+
+    const exportPath = await exportDesignZip({
+      storageRoot,
+      html: '<!DOCTYPE html><html><body><img src="data:image/png;base64,QUJDRA==" alt="hero"></body></html>',
+      sliders: [],
+      projectLabel: "zip-a",
+    });
+
+    const exported = await fs.readFile(exportPath);
+    expect(exportPath.endsWith(".zip")).toBe(true);
+    expect(exported.slice(0, 2).toString("binary")).toBe("PK");
+    expect(exported.includes(Buffer.from("index.html"))).toBe(true);
+    expect(exported.includes(Buffer.from("assets/asset-1.png"))).toBe(true);
   });
 });

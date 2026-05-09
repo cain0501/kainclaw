@@ -118,7 +118,9 @@
 - If a requirement is unclear, contradictory, or has hidden product tradeoffs, raise a blocker instead of silently redefining behavior.
 - Prefer the smallest change that satisfies the approved scope.
 - Scope smell: if a task is drifting beyond about 8 files, stop and re-check whether the change is still aligned with spec.
-- **Windows shell constraint**: PowerShell on this machine is unreliable at startup. For file reading, symbol search, and code navigation, always prefer the direct file tools (Read, Grep, Glob) over shell commands (`cat`, `grep`, `find`). Use Bash only when shell output is strictly required and no file-tool alternative exists.
+- **File operation preference**: For file reading, symbol search, and code navigation, always prefer the direct file tools (Read, Grep, Glob) over shell commands (`cat`, `grep`, `find`) — they are faster with no process spawn overhead. Use PowerShell only for operations that require a shell: build commands, script execution, system calls, or piped output.
+- **Index-first rule**: Before running Grep, Glob, or Read for symbol lookup, call chain tracing, or impact analysis, query `codebase-memory-mcp` first. Only open specific source files after a graph hit to confirm details. Do not do full-repo scans when a graph query can answer the question.
+- **Index vs grep judgment**: Use the index (`trace_path`, `search_graph`) for call chains, dependency trees, and module structure. Use Grep for exact string/property name lookups — the index may miss connections when a property name differs from its class name (e.g. `imageGalleryStore` property vs `ImageLabGalleryStore` class). When index results seem incomplete, always verify with Grep before concluding something is unused.
 
 ## Claude Source Parity Rule
 

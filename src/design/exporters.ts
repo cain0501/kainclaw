@@ -4,10 +4,16 @@ import { deflateRawSync } from "node:zlib";
 
 import type { DesignSlider } from "./slidersExtractor";
 
-export type DesignExportFormat = "html" | "pdf" | "pptx";
+export type DesignExportFormat = "html" | "pdf" | "pptx" | "zip";
 
 type ZipEntry = {
   name: string;
+  data: Buffer;
+};
+
+type ExtractedAsset = {
+  fileName: string;
+  mimeType: string;
   data: Buffer;
 };
 
@@ -99,6 +105,48 @@ function createZip(entries: ZipEntry[]): Buffer {
   endHeader.writeUInt16LE(0, 20);
 
   return Buffer.concat([...localChunks, centralDirectory, endHeader]);
+}
+
+function mimeTypeToExtension(mimeType: string): string {
+  switch (mimeType.toLowerCase()) {
+    case "image/png":
+      return "png";
+    case "image/jpeg":
+    case "image/jpg":
+      return "jpg";
+    case "image/webp":
+      return "webp";
+    case "image/gif":
+      return "gif";
+    case "image/svg+xml":
+      return "svg";
+    default:
+      return "bin";
+  }
+}
+
+function extractEmbeddedAssets(html: string): {
+  rewrittenHtml: string;
+  assets: ExtractedAsset[];
+} {
+  const assets: ExtractedAsset[] = [];
+  let assetIndex = 0;
+  const rewrittenHtml = html.replace(
+    /(["'(])data:([^;,]+);base64,([A-Za-z0-9+/=]+)(["')])/g,
+    (_match, prefix: string, mimeType: string, data: string, suffix: string) => {
+      const extension = mimeTypeToExtension(mimeType);
+      const fileName = `assets/asset-${assetIndex + 1}.${extension}`;
+      assetIndex += 1;
+      assets.push({
+        fileName,
+        mimeType,
+        data: Buffer.from(data, "base64"),
+      });
+      return `${prefix}${fileName}${suffix}`;
+    },
+  );
+
+  return { rewrittenHtml, assets };
 }
 
 function escapeXml(value: string): string {
@@ -483,5 +531,34 @@ export async function exportDesignPptx(options: {
   const pptxBuffer = buildPptxBuffer(slideImages);
   await fs.mkdir(path.dirname(exportPath), { recursive: true });
   await fs.writeFile(exportPath, pptxBuffer);
+  return exportPath;
+}
+
+export async function exportDesignZip(options: {
+  storageRoot: string;
+  html: string;
+  sliders: DesignSlider[];
+  projectLabel?: string;
+}): Promise<string> {
+  const exportPath = buildDesignExportPath({
+    storageRoot: options.storageRoot,
+    format: "zip",
+    projectLabel: options.projectLabel,
+  });
+  const finalHtml = applySliderValuesToHtml(options.html, options.sliders);
+  const { rewrittenHtml, assets } = extractEmbeddedAssets(finalHtml);
+  const zipEntries: ZipEntry[] = [
+    {
+      name: "index.html",
+      data: Buffer.from(rewrittenHtml, "utf8"),
+    },
+    ...assets.map(asset => ({
+      name: asset.fileName,
+      data: asset.data,
+    })),
+  ];
+  const zipBuffer = createZip(zipEntries);
+  await fs.mkdir(path.dirname(exportPath), { recursive: true });
+  await fs.writeFile(exportPath, zipBuffer);
   return exportPath;
 }

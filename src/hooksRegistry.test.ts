@@ -85,7 +85,13 @@ describe("hooksRegistry", () => {
       "prompt",
       "agent",
     ]);
-    expect(listSupportedHookEvents().map(event => event.id)).toContain("ToolUseFinished");
+    expect(listSupportedHookEvents().map(event => event.id)).toEqual(
+      expect.arrayContaining([
+        "ToolUseFinished",
+        "WorktreeCreate",
+        "WorktreeRemove",
+      ]),
+    );
     expect(listSupportedHookEvents().length).toBeGreaterThanOrEqual(20);
   });
 

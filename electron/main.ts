@@ -26,7 +26,7 @@ import type { BridgeProviderConfig } from "../src/platform/localBridgeRuntime";
 let mainWindow: BrowserWindow | null = null;
 let chatPanel: ElectronChatPanel | null = null;
 
-function buildTimestampedExportPath(projectLabel: string, format: "pdf" | "pptx"): string {
+function buildTimestampedExportPath(projectLabel: string, format: "pdf" | "pptx" | "zip"): string {
   return path.join(
     resolveElectronStoragePath(app.getPath("userData")),
     "exports",
@@ -350,6 +350,43 @@ ipcMain.handle("design:exportPptx", async (_event, payload: Record<string, unkno
     sliders: [],
     projectLabel,
     renderSlideImage: async () => png,
+  });
+  const buffer = await fs.readFile(tempPath);
+  await fs.mkdir(path.dirname(result.filePath), { recursive: true });
+  await fs.writeFile(result.filePath, buffer);
+  return result.filePath;
+});
+
+ipcMain.handle("design:exportZip", async (_event, payload: Record<string, unknown>) => {
+  if (!mainWindow) {
+    throw new Error("Main window is not available.");
+  }
+  const html = typeof payload.html === "string" ? payload.html : "";
+  const sliders = Array.isArray(payload.sliders) ? payload.sliders : [];
+  const projectLabel =
+    typeof payload.projectLabel === "string" && payload.projectLabel.trim()
+      ? payload.projectLabel.trim()
+      : "kainclaw-design";
+  if (!html.trim()) {
+    throw new Error("Design ZIP export requires html.");
+  }
+
+  const defaultPath = buildTimestampedExportPath(projectLabel, "zip");
+  const result = await dialog.showSaveDialog(mainWindow, {
+    title: "导出 ZIP",
+    defaultPath,
+    filters: [{ name: "ZIP", extensions: ["zip"] }],
+  });
+  if (result.canceled || !result.filePath) {
+    throw new Error("用户取消了 ZIP 导出。");
+  }
+
+  const { exportDesignZip } = await import("../src/design/exporters.js");
+  const tempPath = await exportDesignZip({
+    storageRoot: resolveElectronStoragePath(app.getPath("userData")),
+    html,
+    sliders: sliders as DesignSlider[],
+    projectLabel,
   });
   const buffer = await fs.readFile(tempPath);
   await fs.mkdir(path.dirname(result.filePath), { recursive: true });

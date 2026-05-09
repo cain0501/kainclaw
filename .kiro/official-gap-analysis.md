@@ -6,7 +6,8 @@
 - 最后验证基线：168 个测试文件，1299 个测试通过（2026-05-03）
 - 已按 Claude baseline 收口：MCP（transport/auth/OAuth/prompts/transcript）、Tasks/toolRuntime、Compact lifecycle、TaskStop remote、LSP、ToolSearchTool、Task aliases、Markdown renderer、/verify report、provider identity、工具去重、installed-skills、bilingual i18n
 - 最近已收口的桌面壳主线：KainClaw Design V1（`vscode-extension-aab`）与 V2 联动（`vscode-extension-0xu`）
-- 剩余 P1 缺口：extension.ts 宿主下沉（vscode-extension-f4v）、MCP oauth.xaa（vscode-extension-2tf）、Tasks hosted/detached remote（vscode-extension-7w2）
+- 剩余 P1 缺口：无（njp + 7w2 均已关闭）
+- 已降级/推迟：extension.ts 宿主下沉（vscode-extension-f4v）— 功能高速增长期减债 ROI 低，等速度放缓后再做；MCP OAuth XAA 企业流程 — 无内测用户，产品上线后有企业需求再做
 
 ---
 
@@ -102,10 +103,13 @@
 
 ## 当前优先顺序
 
-1. 继续把宿主总控逻辑从 `extension.ts` 往 host / runtime / adapter 下沉（`bd show vscode-extension-f4v`）
+1. 当前无 P1 缺口 — 所有已识别的官方 parity P1 任务均已关闭
 2. 继续收桌面壳的真实可用子集，不虚报未接好的能力
-3. 继续补 `/review`、`/verify`、任务与工具链相关 parity 的边界测试（`bd show vscode-extension-7w2`）
-4. 继续维持三份主文档为"当前状态"写法，不再回到流水账
+3. 继续维持三份主文档为"当前状态"写法，不再回到流水账
+
+> **已降级（不做）：**
+> - `extension.ts` 减债（vscode-extension-f4v）：功能高速增长期，减债后很快被新功能增肥，ROI 低。等功能速度放缓后再做。
+> - MCP OAuth XAA 企业流程（原 vscode-extension-2tf）：无内测用户，企业 SSO 需求不存在。产品上线后有企业客户再拆单独 issue。
 
 ## 相关规格与参考路径
 

@@ -3,6 +3,7 @@ import { createServer } from "node:http";
 import {
   auth as sdkAuth,
   discoverAuthorizationServerMetadata,
+  refreshAuthorization as sdkRefreshAuthorization,
   type OAuthClientProvider,
   type OAuthDiscoveryState,
 } from "@modelcontextprotocol/sdk/client/auth.js";
@@ -55,6 +56,45 @@ const MCP_OAUTH_CREDENTIALS_SECRET_KEY = "cain.mcp.oauth.credentials.v1";
 const MCP_OAUTH_DISCOVERY_STATE_KEY = "cain.mcp.oauth.discovery.v1";
 const OAUTH_CALLBACK_TIMEOUT_MS = 5 * 60 * 1000;
 const OAUTH_REDIRECT_PORT_FALLBACK = 3118;
+const NONSTANDARD_INVALID_GRANT_ALIASES = new Set([
+  "invalid_refresh_token",
+  "expired_refresh_token",
+  "token_expired",
+]);
+
+async function normalizeOAuthErrorBody(response: Response): Promise<Response> {
+  if (!response.ok) {
+    return response;
+  }
+
+  const text = await response.text();
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(text);
+  } catch {
+    return new Response(text, response);
+  }
+
+  if (
+    !parsed ||
+    typeof parsed !== "object" ||
+    !("error" in parsed) ||
+    typeof (parsed as Record<string, unknown>).error !== "string"
+  ) {
+    return new Response(text, response);
+  }
+
+  const errorCode = (parsed as Record<string, unknown>).error as string;
+  const normalized = NONSTANDARD_INVALID_GRANT_ALIASES.has(errorCode)
+    ? { ...parsed, error: "invalid_grant" }
+    : parsed;
+
+  return new Response(JSON.stringify(normalized), {
+    status: 400,
+    statusText: "Bad Request",
+    headers: response.headers,
+  });
+}
 
 export function getMcpOAuthServerKey(
   serverName: string,
@@ -244,11 +284,19 @@ function createAuthFetchForServer(
     init?.signal?.addEventListener("abort", abortHandler, { once: true });
 
     try {
-      return await fetch(input, {
+      const response = await fetch(input, {
         ...init,
         headers,
         signal: controller.signal,
       });
+      const requestMethod =
+        init?.method ??
+        (typeof Request !== "undefined" && input instanceof Request
+          ? input.method
+          : undefined);
+      return requestMethod?.toUpperCase() === "POST"
+        ? normalizeOAuthErrorBody(response)
+        : response;
     } finally {
       clearTimeout(timeoutId);
       init?.signal?.removeEventListener("abort", abortHandler);
@@ -260,6 +308,7 @@ export class HostBackedMcpOAuthClientProvider implements OAuthClientProvider {
   private readonly serverKey: string;
   private codeVerifierValue: string | undefined;
   private stateValue: string | undefined;
+  private _refreshInProgress: Promise<OAuthTokens | undefined> | undefined;
 
   constructor(
     private readonly serverName: string,
@@ -344,6 +393,25 @@ export class HostBackedMcpOAuthClientProvider implements OAuthClientProvider {
       return undefined;
     }
 
+    if (expiresIn <= 300 && stored.refreshToken) {
+      if (!this._refreshInProgress) {
+        this._refreshInProgress = this.refreshAuthorization(
+          stored.refreshToken,
+        ).finally(() => {
+          this._refreshInProgress = undefined;
+        });
+      }
+
+      try {
+        const refreshed = await this._refreshInProgress;
+        if (refreshed) {
+          return refreshed;
+        }
+      } catch {
+        // Fall back to the stored tokens if proactive refresh fails.
+      }
+    }
+
     return {
       access_token: stored.accessToken,
       token_type: "Bearer",
@@ -367,6 +435,83 @@ export class HostBackedMcpOAuthClientProvider implements OAuthClientProvider {
       scope: tokens.scope,
     };
     await writeCredentialMap(this.host, map);
+  }
+
+  async refreshAuthorization(
+    refreshToken: string,
+  ): Promise<OAuthTokens | undefined> {
+    const MAX_ATTEMPTS = 3;
+
+    for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt += 1) {
+      try {
+        const fetchFn = createAuthFetchForServer(this.config);
+        const metadata = await discoverAuthorizationServerMetadata(
+          this.config.url,
+          { fetchFn },
+        );
+        if (!metadata) {
+          return undefined;
+        }
+
+        const clientInfo = await this.clientInformation();
+        if (!clientInfo) {
+          return undefined;
+        }
+
+        const newTokens = await sdkRefreshAuthorization(
+          new URL(this.config.url),
+          {
+            metadata,
+            clientInformation: clientInfo,
+            refreshToken,
+            resource: new URL(this.config.url),
+            fetchFn,
+          },
+        );
+
+        if (newTokens) {
+          await this.saveTokens(newTokens);
+          return newTokens;
+        }
+        return undefined;
+      } catch (error) {
+        const oauthErrorCode =
+          error &&
+          typeof error === "object" &&
+          "errorCode" in error &&
+          typeof error.errorCode === "string"
+            ? error.errorCode
+            : undefined;
+        const errorName =
+          error instanceof Error ? error.name : undefined;
+        const errorMessage =
+          error instanceof Error ? error.message : String(error);
+
+        if (
+          oauthErrorCode === "invalid_grant" ||
+          errorName === "InvalidGrantError" ||
+          /invalid(?:[_ -])grant/i.test(errorMessage)
+        ) {
+          await this.invalidateCredentials("tokens");
+          return undefined;
+        }
+
+        const isTransient =
+          /timeout|timed out|etimedout|econnreset|503|429|temporarily/i.test(
+            errorMessage,
+          );
+
+        if (!isTransient || attempt >= MAX_ATTEMPTS) {
+          return undefined;
+        }
+
+        await new Promise(resolve =>
+          setTimeout(resolve, 1000 * Math.pow(2, attempt - 1)),
+        );
+      }
+    }
+
+    return undefined;
   }
 
   async redirectToAuthorization(authorizationUrl: URL): Promise<void> {
@@ -550,6 +695,65 @@ export async function performMcpOAuthFlow(options: {
   } finally {
     callbackWaiter.cleanup();
   }
+}
+
+export async function revokeServerTokens(options: {
+  host: McpOAuthHost;
+  serverName: string;
+  config: McpOAuthRemoteServerConfig;
+}): Promise<void> {
+  const serverKey = getMcpOAuthServerKey(options.serverName, options.config);
+  const credentialMap = await readCredentialMap(options.host);
+  const tokenData = credentialMap[serverKey];
+
+  if (!tokenData?.accessToken && !tokenData?.refreshToken) {
+    return;
+  }
+
+  try {
+    const fetchFn = createAuthFetchForServer(options.config);
+    const metadata = await discoverAuthorizationServerMetadata(
+      options.config.url,
+      { fetchFn },
+    );
+
+    const revocationEndpoint =
+      metadata &&
+      "revocation_endpoint" in metadata &&
+      typeof metadata.revocation_endpoint === "string"
+        ? metadata.revocation_endpoint
+        : null;
+
+    if (revocationEndpoint) {
+      const revokeOne = async (token: string, hint: string) => {
+        const params = new URLSearchParams({ token, token_type_hint: hint });
+        if (tokenData.clientId) {
+          params.set("client_id", tokenData.clientId);
+        }
+        try {
+          await fetchFn(revocationEndpoint, {
+            method: "POST",
+            headers: { "Content-Type": "application/x-www-form-urlencoded" },
+            body: params,
+          });
+        } catch {
+          // Best-effort server-side revoke; local credentials are still cleared below.
+        }
+      };
+
+      if (tokenData.refreshToken) {
+        await revokeOne(tokenData.refreshToken, "refresh_token");
+      }
+      if (tokenData.accessToken) {
+        await revokeOne(tokenData.accessToken, "access_token");
+      }
+    }
+  } catch {
+    // Best-effort revoke; local credentials are still cleared below.
+  }
+
+  delete credentialMap[serverKey];
+  await writeCredentialMap(options.host, credentialMap);
 }
 
 function waitForOAuthCallback(options: {

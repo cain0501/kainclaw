@@ -1,21 +1,33 @@
-import { describe, expect, it, vi, beforeEach } from "vitest";
+import { describe, expect, it, vi, beforeEach, afterEach } from "vitest";
+import type { AuthorizationServerMetadata } from "@modelcontextprotocol/sdk/shared/auth.js";
 
-const { sdkAuthMock, discoverAuthorizationServerMetadataMock } = vi.hoisted(
-  () => ({
-    sdkAuthMock: vi.fn(),
-    discoverAuthorizationServerMetadataMock: vi.fn(),
-  }),
-);
-
-vi.mock("@modelcontextprotocol/sdk/client/auth.js", () => ({
-  auth: sdkAuthMock,
-  discoverAuthorizationServerMetadata: discoverAuthorizationServerMetadataMock,
+const {
+  sdkAuthMock,
+  discoverAuthorizationServerMetadataMock,
+  sdkRefreshAuthorizationMock,
+} = vi.hoisted(() => ({
+  sdkAuthMock: vi.fn(),
+  discoverAuthorizationServerMetadataMock: vi.fn(),
+  sdkRefreshAuthorizationMock: vi.fn(),
 }));
+
+vi.mock("@modelcontextprotocol/sdk/client/auth.js", async importOriginal => {
+  const actual =
+    await importOriginal<typeof import("@modelcontextprotocol/sdk/client/auth.js")>();
+  return {
+    ...actual,
+    auth: sdkAuthMock,
+    discoverAuthorizationServerMetadata:
+      discoverAuthorizationServerMetadataMock,
+    refreshAuthorization: sdkRefreshAuthorizationMock,
+  };
+});
 
 import {
   createMcpOAuthClientProvider,
   hasMcpDiscoveryButNoToken,
   performMcpOAuthFlow,
+  revokeServerTokens,
   type McpOAuthHost,
 } from "./mcpOAuth";
 
@@ -50,9 +62,29 @@ class FakeMcpOAuthHost implements McpOAuthHost {
 }
 
 describe("mcpOAuth", () => {
+  const realFetch = globalThis.fetch;
+
   beforeEach(() => {
     vi.clearAllMocks();
   });
+
+  afterEach(() => {
+    globalThis.fetch = realFetch;
+  });
+
+  function createMetadata(
+    overrides: Partial<AuthorizationServerMetadata> = {},
+  ): AuthorizationServerMetadata {
+    return {
+      issuer: "https://auth.example.com",
+      authorization_endpoint: "https://auth.example.com/authorize",
+      token_endpoint: "https://auth.example.com/token",
+      response_types_supported: ["code"],
+      grant_types_supported: ["authorization_code", "refresh_token"],
+      token_endpoint_auth_methods_supported: ["none"],
+      ...overrides,
+    };
+  }
 
   it("persists client information, tokens, and discovery state through the host", async () => {
     const host = new FakeMcpOAuthHost();
@@ -234,5 +266,176 @@ describe("mcpOAuth", () => {
         onAuthorizationUrl: () => undefined,
       }),
     ).rejects.toThrow("XAA OAuth");
+  });
+
+  it("proactively refreshes near-expiry tokens and dedupes concurrent refreshes", async () => {
+    const host = new FakeMcpOAuthHost();
+    const provider = createMcpOAuthClientProvider({
+      serverName: "github",
+      config: {
+        kind: "streamable-http",
+        url: "https://api.example.com/mcp",
+        oauth: { clientId: "client-id" },
+      },
+      host,
+      redirectUrl: "http://localhost:3118/callback",
+    });
+
+    await provider.saveTokens({
+      access_token: "old-access-token",
+      refresh_token: "refresh-token",
+      expires_in: 60,
+      token_type: "Bearer",
+    });
+
+    discoverAuthorizationServerMetadataMock.mockResolvedValue(createMetadata());
+    let resolveRefresh: ((value: {
+      access_token: string;
+      refresh_token: string;
+      expires_in: number;
+      token_type: string;
+    }) => void) | undefined;
+    sdkRefreshAuthorizationMock.mockImplementation(
+      () =>
+        new Promise(resolve => {
+          resolveRefresh = resolve;
+        }),
+    );
+
+    const first = provider.tokens();
+    const second = provider.tokens();
+    await vi.waitFor(() => {
+      expect(resolveRefresh).toBeTypeOf("function");
+    });
+    resolveRefresh?.({
+      access_token: "new-access-token",
+      refresh_token: "new-refresh-token",
+      expires_in: 3600,
+      token_type: "Bearer",
+    });
+
+    const [firstTokens, secondTokens] = await Promise.all([first, second]);
+    expect(firstTokens?.access_token).toBe("new-access-token");
+    expect(secondTokens?.access_token).toBe("new-access-token");
+    expect(sdkRefreshAuthorizationMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("clears stored tokens when refresh hits a Slack-style invalid grant response", async () => {
+    const host = new FakeMcpOAuthHost();
+    const provider = createMcpOAuthClientProvider({
+      serverName: "slack",
+      config: {
+        kind: "streamable-http",
+        url: "https://api.example.com/mcp",
+        oauth: { clientId: "client-id" },
+      },
+      host,
+      redirectUrl: "http://localhost:3118/callback",
+    });
+
+    await provider.saveTokens({
+      access_token: "access-token",
+      refresh_token: "refresh-token",
+      expires_in: 3600,
+      token_type: "Bearer",
+    });
+
+    discoverAuthorizationServerMetadataMock.mockResolvedValue(createMetadata());
+    sdkRefreshAuthorizationMock.mockImplementation(async (...args: Parameters<
+      typeof import("@modelcontextprotocol/sdk/client/auth.js").refreshAuthorization
+    >) => {
+      const actual =
+        await vi.importActual<typeof import("@modelcontextprotocol/sdk/client/auth.js")>(
+          "@modelcontextprotocol/sdk/client/auth.js",
+        );
+      return actual.refreshAuthorization(args[0], args[1]);
+    });
+    globalThis.fetch = vi.fn(async () =>
+      new Response(
+        JSON.stringify({ error: "invalid_refresh_token" }),
+        {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        },
+      ),
+    ) as typeof fetch;
+
+    await expect(
+      provider.refreshAuthorization("refresh-token"),
+    ).resolves.toBeUndefined();
+    await expect(provider.tokens()).resolves.toBeUndefined();
+  });
+
+  it("retries transient refresh failures up to success", async () => {
+    const host = new FakeMcpOAuthHost();
+    const provider = createMcpOAuthClientProvider({
+      serverName: "github",
+      config: {
+        kind: "streamable-http",
+        url: "https://api.example.com/mcp",
+        oauth: { clientId: "client-id" },
+      },
+      host,
+      redirectUrl: "http://localhost:3118/callback",
+    });
+
+    discoverAuthorizationServerMetadataMock.mockResolvedValue(createMetadata());
+    sdkRefreshAuthorizationMock
+      .mockRejectedValueOnce(new Error("503 temporarily unavailable"))
+      .mockRejectedValueOnce(new Error("ETIMEDOUT"))
+      .mockResolvedValueOnce({
+        access_token: "recovered-access-token",
+        refresh_token: "refresh-token",
+        expires_in: 3600,
+        token_type: "Bearer",
+      });
+
+    const refreshed = await provider.refreshAuthorization("refresh-token");
+    expect(refreshed?.access_token).toBe("recovered-access-token");
+    expect(sdkRefreshAuthorizationMock).toHaveBeenCalledTimes(3);
+  });
+
+  it("revokes server tokens best-effort and always clears local credentials", async () => {
+    const host = new FakeMcpOAuthHost();
+    const provider = createMcpOAuthClientProvider({
+      serverName: "github",
+      config: {
+        kind: "streamable-http",
+        url: "https://api.example.com/mcp",
+        oauth: { clientId: "client-id" },
+      },
+      host,
+      redirectUrl: "http://localhost:3118/callback",
+    });
+
+    await provider.saveClientInformation({
+      client_id: "client-id",
+    });
+    await provider.saveTokens({
+      access_token: "access-token",
+      refresh_token: "refresh-token",
+      expires_in: 3600,
+      token_type: "Bearer",
+    });
+
+    discoverAuthorizationServerMetadataMock.mockResolvedValue(
+      createMetadata({
+        revocation_endpoint: "https://auth.example.com/revoke",
+      }),
+    );
+    globalThis.fetch = vi.fn(async () => new Response(null, { status: 200 })) as typeof fetch;
+
+    await revokeServerTokens({
+      host,
+      serverName: "github",
+      config: {
+        kind: "streamable-http",
+        url: "https://api.example.com/mcp",
+        oauth: { clientId: "client-id" },
+      },
+    });
+
+    expect(globalThis.fetch).toHaveBeenCalledTimes(2);
+    await expect(provider.tokens()).resolves.toBeUndefined();
   });
 });

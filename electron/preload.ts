@@ -12,6 +12,8 @@ contextBridge.exposeInMainWorld("electronAPI", {
     ipcRenderer.invoke("design:exportPdf", { html, projectLabel }),
   exportDesignPptx: (html: string, projectLabel: string) =>
     ipcRenderer.invoke("design:exportPptx", { html, projectLabel }),
+  exportDesignZip: (html: string, sliders: unknown[], projectLabel: string) =>
+    ipcRenderer.invoke("design:exportZip", { html, sliders, projectLabel }),
 });
 
 /**

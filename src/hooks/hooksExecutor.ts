@@ -24,7 +24,9 @@ export type HookEvent =
   | "SubagentStart"
   | "SubagentStop"
   | "TaskCreated"
-  | "TaskCompleted";
+  | "TaskCompleted"
+  | "WorktreeCreate"
+  | "WorktreeRemove";
 
 export interface HookContext {
   event: HookEvent;

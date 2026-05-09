@@ -84,6 +84,7 @@ describe("Electron renderer settings", () => {
     expect(html).toContain('id="design-export-html-btn"');
     expect(html).toContain('id="design-export-pdf-btn"');
     expect(html).toContain('id="design-export-pptx-btn"');
+    expect(html).toContain('id="design-export-zip-btn"');
     expect(html).toContain('id="design-tweaks-btn" class="btn-secondary" onclick="toggleDesignTweaks()"');
     expect(html).toContain("function generateDesignWorkbench()");
     expect(html).toContain("function applyDesignPatchRequest()");
@@ -146,6 +147,7 @@ describe("Electron renderer settings", () => {
     expect(html).toContain("referenceImageMimeType");
     expect(html).toContain("window.electronAPI.exportDesignPptx");
     expect(html).toContain("window.electronAPI.exportDesignHtml");
+    expect(html).toContain("window.electronAPI.exportDesignZip");
     expect(html).not.toContain("type: 'design:export'");
     expect(html).toContain("case 'design:patchResult':");
     expect(html).toContain("case 'design:result':");

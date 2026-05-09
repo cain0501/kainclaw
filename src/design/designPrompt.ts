@@ -228,6 +228,211 @@ function getSkillPatch(outputType: DesignOutputType): string {
   }
 }
 
+function getSkillWorkflow(outputType: DesignOutputType): string {
+  switch (outputType) {
+    case "social-carousel":
+      return `## Skill Workflow: Social Carousel
+
+Produce a 3-panel social carousel as one coherent series.
+
+Workflow:
+1. Pick one theme and 3 connected captions from the brief.
+2. Make each panel readable on its own, but stronger as a sequence.
+3. Use one decisive visual move per panel: oversized headline, full-bleed color story, or a strong stamp.
+4. Keep navigation chrome out. This should feel like designed post panels, not app screens.
+5. Self-check: each panel has a distinct focal point and the three together read like one system.`;
+    case "email":
+      return `## Skill Workflow: Email Template
+
+Produce a conversion-focused email layout.
+
+Workflow:
+1. Decide the one message the email must land in the first viewport.
+2. Build a narrow centered structure suitable for inbox clients.
+3. Prioritize hierarchy: subject-like headline, one supporting block, one clear CTA.
+4. Keep the visual language compact and scannable, not webpage-like.
+5. Self-check: the CTA is obvious, sections are short, and no block depends on custom app chrome.`;
+    case "mobile-app":
+      return `## Skill Workflow: Mobile App
+
+Produce a mobile product screen or short screen set.
+
+Workflow:
+1. Decide the primary user action for the screen.
+2. Compose for a phone viewport with realistic spacing and touch targets.
+3. Make navigation and status treatment feel native instead of generic web cards.
+4. Use content density intentionally: one dominant action, one supporting layer, minimal distraction.
+5. Self-check: the screen would still read clearly on a real phone at arm's length.`;
+    case "magazine-poster":
+      return `## Skill Workflow: Magazine Poster
+
+Produce an editorial print-first composition.
+
+Workflow:
+1. Pick the emotional center of the brief: headline, image, or a dramatic stat.
+2. Build hierarchy like a cover or poster, not like a website.
+3. Let type, whitespace, and asymmetry do the work before adding decoration.
+4. Use supporting copy sparingly and position it like editorial furniture.
+5. Self-check: it feels intentional from ten feet away and still rewards close reading.`;
+    case "dashboard":
+      return `## Skill Workflow: Dashboard
+
+Produce a dense but readable desktop dashboard.
+
+Workflow:
+1. Choose the top-line metrics the user should notice first.
+2. Arrange the page as a real operational surface: summary first, supporting breakdowns second.
+3. Use repetition and alignment so the interface scans quickly.
+4. Keep decorative hero treatment out of the way of utility.
+5. Self-check: a user could find the most important number in under two seconds.`;
+    case "doc-report":
+      return `## Skill Workflow: Document Report
+
+Produce a calm long-form reading layout.
+
+Workflow:
+1. Break the brief into sections with a document rhythm.
+2. Let typography and section spacing create the structure.
+3. Keep charts, callouts, and dividers subordinate to reading flow.
+4. Use contrast and emphasis only where the argument turns.
+5. Self-check: it reads like a designed report, not a landing page pretending to be one.`;
+    case "pricing-page":
+      return `## Skill Workflow: Pricing Page
+
+Produce a comparison-first pricing page.
+
+Workflow:
+1. Decide the recommended plan and make that choice obvious.
+2. Stage the plans for fast scanning before adding supporting detail.
+3. Use repeated structure so comparison is effortless.
+4. Put trust and CTA blocks after the pricing grid, not before it.
+5. Self-check: a user can tell what to click and why within one pass.`;
+    case "landing-page":
+      return `## Skill Workflow: Landing Page
+
+Produce a conversion-led landing page.
+
+Workflow:
+1. Lock the top-fold promise before thinking about secondary sections.
+2. Decide the sequence: promise, proof, explanation, action.
+3. Give each section one visual job and one content job.
+4. Keep ornament subordinate to message clarity.
+5. Self-check: the page has momentum from top to CTA, not just a stack of nice blocks.`;
+    case "slide":
+      return `## Skill Workflow: Slide Deck
+
+Produce presentation slides, not a web page.
+
+Workflow:
+1. Decide the narrative arc before styling individual slides.
+2. Make each slide carry one idea with strong title hierarchy.
+3. Use a shared presentation rhythm so the deck feels deliberate across slides.
+4. Favor clarity from a distance over interface decoration.
+5. Self-check: each slide can be understood in seconds during a live presentation.`;
+    case "infographic":
+      return `## Skill Workflow: Infographic
+
+Produce a structured information graphic.
+
+Workflow:
+1. Identify the main story, then the supporting facts.
+2. Turn the story into grouped visual blocks or a clear reading path.
+3. Use labels and hierarchy to explain, not to decorate.
+4. Keep each data moment specific and uncluttered.
+5. Self-check: the piece teaches one thing clearly without turning into a wall of fragments.`;
+    case "animation":
+      return `## Skill Workflow: Motion Concept
+
+Produce a motion-ready layout concept.
+
+Workflow:
+1. Decide the visual beat sequence before styling frames.
+2. Use rhythm, contrast, and repeated anchors to imply movement.
+3. Keep the composition legible even without real playback.
+4. Make the motion idea feel integral, not pasted on after the layout.
+5. Self-check: a motion designer could immediately see how the sequence should move.`;
+    case "prototype":
+    default:
+      return `## Skill Workflow: Prototype
+
+Produce a designed interactive prototype.
+
+Workflow:
+1. Decide the product moment or scenario the prototype must sell.
+2. Build one clear primary path through the screen or page.
+3. Use real-seeming interface structure instead of generic placeholder boxes.
+4. Let typography, color, and spacing establish the product's posture.
+5. Self-check: it feels like a purposeful product concept, not a template fill.`;
+  }
+}
+
+export function buildDesignChatSystemPrompt(options?: {
+  brandContext?: string;
+}): string {
+  const brandBlock = options?.brandContext?.trim()
+    ? [
+        "",
+        "## Brand Context",
+        options.brandContext.trim(),
+      ]
+    : [];
+
+  return [
+    "You are KainClaw Design Chat, a design-focused assistant working in a two-turn workflow.",
+    "You are not a generic programmer in this lane. Stay inside design discovery, direction, and artifact generation.",
+    "",
+    "## Design Chat Protocol",
+    "Turn 1: when the user sends a fresh design brief, reply with one short line plus a <question-form id=\"discovery\"> block, then stop.",
+    "Skip the form only when the user explicitly says to skip questions / just build / direct generate, or when the user message starts with [form answers - discovery].",
+    "Turn 2: when the user message starts with [form answers - discovery], generate the design immediately. Do not ask more questions.",
+    "",
+    "The question-form should be plain text XML-like content.",
+    "Keep the form under 7 questions.",
+    "Ask only the highest-value design questions that remain open.",
+    "",
+    "When generating the final artifact, output exactly one artifact in this format:",
+    "<artifact identifier=\"slug\" type=\"text/html\" title=\"Design Title\">",
+    "<!DOCTYPE html>",
+    "<html>...</html>",
+    "</artifact>",
+    "",
+    "Do not wrap the artifact in markdown fences.",
+    "Do not output extra explanation after the artifact.",
+    "The HTML must be a single-file document previewable in a browser.",
+    "",
+    "Visual quality rules:",
+    "- Use deliberate whitespace, strong typography contrast, and a distinct visual mood.",
+    "- Match the requested output type instead of falling back to a generic landing-page aesthetic.",
+    "- Stay specific to the user's brief. Do not invent fake stats or filler labels.",
+    ...(CRAFT_ANTI_SLOP ? ["", CRAFT_ANTI_SLOP] : []),
+    ...(CRAFT_TYPOGRAPHY ? ["", CRAFT_TYPOGRAPHY] : []),
+    ...(CRAFT_COLOR ? ["", CRAFT_COLOR] : []),
+    ...(CRAFT_LAYOUT ? ["", CRAFT_LAYOUT] : []),
+    ...brandBlock,
+  ].join("\n");
+}
+
+export function buildDesignChatUserPrompt(options: {
+  prompt: string;
+  outputType: DesignOutputType;
+  brandContext?: string;
+}): string {
+  const workflow = getSkillWorkflow(options.outputType);
+  return [
+    `Output type: ${options.outputType}`,
+    ...(workflow ? ["", workflow] : []),
+    "",
+    `User request: ${options.prompt.trim() || "Create a design direction."}`,
+    ...(options.brandContext?.trim()
+      ? [
+          "",
+          "Brand context:",
+          options.brandContext.trim(),
+        ]
+      : []),
+  ].join("\n");
+}
+
 export function buildKainClawDesignSystemPrompt(options?: {
   customInstructions?: string;
   selectedDirection?: DesignDirectionSuggestion;

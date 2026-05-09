@@ -80,12 +80,25 @@ export type ArtifactPanelSessionState = {
   collapsed?: boolean;
 };
 
+export type DesignFlowState = {
+  flowId: string;
+  projectId: string;
+  conversationId?: string;
+  createdAt: number;
+  conversationHistory?: Array<{
+    role: "user" | "assistant";
+    content: string;
+  }>;
+};
+
 export type SessionRuntimeState = {
   pendingPlanVerification?: PendingPlanVerificationSessionState;
   modelConversation?: PersistedConversationMessage[];
   compactBoundary?: CompactBoundarySessionState;
   artifactPanel?: ArtifactPanelSessionState;
+  designFlowState?: DesignFlowState;
   workspaceRoot?: string;
+  sessionType?: "design" | "default";
 };
 
 export type SessionMeta = {
@@ -491,6 +504,41 @@ export class SessionRepository {
         ...(typeof parsed.workspaceRoot === "string"
           ? { workspaceRoot: parsed.workspaceRoot }
           : {}),
+        ...(parsed.sessionType === "design" || parsed.sessionType === "default"
+          ? { sessionType: parsed.sessionType }
+          : {}),
+        ...(parsed.designFlowState &&
+        typeof parsed.designFlowState.flowId === "string" &&
+        typeof parsed.designFlowState.projectId === "string" &&
+        typeof parsed.designFlowState.createdAt === "number"
+          ? {
+              designFlowState: {
+                flowId: parsed.designFlowState.flowId,
+                projectId: parsed.designFlowState.projectId,
+                createdAt: parsed.designFlowState.createdAt,
+                ...(typeof parsed.designFlowState.conversationId === "string"
+                  ? { conversationId: parsed.designFlowState.conversationId }
+                  : {}),
+                ...(Array.isArray(parsed.designFlowState.conversationHistory)
+                  ? {
+                      conversationHistory: parsed.designFlowState.conversationHistory
+                        .filter(
+                          (
+                            message,
+                          ): message is { role: "user" | "assistant"; content: string } =>
+                            !!message &&
+                            (message.role === "user" || message.role === "assistant") &&
+                            typeof message.content === "string",
+                        )
+                        .map(message => ({
+                          role: message.role,
+                          content: message.content,
+                        })),
+                    }
+                  : {}),
+              },
+            }
+          : {}),
         ...(parsed.artifactPanel &&
         (parsed.artifactPanel.activeArtifactId === null ||
           typeof parsed.artifactPanel.activeArtifactId === "string")
@@ -525,6 +573,41 @@ export class SessionRepository {
         : {}),
       ...(typeof state.workspaceRoot === "string"
         ? { workspaceRoot: state.workspaceRoot }
+        : {}),
+      ...(state.sessionType === "design" || state.sessionType === "default"
+        ? { sessionType: state.sessionType }
+        : {}),
+      ...(state.designFlowState &&
+      typeof state.designFlowState.flowId === "string" &&
+      typeof state.designFlowState.projectId === "string" &&
+      typeof state.designFlowState.createdAt === "number"
+        ? {
+            designFlowState: {
+              flowId: state.designFlowState.flowId,
+              projectId: state.designFlowState.projectId,
+              createdAt: state.designFlowState.createdAt,
+              ...(typeof state.designFlowState.conversationId === "string"
+                ? { conversationId: state.designFlowState.conversationId }
+                : {}),
+              ...(Array.isArray(state.designFlowState.conversationHistory)
+                ? {
+                    conversationHistory: state.designFlowState.conversationHistory
+                      .filter(
+                        (
+                          message,
+                        ): message is { role: "user" | "assistant"; content: string } =>
+                          !!message &&
+                          (message.role === "user" || message.role === "assistant") &&
+                          typeof message.content === "string",
+                      )
+                      .map(message => ({
+                        role: message.role,
+                        content: message.content,
+                      })),
+                  }
+                : {}),
+            },
+          }
         : {}),
       ...(state.compactBoundary
         ? {
@@ -593,6 +676,8 @@ export class SessionRepository {
       !normalizedState.modelConversation &&
       !normalizedState.compactBoundary &&
       !normalizedState.artifactPanel &&
+      !normalizedState.designFlowState &&
+      !normalizedState.sessionType &&
       typeof normalizedState.workspaceRoot !== "string"
     ) {
       try {
