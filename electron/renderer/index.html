@@ -1735,6 +1735,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-seri
 </div>
 
 <script src="./vendor/marked.umd.js"></script>
+<script src="./questionForm.js"></script>
 <script>
 // IPC Bridge
 const vscode = window.acquireVsCodeApi();
@@ -1801,6 +1802,7 @@ const expandedThinkingSummaries = new Set();
 let artifactToastTimer = null;
 let artifactPanelWidth = null;
 let artifactResizeActive = false;
+const questionFormStates = new Map();
 const MIDTAI_DIRECTIONS = {
   prototype: [
     { label:'信息建筑', summary:'高对比网格，适合产品首页和 B2B 原型', stylePrompt:'information architecture, swiss grid, strong editorial hierarchy, black white with restrained red accent, premium product prototype', preview:'linear-gradient(135deg,#111111 0%,#f5f1eb 55%,#e63946 100%)' },
@@ -2200,6 +2202,7 @@ function describeSupportedImageSpec(inferredImageRatio) {
 }
 const designBridgeState = {
   artifactId: null,
+  designFlowId: null,
   title: '',
   html: '',
   editModeAvailable: false,
@@ -3477,6 +3480,7 @@ function applyState(state) {
     artifacts: [],
     artifactPanelCollapsed: false,
   };
+  designBridgeState.designFlowId = state.designState?.currentFlowId || null;
   applyUiLanguageState(state.uiLanguage, state.dialogStrings, state.shellStrings);
   appState.providerLabel = state.providerLabel || shellText('providerLabelUnset');
   appState.workspaceInfo = state.workspaceInfo || {
@@ -5069,6 +5073,7 @@ function renderMidtaiPromptLibrary() {
 function hydrateDesignProjectIntoBridge(project, activeVersion) {
   if (!project) {
     designHomeState.currentProjectId = null;
+    designBridgeState.designFlowId = null;
     showPage('design-home');
     requestDesignHome();
     return;
@@ -5107,6 +5112,9 @@ function syncMidtaiDesignPayload(payload) {
     : null;
 
   designHomeState.currentProjectId = project?.projectId || payload?.projectId || null;
+  if (!designHomeState.currentProjectId) {
+    designBridgeState.designFlowId = null;
+  }
   designBridgeState.mode = project?.source === 'blank' && !activeVersion ? 'new' : 'edit';
   designBridgeState.title = project?.name || artifact?.title || designBridgeState.title || 'KainClaw Design';
   designBridgeState.versionId = activeVersion?.id || project?.activeVersionId || designBridgeState.versionId || null;
@@ -6791,8 +6799,10 @@ function generateDesignWorkbench() {
     const userContext = designBridgeState.userContext || '';
     designBridgeState.userContext = '';
     send({
-      type: 'design:editCurrent',
+      type: 'sendPrompt',
       prompt: designBridgeState.prompt,
+      lane: 'design',
+      designFlowId: designBridgeState.designFlowId || undefined,
       outputType: designBridgeState.outputType,
       style: designBridgeState.style,
       userContext,
@@ -6808,8 +6818,10 @@ function generateDesignWorkbench() {
   }
 
   send({
-    type: 'design:requestDirections',
+    type: 'sendPrompt',
     prompt: designBridgeState.prompt,
+    lane: 'design',
+    designFlowId: designBridgeState.designFlowId || undefined,
     outputType: designBridgeState.outputType,
     style: designBridgeState.style,
     brandContext: buildBrandContext(brand),
@@ -7674,7 +7686,7 @@ function renderMessage(m, messageIndex) {
   const isError = m.kind === 'error';
   const cls = isError ? 'error' : (isUser ? 'user' : 'assistant');
   const rawContent = m.content || '';
-  let content = renderMessageContent(rawContent, isUser);
+  let content = renderMessageContent(rawContent, isUser, messageIndex);
 
   if (!isUser && m.kind === 'tool_use') {
     content = renderToolUseMessage(m);
@@ -7738,12 +7750,238 @@ function renderMessage(m, messageIndex) {
   </div>`;
 }
 
-function renderMessageContent(text, isUser = false) {
+function getQuestionFormModule() {
+  return globalThis.KainClawQuestionForm || null;
+}
+
+function getQuestionFormStateKey(messageIndex, formId) {
+  return `${messageIndex}:${formId}`;
+}
+
+function getSubmittedFormAnswers(messageIndex, form) {
+  const nextMessage = Array.isArray(appState.messages) ? appState.messages[messageIndex + 1] : null;
+  if (!nextMessage || nextMessage.role !== 'user') {
+    return null;
+  }
+  const parser = getQuestionFormModule();
+  if (!parser?.parseFormattedFormAnswers) {
+    return null;
+  }
+  const parsed = parser.parseFormattedFormAnswers(String(nextMessage.content || ''), form.id);
+  if (!parsed) {
+    return null;
+  }
+  const normalized = {};
+  for (const question of form.questions) {
+    const byLabel = parsed[question.label];
+    if (typeof byLabel === 'string') {
+      normalized[question.id] = question.type === 'checkbox'
+        ? byLabel.split(',').map(item => item.trim()).filter(Boolean)
+        : byLabel;
+    }
+  }
+  return normalized;
+}
+
+function createEmptyQuestionFormAnswers(form) {
+  const answers = {};
+  for (const question of form.questions) {
+    answers[question.id] = question.type === 'checkbox' ? [] : '';
+  }
+  return answers;
+}
+
+function getOrCreateQuestionFormState(messageIndex, form) {
+  const key = getQuestionFormStateKey(messageIndex, form.id);
+  let state = questionFormStates.get(key);
+  const submittedAnswers = getSubmittedFormAnswers(messageIndex, form);
+  if (!state) {
+    state = {
+      answers: submittedAnswers ? { ...submittedAnswers } : createEmptyQuestionFormAnswers(form),
+      locked: !!submittedAnswers,
+    };
+    questionFormStates.set(key, state);
+  } else if (submittedAnswers && !state.locked) {
+    state.answers = { ...submittedAnswers };
+    state.locked = true;
+  }
+  return state;
+}
+
+function updateQuestionFormTextValue(messageIndex, formId, questionId, value) {
+  const key = getQuestionFormStateKey(messageIndex, formId);
+  const state = questionFormStates.get(key);
+  if (!state || state.locked) return;
+  state.answers[questionId] = String(value || '');
+}
+
+function updateQuestionFormChoice(messageIndex, formId, questionId, value, checked, maxSelections) {
+  const key = getQuestionFormStateKey(messageIndex, formId);
+  const state = questionFormStates.get(key);
+  if (!state || state.locked) return;
+
+  if (checked === undefined) {
+    state.answers[questionId] = value;
+    return;
+  }
+
+  const current = Array.isArray(state.answers[questionId]) ? [...state.answers[questionId]] : [];
+  const exists = current.includes(value);
+  if (checked && !exists) {
+    current.push(value);
+  }
+  if (!checked && exists) {
+    current.splice(current.indexOf(value), 1);
+  }
+  const limit = Number.isFinite(maxSelections) ? Number(maxSelections) : null;
+  state.answers[questionId] = limit && current.length > limit ? current.slice(0, limit) : current;
+}
+
+function isQuestionFormQuestionAnswered(question, value) {
+  if (question.type === 'checkbox') {
+    return Array.isArray(value) && value.length > 0;
+  }
+  return typeof value === 'string' && value.trim().length > 0;
+}
+
+function isQuestionFormSubmittable(form, state) {
+  return form.questions.every(question => {
+    if (!question.required) return true;
+    return isQuestionFormQuestionAnswered(question, state.answers[question.id]);
+  });
+}
+
+function submitQuestionForm(messageIndex, formId) {
+  const parser = getQuestionFormModule();
+  if (!parser?.formatFormAnswers) return;
+
+  const segments = parser.splitOnQuestionForms(String(appState.messages?.[messageIndex]?.content || ''));
+  const formSegment = segments.find(segment => segment.kind === 'form' && segment.form?.id === formId);
+  if (!formSegment) return;
+
+  const state = getOrCreateQuestionFormState(messageIndex, formSegment.form);
+  if (!isQuestionFormSubmittable(formSegment.form, state)) {
+    return;
+  }
+
+  state.locked = true;
+  const prompt = parser.formatFormAnswers(formSegment.form, state.answers);
+  send({
+    type: 'sendPrompt',
+    prompt,
+    lane: 'design',
+    designFlowId: designBridgeState.designFlowId || undefined,
+    outputType: designBridgeState.outputType || 'prototype',
+  });
+  renderMessages();
+}
+
+function renderQuestionFormQuestion(messageIndex, form, question, state) {
+  const value = state.answers[question.id];
+  const locked = state.locked;
+  const labelHtml = `<div style="font-size:12px;font-weight:600;color:#18181b;line-height:1.5;margin-bottom:8px">${escapeHtml(question.label)}${question.required ? ' <span style="color:#E84040">*</span>' : ''}</div>`;
+
+  if (question.type === 'radio') {
+    const options = (question.options || []).map(option => {
+      const checked = value === option.value;
+      return `<label style="display:flex;align-items:flex-start;gap:8px;padding:8px 10px;border:1px solid ${checked ? '#f1b4b4' : '#e4e4e7'};border-radius:8px;background:${checked ? '#fff5f5' : '#fff'};cursor:${locked ? 'default' : 'pointer'}">
+        <input type="radio" name="qf-${messageIndex}-${form.id}-${question.id}" value="${escapeHtml(option.value)}" ${checked ? 'checked' : ''} ${locked ? 'disabled' : ''} onchange="updateQuestionFormChoice(${messageIndex}, '${escapeHtml(form.id)}', '${escapeHtml(question.id)}', this.value)">
+        <span style="font-size:12px;color:#18181b">${escapeHtml(option.label)}</span>
+      </label>`;
+    }).join('');
+    return `<div style="display:flex;flex-direction:column;gap:8px">${labelHtml}${options}</div>`;
+  }
+
+  if (question.type === 'checkbox') {
+    const options = (question.options || []).map(option => {
+      const checked = Array.isArray(value) && value.includes(option.value);
+      return `<label style="display:flex;align-items:flex-start;gap:8px;padding:8px 10px;border:1px solid ${checked ? '#f1b4b4' : '#e4e4e7'};border-radius:8px;background:${checked ? '#fff5f5' : '#fff'};cursor:${locked ? 'default' : 'pointer'}">
+        <input type="checkbox" value="${escapeHtml(option.value)}" ${checked ? 'checked' : ''} ${locked ? 'disabled' : ''} onchange="updateQuestionFormChoice(${messageIndex}, '${escapeHtml(form.id)}', '${escapeHtml(question.id)}', this.value, this.checked, ${Number.isFinite(question.maxSelections) ? Number(question.maxSelections) : 'undefined'})">
+        <span style="font-size:12px;color:#18181b">${escapeHtml(option.label)}</span>
+      </label>`;
+    }).join('');
+    const hint = Number.isFinite(question.maxSelections)
+      ? `<div style="font-size:11px;color:#71717a;margin-top:-2px">最多选择 ${escapeHtml(String(question.maxSelections))} 项</div>`
+      : '';
+    return `<div style="display:flex;flex-direction:column;gap:8px">${labelHtml}${hint}${options}</div>`;
+  }
+
+  if (question.type === 'select') {
+    const options = (question.options || []).map(option =>
+      `<option value="${escapeHtml(option.value)}"${value === option.value ? ' selected' : ''}>${escapeHtml(option.label)}</option>`,
+    ).join('');
+    return `<div>${labelHtml}<select ${locked ? 'disabled' : ''} onchange="updateQuestionFormTextValue(${messageIndex}, '${escapeHtml(form.id)}', '${escapeHtml(question.id)}', this.value)" style="width:100%;border:1px solid #e4e4e7;border-radius:8px;padding:9px 10px;font-size:12px;font-family:inherit;background:#fff">${options}</select></div>`;
+  }
+
+  if (question.type === 'textarea') {
+    return `<div>${labelHtml}<textarea ${locked ? 'disabled' : ''} oninput="updateQuestionFormTextValue(${messageIndex}, '${escapeHtml(form.id)}', '${escapeHtml(question.id)}', this.value)" placeholder="${escapeHtml(question.placeholder || '')}" style="width:100%;min-height:88px;border:1px solid #e4e4e7;border-radius:8px;padding:9px 10px;font-size:12px;line-height:1.6;font-family:inherit;resize:vertical;background:#fff">${escapeHtml(String(value || ''))}</textarea></div>`;
+  }
+
+  return `<div>${labelHtml}<input type="text" ${locked ? 'disabled' : ''} value="${escapeHtml(String(value || ''))}" oninput="updateQuestionFormTextValue(${messageIndex}, '${escapeHtml(form.id)}', '${escapeHtml(question.id)}', this.value)" placeholder="${escapeHtml(question.placeholder || '')}" style="width:100%;border:1px solid #e4e4e7;border-radius:8px;padding:9px 10px;font-size:12px;font-family:inherit;background:#fff"></div>`;
+}
+
+function renderQuestionForm(form, messageIndex) {
+  const state = getOrCreateQuestionFormState(messageIndex, form);
+  const questionsHtml = form.questions
+    .map(question => renderQuestionFormQuestion(messageIndex, form, question, state))
+    .join('<div style="height:2px"></div>');
+  const submittedAnswers = getSubmittedFormAnswers(messageIndex, form);
+  const buttonAttrs = isQuestionFormSubmittable(form, state)
+    ? 'style="justify-content:center"'
+    : 'style="justify-content:center;opacity:.5;cursor:not-allowed" disabled';
+  const statusLabel = state.locked
+    ? `<span class="badge-green">已回答</span>`
+    : `<button class="btn-red" ${buttonAttrs} onclick="submitQuestionForm(${messageIndex}, '${form.id}')">开始生成</button>`;
+  const submittedPreview = submittedAnswers
+    ? form.questions
+        .filter(question => submittedAnswers[question.id] !== undefined)
+        .map(question => {
+          const answer = submittedAnswers[question.id];
+          const text = Array.isArray(answer) ? answer.join(', ') : String(answer);
+          return `<div style="font-size:11px;color:#71717a;line-height:1.6"><strong>${escapeHtml(question.label)}</strong>: ${escapeHtml(text)}</div>`;
+        })
+        .join('')
+    : '';
+
+  return `<div style="margin-top:8px;border:1px solid #eadfd2;border-radius:16px;background:#fff;padding:14px 14px 12px">
+    <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:8px">
+      <div>
+        <div style="font-size:13px;font-weight:700;color:#18181b">${escapeHtml(form.title || 'Quick brief')}</div>
+        <div style="font-size:11px;color:#71717a;line-height:1.6;margin-top:3px">填完这几个问题，我就继续生成。</div>
+      </div>
+      ${statusLabel}
+    </div>
+    <div style="display:flex;flex-direction:column;gap:12px">${questionsHtml}</div>
+    ${submittedPreview ? `<div style="margin-top:12px;padding-top:10px;border-top:1px dashed #e4e4e7;display:flex;flex-direction:column;gap:4px">${submittedPreview}</div>` : ''}
+  </div>`;
+}
+
+function renderQuestionFormMessage(text, messageIndex) {
+  const parser = getQuestionFormModule();
+  if (!parser?.splitOnQuestionForms) {
+    return renderMarkdown(text);
+  }
+  const segments = parser.splitOnQuestionForms(String(text || ''));
+  return segments.map(segment => {
+    if (segment.kind === 'text') {
+      return renderMarkdown(segment.text || '');
+    }
+    if (segment.kind === 'form' && segment.form) {
+      return renderQuestionForm(segment.form, messageIndex);
+    }
+    return renderMarkdown(segment.raw || '');
+  }).join('');
+}
+
+function renderMessageContent(text, isUser = false, messageIndex = -1) {
   if (!isUser && isVerificationReport(text)) {
     return renderVerificationReport(text);
   }
   if (!isUser && isMcpStatusReport(text)) {
     return renderMcpStatusReport(text);
+  }
+  if (!isUser && /<question-form\b/i.test(text)) {
+    return renderQuestionFormMessage(text, messageIndex);
   }
   return renderMarkdown(text);
 }
