@@ -161,6 +161,7 @@ import {
   SessionRepository,
   type ChatMessage,
   type CompactBoundarySessionState,
+  type PersistedConversationMessage,
 } from "./storage/sessionRepository";
 import { SwarmCoordinator } from "./agent/swarm/SwarmCoordinator";
 import { hasExplicitSwarmIntent } from "./agent/swarm/swarmIntent";
@@ -216,6 +217,7 @@ import {
 import { createExtensionPromptRequestState } from "./extensionPromptStateHost";
 import { SkillStore } from "./skills/skillStore";
 import { ProfileStore } from "./userModel/profileStore";
+import { createCronScheduler } from "./cron/cronScheduler";
 
 // Local host-side types.
 
@@ -233,7 +235,7 @@ class ChatSidebarProvider implements vscode.WebviewViewProvider, vscode.Disposab
   public static readonly viewType = "terminalAiAssistant.chatView";
 
   private readonly sessionMessages: ChatMessage[] = [];
-  private readonly conversationMessages: ChatMessage[] = [];
+  private readonly conversationMessages: PersistedConversationMessage[] = [];
   private pendingPromptAttachments: Array<{ data: string; mimeType: string }> | undefined;
   private webviewView: vscode.WebviewView | undefined;
   private isBusy = false;
@@ -294,6 +296,7 @@ class ChatSidebarProvider implements vscode.WebviewViewProvider, vscode.Disposab
   private readonly backgroundTaskNotificationTimer: ReturnType<
     typeof setInterval
   >;
+  private readonly cronScheduler = createCronScheduler();
 
   // Current session ID (P01).
   private currentSessionId: string | undefined;
@@ -379,7 +382,8 @@ class ChatSidebarProvider implements vscode.WebviewViewProvider, vscode.Disposab
           enabled: this.conversationFeatureBindings.isSessionPersistenceEnabled(),
           currentSessionId: this.currentSessionId,
           pendingPlanVerification: this.pendingPlanVerification,
-          conversationMessages: this.conversationMessages,
+          conversationMessages:
+            this.conversationMessages as PersistedConversationMessage[],
           compactBoundary: this.compactBoundary,
           saveRuntimeState: (sessionId, runtimeState) =>
             this.sessions.saveRuntimeState(sessionId, runtimeState),
@@ -389,7 +393,8 @@ class ChatSidebarProvider implements vscode.WebviewViewProvider, vscode.Disposab
         this.conversationFeatureBindings.isSessionPersistenceEnabled(),
       getCurrentSessionId: () => this.currentSessionId,
       getSessionMessages: () => this.sessionMessages,
-      getConversationMessages: () => this.conversationMessages,
+      getConversationMessages: () =>
+        this.conversationMessages as PersistedConversationMessage[],
       saveRuntimeState: (sessionId, runtimeState) =>
         this.sessions.saveRuntimeState(sessionId, runtimeState),
       rebuildConversationMessagesFromSession: () =>
@@ -613,7 +618,14 @@ class ChatSidebarProvider implements vscode.WebviewViewProvider, vscode.Disposab
       resetPendingPlanVerificationToAwaitingStart: () =>
         this.conversationRuntimeStateBindings.resetPendingPlanVerificationToAwaitingStart(),
       getConversationHistory: () =>
-        this.conversationHistoryBindings.getConversationHistory(),
+        this.conversationHistoryBindings.getConversationHistory().filter(
+          (
+            message,
+          ): message is Extract<
+            PersistedConversationMessage,
+            { role: "user" | "assistant" }
+          > => message.role === "user" || message.role === "assistant",
+        ),
       getSessionInstalledSkillHooks: () =>
         getSessionInstalledSkillHooks(
           this.sessionInstalledSkillHooks,
@@ -671,6 +683,12 @@ class ChatSidebarProvider implements vscode.WebviewViewProvider, vscode.Disposab
       },
       runtimes: this.workspaceRuntimeHost.getRuntimes(),
     });
+    this.cronScheduler.start(
+      getPrimaryWorkspaceFolderPath() ?? "",
+      prompt => {
+        void this.handlePrompt(prompt);
+      },
+    );
     this.disposeFastModeRuntimeListener = onFastModeRuntimeStateChanged(() => {
       this.postState();
       this.workspaceStatusController.requestRefresh();
@@ -1107,6 +1125,7 @@ class ChatSidebarProvider implements vscode.WebviewViewProvider, vscode.Disposab
       watcher.dispose();
     }
     this.swarm?.dispose();
+    this.cronScheduler.stop();
     clearAllSessionInstalledSkillHooks(this.sessionInstalledSkillHooks);
     this.resetActiveRuntimeControllers();
     await this.sessions.flush().catch(error => {
@@ -1234,7 +1253,7 @@ class ChatSidebarProvider implements vscode.WebviewViewProvider, vscode.Disposab
                 this.currentSessionId = sessionId;
               },
               sessionMessages: this.sessionMessages,
-              conversationMessages: this.conversationMessages,
+              conversationMessages: this.conversationHistoryBindings.getConversationHistory(),
               getPendingPromptAttachments: () => this.pendingPromptAttachments,
               setPendingPromptAttachments: attachments => {
                 this.pendingPromptAttachments = attachments;

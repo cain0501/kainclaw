@@ -36,7 +36,7 @@ Latest verification note: 2026-05-09 - micro-compact (650) verified: `npm test`,
 | vscode-extension-26q | Kanban 视图：我的作品看板模式 | OPEN P3 | — |
 | vscode-extension-0z5 | 画布草图标注工具：iframe 上层 canvas overlay | OPEN P3 | — |
 | vscode-extension-650 | Micro-compact：长会话工具结果轻量清理 | ✓ CLOSED | `.kiro/primers/vscode-extension-650.md` |
-| vscode-extension-tgx | CronCreate / CronDelete / CronList 工具 | OPEN | `.kiro/primers/vscode-extension-tgx.md` |
+| vscode-extension-tgx | CronCreate / CronDelete / CronList 工具 | ✓ CLOSED | `.kiro/primers/vscode-extension-tgx.md` |
 | vscode-extension-uyl | Plan Mode V2 多阶段规划提示词升级 | OPEN | `.kiro/primers/vscode-extension-uyl.md` |
 | vscode-extension-9pz | codebase-memory-mcp integration | CLOSED | `.kiro/primers/vscode-extension-9pz.md` |
 | vscode-extension-u7w | 图像我的作品：缩略图持久化（对齐设计列表机制） | ✓ CLOSED | `.kiro/primers/vscode-extension-u7w.md` |
@@ -82,7 +82,7 @@ Latest verification note: 2026-05-09 - micro-compact (650) verified: `npm test`,
 - Tasks / background commands
 - built-in Review / Verification (/review, /verify)
 - Thinking / Effort / Fast mode
-- Compact / Auto-compact
+- Cron / Scheduler (CronCreate / CronDelete / CronList tools, `.cain/scheduled_tasks.json` persistence, session-only in-memory tasks, 1s scheduler loop)
 - Micro-compact (lightweight tool result clearing before auto-compact, `src/compact/microCompact.ts`)
 - Auto-Memory
 - LSP phase 1 + partial phase 2
@@ -121,7 +121,6 @@ Latest verification note: 2026-05-09 - micro-compact (650) verified: `npm test`,
 ## Not Yet Started
 
 - Browser Bridge / Desktop automation / Computer Use
-- Scheduler / Cron
 - Full desktop Skills / Agents / Hooks UI
 - Full Office chain (Excel/PowerPoint)
 - Full Windows release client

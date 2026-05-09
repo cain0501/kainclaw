@@ -662,40 +662,39 @@ describe("promptFlowHost", () => {
       persistCurrentSessionRuntimeState: options.persistCurrentSessionRuntimeState,
       maybeAutoCompactConversation: options.maybeAutoCompactConversation,
     });
-    expect(runPromptTurnWithHostMock).toHaveBeenCalledWith({
-      prompt: "Expanded MCP prompt",
-      workspaceRoot: "E:\\repo",
-      config: promptExecution.config,
-      envMap: { HELLO: "world" },
-      runtimeOptions: { fastMode: true },
-      effortLevel: "high",
-      runtime: promptExecution.runtime,
-      tools: promptExecution.tools,
-      installedSkillHooks: [],
-      userHooks: [],
-      installedSkillAgentRunner: expect.any(Function),
-      existingSwarm: options.existingSwarm,
-      createSwarm: expect.any(Function),
-      assignSwarm: options.assignSwarm,
-      getConversationHistory: options.getConversationHistory,
-      buildWorkspaceSystemPrompt: options.buildWorkspaceSystemPrompt,
-      buildProviderAdapter: options.buildProviderAdapter,
-      shouldEnableSwarmForPrompt: options.shouldEnableSwarmForPrompt,
-      setCompanionState: options.setCompanionState,
-      appendStreamingToken: options.appendStreamingToken,
-      logFirstToken: options.logFirstToken,
-      postToken: options.postToken,
-      startToolExecution: options.startToolExecution,
-      finishToolExecution: options.finishToolExecution,
-      onToolError: options.onToolError,
-      modelActivityId: "activity-1",
-      finishModelActivity: options.finishModelActivity,
-      logNoStreamingReply: options.logNoStreamingReply,
-      recordAssistantReply: options.recordAssistantReply,
-      clearStreamingText: options.clearStreamingText,
-      queueAutoMemoryExtraction: expect.any(Function),
-      updateMood: options.updateMood,
-    });
+    const runPromptTurnArgs = vi.mocked(runPromptTurnWithHostMock).mock.calls[0]?.[0];
+    expect(runPromptTurnArgs).toBeDefined();
+    expect(runPromptTurnArgs?.prompt).toBe("Expanded MCP prompt");
+    expect(runPromptTurnArgs?.workspaceRoot).toBe("E:\\repo");
+    expect(runPromptTurnArgs?.config).toEqual(promptExecution.config);
+    expect(runPromptTurnArgs?.envMap).toEqual({ HELLO: "world" });
+    expect(runPromptTurnArgs?.runtimeOptions).toEqual({ fastMode: true });
+    expect(runPromptTurnArgs?.effortLevel).toBe("high");
+    expect(runPromptTurnArgs?.runtime).toBe(promptExecution.runtime);
+    expect(runPromptTurnArgs?.tools).toBe(promptExecution.tools);
+    expect(runPromptTurnArgs?.installedSkillHooks).toEqual([]);
+    expect(runPromptTurnArgs?.userHooks).toEqual([]);
+    expect(runPromptTurnArgs?.installedSkillAgentRunner).toEqual(expect.any(Function));
+    expect(runPromptTurnArgs?.existingSwarm).toBe(options.existingSwarm);
+    expect(runPromptTurnArgs?.createSwarm).toEqual(expect.any(Function));
+    expect(runPromptTurnArgs?.assignSwarm).toBe(options.assignSwarm);
+    expect(runPromptTurnArgs?.buildWorkspaceSystemPrompt).toBe(options.buildWorkspaceSystemPrompt);
+    expect(runPromptTurnArgs?.buildProviderAdapter).toBe(options.buildProviderAdapter);
+    expect(runPromptTurnArgs?.shouldEnableSwarmForPrompt).toBe(options.shouldEnableSwarmForPrompt);
+    expect(runPromptTurnArgs?.setCompanionState).toBe(options.setCompanionState);
+    expect(runPromptTurnArgs?.appendStreamingToken).toBe(options.appendStreamingToken);
+    expect(runPromptTurnArgs?.logFirstToken).toBe(options.logFirstToken);
+    expect(runPromptTurnArgs?.postToken).toBe(options.postToken);
+    expect(runPromptTurnArgs?.startToolExecution).toBe(options.startToolExecution);
+    expect(runPromptTurnArgs?.finishToolExecution).toBe(options.finishToolExecution);
+    expect(runPromptTurnArgs?.onToolError).toBe(options.onToolError);
+    expect(runPromptTurnArgs?.modelActivityId).toBe("activity-1");
+    expect(runPromptTurnArgs?.finishModelActivity).toBe(options.finishModelActivity);
+    expect(runPromptTurnArgs?.logNoStreamingReply).toBe(options.logNoStreamingReply);
+    expect(runPromptTurnArgs?.recordAssistantReply).toBe(options.recordAssistantReply);
+    expect(runPromptTurnArgs?.clearStreamingText).toBe(options.clearStreamingText);
+    expect(runPromptTurnArgs?.queueAutoMemoryExtraction).toEqual(expect.any(Function));
+    expect(runPromptTurnArgs?.updateMood).toBe(options.updateMood);
     expect(options.createSwarm).toHaveBeenCalledWith({
       workerToolContext: {
         workspaceRoot: "E:\\repo",

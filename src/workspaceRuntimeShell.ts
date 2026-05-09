@@ -163,6 +163,11 @@ export class WorkspaceRuntime {
       lsp: this.lspRuntime,
       tasks: this.getTasks(),
       worktree: this.getWorktree(),
+      scheduler: {
+        enable: () => {
+          // Host-level scheduler is already running; this preserves tool API compatibility.
+        },
+      },
       stopBackgroundTask: this.stopBackgroundTask,
       runVerification: this.runVerification,
       runReview: this.runReview,

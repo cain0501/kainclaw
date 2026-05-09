@@ -359,6 +359,9 @@ export type ToolContext = {
   lsp?: LspToolAdapter;
   tasks?: ConversationTaskRuntime;
   worktree?: ConversationWorktreeRuntime;
+  scheduler?: {
+    enable(): void;
+  };
   stopBackgroundTask?: (
     taskId: string,
   ) => Promise<{ taskId: string; taskType: string; command: string }>;
@@ -3060,6 +3063,111 @@ const handlers: Record<string, ToolHandler> = {
     };
   },
 
+  async CronCreate(input, context) {
+    const { parseCronExpression, nextCronRunMs, cronToHuman } = await import("./cron/cronUtils.js");
+    const { addCronTask, listAllCronTasks } = await import("./cron/cronTasks.js");
+
+    const cron = typeof input.cron === "string" ? input.cron.trim() : "";
+    const prompt = typeof input.prompt === "string" ? input.prompt : "";
+    const recurring = input.recurring !== false;
+    const durable = input.durable === true;
+
+    if (!cron) {
+      throw new Error("cron is required");
+    }
+    if (!prompt) {
+      throw new Error("prompt is required");
+    }
+    if (!parseCronExpression(cron)) {
+      throw new Error(
+        `Invalid cron expression '${cron}'. Expected 5 fields: M H DoM Mon DoW.`,
+      );
+    }
+    if (nextCronRunMs(cron, Date.now()) === null) {
+      throw new Error(
+        `Cron expression '${cron}' does not match any calendar date in the next year.`,
+      );
+    }
+    const tasks = await listAllCronTasks(context.workspaceRoot);
+    if (tasks.length >= 50) {
+      throw new Error("Too many scheduled jobs (max 50). Cancel one first.");
+    }
+
+    const id = await addCronTask(
+      cron,
+      prompt,
+      recurring,
+      durable,
+      context.workspaceRoot,
+    );
+    context.scheduler?.enable();
+
+    const humanSchedule = cronToHuman(cron);
+    const where = durable
+      ? "Persisted to .cain/scheduled_tasks.json"
+      : "Session-only (not written to disk, dies when session ends)";
+
+    return {
+      summary: `Scheduled cron job ${id}`,
+      content: recurring
+        ? `Scheduled recurring job ${id} (${humanSchedule}). ${where}. Auto-expires after 7 days. Use CronDelete to cancel sooner.`
+        : `Scheduled one-shot task ${id} (${humanSchedule}). ${where}. It will fire once then auto-delete.`,
+    };
+  },
+
+  async CronDelete(input, context) {
+    const { listAllCronTasks, removeCronTasks } = await import("./cron/cronTasks.js");
+
+    const id = typeof input.id === "string" ? input.id.trim() : "";
+    if (!id) {
+      throw new Error("id is required");
+    }
+
+    const tasks = await listAllCronTasks(context.workspaceRoot);
+    if (!tasks.some((task: { id: string }) => task.id === id)) {
+      throw new Error(`No scheduled job with id '${id}'`);
+    }
+
+    await removeCronTasks([id], context.workspaceRoot);
+    return {
+      summary: `Cancelled cron job ${id}`,
+      content: `Cancelled job ${id}.`,
+    };
+  },
+
+  async CronList(_input, context) {
+    const { listAllCronTasks } = await import("./cron/cronTasks.js");
+    const { cronToHuman } = await import("./cron/cronUtils.js");
+
+    const tasks = await listAllCronTasks(context.workspaceRoot);
+    if (tasks.length === 0) {
+      return {
+        summary: "No scheduled cron jobs",
+        content: "No scheduled jobs.",
+      };
+    }
+
+    const lines = tasks.map((task: {
+      id: string;
+      cron: string;
+      prompt: string;
+      recurring?: boolean;
+      durable?: boolean;
+    }) => {
+      const human = cronToHuman(task.cron);
+      const kind = task.recurring ? "(recurring)" : "(one-shot)";
+      const store = task.durable === false ? "[session-only]" : "";
+      const preview =
+        task.prompt.length > 80 ? `${task.prompt.slice(0, 77)}...` : task.prompt;
+      return `${task.id} — ${human} ${kind}${store ? ` ${store}` : ""}: ${preview}`;
+    });
+
+    return {
+      summary: `Listed ${tasks.length} scheduled cron job(s)`,
+      content: lines.join("\n"),
+    };
+  },
+
   async write_file(input, context) {
     const rawPath = typeof input.path === "string" ? input.path : "";
     const content = typeof input.content === "string" ? input.content : "";
@@ -5310,6 +5418,61 @@ export const toolDefinitions: ToolDefinition[] = [
       readOnlyHint: true,
       title: "Ask user question",
     },
+  },
+  {
+    name: "CronCreate",
+    description:
+      "Schedule a recurring or one-shot prompt to be enqueued at a future time. Uses standard 5-field cron in the user's local timezone.",
+    input_schema: {
+      type: "object",
+      properties: {
+        cron: {
+          type: "string",
+          description:
+            'Standard 5-field cron expression in local time: "M H DoM Mon DoW" (e.g. "*/5 * * * *" = every 5 minutes, "30 14 28 2 *" = Feb 28 at 2:30pm local once).',
+        },
+        prompt: {
+          type: "string",
+          description: "The prompt to enqueue at each fire time.",
+        },
+        recurring: {
+          type: "boolean",
+          description:
+            "true (default) = fire on every cron match until deleted or auto-expired after 7 days. false = fire once at the next match, then auto-delete.",
+        },
+        durable: {
+          type: "boolean",
+          description:
+            "true = persist to .cain/scheduled_tasks.json and survive restarts. false (default) = in-memory only, dies when this session ends.",
+        },
+      },
+      required: ["cron", "prompt"],
+    },
+    annotations: { title: "Schedule cron job" },
+  },
+  {
+    name: "CronDelete",
+    description: "Cancel a scheduled cron job by its ID.",
+    input_schema: {
+      type: "object",
+      properties: {
+        id: {
+          type: "string",
+          description: "Job ID returned by CronCreate.",
+        },
+      },
+      required: ["id"],
+    },
+    annotations: { title: "Cancel cron job" },
+  },
+  {
+    name: "CronList",
+    description: "List all active scheduled cron jobs.",
+    input_schema: {
+      type: "object",
+      properties: {},
+    },
+    annotations: { title: "List cron jobs", readOnlyHint: true },
   },
   {
     name: "SkillTool",
