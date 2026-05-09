@@ -3901,6 +3901,8 @@ function buildMidtaiCanvasSrcdoc(html) {
     if (window.__kcPrevSelected) {
       try { window.__kcPrevSelected.style.outline = ''; window.__kcPrevSelected.style.outlineOffset = ''; } catch(err) {}
     }
+    // 先捕获 outerHTML，再设置 outline，避免 outline 样式被烘焙进 outerHTML 发给服务端
+    var capturedOuterHTML = found.outerHTML || '';
     found.style.outline = '2px solid rgba(201,76,46,0.9)';
     found.style.outlineOffset = '2px';
     window.__kcPrevSelected = found;
@@ -3913,8 +3915,8 @@ function buildMidtaiCanvasSrcdoc(html) {
       isImg: isImg,
       src: found.src || readBackgroundImageUrl(found) || '',
       selector: buildSelector(found),
-      outerHTML: (found.outerHTML || '').slice(0, 300),
-      fullOuterHTML: found.outerHTML || '',
+      outerHTML: capturedOuterHTML.slice(0, 300),
+      fullOuterHTML: capturedOuterHTML,
       rect: {
         top: rect.top,
         left: rect.left,
