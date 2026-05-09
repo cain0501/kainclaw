@@ -1260,6 +1260,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-seri
                       <button onclick="exportDesign('html');toggleMidtaiExportMenu(false)" style="display:block;width:100%;text-align:left;padding:8px 14px;border:none;background:none;cursor:pointer;font-size:12px;color:#2d1f14" onmouseover="this.style.background='#f6f1ea'" onmouseout="this.style.background='none'">导出 HTML</button>
                       <button onclick="exportDesign('pdf');toggleMidtaiExportMenu(false)" style="display:block;width:100%;text-align:left;padding:8px 14px;border:none;background:none;cursor:pointer;font-size:12px;color:#2d1f14" onmouseover="this.style.background='#f6f1ea'" onmouseout="this.style.background='none'">导出 PDF</button>
                       <button onclick="exportDesign('pptx');toggleMidtaiExportMenu(false)" style="display:block;width:100%;text-align:left;padding:8px 14px;border:none;background:none;cursor:pointer;font-size:12px;color:#2d1f14" onmouseover="this.style.background='#f6f1ea'" onmouseout="this.style.background='none'">导出 PPTX</button>
+                      <button onclick="exportDesign('zip');toggleMidtaiExportMenu(false)" style="display:block;width:100%;text-align:left;padding:8px 14px;border:none;background:none;cursor:pointer;font-size:12px;color:#2d1f14" onmouseover="this.style.background='#f6f1ea'" onmouseout="this.style.background='none'">导出 ZIP</button>
                     </div>
                   </div>
                 </div>
@@ -1620,6 +1621,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-seri
             <button id="design-export-html-btn" class="btn-secondary" onclick="exportDesignWorkbench('html')">导出 HTML</button>
             <button id="design-export-pdf-btn" class="btn-secondary" onclick="exportDesignWorkbench('pdf')">导出 PDF</button>
             <button id="design-export-pptx-btn" class="btn-secondary" onclick="exportDesignWorkbench('pptx')">导出 PPTX</button>
+            <button id="design-export-zip-btn" class="btn-secondary" onclick="exportDesignWorkbench('zip')">导出 ZIP</button>
           </div>
         </div>
       </details>
@@ -6780,14 +6782,11 @@ function generateDesignWorkbench() {
     return;
   }
 
-  const userContext = designBridgeState.userContext || '';
-  designBridgeState.userContext = '';
   send({
     type: 'design:requestDirections',
     prompt: designBridgeState.prompt,
     outputType: designBridgeState.outputType,
     style: designBridgeState.style,
-    userContext,
     brandContext: brand ? brand.stylePrompt : '',
     ...(designBridgeState.referenceImage ? {
       referenceImageDataUrl: designBridgeState.referenceImage.dataUrl,
@@ -6979,6 +6978,26 @@ async function exportDesignWorkbench(format) {
         projectLabel,
       );
       handleMessage({ type: 'design:exportDone', format: 'pptx', filePath });
+    } catch (error) {
+      handleMessage({
+        type: 'design:error',
+        message: error instanceof Error ? error.message : String(error),
+      });
+    }
+    return;
+  }
+
+  if (format === 'zip') {
+    try {
+      const filePath = await window.electronAPI.exportDesignZip(
+        designBridgeState.html,
+        designBridgeState.sliders.map(slider => ({
+          ...slider,
+          default: designBridgeState.sliderValues[slider.id] ?? slider.default,
+        })),
+        projectLabel,
+      );
+      handleMessage({ type: 'design:exportDone', format: 'zip', filePath });
     } catch (error) {
       handleMessage({
         type: 'design:error',
