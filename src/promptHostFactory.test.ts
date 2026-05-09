@@ -164,6 +164,7 @@ describe("promptHostFactory", () => {
         getPlanContent: vi.fn(),
       },
       appendConversationMessage: vi.fn(),
+      replaceConversationHistory: vi.fn(async () => undefined),
       buildPromptFileMentionContext: vi.fn(),
       persistCurrentSessionRuntimeState: vi.fn(),
       existingSwarm: { id: "swarm-1" } as any,
@@ -223,6 +224,7 @@ describe("promptHostFactory", () => {
       },
       flow: {
         appendConversationMessage: flowOptions.appendConversationMessage,
+        replaceConversationHistory: flowOptions.replaceConversationHistory,
         buildPromptFileMentionContext: flowOptions.buildPromptFileMentionContext,
         persistCurrentSessionRuntimeState:
           flowOptions.persistCurrentSessionRuntimeState,

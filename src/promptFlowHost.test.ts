@@ -50,6 +50,7 @@ function createBaseOptions() {
     updateMood: vi.fn(async () => undefined),
     createModelActivity: vi.fn(() => "activity-1"),
     appendConversationMessage: vi.fn(),
+    replaceConversationHistory: vi.fn(async () => undefined),
     buildPromptFileMentionContext: vi.fn(async () => ({
       supplementalPrompt: "context payload",
     })),
@@ -94,6 +95,7 @@ describe("promptFlowHost", () => {
     const createSwarm = vi.fn(() => ({ id: "swarm-2" }));
     const buildWorkspaceSystemPrompt = vi.fn(async () => "system prompt");
     const appendConversationMessage = vi.fn();
+    const replaceConversationHistory = vi.fn(async () => undefined);
     const buildPromptFileMentionContext = vi.fn(async () => ({
       supplementalPrompt: "context payload",
     }));
@@ -118,6 +120,7 @@ describe("promptFlowHost", () => {
       createSwarm,
       buildWorkspaceSystemPrompt,
       appendConversationMessage,
+      replaceConversationHistory,
       buildPromptFileMentionContext,
       persistCurrentSessionRuntimeState,
       existingSwarm: { id: "swarm-1" },
@@ -161,6 +164,7 @@ describe("promptFlowHost", () => {
     const createSwarm = vi.fn(() => ({ id: "swarm-2" }));
     const buildWorkspaceSystemPrompt = vi.fn(async () => "system prompt");
     const appendConversationMessage = vi.fn();
+    const replaceConversationHistory = vi.fn(async () => undefined);
     const buildPromptFileMentionContext = vi.fn(async () => ({
       supplementalPrompt: "context payload",
     }));
@@ -190,6 +194,7 @@ describe("promptFlowHost", () => {
       createSwarm,
       buildWorkspaceSystemPrompt,
       appendConversationMessage,
+      replaceConversationHistory,
       buildPromptFileMentionContext,
       persistCurrentSessionRuntimeState,
       existingSwarm: { id: "swarm-1" },
@@ -247,6 +252,7 @@ describe("promptFlowHost", () => {
     const buildWorkspaceSystemPrompt = vi.fn(async () => "system prompt");
     const stateBindings = createPromptFlowStateBindings({
       appendConversationMessage: vi.fn(),
+      replaceConversationHistory: vi.fn(async () => undefined),
       buildPromptFileMentionContext: vi.fn(async () => ({
         supplementalPrompt: "context payload",
       })),
@@ -327,6 +333,7 @@ describe("promptFlowHost", () => {
 
   it("creates prompt flow state bindings that pass conversation and swarm state through unchanged", async () => {
     const appendConversationMessage = vi.fn();
+    const replaceConversationHistory = vi.fn(async () => undefined);
     const buildPromptFileMentionContext = vi.fn(async () => ({
       supplementalPrompt: "context payload",
     }));
@@ -341,6 +348,7 @@ describe("promptFlowHost", () => {
 
     const bindings = createPromptFlowStateBindings({
       appendConversationMessage,
+      replaceConversationHistory,
       buildPromptFileMentionContext,
       persistCurrentSessionRuntimeState,
       existingSwarm,

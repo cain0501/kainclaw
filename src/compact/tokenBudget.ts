@@ -11,7 +11,7 @@ const MULTIPLIERS: Record<string, number> = {
   b: 1_000_000_000,
 };
 
-type ConversationMessage = Extract<NormalizedMessage, { role: "user" | "assistant" }>;
+type ConversationMessage = NormalizedMessage;
 
 const MEDIA_ATTACHMENT_TOKEN_ESTIMATE = 2_000;
 

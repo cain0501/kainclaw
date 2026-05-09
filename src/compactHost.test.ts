@@ -297,6 +297,56 @@ describe("compactHost", () => {
     );
   });
 
+  it("micro-compacts tool results before full compaction and skips full compaction if enough tokens are freed", async () => {
+    const addPhaseActivity = vi.fn(() => "activity-micro");
+    const finishPhaseActivity = vi.fn();
+    const replaceConversationHistory = vi.fn();
+    const performConversationCompaction = vi.fn(async () => {
+      throw new Error("should not run");
+    });
+
+    await maybeAutoCompactConversation({
+      config: {
+        type: "anthropic",
+        apiKey: "secret",
+        model: "claude-sonnet",
+      },
+      getConversationHistory: () => {
+        const history = [];
+        for (let index = 0; index < 8; index += 1) {
+          history.push({
+            role: "assistant" as const,
+            content: "",
+            toolCalls: [
+              {
+                id: `tool-${index}`,
+                name: "read_file",
+                input: { path: `file-${index}.ts` },
+              },
+            ],
+          });
+          history.push({
+            role: "tool_result" as const,
+            toolCallId: `tool-${index}`,
+            content: "x".repeat(100_000),
+          });
+        }
+        history.push({ role: "user" as const, content: "follow up" });
+        return history;
+      },
+      replaceConversationHistory,
+      performConversationCompaction,
+      addPhaseActivity,
+      finishPhaseActivity,
+      toErrorMessage: error => String(error),
+    });
+
+    expect(replaceConversationHistory).toHaveBeenCalledTimes(1);
+    expect(performConversationCompaction).not.toHaveBeenCalled();
+    expect(addPhaseActivity).not.toHaveBeenCalled();
+    expect(finishPhaseActivity).not.toHaveBeenCalled();
+  });
+
   it("stops retrying auto-compact after repeated failures", async () => {
     const addPhaseActivity = vi.fn(() => "activity-1");
     const finishPhaseActivity = vi.fn();
@@ -433,6 +483,56 @@ describe("compactHost", () => {
       "done",
       expect.stringContaining("Estimated tokens"),
     );
+  });
+
+  it("host-backed auto compact can micro-compact complete message history before full compaction", async () => {
+    const createProviderAdapter = vi.fn(() => ({
+      runStep: vi.fn(async () => ({
+        text: "<summary>Condensed summary</summary>",
+        toolCalls: [],
+        done: true,
+      })),
+    }));
+    const replaceConversationHistory = vi.fn();
+    const performConversationCompaction = vi.fn(async () => {
+      throw new Error("should not run");
+    });
+
+    await maybeAutoCompactConversation({
+      config: {
+        type: "anthropic",
+        apiKey: "secret",
+        model: "claude-sonnet",
+      },
+      getConversationHistory: () =>
+        Array.from({ length: 8 }, (_, index) => [
+          {
+            role: "assistant" as const,
+            content: "",
+            toolCalls: [
+              {
+                id: `tool-${index}`,
+                name: "read_file",
+                input: { path: `file-${index}.ts` },
+              },
+            ],
+          },
+          {
+            role: "tool_result" as const,
+            toolCallId: `tool-${index}`,
+            content: "x".repeat(100_000),
+          },
+        ]).flat(),
+      replaceConversationHistory,
+      performConversationCompaction,
+      addPhaseActivity: vi.fn(() => "activity-host-micro"),
+      finishPhaseActivity: vi.fn(),
+      toErrorMessage: error => String(error),
+    });
+
+    expect(replaceConversationHistory).toHaveBeenCalledTimes(1);
+    expect(performConversationCompaction).not.toHaveBeenCalled();
+    expect(createProviderAdapter).not.toHaveBeenCalled();
   });
 
   it("creates an auto compact runner that reuses shared host wiring", async () => {

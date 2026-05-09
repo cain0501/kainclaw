@@ -3316,6 +3316,8 @@ export class ElectronChatPanel {
     const style = typeof message.style === "string" ? message.style.trim() : "";
     const userContext =
       typeof message.userContext === "string" ? message.userContext.trim() : "";
+    const brandContext =
+      typeof message.brandContext === "string" ? message.brandContext.trim() : "";
     const referenceImageDataUrl =
       typeof message.referenceImageDataUrl === "string" &&
         message.referenceImageDataUrl.trim()
@@ -3349,6 +3351,7 @@ export class ElectronChatPanel {
         outputType,
         ...(style ? { style } : {}),
         ...(userContext ? { userContext } : {}),
+        ...(brandContext ? { brandContext } : {}),
         ...(referenceImageDataUrl ? { referenceImageDataUrl } : {}),
         ...(referenceImageMimeType ? { referenceImageMimeType } : {}),
         onToken: (token: string) => {

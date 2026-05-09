@@ -5,6 +5,24 @@ import type {
   PersistedConversationMessage,
   SessionRuntimeState,
 } from "./storage/sessionRepository";
+import type { NormalizedMessage } from "./agent/providers/IProviderAdapter";
+
+type PersistableConversationMessage =
+  | NormalizedMessage
+  | PersistedConversationMessage
+  | Pick<ChatMessage, "role" | "content" | "attachments" | "generatedImages">;
+
+function hasReasoningContent(
+  message: PersistableConversationMessage,
+): message is Extract<NormalizedMessage, { role: "assistant" }> {
+  return message.role === "assistant" && "toolCalls" in message;
+}
+
+function isNormalizedToolResult(
+  message: PersistableConversationMessage,
+): message is Extract<NormalizedMessage, { role: "tool_result" }> {
+  return message.role === "tool_result";
+}
 
 export type PendingPlanVerificationState = PendingPlanVerificationSessionState;
 
@@ -148,45 +166,94 @@ export function deserializePendingPlanVerificationState(
 }
 
 export function serializeModelConversation(
-  conversationMessages: Array<
-    Pick<ChatMessage, "role" | "content" | "attachments" | "generatedImages">
-  >,
+  conversationMessages: PersistableConversationMessage[],
 ): PersistedConversationMessage[] | undefined {
   if (conversationMessages.length === 0) {
     return undefined;
   }
 
-  return conversationMessages.map(message => ({
-    role: message.role,
-    content: message.content,
-    ...(message.attachments && message.attachments.length > 0
-      ? { attachments: message.attachments }
-      : {}),
-    ...(message.generatedImages && message.generatedImages.length > 0
-      ? { generatedImages: message.generatedImages }
-      : {}),
-  }));
+  return conversationMessages.map(message => {
+    if (message.role === "user") {
+      return {
+        role: "user",
+        content: message.content,
+        ...(message.attachments && message.attachments.length > 0
+          ? { attachments: message.attachments }
+          : {}),
+      };
+    }
+
+    if (message.role === "assistant") {
+      return {
+        role: "assistant",
+        content: message.content,
+        ...(hasReasoningContent(message) && message.reasoningContent
+          ? { reasoningContent: message.reasoningContent }
+          : {}),
+        ...(hasReasoningContent(message) && message.toolCalls?.length
+          ? { toolCalls: message.toolCalls }
+          : {}),
+        ...("generatedImages" in message &&
+        message.generatedImages &&
+        message.generatedImages.length > 0
+          ? { generatedImages: message.generatedImages }
+          : {}),
+      };
+    }
+
+    return {
+      role: "tool_result",
+      content: message.content,
+      toolCallId: isNormalizedToolResult(message) ? message.toolCallId : "",
+      ...(isNormalizedToolResult(message) && message.isError
+        ? { isError: message.isError }
+        : {}),
+    };
+  });
 }
 
 export function restoreModelConversation(options: {
   modelConversation: PersistedConversationMessage[] | undefined;
-  conversationMessages: Array<
-    Pick<ChatMessage, "role" | "content" | "attachments" | "generatedImages">
-  >;
+  conversationMessages: NormalizedMessage[];
   rebuildConversationMessagesFromSession: () => void;
 }): void {
   if (options.modelConversation && options.modelConversation.length > 0) {
     options.conversationMessages.length = 0;
     for (const message of options.modelConversation) {
+      if (message.role === "user") {
+        options.conversationMessages.push({
+          role: "user",
+          content: message.content,
+          ...(message.attachments && message.attachments.length > 0
+            ? { attachments: message.attachments }
+            : {}),
+        });
+        continue;
+      }
+
+      if (message.role === "assistant") {
+        options.conversationMessages.push({
+          role: "assistant",
+          content: message.content,
+          ...(message.reasoningContent
+            ? { reasoningContent: message.reasoningContent }
+            : {}),
+          ...(message.toolCalls?.length ? { toolCalls: message.toolCalls } : {}),
+          ...(message.attachments && message.attachments.length > 0
+            ? { attachments: message.attachments }
+            : {}),
+          ...(message.generatedImages && message.generatedImages.length > 0
+            ? { generatedImages: message.generatedImages }
+            : {}),
+        });
+        continue;
+      }
+
       options.conversationMessages.push({
-        role: message.role,
+        role: "tool_result",
+        toolCallId: message.toolCallId ?? "",
         content: message.content,
-        ...(message.attachments && message.attachments.length > 0
-          ? { attachments: message.attachments }
-          : {}),
-        ...(message.generatedImages && message.generatedImages.length > 0
-          ? { generatedImages: message.generatedImages }
-          : {}),
+        ...(message.isError ? { isError: message.isError } : {}),
       });
     }
     return;
@@ -197,9 +264,7 @@ export function restoreModelConversation(options: {
 
 export function buildSessionRuntimeState(options: {
   pendingPlanVerification: PendingPlanVerificationState | undefined;
-  conversationMessages: Array<
-    Pick<ChatMessage, "role" | "content" | "attachments" | "generatedImages">
-  >;
+  conversationMessages: PersistableConversationMessage[];
   compactBoundary?: CompactBoundarySessionState;
 }): SessionRuntimeState {
   return {
@@ -217,9 +282,7 @@ export function persistSessionRuntimeState(options: {
   enabled: boolean;
   currentSessionId?: string;
   pendingPlanVerification: PendingPlanVerificationState | undefined;
-  conversationMessages: Array<
-    Pick<ChatMessage, "role" | "content" | "attachments" | "generatedImages">
-  >;
+  conversationMessages: PersistableConversationMessage[];
   compactBoundary?: CompactBoundarySessionState;
   saveRuntimeState: (
     sessionId: string,
@@ -254,9 +317,8 @@ export function createConversationRuntimeStateBindings(options: {
   getPersistenceEnabled: () => boolean;
   getCurrentSessionId: () => string | undefined;
   getSessionMessages: () => Array<Pick<ChatMessage, "role" | "content">>;
-  getConversationMessages: () => Array<
-    Pick<ChatMessage, "role" | "content" | "attachments" | "generatedImages">
-  >;
+  getConversationMessages: () => PersistableConversationMessage[];
+  getModelConversationMessages?: () => NormalizedMessage[];
   saveRuntimeState: (
     sessionId: string,
     runtimeState: SessionRuntimeState,
@@ -315,7 +377,9 @@ export function createConversationRuntimeStateBindings(options: {
     restoreModelConversationFromRuntime: modelConversation => {
       restoreModelConversation({
         modelConversation,
-        conversationMessages: options.getConversationMessages(),
+        conversationMessages:
+          options.getModelConversationMessages?.() ??
+          (options.getConversationMessages() as NormalizedMessage[]),
         rebuildConversationMessagesFromSession:
           options.rebuildConversationMessagesFromSession,
       });

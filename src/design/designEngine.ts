@@ -17,6 +17,7 @@ export type DesignGenerateOptions = {
   outputType: DesignOutputType;
   style?: string;
   userContext?: string;
+  brandContext?: string;
   referenceImageDataUrl?: string;
   referenceImageMimeType?: string;
   customSystemInstructions?: string;
@@ -54,6 +55,7 @@ export async function generateKainClawDesign(
   options: DesignGenerateOptions,
 ): Promise<DesignGenerateResult> {
   const systemPrompt = buildKainClawDesignSystemPrompt({
+    ...(options.brandContext?.trim() ? { brandContext: options.brandContext.trim() } : {}),
     customInstructions: options.customSystemInstructions,
   });
   const userPrompt = buildKainClawDesignUserPrompt({

@@ -108,6 +108,13 @@ describe("Electron renderer settings", () => {
     expect(html).toContain("function openGuideForm()");
     expect(html).toContain("function submitGuideForm()");
     expect(html).toContain("designBridgeState.userContext");
+    expect(html).toContain('id="tab-brand"');
+    expect(html).toContain('id="midtai-brand-picker"');
+    expect(html).toContain("const BRAND_SYSTEMS = [");
+    expect(html).toContain("function switchDirectionTab(tab)");
+    expect(html).toContain("function renderBrandPicker()");
+    expect(html).toContain("function selectBrand(id)");
+    expect(html).toContain("brandContext:");
     expect(html).toContain("function renderDesignReferencePanel(metaEl, previewEl)");
     expect(html).toContain("function handleDesignReferenceUpload(event)");
     expect(html).toContain("function pickLatestImageLabResultForDesign()");

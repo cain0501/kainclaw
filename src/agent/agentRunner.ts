@@ -319,7 +319,11 @@ async function runForkedInstalledSkill(options: {
 export async function runAgent(
   history: NormalizedMessage[],
   options: AgentRunnerOptions,
-): Promise<{ text: string; reasoningContent?: string }> {
+): Promise<{
+  text: string;
+  reasoningContent?: string;
+  messages: NormalizedMessage[];
+}> {
   const {
     provider,
     tools,
@@ -477,6 +481,12 @@ export async function runAgent(
         }
 
         if (activeInstalledSkillHooks.length > 0) {
+          const installedSkillHookAgentRunner = createInstalledSkillHookAgentRunner({
+            provider: activeProvider,
+            toolContext,
+            tools: activeTools,
+            providerRuntimeContext: activeProviderRuntimeContext,
+          });
           await triggerHooks(
             "PostToolCall",
             activeInstalledSkillHooks,
@@ -489,13 +499,38 @@ export async function runAgent(
                 content: toolResultContent,
               },
             },
-            createInstalledSkillHookAgentRunner({
-              provider: activeProvider,
-              toolContext,
-              tools: activeTools,
-              providerRuntimeContext: activeProviderRuntimeContext,
-              }),
+            installedSkillHookAgentRunner,
           );
+
+          if (toolCall.name === "EnterWorktree") {
+            await triggerHooks(
+              "WorktreeCreate",
+              activeInstalledSkillHooks,
+              {
+                workspaceRoot: toolContext.workspaceRoot,
+                toolName: toolCall.name,
+                toolInput: toolCall.input,
+              },
+              installedSkillHookAgentRunner,
+            );
+          } else if (
+            toolCall.name === "ExitWorktree" &&
+            toolCall.input &&
+            typeof toolCall.input === "object" &&
+            !Array.isArray(toolCall.input) &&
+            (toolCall.input as Record<string, unknown>).action === "remove"
+          ) {
+            await triggerHooks(
+              "WorktreeRemove",
+              activeInstalledSkillHooks,
+              {
+                workspaceRoot: toolContext.workspaceRoot,
+                toolName: toolCall.name,
+                toolInput: toolCall.input,
+              },
+              installedSkillHookAgentRunner,
+            );
+          }
         }
 
         if (result.installedSkillHooks && result.installedSkillHooks.length > 0) {
@@ -591,5 +626,6 @@ export async function runAgent(
   return {
     text: lastText || lastToolResultContent || "[assistant returned no text]",
     ...(lastReasoningContent ? { reasoningContent: lastReasoningContent } : {}),
+    messages,
   };
 }

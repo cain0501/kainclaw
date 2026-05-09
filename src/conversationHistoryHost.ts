@@ -3,23 +3,16 @@ import type {
   CompactBoundarySessionState,
   PersistedConversationMessage,
 } from "./storage/sessionRepository";
+import type { NormalizedMessage } from "./agent/providers/IProviderAdapter";
 
 export type HistoryCommandBehavior = "exclude" | "excludeWithReply";
 
 export type ConversationHistoryBindings = {
   rebuildConversationMessagesFromSession: () => void;
   getVisibleSessionMessages: () => ChatMessage[];
-  getConversationHistory: () => Array<
-    PersistedConversationMessage & {
-      attachments?: Array<{ data: string; mimeType: string }>;
-    }
-  >;
+  getConversationHistory: () => NormalizedMessage[];
   replaceConversationHistory: (
-    messages: Array<{
-      role: PersistedConversationMessage["role"];
-      content: string;
-      attachments?: Array<{ data: string; mimeType: string }>;
-    }>,
+    messages: NormalizedMessage[],
     compactBoundary?: CompactBoundarySessionState,
   ) => void;
 };
@@ -56,8 +49,8 @@ export function getHistoryCommandBehavior(
 
 export function buildConversationHistoryFromSession(
   sessionMessages: ChatMessage[],
-): PersistedConversationMessage[] {
-  const conversationMessages: PersistedConversationMessage[] = [];
+): NormalizedMessage[] {
+  const conversationMessages: NormalizedMessage[] = [];
   let skipNextAssistant = false;
 
   for (const message of sessionMessages) {
@@ -81,12 +74,20 @@ export function buildConversationHistoryFromSession(
     }
 
     skipNextAssistant = false;
+    if (message.role === "user") {
+      conversationMessages.push({
+        role: "user",
+        content: message.content,
+        ...(message.attachments && message.attachments.length > 0
+          ? { attachments: message.attachments }
+          : {}),
+      });
+      continue;
+    }
+
     conversationMessages.push({
-      role: message.role,
+      role: "assistant",
       content: message.content,
-      ...(message.attachments && message.attachments.length > 0
-        ? { attachments: message.attachments }
-        : {}),
     });
   }
 
@@ -94,27 +95,73 @@ export function buildConversationHistoryFromSession(
 }
 
 export function cloneConversationHistory(
-  conversationMessages: Array<Pick<PersistedConversationMessage, "role" | "content"> & { attachments?: Array<{ data: string; mimeType: string }> }>,
-): Array<PersistedConversationMessage & { attachments?: Array<{ data: string; mimeType: string }> }> {
-  return conversationMessages.map(message => ({
-    role: message.role,
-    content: message.content,
-    ...(message.attachments && message.attachments.length > 0 ? { attachments: message.attachments } : {}),
-  }));
+  conversationMessages: Array<NormalizedMessage | PersistedConversationMessage>,
+): NormalizedMessage[] {
+  return conversationMessages.map(message => {
+    if (message.role === "user") {
+      return {
+        role: "user",
+        content: message.content,
+        ...(message.attachments && message.attachments.length > 0
+          ? { attachments: message.attachments }
+          : {}),
+      };
+    }
+
+    if (message.role === "assistant") {
+      return {
+        role: "assistant",
+        content: message.content,
+        ...(message.reasoningContent
+          ? { reasoningContent: message.reasoningContent }
+          : {}),
+        ...(message.toolCalls?.length ? { toolCalls: message.toolCalls } : {}),
+      };
+    }
+
+    return {
+      role: "tool_result",
+      toolCallId: message.toolCallId ?? "",
+      content: message.content,
+      ...(message.isError ? { isError: message.isError } : {}),
+    };
+  });
 }
 
 export function replaceConversationHistory(
   target: PersistedConversationMessage[],
-  nextMessages: Array<Pick<PersistedConversationMessage, "role" | "content" | "attachments">>,
+  nextMessages: NormalizedMessage[],
 ): void {
   target.length = 0;
   for (const message of nextMessages) {
+    if (message.role === "user") {
+      target.push({
+        role: "user",
+        content: message.content,
+        ...(message.attachments && message.attachments.length > 0
+          ? { attachments: message.attachments }
+          : {}),
+      });
+      continue;
+    }
+
+    if (message.role === "assistant") {
+      target.push({
+        role: "assistant",
+        content: message.content,
+        ...(message.reasoningContent
+          ? { reasoningContent: message.reasoningContent }
+          : {}),
+        ...(message.toolCalls?.length ? { toolCalls: message.toolCalls } : {}),
+      });
+      continue;
+    }
+
     target.push({
-      role: message.role,
+      role: "tool_result",
+      toolCallId: message.toolCallId,
       content: message.content,
-      ...(message.attachments && message.attachments.length > 0
-        ? { attachments: message.attachments }
-        : {}),
+      ...(message.isError ? { isError: message.isError } : {}),
     });
   }
 }

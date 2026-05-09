@@ -12,7 +12,7 @@
 | Test files | 172 | 2026-05-09 |
 | Tests passing | 1358 | 2026-05-09 |
 | Last verified commit | see `git log --oneline -1` | — |
-| Last clean verification | 2026-05-09 — Midtai guide form + showcase templates integrated (`vitest: designPrompt/ElectronChatPanel/rendererSettings`, `npm run build:electron`, renderer JS syntax check, UTF-8 decode check) | — |
+| Last clean verification | 2026-05-09 — 品牌参考 tab integrated (`vitest: designPrompt/ElectronChatPanel/rendererSettings`, renderer JS syntax check, UTF-8 decode check) | — |
 
 **Required passing commands:**
 ```bash
@@ -22,7 +22,7 @@ npm run build
 npm run build:electron   # only when Electron behavior changed
 ```
 
-Latest verification note: 2026-05-09 - Midtai guide form + showcase templates integrated (`vitest: designPrompt/ElectronChatPanel/rendererSettings`, `npm run build:electron`, renderer JS syntax check, UTF-8 decode check). Full repo `npm run check`/`npm run build` still blocked by existing `NormalizedMessage` type issues; full `npm test` still has existing `conversationRuntimeStateHost` failures.
+Latest verification note: 2026-05-09 - 品牌参考 tab integrated (`vitest: designPrompt/ElectronChatPanel/rendererSettings`, renderer JS syntax check, UTF-8 decode check). `npm run build:electron` currently still blocked by existing `ElectronChatPanel.test.ts` / `compactHost.ts` type issues; full repo `npm run check`/`npm run build` remain blocked by existing `NormalizedMessage` type issues; full `npm test` still has existing `conversationRuntimeStateHost` failures.
 
 ## Active Tasks
 
@@ -31,7 +31,7 @@ Latest verification note: 2026-05-09 - Midtai guide form + showcase templates in
 | vscode-extension-lb4 | Design Skill 扩展：输出类型从5个扩展到12个 | ✓ CLOSED | `.kiro/primers/vscode-extension-lb4.md` |
 | vscode-extension-e3m | 引导问题表单：输入框展开态（静态版） | ✓ CLOSED | `.kiro/primers/vscode-extension-e3m.md` |
 | vscode-extension-wsy | 示例库 Showcase：设计页面预置 prompt 模板 | ✓ CLOSED | `.kiro/primers/vscode-extension-wsy.md` |
-| vscode-extension-40p | 品牌设计系统库：左侧面板品牌参考 tab | OPEN | `.kiro/primers/vscode-extension-40p.md` |
+| vscode-extension-40p | 品牌设计系统库：左侧面板品牌参考 tab | ✓ CLOSED | `.kiro/primers/vscode-extension-40p.md` |
 | vscode-extension-8ib | 导出 ZIP：HTML + 资源打包下载 | OPEN P3 | — |
 | vscode-extension-26q | Kanban 视图：我的作品看板模式 | OPEN P3 | — |
 | vscode-extension-0z5 | 画布草图标注工具：iframe 上层 canvas overlay | OPEN P3 | — |
@@ -101,6 +101,7 @@ Latest verification note: 2026-05-09 - Midtai guide form + showcase templates in
 - Midtai 设计表单 (输出类型 select + 视觉方向卡片选择器，按输出类型动态渲染，选中值传入 generateDesignWorkbench)
 - Midtai Design Skill 扩展 (12 个输出类型，含 8 个新 skill prompt 约束 + renderer 双入口 select + directions fallback)
 - Midtai Guide Form + Showcase (静态引导问题表单、模板卡片库、skill/prompt 一键回填、`userContext` 透传链路)
+- Midtai Brand Systems (视觉方向 / 品牌参考双 tab、15 个品牌卡片、`brandContext` system prompt 注入)
 - Midtai 图像整合 (左侧图像表单 + 比例/数量控件 + 生成预览 shimmer/结果卡片 + 静态提示词库 + 插入到对话)
 - Local Bridge / Word Add-in (read + write-back + Track Changes + comments)
 - Electron i18n (shellStrings covering all surfaces)

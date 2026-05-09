@@ -230,9 +230,19 @@ function getSkillPatch(outputType: DesignOutputType): string {
 export function buildKainClawDesignSystemPrompt(options?: {
   customInstructions?: string;
   selectedDirection?: DesignDirectionSuggestion;
+  brandContext?: string;
 }): string {
   const directionBlock = options?.selectedDirection
     ? ["", renderDirectionSpec(options.selectedDirection)]
+    : [];
+  const brandBlock = options?.brandContext?.trim()
+    ? [
+        "",
+        "## Brand Design System",
+        options.brandContext.trim(),
+        "",
+        "Apply this brand's visual language strictly. It overrides generic craft defaults where they conflict.",
+      ]
     : [];
 
   return [
@@ -258,6 +268,7 @@ export function buildKainClawDesignSystemPrompt(options?: {
     ...(CRAFT_TYPOGRAPHY ? ["", CRAFT_TYPOGRAPHY] : []),
     ...(CRAFT_COLOR ? ["", CRAFT_COLOR] : []),
     ...(CRAFT_LAYOUT ? ["", CRAFT_LAYOUT] : []),
+    ...brandBlock,
     ...directionBlock,
     "",
     "Slider schema:",

@@ -1168,8 +1168,15 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-seri
                 </label>
               </div>
               <div class="midtai-form-group">
-                <label class="midtai-form-label">视觉方向 <span style="color:#a8a29e;font-weight:400;text-transform:none">（可不选）</span></label>
+                <label class="midtai-form-label">视觉方向 / 品牌参考 <span style="color:#a8a29e;font-weight:400;text-transform:none">（可不选）</span></label>
+                <div style="display:flex;gap:0;margin-bottom:8px;border:1px solid #eadfd2;border-radius:6px;overflow:hidden">
+                  <button type="button" id="tab-direction" onclick="switchDirectionTab('direction')"
+                    style="flex:1;padding:5px;font-size:11px;border:none;cursor:pointer;background:#c9502e;color:#fff">视觉方向</button>
+                  <button type="button" id="tab-brand" onclick="switchDirectionTab('brand')"
+                    style="flex:1;padding:5px;font-size:11px;border:none;cursor:pointer;background:#fff;color:#78716c">品牌参考</button>
+                </div>
                 <div id="midtai-direction-picker" class="midtai-direction-picker"></div>
+                <div id="midtai-brand-picker" style="display:none"></div>
               </div>
             </div>
           </div>
@@ -1911,6 +1918,98 @@ const SHOWCASE_TEMPLATES = [
     prompt: '设计一张杂志风格封面海报，A4 比例，强排版层级，大标题 + 副标题 + 期号，印刷感，高级克制。',
   },
 ];
+const BRAND_SYSTEMS = [
+  {
+    id: 'linear',
+    name: 'Linear',
+    palette: ['#5E6AD2', '#1A1A1A', '#F7F7F7'],
+    stylePrompt: 'Brand: Linear. Design language: dark/light neutral backgrounds, purple accent #5E6AD2, Inter font throughout, tight 4px-base spacing, minimal borders (1px #E5E5E5), subtle depth via shadow not color. Components: pill badges, clean tables, monospace code blocks. Tone: engineering precision, no decoration.',
+  },
+  {
+    id: 'stripe',
+    name: 'Stripe',
+    palette: ['#635BFF', '#0A2540', '#FFFFFF'],
+    stylePrompt: 'Brand: Stripe. Design language: deep navy #0A2540 for hero sections, indigo #635BFF accent, white surface cards with strong shadow (0 4px 24px rgba(0,0,0,.12)), Sohne/Inter font. Gradients: subtle blue-to-white on hero only. Components: rounded-lg cards, clean data tables, prominent CTA buttons. Tone: trusted, enterprise-grade.',
+  },
+  {
+    id: 'vercel',
+    name: 'Vercel',
+    palette: ['#000000', '#FFFFFF', '#888888'],
+    stylePrompt: 'Brand: Vercel. Design language: pure black/white, zero color except for syntax highlighting, Geist font, generous whitespace, 1px borders on #E5E5E5. No gradients, no shadows on cards. Components: monospace terminal blocks, minimal nav, large display headlines. Tone: developer-first, brutally minimal.',
+  },
+  {
+    id: 'notion',
+    name: 'Notion',
+    palette: ['#2EAADC', '#37352F', '#F7F6F3'],
+    stylePrompt: 'Brand: Notion. Design language: warm off-white #F7F6F3 background, dark brown #37352F text, blue #2EAADC accent used sparingly. Inter font, comfortable 1.6 line-height, generous padding. Components: block-style layout, subtle hover states, emoji used contextually (not decoratively). Tone: calm, productive, human.',
+  },
+  {
+    id: 'apple',
+    name: 'Apple',
+    palette: ['#0071E3', '#1D1D1F', '#F5F5F7'],
+    stylePrompt: 'Brand: Apple. Design language: light gray #F5F5F7 background, near-black #1D1D1F text, blue #0071E3 for links/CTA only. SF Pro / system-ui font. Large hero imagery, minimal text, extreme whitespace. Components: full-bleed sections, product-centered layout, no visible borders. Tone: premium, aspirational, effortless.',
+  },
+  {
+    id: 'figma',
+    name: 'Figma',
+    palette: ['#F24E1E', '#FF7262', '#1E1E1E'],
+    stylePrompt: 'Brand: Figma. Design language: dark #1E1E1E base, orange-red #F24E1E + coral #FF7262 accents, Inter font. Colorful but controlled: accent appears in icons and CTAs only. Components: feature grid with icon+text, dark hero with gradient text, community-feel cards. Tone: creative, collaborative, energetic.',
+  },
+  {
+    id: 'github',
+    name: 'GitHub',
+    palette: ['#238636', '#0D1117', '#F0F6FC'],
+    stylePrompt: 'Brand: GitHub. Design language: near-black #0D1117 dark mode base, green #238636 for success/CTA, light #F0F6FC text. Mona Sans font. Components: code blocks with syntax highlight, contribution graph style data viz, pill badges for status. Tone: developer community, open source, technical.',
+  },
+  {
+    id: 'airbnb',
+    name: 'Airbnb',
+    palette: ['#FF5A5F', '#484848', '#FFFFFF'],
+    stylePrompt: 'Brand: Airbnb. Design language: coral red #FF5A5F accent, warm dark #484848 text, white background. Cereal/circular font. Components: card grid with rounded corners (12px), photo-forward layout, star ratings, map integration hints. Tone: warm, welcoming, travel-inspired.',
+  },
+  {
+    id: 'xiaohongshu',
+    name: '小红书',
+    palette: ['#FF2442', '#1A1A1A', '#FFFFFF'],
+    stylePrompt: 'Brand: 小红书 (RED/Xiaohongshu). Design language: red #FF2442 accent, clean white background, dark text. PingFang SC font. Components: 3:4 card grid, heart/save interactions, tag chips, user avatar + name attribution. Tone: lifestyle, discovery, authentic UGC.',
+  },
+  {
+    id: 'douyin',
+    name: '抖音',
+    palette: ['#FE2C55', '#25F4EE', '#000000'],
+    stylePrompt: 'Brand: 抖音 (TikTok). Design language: black background, red #FE2C55 + cyan #25F4EE dual accent (used together for logo effect), white text. Components: full-screen vertical video cards, floating action buttons, bottom tab bar. Tone: energetic, youth-oriented, entertainment-first.',
+  },
+  {
+    id: 'feishu',
+    name: '飞书',
+    palette: ['#1456F0', '#1F2329', '#F5F6F7'],
+    stylePrompt: 'Brand: 飞书 (Lark). Design language: blue #1456F0 accent, near-black #1F2329 text, light gray #F5F6F7 background. PingFang SC / Inter font. Components: sidebar navigation, document-style layout, collaboration indicators, clean data tables. Tone: professional, efficient, enterprise collaboration.',
+  },
+  {
+    id: 'framer',
+    name: 'Framer',
+    palette: ['#0099FF', '#0A0A0A', '#FFFFFF'],
+    stylePrompt: 'Brand: Framer. Design language: electric blue #0099FF on black #0A0A0A, white for content areas. Inter font. Components: interactive preview cards, gradient mesh backgrounds (used sparingly), bold display type, motion-hint UI. Tone: creative tools, designer-focused, cutting-edge.',
+  },
+  {
+    id: 'raycast',
+    name: 'Raycast',
+    palette: ['#FF6363', '#1C1C1E', '#2C2C2E'],
+    stylePrompt: 'Brand: Raycast. Design language: dark #1C1C1E base, coral #FF6363 accent, dark surface #2C2C2E for cards. SF Pro / Inter font. Components: command palette style list, keyboard shortcut badges, extension cards with icon. Tone: power user, macOS-native, productivity.',
+  },
+  {
+    id: 'loom',
+    name: 'Loom',
+    palette: ['#625DF5', '#1A1A2E', '#FFFFFF'],
+    stylePrompt: 'Brand: Loom. Design language: purple #625DF5 accent, dark navy #1A1A2E for hero, white for content. Inter font. Components: video thumbnail cards with play overlay, timeline UI, reaction bubbles. Tone: async communication, friendly, modern remote work.',
+  },
+  {
+    id: 'linear-dark',
+    name: 'Monocle / Editorial',
+    palette: ['#C9A96E', '#1A1A1A', '#F5F0E8'],
+    stylePrompt: 'Brand: Editorial / Monocle style. Design language: warm off-white #F5F0E8 background, dark #1A1A1A text, gold #C9A96E accent. Serif display font (Playfair Display or similar) + sans body. Components: editorial grid, pull quotes, large imagery with caption, issue/volume numbering. Tone: premium print, intellectual, timeless.',
+  },
+];
 
 let midtaiState = {
   type: 'img',
@@ -2131,6 +2230,7 @@ const designBridgeState = {
   versionsPanelExpanded: false,
   exportPanelExpanded: false,
 };
+let selectedBrandId = null;
 
 const GUIDE_FORM_CONFIG = {
   'prototype': [
@@ -3824,6 +3924,60 @@ function renderMidtaiDirectionPicker() {
   </button>`).join('');
 
   picker.innerHTML = autoCard + dirCards;
+}
+
+function switchDirectionTab(tab) {
+  const dirPicker = document.getElementById('midtai-direction-picker');
+  const brandPicker = document.getElementById('midtai-brand-picker');
+  const tabDir = document.getElementById('tab-direction');
+  const tabBrand = document.getElementById('tab-brand');
+  if (!dirPicker || !brandPicker || !tabDir || !tabBrand) return;
+
+  if (tab === 'direction') {
+    dirPicker.style.display = '';
+    brandPicker.style.display = 'none';
+    tabDir.style.background = '#c9502e';
+    tabDir.style.color = '#fff';
+    tabBrand.style.background = '#fff';
+    tabBrand.style.color = '#78716c';
+    selectedBrandId = null;
+    return;
+  }
+
+  dirPicker.style.display = 'none';
+  brandPicker.style.display = '';
+  tabDir.style.background = '#fff';
+  tabDir.style.color = '#78716c';
+  tabBrand.style.background = '#c9502e';
+  tabBrand.style.color = '#fff';
+  if (midtaiState.designDirection) {
+    midtaiState.designDirection = '';
+    renderMidtaiDirectionPicker();
+  }
+  renderBrandPicker();
+}
+
+function renderBrandPicker() {
+  const picker = document.getElementById('midtai-brand-picker');
+  if (!picker) return;
+  picker.innerHTML = `
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px">
+      ${BRAND_SYSTEMS.map(brand => `
+        <div id="brand-card-${brand.id}" onclick="selectBrand('${brand.id}')"
+          style="border:2px solid ${selectedBrandId === brand.id ? '#c9502e' : '#eadfd2'};border-radius:8px;padding:8px;cursor:pointer;background:${selectedBrandId === brand.id ? '#fff5f0' : '#fff'}">
+          <div style="font-size:11px;font-weight:600;color:#292524;margin-bottom:5px">${escapeHtml(brand.name)}</div>
+          <div style="display:flex;gap:3px">
+            ${brand.palette.map(color => `<div style="width:14px;height:14px;border-radius:3px;background:${color};border:1px solid #eadfd2"></div>`).join('')}
+          </div>
+        </div>
+      `).join('')}
+    </div>
+  `;
+}
+
+function selectBrand(id) {
+  selectedBrandId = selectedBrandId === id ? null : id;
+  renderBrandPicker();
 }
 
 function toggleShowcase(forceOpen) {
@@ -6586,6 +6740,7 @@ function generateDesignWorkbench() {
   const style = midtaiState.designDirection !== undefined
     ? midtaiState.designDirection
     : (document.getElementById('design-style-input')?.value?.trim() || '');
+  const brand = selectedBrandId ? BRAND_SYSTEMS.find(item => item.id === selectedBrandId) : null;
   const prompt = promptInput?.value?.trim() || '';
   if (!prompt) {
     designBridgeState.error = isEnglishUi() ? 'Enter a design request first.' : '\u8bf7\u5148\u8f93\u5165\u8bbe\u8ba1\u9700\u6c42\u3002';
@@ -6614,6 +6769,7 @@ function generateDesignWorkbench() {
       outputType: designBridgeState.outputType,
       style: designBridgeState.style,
       userContext,
+      brandContext: brand ? brand.stylePrompt : '',
       html: designBridgeState.html,
       sliders: designBridgeState.sliders,
       ...(designBridgeState.referenceImage ? {
@@ -6632,6 +6788,7 @@ function generateDesignWorkbench() {
     outputType: designBridgeState.outputType,
     style: designBridgeState.style,
     userContext,
+    brandContext: brand ? brand.stylePrompt : '',
     ...(designBridgeState.referenceImage ? {
       referenceImageDataUrl: designBridgeState.referenceImage.dataUrl,
       referenceImageMimeType: designBridgeState.referenceImage.mimeType,
@@ -6653,6 +6810,7 @@ function chooseDesignDirection(directionId) {
     outputType: designBridgeState.outputType,
     style: designBridgeState.style,
     userContext,
+    brandContext: selectedBrandId ? (BRAND_SYSTEMS.find(item => item.id === selectedBrandId)?.stylePrompt || '') : '',
     ...(designBridgeState.referenceImage ? {
       referenceImageDataUrl: designBridgeState.referenceImage.dataUrl,
       referenceImageMimeType: designBridgeState.referenceImage.mimeType,
@@ -6671,6 +6829,7 @@ function skipDesignDirectionSuggestions() {
     outputType: designBridgeState.outputType,
     style: designBridgeState.style,
     userContext,
+    brandContext: selectedBrandId ? (BRAND_SYSTEMS.find(item => item.id === selectedBrandId)?.stylePrompt || '') : '',
     ...(designBridgeState.referenceImage ? {
       referenceImageDataUrl: designBridgeState.referenceImage.dataUrl,
       referenceImageMimeType: designBridgeState.referenceImage.mimeType,

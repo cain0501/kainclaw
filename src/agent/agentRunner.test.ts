@@ -518,6 +518,238 @@ describe("agentRunner", () => {
     }
   });
 
+  it("fires WorktreeCreate after a successful EnterWorktree tool call", async () => {
+    const provider = new ScriptedProvider([
+      {
+        text: "create a worktree",
+        toolCalls: [{ id: "tool-1", name: "EnterWorktree", input: { prompt: "feature branch" } }],
+        done: false,
+      },
+      {
+        text: "done",
+        toolCalls: [],
+        done: true,
+      },
+    ]);
+
+    const toolContext: ToolContext = {
+      workspaceRoot: "E:\\claudecodejingiang\\vscode-extension",
+    };
+
+    const tools: ToolDefinition[] = [
+      {
+        name: "EnterWorktree",
+        description: "Create a worktree",
+        input_schema: { type: "object", properties: {} },
+      },
+    ];
+
+    const executeSpy = vi.spyOn(await import("../toolRuntime.js"), "executeTool").mockResolvedValue({
+      summary: "Created worktree",
+      content: "worktree ready",
+    });
+    const hooksSpy = vi.spyOn(await import("../hooks/hooksTrigger.js"), "triggerHooks");
+    hooksSpy.mockResolvedValue({});
+
+    try {
+      const result = await runAgent([], {
+        provider,
+        tools,
+        toolContext,
+        installedSkillHooks: [
+          {
+            id: "hook-worktree-create",
+            name: "hook-worktree-create",
+            type: "prompt",
+            description: "hook",
+            events: ["WorktreeCreate"],
+            prompt: "noop",
+          },
+        ],
+      });
+
+      expect(result.text).toBe("done");
+      expect(hooksSpy).toHaveBeenNthCalledWith(
+        1,
+        "PreToolCall",
+        expect.any(Array),
+        expect.objectContaining({
+          workspaceRoot: "E:\\claudecodejingiang\\vscode-extension",
+          toolName: "EnterWorktree",
+          toolInput: { prompt: "feature branch" },
+        }),
+        expect.any(Function),
+      );
+      expect(hooksSpy).toHaveBeenNthCalledWith(
+        2,
+        "PostToolCall",
+        expect.any(Array),
+        expect.objectContaining({
+          workspaceRoot: "E:\\claudecodejingiang\\vscode-extension",
+          toolName: "EnterWorktree",
+        }),
+        expect.any(Function),
+      );
+      expect(hooksSpy).toHaveBeenNthCalledWith(
+        3,
+        "WorktreeCreate",
+        expect.any(Array),
+        expect.objectContaining({
+          workspaceRoot: "E:\\claudecodejingiang\\vscode-extension",
+          toolName: "EnterWorktree",
+          toolInput: { prompt: "feature branch" },
+        }),
+        expect.any(Function),
+      );
+      expect(executeSpy).toHaveBeenCalledWith(
+        "EnterWorktree",
+        { prompt: "feature branch" },
+        toolContext,
+      );
+    } finally {
+      hooksSpy.mockRestore();
+      executeSpy.mockRestore();
+    }
+  });
+
+  it("fires WorktreeRemove after a successful ExitWorktree remove action", async () => {
+    const provider = new ScriptedProvider([
+      {
+        text: "remove the worktree",
+        toolCalls: [{ id: "tool-1", name: "ExitWorktree", input: { action: "remove" } }],
+        done: false,
+      },
+      {
+        text: "done",
+        toolCalls: [],
+        done: true,
+      },
+    ]);
+
+    const toolContext: ToolContext = {
+      workspaceRoot: "E:\\claudecodejingiang\\vscode-extension",
+    };
+
+    const tools: ToolDefinition[] = [
+      {
+        name: "ExitWorktree",
+        description: "Exit a worktree",
+        input_schema: { type: "object", properties: {} },
+      },
+    ];
+
+    const executeSpy = vi.spyOn(await import("../toolRuntime.js"), "executeTool").mockResolvedValue({
+      summary: "Removed worktree",
+      content: "worktree removed",
+    });
+    const hooksSpy = vi.spyOn(await import("../hooks/hooksTrigger.js"), "triggerHooks");
+    hooksSpy.mockResolvedValue({});
+
+    try {
+      const result = await runAgent([], {
+        provider,
+        tools,
+        toolContext,
+        installedSkillHooks: [
+          {
+            id: "hook-worktree-remove",
+            name: "hook-worktree-remove",
+            type: "prompt",
+            description: "hook",
+            events: ["WorktreeRemove"],
+            prompt: "noop",
+          },
+        ],
+      });
+
+      expect(result.text).toBe("done");
+      expect(hooksSpy).toHaveBeenNthCalledWith(
+        3,
+        "WorktreeRemove",
+        expect.any(Array),
+        expect.objectContaining({
+          workspaceRoot: "E:\\claudecodejingiang\\vscode-extension",
+          toolName: "ExitWorktree",
+          toolInput: { action: "remove" },
+        }),
+        expect.any(Function),
+      );
+      expect(executeSpy).toHaveBeenCalledWith(
+        "ExitWorktree",
+        { action: "remove" },
+        toolContext,
+      );
+    } finally {
+      hooksSpy.mockRestore();
+      executeSpy.mockRestore();
+    }
+  });
+
+  it("does not fire WorktreeRemove for ExitWorktree keep actions", async () => {
+    const provider = new ScriptedProvider([
+      {
+        text: "keep the worktree",
+        toolCalls: [{ id: "tool-1", name: "ExitWorktree", input: { action: "keep" } }],
+        done: false,
+      },
+      {
+        text: "done",
+        toolCalls: [],
+        done: true,
+      },
+    ]);
+
+    const toolContext: ToolContext = {
+      workspaceRoot: "E:\\claudecodejingiang\\vscode-extension",
+    };
+
+    const tools: ToolDefinition[] = [
+      {
+        name: "ExitWorktree",
+        description: "Exit a worktree",
+        input_schema: { type: "object", properties: {} },
+      },
+    ];
+
+    const executeSpy = vi.spyOn(await import("../toolRuntime.js"), "executeTool").mockResolvedValue({
+      summary: "Kept worktree",
+      content: "worktree kept",
+    });
+    const hooksSpy = vi.spyOn(await import("../hooks/hooksTrigger.js"), "triggerHooks");
+    hooksSpy.mockResolvedValue({});
+
+    try {
+      const result = await runAgent([], {
+        provider,
+        tools,
+        toolContext,
+        installedSkillHooks: [
+          {
+            id: "hook-worktree-remove-keep",
+            name: "hook-worktree-remove-keep",
+            type: "prompt",
+            description: "hook",
+            events: ["WorktreeRemove"],
+            prompt: "noop",
+          },
+        ],
+      });
+
+      expect(result.text).toBe("done");
+      expect(
+        hooksSpy.mock.calls.some(call => call[0] === "WorktreeRemove"),
+      ).toBe(false);
+      expect(executeSpy).toHaveBeenCalledWith(
+        "ExitWorktree",
+        { action: "keep" },
+        toolContext,
+      );
+    } finally {
+      hooksSpy.mockRestore();
+      executeSpy.mockRestore();
+    }
+  });
+
   it("rebuilds the active provider when SkillTool returns model/effort overrides", async () => {
     const baseProvider: IProviderAdapter = {
       async runStep(_messages, _tools) {

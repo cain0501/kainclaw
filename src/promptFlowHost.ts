@@ -149,6 +149,9 @@ function createInstalledSkillAgentRunner<TRuntime extends PromptRuntimeLike>(opt
 async function runForkedInstalledSkillFlow<TRuntime extends PromptRuntimeLike>(options: {
   promptExecution: ContinuePromptExecution<TRuntime>;
   createModelActivity: () => string;
+  replaceConversationHistory: (
+    messages: NormalizedMessage[],
+  ) => void | Promise<void>;
   buildWorkspaceSystemPrompt: (
     workspaceRoot: string,
     config: AdapterProviderConfig,
@@ -264,7 +267,12 @@ async function runForkedInstalledSkillFlow<TRuntime extends PromptRuntimeLike>(o
 
   const runPromptAgentTurnImpl =
     options.runPromptAgentTurnImpl ?? runPromptAgentTurn;
-  const { reply, sawStreamingToken, latestThinkingSummary } =
+  const {
+    reply,
+    sawStreamingToken,
+    latestThinkingSummary,
+    conversationHistory,
+  } =
     await runPromptAgentTurnImpl({
       history,
       provider,
@@ -284,6 +292,8 @@ async function runForkedInstalledSkillFlow<TRuntime extends PromptRuntimeLike>(o
       onToolStart: promptTurnAgentCallbacks.onToolStart,
       onToolEnd: promptTurnAgentCallbacks.onToolEnd,
     });
+
+  await options.replaceConversationHistory(conversationHistory);
 
   if (prePromptHooks.length > 0) {
     await triggerHooks(
@@ -314,6 +324,9 @@ async function runForkedInstalledSkillFlow<TRuntime extends PromptRuntimeLike>(o
 
 export function createPromptFlowStateBindings<TSwarm>(options: {
   appendConversationMessage: (message: PromptConversationMessage) => void;
+  replaceConversationHistory: (
+    messages: NormalizedMessage[],
+  ) => void | Promise<void>;
   buildPromptFileMentionContext: (options: {
     prompt: string;
     workspaceRoot: string;
@@ -321,10 +334,7 @@ export function createPromptFlowStateBindings<TSwarm>(options: {
   persistCurrentSessionRuntimeState: () => void;
   existingSwarm?: TSwarm;
   assignSwarm: (swarm: TSwarm) => void;
-  getConversationHistory: () => Array<{
-    role: "user" | "assistant";
-    content: string;
-  }>;
+  getConversationHistory: () => NormalizedMessage[];
   buildProviderAdapter: (options: {
     config: AdapterProviderConfig;
     workspaceRoot: string;
@@ -335,6 +345,9 @@ export function createPromptFlowStateBindings<TSwarm>(options: {
   shouldEnableSwarmForPrompt: (prompt: string) => boolean;
 }): {
   appendConversationMessage: (message: PromptConversationMessage) => void;
+  replaceConversationHistory: (
+    messages: NormalizedMessage[],
+  ) => void | Promise<void>;
   buildPromptFileMentionContext: (options: {
     prompt: string;
     workspaceRoot: string;
@@ -342,10 +355,7 @@ export function createPromptFlowStateBindings<TSwarm>(options: {
   persistCurrentSessionRuntimeState: () => void;
   existingSwarm?: TSwarm;
   assignSwarm: (swarm: TSwarm) => void;
-  getConversationHistory: () => Array<{
-    role: "user" | "assistant";
-    content: string;
-  }>;
+  getConversationHistory: () => NormalizedMessage[];
   buildProviderAdapter: (options: {
     config: AdapterProviderConfig;
     workspaceRoot: string;
@@ -357,6 +367,7 @@ export function createPromptFlowStateBindings<TSwarm>(options: {
 } {
   return {
     appendConversationMessage: options.appendConversationMessage,
+    replaceConversationHistory: options.replaceConversationHistory,
     buildPromptFileMentionContext: options.buildPromptFileMentionContext,
     persistCurrentSessionRuntimeState: options.persistCurrentSessionRuntimeState,
     existingSwarm: options.existingSwarm,
@@ -483,6 +494,9 @@ export function createPromptFlowBindings<
     effortLevel: EffortLevel | undefined,
   ) => Promise<string>;
   appendConversationMessage: (message: PromptConversationMessage) => void;
+  replaceConversationHistory: (
+    messages: NormalizedMessage[],
+  ) => void | Promise<void>;
   buildPromptFileMentionContext: (options: {
     prompt: string;
     workspaceRoot: string;
@@ -490,10 +504,7 @@ export function createPromptFlowBindings<
   persistCurrentSessionRuntimeState: () => void;
   existingSwarm?: TSwarm;
   assignSwarm: (swarm: TSwarm) => void;
-  getConversationHistory: () => Array<{
-    role: "user" | "assistant";
-    content: string;
-  }>;
+  getConversationHistory: () => NormalizedMessage[];
   buildProviderAdapter: (options: {
     config: AdapterProviderConfig;
     workspaceRoot: string;
@@ -548,6 +559,7 @@ export function createPromptFlowBindings<
     buildWorkspaceSystemPrompt: options.buildWorkspaceSystemPrompt,
     stateBindings: createPromptFlowStateBindings<TSwarm>({
       appendConversationMessage: options.appendConversationMessage,
+      replaceConversationHistory: options.replaceConversationHistory,
       buildPromptFileMentionContext: options.buildPromptFileMentionContext,
       persistCurrentSessionRuntimeState:
         options.persistCurrentSessionRuntimeState,
@@ -597,6 +609,9 @@ export function createPromptFlowBindingsFromShared<
     effortLevel: EffortLevel | undefined,
   ) => Promise<string>;
   appendConversationMessage: (message: PromptConversationMessage) => void;
+  replaceConversationHistory: (
+    messages: NormalizedMessage[],
+  ) => void | Promise<void>;
   buildPromptFileMentionContext: (options: {
     prompt: string;
     workspaceRoot: string;
@@ -640,6 +655,7 @@ export function createPromptFlowBindingsFromShared<
     createSwarm: options.createSwarm,
     buildWorkspaceSystemPrompt: options.buildWorkspaceSystemPrompt,
     appendConversationMessage: options.appendConversationMessage,
+    replaceConversationHistory: options.replaceConversationHistory,
     buildPromptFileMentionContext: options.buildPromptFileMentionContext,
     persistCurrentSessionRuntimeState: options.persistCurrentSessionRuntimeState,
     existingSwarm: options.existingSwarm,
@@ -710,6 +726,9 @@ export async function runPromptFlowWithHost<
   updateMood: (delta: number, countConversation?: boolean) => Promise<void>;
   createModelActivity: () => string;
   appendConversationMessage: (message: PromptConversationMessage) => void;
+  replaceConversationHistory: (
+    messages: NormalizedMessage[],
+  ) => void | Promise<void>;
   buildPromptFileMentionContext: (options: {
     prompt: string;
     workspaceRoot: string;
@@ -726,10 +745,7 @@ export async function runPromptFlowWithHost<
     promptExecution: ContinuePromptExecution<TRuntime>;
   }) => TSwarm;
   assignSwarm: (swarm: TSwarm) => void;
-  getConversationHistory: () => Array<{
-    role: "user" | "assistant";
-    content: string;
-  }>;
+  getConversationHistory: () => NormalizedMessage[];
   buildWorkspaceSystemPrompt: (
     workspaceRoot: string,
     config: AdapterProviderConfig,
@@ -794,6 +810,7 @@ export async function runPromptFlowWithHost<
     await runForkedInstalledSkillFlow({
       promptExecution: continuePromptExecution,
       createModelActivity: options.createModelActivity,
+      replaceConversationHistory: options.replaceConversationHistory,
       buildWorkspaceSystemPrompt: options.buildWorkspaceSystemPrompt,
       buildProviderAdapter: options.buildProviderAdapter,
       setCompanionState: options.setCompanionState,
@@ -893,7 +910,13 @@ export async function runPromptFlowWithHost<
         promptExecution: continuePromptExecution,
       }),
     assignSwarm: options.assignSwarm,
-    getConversationHistory: options.getConversationHistory,
+    getConversationHistory: () =>
+      options.getConversationHistory().filter(
+        (
+          message,
+        ): message is Extract<NormalizedMessage, { role: "user" | "assistant" }> =>
+          message.role === "user" || message.role === "assistant",
+      ),
     buildWorkspaceSystemPrompt: options.buildWorkspaceSystemPrompt,
     buildProviderAdapter: options.buildProviderAdapter,
     shouldEnableSwarmForPrompt: options.shouldEnableSwarmForPrompt,

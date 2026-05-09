@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  buildKainClawDesignSystemPrompt,
   buildKainClawDesignUserPrompt,
   DESIGN_OUTPUT_TYPES,
   normalizeDesignOutputType,
@@ -50,5 +51,15 @@ describe("designPrompt", () => {
 
     expect(prompt).toContain("User context:");
     expect(prompt).toContain("product: SaaS工具；cta: 免费试用");
+  });
+
+  it("injects brand context into the system prompt", () => {
+    const prompt = buildKainClawDesignSystemPrompt({
+      brandContext: "Brand: Linear. Design language: engineering precision.",
+    });
+
+    expect(prompt).toContain("## Brand Design System");
+    expect(prompt).toContain("Brand: Linear. Design language: engineering precision.");
+    expect(prompt).toContain("overrides generic craft defaults");
   });
 });

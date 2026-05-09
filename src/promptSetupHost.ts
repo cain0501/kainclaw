@@ -1,6 +1,7 @@
 import { SYSTEM_PROMPT } from "./agent/agentRunner";
 import type {
   NormalizedImageAttachment,
+  NormalizedMessage,
   ProviderConfig as AdapterProviderConfig,
 } from "./agent/providers/IProviderAdapter";
 import { getAutoMemoryDir, readAutoMemoryEntrypoint } from "./autoMemory/paths";
@@ -161,7 +162,7 @@ export async function preparePromptTurnDependencies<TProvider>(options: {
   envMap: Record<string, string>;
   runtimeOptions: ProviderRuntimeOptions;
   effortLevel: EffortLevel | undefined;
-  getConversationHistory: () => Array<{ role: "user" | "assistant"; content: string }>;
+  getConversationHistory: () => NormalizedMessage[];
   getSystemPromptForWorkspace: (
     workspaceRoot: string,
     config: AdapterProviderConfig,
@@ -176,7 +177,7 @@ export async function preparePromptTurnDependencies<TProvider>(options: {
   }) => TProvider;
   shouldEnableSwarmForPrompt: (prompt: string) => boolean;
 }): Promise<{
-  history: Array<{ role: "user" | "assistant"; content: string }>;
+  history: NormalizedMessage[];
   provider: TProvider;
   swarmEnabledForTurn: boolean;
 }> {

@@ -1,6 +1,7 @@
 import type {
   IProviderAdapter,
   NormalizedImageAttachment,
+  NormalizedMessage,
   ProviderConfig as AdapterProviderConfig,
 } from "./agent/providers/IProviderAdapter";
 import type { SkillStore } from "./skills/skillStore";
@@ -35,6 +36,17 @@ import type { ToolContext, ToolDefinition } from "./toolRuntime";
 import type { EffortLevel, ProviderRuntimeOptions } from "./thinkingEffort/types";
 import { buildUtf8PowerShellEncodedCommand } from "./toolRuntime";
 
+function toInspectableConversationHistory(
+  messages: NormalizedMessage[],
+): Array<{ role: "user" | "assistant"; content: string }> {
+  return messages.filter(
+    (
+      message,
+    ): message is Extract<NormalizedMessage, { role: "user" | "assistant" }> =>
+      message.role === "user" || message.role === "assistant",
+  );
+}
+
 export type PromptRuntimeLike = WorkspaceRuntimeLike & {
   getToolContext(mode?: string): ToolContext;
 };
@@ -57,11 +69,6 @@ export type PromptExecutionResult<TRuntime> =
       installedSkillHooks?: HookDefinition[];
     };
 
-type ConversationMessage = {
-  role: "user" | "assistant";
-  content: string;
-};
-
 export function createPromptExecutionCommandHandlers<
   TRuntime extends PromptRuntimeLike,
 >(options: {
@@ -72,13 +79,13 @@ export function createPromptExecutionCommandHandlers<
   setFastMode: (enabled: boolean) => Promise<unknown>;
   setActiveProviderModel: (model: string) => Promise<unknown>;
   refreshWorkspaceStatus: () => void;
-  getConversationHistory: () => ConversationMessage[];
+  getConversationHistory: () => NormalizedMessage[];
   getPendingPlanVerification: () => PendingPlanVerificationState | undefined;
   sessionMessages: ChatMessage[];
   blockedByPlanMode: boolean;
   getTranscriptPath: () => string | undefined;
   replaceConversationHistory: (
-    messages: Array<{ role: "user" | "assistant"; content: string }>,
+    messages: NormalizedMessage[],
     compactBoundary?: CompactBoundarySessionState,
   ) => void | Promise<void>;
   backgroundTaskHost: Pick<
@@ -174,7 +181,8 @@ export function createPromptExecutionCommandHandlers<
         workspaceRoot,
         config,
         envMap,
-        getConversationHistory: options.getConversationHistory,
+        getConversationHistory: () =>
+          toInspectableConversationHistory(options.getConversationHistory()),
         getTranscriptPath: options.getTranscriptPath,
         replaceConversationHistory: options.replaceConversationHistory,
         createProviderAdapter: compactOptions =>
@@ -210,7 +218,8 @@ export function createPromptExecutionCommandHandlers<
         effortLevel,
         sessionMessages: options.sessionMessages,
         blockedByPlanMode: options.blockedByPlanMode,
-        getConversationHistory: options.getConversationHistory,
+        getConversationHistory: () =>
+          toInspectableConversationHistory(options.getConversationHistory()),
         getPendingPlanVerification: options.getPendingPlanVerification,
         backgroundTaskHost: options.backgroundTaskHost,
         findActiveBuiltInAgentTask: options.findActiveBuiltInAgentTask,
@@ -250,7 +259,8 @@ export function createPromptExecutionCommandHandlers<
         effortLevel,
         sessionMessages: options.sessionMessages,
         blockedByPlanMode: options.blockedByPlanMode,
-        getConversationHistory: options.getConversationHistory,
+        getConversationHistory: () =>
+          toInspectableConversationHistory(options.getConversationHistory()),
         getPendingPlanVerification: options.getPendingPlanVerification,
         backgroundTaskHost: options.backgroundTaskHost,
         addPhaseActivity: options.addPhaseActivity,
@@ -284,7 +294,8 @@ export function createPromptExecutionCommandHandlers<
         effortLevel,
         sessionMessages: options.sessionMessages,
         blockedByPlanMode: options.blockedByPlanMode,
-        getConversationHistory: options.getConversationHistory,
+        getConversationHistory: () =>
+          toInspectableConversationHistory(options.getConversationHistory()),
         getPendingPlanVerification: options.getPendingPlanVerification,
         backgroundTaskHost: options.backgroundTaskHost,
         addPhaseActivity: options.addPhaseActivity,
@@ -318,7 +329,8 @@ export function createPromptExecutionCommandHandlers<
         effortLevel,
         sessionMessages: options.sessionMessages,
         blockedByPlanMode: options.blockedByPlanMode,
-        getConversationHistory: options.getConversationHistory,
+        getConversationHistory: () =>
+          toInspectableConversationHistory(options.getConversationHistory()),
         getPendingPlanVerification: options.getPendingPlanVerification,
         backgroundTaskHost: options.backgroundTaskHost,
         findActiveBuiltInAgentTask: options.findActiveBuiltInAgentTask,

@@ -5,6 +5,38 @@
 
 在左侧面板"视觉方向"区加"品牌参考"tab，内置 15 个品牌卡片，用户选中后品牌 stylePrompt 注入 system prompt，生成的设计自动套用该品牌视觉语言。
 
+## Already Completed
+
+- `electron/renderer/index.html`
+  - 视觉方向区已升级为双 tab：`视觉方向` / `品牌参考`
+  - 已新增 `BRAND_SYSTEMS`，内置 15 个品牌卡片数据
+  - 已新增 `selectedBrandId`、`switchDirectionTab()`、`renderBrandPicker()`、`selectBrand()`
+  - 选中品牌后会把 `brandContext` 带进生成链路
+  - 切回视觉方向 tab 时会自动清空品牌选择
+  - 切到品牌参考 tab 时会自动清空旧的视觉方向，避免 direction spec 与 brand system 同时生效
+- `electron/ElectronChatPanel.ts`
+  - 已从 `message.brandContext` 读取并透传给 design 生成链路
+- `src/design/designEngine.ts`
+  - `DesignGenerateOptions` 已支持 `brandContext`
+  - `buildKainClawDesignSystemPrompt()` 已接收 `brandContext`
+- `src/design/designPrompt.ts`
+  - system prompt 已注入 `## Brand Design System` 段落
+  - 明确声明品牌视觉语言优先于通用 craft defaults
+- 测试
+  - `src/design/designPrompt.test.ts` 已覆盖 brand context 注入
+  - `electron/ElectronChatPanel.test.ts` 已覆盖 `design:generate` 透传 `brandContext`
+  - `electron/rendererSettings.test.ts` 已覆盖品牌 tab / picker / helper 锚点
+
+## 验证结果
+
+- 已通过：
+  - `npx vitest run src/design/designPrompt.test.ts electron/ElectronChatPanel.test.ts electron/rendererSettings.test.ts`
+  - `electron/renderer/index.html` JS syntax check
+  - UTF-8 decode check
+- 当前仓库仍有与本任务无关的基线问题：
+  - `npm run build:electron` 被现有 `ElectronChatPanel.test.ts` / `compactHost.ts` 类型问题阻塞
+  - 全仓 `npm run check` / `npm run build` 之前也已被既有 `NormalizedMessage` 相关类型问题阻塞
+
 ## 当前状态
 
 `electron/renderer/index.html` 第 1152 行附近：

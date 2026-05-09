@@ -1,16 +1,12 @@
 import type {
   IProviderAdapter,
   ProviderConfig as AdapterProviderConfig,
+  NormalizedMessage,
 } from "./agent/providers/IProviderAdapter";
 import type { ProviderRuntimeOptions } from "./thinkingEffort/types";
 
-type ConversationMessage = {
-  role: "user" | "assistant";
-  content: string;
-};
-
 export type PromptSharedBindings = {
-  getConversationHistory: () => ConversationMessage[];
+  getConversationHistory: () => NormalizedMessage[];
   getTranscriptPath: () => string | undefined;
   createProviderAdapter: (options: {
     config: AdapterProviderConfig;
@@ -32,7 +28,7 @@ export type PromptSharedBindings = {
 };
 
 export function createPromptSharedBindings(options: {
-  getConversationHistory: () => ConversationMessage[];
+  getConversationHistory: () => NormalizedMessage[];
   isSessionPersistenceEnabled: () => boolean;
   getCurrentSessionId: () => string | undefined;
   getTranscriptFilePath: (sessionId: string) => string;

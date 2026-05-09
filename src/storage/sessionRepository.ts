@@ -43,10 +43,17 @@ export type PendingPlanVerificationSessionState = {
 };
 
 export type PersistedConversationMessage = {
-  role: "user" | "assistant";
+  role: "user" | "assistant" | "tool_result";
   content: string;
   /** DeepSeek thinking mode: stored to pass back on subsequent turns. */
   reasoningContent?: string;
+  toolCallId?: string;
+  isError?: boolean;
+  toolCalls?: Array<{
+    id: string;
+    name: string;
+    input: Record<string, unknown>;
+  }>;
   attachments?: Array<{ data: string; mimeType: string }>;
   generatedImages?: Array<{
     id: string;

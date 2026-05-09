@@ -405,6 +405,7 @@ export async function runPromptAgentTurn(options: {
   reply: string;
   sawStreamingToken: boolean;
   latestThinkingSummary?: string;
+  conversationHistory: NormalizedMessage[];
 }> {
   const runAgentImpl = options.runAgentImpl ?? runAgent;
   const activeHooks = [
@@ -414,7 +415,7 @@ export async function runPromptAgentTurn(options: {
   let sawStreamingToken = false;
   let latestThinkingSummary: string | undefined;
 
-  const { text: reply } = await runAgentImpl(options.history, {
+  const { text: reply, messages } = await runAgentImpl(options.history, {
     provider: options.provider,
     tools: options.tools,
     toolContext: options.toolContext,
@@ -474,5 +475,6 @@ export async function runPromptAgentTurn(options: {
     reply,
     sawStreamingToken,
     latestThinkingSummary,
+    conversationHistory: messages,
   };
 }

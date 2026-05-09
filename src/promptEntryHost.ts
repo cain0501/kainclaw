@@ -12,6 +12,7 @@ import type { McpServerStatusSummary } from "./mcpRuntime";
 import type { PromptSharedBindings } from "./promptBindingsHost";
 import type {
   IProviderAdapter,
+  NormalizedMessage,
   ProviderConfig as AdapterProviderConfig,
 } from "./agent/providers/IProviderAdapter";
 import type { ChatMessage } from "./storage/sessionRepository";
@@ -20,11 +21,6 @@ import type { EffortLevel, ProviderRuntimeOptions } from "./thinkingEffort/types
 import type { SkillStore } from "./skills/skillStore";
 import type { ProfileStore } from "./userModel/profileStore";
 
-type ConversationMessage = {
-  role: "user" | "assistant";
-  content: string;
-};
-
 export type PromptEntryCommandBindings<TRuntime extends PromptRuntimeLike> = {
   getCurrentEffortLevel: () => EffortLevel | undefined;
   setEffortLevel: (value: EffortLevel | undefined) => Promise<unknown>;
@@ -32,15 +28,15 @@ export type PromptEntryCommandBindings<TRuntime extends PromptRuntimeLike> = {
   setFastMode: (enabled: boolean) => Promise<unknown>;
   setActiveProviderModel: (model: string) => Promise<unknown>;
   refreshWorkspaceStatus: () => void;
-  getConversationHistory: () => ConversationMessage[];
+  getConversationHistory: () => NormalizedMessage[];
   getPendingPlanVerification: () => PendingPlanVerificationState | undefined;
   getCurrentSessionId?: () => string | undefined;
   sessionMessages: ChatMessage[];
   blockedByPlanMode: boolean;
   getTranscriptPath: () => string | undefined;
   replaceConversationHistory: (
-    messages: Array<{ role: "user" | "assistant"; content: string }>,
-  ) => void;
+    messages: NormalizedMessage[],
+  ) => void | Promise<void>;
   backgroundTaskHost: Pick<
     BackgroundTaskHost,
     | "runBuiltInAgentSession"
@@ -203,8 +199,8 @@ export function createPromptEntryBindingsFromShared<
   sessionMessages: ChatMessage[];
   blockedByPlanMode: boolean;
   replaceConversationHistory: (
-    messages: Array<{ role: "user" | "assistant"; content: string }>,
-  ) => void;
+    messages: NormalizedMessage[],
+  ) => void | Promise<void>;
   backgroundTaskHost: Pick<
     BackgroundTaskHost,
     | "runBuiltInAgentSession"

@@ -68,6 +68,7 @@ describe("promptHost", () => {
         createSwarm: vi.fn(() => ({ id: "swarm-2" })),
         buildWorkspaceSystemPrompt: vi.fn(async () => "system prompt"),
         appendConversationMessage: vi.fn(),
+        replaceConversationHistory: vi.fn(async () => undefined),
         buildPromptFileMentionContext: vi.fn(async () => ({
           supplementalPrompt: "context payload",
         })),

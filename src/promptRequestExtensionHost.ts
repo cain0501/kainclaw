@@ -2,6 +2,7 @@ import type { ActivityTracker } from "./activityTracker";
 import type {
   IProviderAdapter,
   NormalizedImageAttachment,
+  NormalizedMessage,
   ProviderConfig as AdapterProviderConfig,
 } from "./agent/providers/IProviderAdapter";
 import type {
@@ -31,12 +32,6 @@ import type { ProviderRuntimeOptions } from "./thinkingEffort/types";
 import type { WorkspaceStatusController } from "./workspaceStatusHost";
 import type { SkillStore } from "./skills/skillStore";
 import type { ProfileStore } from "./userModel/profileStore";
-
-type ConversationMessage = {
-  role: "user" | "assistant";
-  content: string;
-  attachments?: NormalizedImageAttachment[];
-};
 
 type PlanModeStateLike = {
   active: boolean;
@@ -111,12 +106,14 @@ export type PromptRequestExtensionSessionBindings = {
 };
 
 export type PromptRequestExtensionConversationBindings = {
-  getConversationHistory: () => ConversationMessage[];
+  getConversationHistory: () => NormalizedMessage[];
   replaceConversationHistory: (
-    messages: ConversationMessage[],
+    messages: NormalizedMessage[],
     compactBoundary?: CompactBoundarySessionState,
   ) => void | Promise<void>;
-  appendConversationMessage: (message: ConversationMessage) => void;
+  appendConversationMessage: (
+    message: Extract<NormalizedMessage, { role: "user" | "assistant" }>,
+  ) => void;
   persistCurrentSessionRuntimeState: () => void;
   pendingPlanVerification: PendingPlanVerificationState | undefined;
   planModeState: PlanModeStateLike;
@@ -226,12 +223,12 @@ export function createPromptRequestSessionPart(
 }
 
 export function createPromptRequestConversationPart(options: {
-  getConversationHistory: () => ConversationMessage[];
+  getConversationHistory: () => NormalizedMessage[];
   replaceConversationHistory: (
-    messages: ConversationMessage[],
+    messages: NormalizedMessage[],
     compactBoundary?: CompactBoundarySessionState,
   ) => void | Promise<void>;
-  conversationMessages: ConversationMessage[];
+  conversationMessages: NormalizedMessage[];
   getPendingPromptAttachments: () => NormalizedImageAttachment[] | undefined;
   setPendingPromptAttachments: (
     attachments: NormalizedImageAttachment[] | undefined,
@@ -262,7 +259,7 @@ export function createPromptRequestConversationPart(options: {
   return {
     getConversationHistory: options.getConversationHistory,
     replaceConversationHistory: options.replaceConversationHistory,
-    appendConversationMessage: message => {
+  appendConversationMessage: message => {
       const mergedMessage = mergePendingAttachmentsIntoConversationMessage({
         message,
         pendingAttachments: options.getPendingPromptAttachments(),
@@ -406,6 +403,8 @@ export function createPromptRequestExtensionBindings<
             parts.conversation.replaceConversationHistory,
           toErrorMessage: parts.execution.toErrorMessage,
         },
+        replaceConversationHistory:
+          parts.conversation.replaceConversationHistory,
         swarmFactory: {
           workspaceFolderPath: parts.execution.workspaceFolderPath,
           backgroundTasks: parts.conversation.getConversationTaskRuntime(),

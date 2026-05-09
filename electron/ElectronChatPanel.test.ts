@@ -4059,6 +4059,7 @@ Freeze skill body.
       outputType: "prototype",
       style: "minimal editorial",
       userContext: "theme: 企业官网；audience: 机器人采购负责人",
+      brandContext: "Brand: Linear. Design language: engineering precision.",
       referenceImageDataUrl: "data:image/png;base64,QUJDRA==",
       referenceImageMimeType: "image/png",
     });
@@ -4078,6 +4079,7 @@ Freeze skill body.
         outputType: "prototype",
         style: "minimal editorial",
         userContext: "theme: 企业官网；audience: 机器人采购负责人",
+        brandContext: "Brand: Linear. Design language: engineering precision.",
         referenceImageDataUrl: "data:image/png;base64,QUJDRA==",
         referenceImageMimeType: "image/png",
       }),

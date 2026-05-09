@@ -11,20 +11,20 @@ import {
 import {
   calculateTokenWarningState,
   getEstimatedConversationTokens,
+  getAutoCompactThreshold,
   MAX_CONSECUTIVE_AUTOCOMPACT_FAILURES,
   shouldAutoCompact,
 } from "./compact/autoCompact";
+import {
+  microCompactMessages,
+  shouldMicroCompact,
+} from "./compact/microCompact";
 import { getPartialCompactPrompt } from "./compact/prompt";
 import { triggerHooks } from "./hooks/hooksTrigger";
 import type { HookDefinition } from "./hooksRegistry";
 import type { CompactBoundarySessionState } from "./storage/sessionRepository";
 
 type ActivityStatus = "done" | "error";
-
-type ConversationHistoryMessage = Extract<
-  NormalizedMessage,
-  { role: "user" | "assistant" }
->;
 
 export function formatCompactTokenCount(value: number): string {
   return new Intl.NumberFormat("en-US").format(value);
@@ -206,6 +206,9 @@ export async function performConversationCompactionWithHost(
 export async function maybeAutoCompactConversation(options: {
   config: ProviderConfig;
   getConversationHistory: () => NormalizedMessage[];
+  replaceConversationHistory?: (
+    conversationHistory: NormalizedMessage[],
+  ) => void | Promise<void>;
   performConversationCompaction: () => Promise<CompactConversationResult>;
   addPhaseActivity: (
     label: string,
@@ -226,14 +229,26 @@ export async function maybeAutoCompactConversation(options: {
     return;
   }
 
-  const conversationHistory = toConversationHistoryMessages(
-    options.getConversationHistory(),
+  let conversationHistory = options.getConversationHistory();
+  const autoCompactThreshold = getAutoCompactThreshold(options.config);
+  if (shouldMicroCompact(conversationHistory, autoCompactThreshold)) {
+    const microResult = microCompactMessages(conversationHistory);
+    if (microResult && microResult.toolsCleared > 0) {
+      conversationHistory = microResult.messages;
+      await options.replaceConversationHistory?.(conversationHistory);
+    }
+  }
+
+  const compactConversationHistory = toConversationHistoryMessages(
+    conversationHistory,
   );
-  if (!shouldAutoCompact(conversationHistory, options.config)) {
+  if (!shouldAutoCompact(compactConversationHistory, options.config)) {
     return;
   }
 
-  const estimatedTokens = getEstimatedConversationTokens(conversationHistory);
+  const estimatedTokens = getEstimatedConversationTokens(
+    compactConversationHistory,
+  );
   const warningState = calculateTokenWarningState(
     estimatedTokens,
     options.config,
@@ -293,6 +308,10 @@ export async function maybeAutoCompactConversationWithHost(
   return maybeAutoCompactConversation({
     config: options.config,
     getConversationHistory: options.getConversationHistory,
+    replaceConversationHistory: conversationHistory =>
+      options.replaceConversationHistory(
+        toConversationHistoryMessages(conversationHistory),
+      ),
     performConversationCompaction: () =>
       performConversationCompactionWithHost({
         ...options,
@@ -422,9 +441,11 @@ export async function handleCompactCommandWithHost(
 
 function toConversationHistoryMessages(
   messages: NormalizedMessage[],
-): ConversationHistoryMessage[] {
+): Array<Extract<NormalizedMessage, { role: "user" | "assistant" }>> {
   return messages.filter(
-    (message): message is ConversationHistoryMessage =>
+    (
+      message,
+    ): message is Extract<NormalizedMessage, { role: "user" | "assistant" }> =>
       (message.role === "user" || message.role === "assistant") &&
       message.content.trim().length > 0,
   );

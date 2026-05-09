@@ -1,4 +1,5 @@
 import type { SwarmCoordinator } from "./agent/swarm/SwarmCoordinator";
+import type { NormalizedMessage } from "./agent/providers/IProviderAdapter";
 import type { AssistantReplyBindings } from "./assistantReplyHost";
 import type { HookDefinition } from "./hooksRegistry";
 import type { SkillStore } from "./skills/skillStore";
@@ -142,7 +143,8 @@ export function createExtensionPromptRequestParts(options: {
           compactedHistory,
           compactBoundary,
         ),
-      conversationMessages: options.state.conversationMessages,
+      conversationMessages:
+        options.state.conversationMessages as NormalizedMessage[],
       getPendingPromptAttachments: options.state.getPendingPromptAttachments,
       setPendingPromptAttachments: options.state.setPendingPromptAttachments,
       persistCurrentSessionRuntimeState: () =>
