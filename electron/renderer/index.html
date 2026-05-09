@@ -1798,6 +1798,7 @@ let appState = {
     artifacts: [],
     artifactPanelCollapsed: false,
   },
+  designArtifactVersions: {},
 };
 const expandedThinkingSummaries = new Set();
 let artifactToastTimer = null;
@@ -5860,6 +5861,11 @@ function handleArtifactDeepEdit() {
   send({ type: 'artifact:openKainClawDesign' });
 }
 
+function enterDesignFromArtifact() {
+  designBridgeRenderedToken = 0;
+  send({ type: 'artifact:enter-design', artifactId: appState.artifactState?.activeArtifactId || '' });
+}
+
 function isDesignBridgeFrameSource(source) {
   const frame = document.getElementById('design-bridge-frame');
   return !!frame?.contentWindow && source === frame.contentWindow;
@@ -7486,9 +7492,11 @@ function renderArtifactPanel() {
   applyArtifactPanelWidth();
   title.textContent = artifact.title || 'Artifact';
   typeBadge.textContent = String(artifact.type || '').toUpperCase();
+  const useDesignArtifactEntry = appState.sessionType === 'design' && artifact.type === 'html';
   deepEditBtn.textContent = isEnglishUi()
     ? 'Open KainClaw Design'
     : '进入 KainClaw Design';
+  deepEditBtn.onclick = useDesignArtifactEntry ? enterDesignFromArtifact : handleArtifactDeepEdit;
   deepEditBtn.style.display = artifact.type === 'html' ? 'inline-flex' : 'none';
 
   if (artifact.type === 'code') {
@@ -7498,6 +7506,11 @@ function renderArtifactPanel() {
     code.textContent = artifact.content || '';
     pre.appendChild(code);
     content.appendChild(pre);
+  } else if (artifact.deleted) {
+    const fallback = document.createElement('div');
+    fallback.className = 'artifacts-panel__placeholder';
+    fallback.textContent = '此设计已删除';
+    content.appendChild(fallback);
   } else if (artifact.type === 'html' || artifact.type === 'svg' || artifact.type === 'mermaid') {
     const frame = document.createElement('iframe');
     frame.className = 'artifacts-panel__frame';
@@ -9340,7 +9353,9 @@ function updateChatComposerUi() {
   }
 
   banner.style.display = 'none';
-  input.placeholder = idlePlaceholder;
+  input.placeholder = appState.sessionType === 'design'
+    ? '描述你想要的设计…'
+    : shellText('composerPlaceholder');
   imageButton.textContent = shellText('imageModeActivate');
   imageButton.className = 'btn-secondary';
 }

@@ -129,6 +129,7 @@ import {
   routeIntentWithLLM,
 } from "../src/imageGeneration/llmIntentRouter";
 import { detectArtifact } from "../src/artifacts/artifactDetector";
+import type { ArtifactObject } from "../src/artifacts/artifactObject";
 import {
   buildDeriveArtifactPrompt,
   providerSupportsArtifactDerivation,
@@ -985,6 +986,10 @@ export class ElectronChatPanel {
       await this.openActiveArtifactInKainClawDesign();
       return;
     }
+    if (type === "artifact:enter-design") {
+      await this.handleEnterDesignFromArtifact(message);
+      return;
+    }
     if (type === "midtai:open") {
       await this.openMidtai(message.payload as MidtaiOpenPayload | undefined);
       return;
@@ -1049,6 +1054,10 @@ export class ElectronChatPanel {
     }
     if (type === "design:getLastProject") {
       await this.getLastDesignProject();
+      return;
+    }
+    if (type === "design:get-active-version") {
+      await this.getActiveDesignVersionForArtifact(message);
       return;
     }
     if (type === "design:generate") {
@@ -2598,32 +2607,25 @@ export class ElectronChatPanel {
         return;
       }
 
-      const version = await this.saveDesignVersion({
-        prompt,
-        outputType,
-        html: result.html,
-        sliders: result.sliders,
-        source: "generate",
-        projectId: context.flow.projectId,
-      });
-
       await this.appendAssistantMessageToSession(requestSessionId, {
         role: "assistant",
         content: result.rawOutput,
         timestamp: Date.now(),
       });
+      const assistantMessageIndex = this.sessionMessages.length - 1;
+      const assistantMessage = this.sessionMessages[assistantMessageIndex];
+      if (assistantMessage) {
+        const detectedArtifact = this.detectArtifactFromSessionMessage(
+          requestSessionId,
+          assistantMessage,
+          assistantMessageIndex,
+        );
+        if (detectedArtifact) {
+          this.getArtifactRegistry(requestSessionId).push(detectedArtifact);
+          await this.setArtifactPanelCollapsedState(requestSessionId, false);
+        }
+      }
       await this.saveCurrentSessionRuntimeState(requestSessionId);
-
-      this.sendToRenderer({
-        type: "design:result",
-        html: result.html,
-        sliders: result.sliders,
-        prompt,
-        outputType,
-        versionId: version.id,
-        projectId: version.projectId,
-        activeVersionId: version.id,
-      });
     } catch (error) {
       if (abortController.signal.aborted) {
         return;
@@ -3389,6 +3391,244 @@ export class ElectronChatPanel {
     }
 
     this.artifactRegistries.set(sessionId, registry);
+  }
+
+  private findArtifactInCurrentSession(artifactId: string): {
+    messageIndex: number;
+    artifact: ReturnType<typeof detectArtifact>;
+    message: ChatMessage;
+  } | null {
+    if (!this.currentSessionId) {
+      return null;
+    }
+
+    for (let index = 0; index < this.sessionMessages.length; index += 1) {
+      const message = this.sessionMessages[index];
+      if (message?.role !== "assistant") {
+        continue;
+      }
+      const artifact = this.detectArtifactFromSessionMessage(
+        this.currentSessionId,
+        message,
+        index,
+      );
+      if (artifact?.id === artifactId) {
+        return {
+          messageIndex: index,
+          artifact,
+          message,
+        };
+      }
+    }
+
+    return null;
+  }
+
+  private findArtifactMessageInSession(
+    sessionId: string,
+    artifactRecordId: string,
+  ): { messageIndex: number; message: ChatMessage } | null {
+    for (let index = 0; index < this.sessionMessages.length; index += 1) {
+      const message = this.sessionMessages[index];
+      if (message?.role !== "assistant") {
+        continue;
+      }
+      if (this.buildArtifactRecordId(sessionId, message, index) === artifactRecordId) {
+        return {
+          messageIndex: index,
+          message,
+        };
+      }
+    }
+
+    return null;
+  }
+
+  private async updateMessageDesignProjectId(
+    sessionId: string,
+    messageIndex: number,
+    projectId: string,
+  ): Promise<void> {
+    await this.sessions.updateMessageAt(sessionId, messageIndex, message => ({
+      ...message,
+      designProjectId: projectId,
+    }));
+    if (this.isViewingSession(sessionId) && this.sessionMessages[messageIndex]) {
+      const nextMessages = [...this.sessionMessages];
+      nextMessages[messageIndex] = {
+        ...nextMessages[messageIndex]!,
+        designProjectId: projectId,
+      };
+      this.sessionMessages = nextMessages;
+    }
+  }
+
+  private async saveDesignArtifactToProject(options: {
+    sessionId: string;
+    messageIndex: number;
+    artifactId: string;
+    html: string;
+    title: string;
+    outputType: DesignOutputType;
+  }): Promise<{ projectId: string; versionId: string }> {
+    const project = await this.designProjectStore.createProject({
+      name: (options.title || "设计作品").slice(0, 80),
+      source: "artifact",
+      sourceArtifactId: options.artifactId,
+      activeVersionId: "pending-version",
+    });
+
+    const version = await this.designVersionStore.saveVersion({
+      projectId: project.projectId,
+      prompt: "",
+      title: "生成",
+      outputType: options.outputType,
+      style: "",
+      html: options.html,
+      sliders: [],
+      source: "generate",
+    });
+
+    await this.designProjectStore.updateProject(project.projectId, {
+      activeVersionId: version.id,
+      updatedAt: version.createdAt,
+      lastOpenedAt: Date.now(),
+    });
+    await this.updateMessageDesignProjectId(
+      options.sessionId,
+      options.messageIndex,
+      project.projectId,
+    );
+    return { projectId: project.projectId, versionId: version.id };
+  }
+
+  private async handleEnterDesignFromArtifact(message: Record<string, unknown>): Promise<void> {
+    const artifactId = String(message.artifactId ?? "").trim();
+    if (!artifactId || !this.currentSessionId) {
+      return;
+    }
+
+    const found = this.findArtifactInCurrentSession(artifactId);
+    if (!found || !found.artifact || found.artifact.type !== "html") {
+      return;
+    }
+
+    const existingProject = await this.designProjectStore.getProjectBySourceArtifactId(artifactId);
+    if (existingProject) {
+      await this.openMidtai({
+        contentType: "design",
+        view: "preview",
+        projectId: existingProject.projectId,
+        artifactId,
+      });
+      return;
+    }
+
+    const saved = await this.saveDesignArtifactToProject({
+      sessionId: this.currentSessionId,
+      messageIndex: found.messageIndex,
+      artifactId,
+      html: found.artifact.content,
+      title: found.artifact.title || "设计作品",
+      outputType: "prototype",
+    });
+
+    await this.postState();
+    await this.openMidtai({
+      contentType: "design",
+      view: "preview",
+      projectId: saved.projectId,
+      artifactId,
+    });
+  }
+
+  private async getActiveDesignVersionForArtifact(message: Record<string, unknown>): Promise<void> {
+    const projectId = String(message.projectId ?? "").trim();
+    if (!projectId) {
+      return;
+    }
+
+    const project = await this.designProjectStore.getProject(projectId);
+    if (!project) {
+      this.sendToRenderer({
+        type: "design:active-version",
+        projectId,
+        deleted: true,
+      });
+      return;
+    }
+
+    const html = await this.designVersionStore.getVersionHtml(project.activeVersionId);
+    this.sendToRenderer({
+      type: "design:active-version",
+      projectId,
+      ...(html ? { html } : { deleted: true }),
+    });
+  }
+
+  private async buildArtifactStatePayload(
+    sessionId: string,
+    runtimeState: SessionRuntimeState | null,
+  ): Promise<{
+    activeArtifact: ArtifactObject | (ArtifactObject & { designProjectId?: string; deleted?: boolean }) | null;
+    activeArtifactId: string | null;
+    artifactCount: number;
+    artifacts: Array<{ id: string; title: string; type: string }>;
+    artifactPanelCollapsed: boolean;
+  }> {
+    const currentArtifactRegistry = this.artifactRegistries.get(sessionId) ?? null;
+    const activeArtifact = currentArtifactRegistry?.activeArtifact ?? null;
+    if (!activeArtifact) {
+      return {
+        activeArtifact: null,
+        activeArtifactId: null,
+        artifactCount: currentArtifactRegistry?.artifacts.length ?? 0,
+        artifacts:
+          currentArtifactRegistry?.artifacts.map(artifact => ({
+            id: artifact.id,
+            title: artifact.title || "Artifact",
+            type: artifact.type,
+          })) ?? [],
+        artifactPanelCollapsed: runtimeState?.artifactPanel?.collapsed ?? false,
+      };
+    }
+
+    const artifactRecordId = activeArtifact.sourceMessageId ?? activeArtifact.id;
+    const binding = this.findArtifactMessageInSession(sessionId, artifactRecordId);
+    const designProjectId = binding?.message.designProjectId?.trim();
+
+    let resolvedActiveArtifact: ArtifactObject | (ArtifactObject & { designProjectId?: string; deleted?: boolean }) = activeArtifact;
+    if (designProjectId) {
+      const project = await this.designProjectStore.getProject(designProjectId);
+      if (!project) {
+        resolvedActiveArtifact = {
+          ...activeArtifact,
+          designProjectId,
+          deleted: true,
+        };
+      } else {
+        const latestHtml = await this.designVersionStore.getVersionHtml(project.activeVersionId);
+        resolvedActiveArtifact = {
+          ...activeArtifact,
+          ...(latestHtml ? { content: latestHtml } : {}),
+          title: project.name || activeArtifact.title,
+          designProjectId,
+        };
+      }
+    }
+
+    return {
+      activeArtifact: resolvedActiveArtifact,
+      activeArtifactId: activeArtifact.id,
+      artifactCount: currentArtifactRegistry?.artifacts.length ?? 0,
+      artifacts:
+        currentArtifactRegistry?.artifacts.map(artifact => ({
+          id: artifact.id,
+          title: artifact.title || "Artifact",
+          type: artifact.type,
+        })) ?? [],
+      artifactPanelCollapsed: runtimeState?.artifactPanel?.collapsed ?? false,
+    };
   }
 
   private getPendingInteraction(): unknown {
@@ -5283,14 +5523,19 @@ ${html.slice(0, 8000)}
       // ignore – MCP not configured
     }
 
-    const currentArtifactRegistry = this.currentSessionId
-      ? (this.artifactRegistries.get(this.currentSessionId) ?? null)
-      : null;
-    const activeArtifact = currentArtifactRegistry?.activeArtifact ?? null;
     const currentRuntimeState = this.currentSessionId
       ? await this.loadSessionRuntimeState(this.currentSessionId)
       : null;
     const currentDesignProject = await this.getCurrentDesignProject();
+    const artifactState = this.currentSessionId
+      ? await this.buildArtifactStatePayload(this.currentSessionId, currentRuntimeState)
+      : {
+          activeArtifact: null,
+          activeArtifactId: null,
+          artifactCount: 0,
+          artifacts: [],
+          artifactPanelCollapsed: false,
+        };
 
     this.sendToRenderer({
       type: "state",
@@ -5313,18 +5558,7 @@ ${html.slice(0, 8000)}
       planMode: { active: false, planFilePath: null },
       pendingApproval: this.getPendingInteraction(),
       onboardingDone,
-      artifactState: {
-        activeArtifact,
-        activeArtifactId: activeArtifact?.id ?? null,
-        artifactCount: currentArtifactRegistry?.artifacts.length ?? 0,
-        artifacts:
-          currentArtifactRegistry?.artifacts.map(artifact => ({
-            id: artifact.id,
-            title: artifact.title || "Artifact",
-            type: artifact.type,
-          })) ?? [],
-        artifactPanelCollapsed: currentRuntimeState?.artifactPanel?.collapsed ?? false,
-      },
+      artifactState,
       designState: {
         currentProjectId: currentDesignProject?.projectId ?? null,
         currentProjectName: currentDesignProject?.name ?? null,
