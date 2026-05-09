@@ -23,6 +23,8 @@ npm run build:electron   # only when Electron behavior changed
 ```
 
 Latest verification note: 2026-05-09 - ZIP export integrated (`npx vitest run src/design/exporters.test.ts electron/rendererSettings.test.ts`, `npm run build:electron`, renderer JS syntax check, UTF-8 decode check). Full repo `npm run check`/`npm run build` remain blocked by existing `NormalizedMessage` type issues; full `npm test` still has existing `conversationRuntimeStateHost` failures.
+Latest verification note: 2026-05-09 - design chat lane + designFlowId protocol integrated (`npx vitest run electron/ElectronChatPanel.test.ts --testNamePattern "design flow|design lane|design:generate|filters design:loadVersions|returns direction suggestions"`, `npm run check`, `npm run build`, `npm run build:electron`, renderer JS syntax check).
+Latest verification note: 2026-05-09 - design chat workflow integrated (`npx vitest run electron/ElectronChatPanel.test.ts --testNamePattern "question-form|design flow|design lane|design:generate|filters design:loadVersions|returns direction suggestions"`, `npm run check`, `npm run build`, `npm run build:electron`, renderer JS syntax check).
 
 ## Active Tasks
 
@@ -41,6 +43,7 @@ Latest verification note: 2026-05-09 - ZIP export integrated (`npx vitest run sr
 | vscode-extension-qhf | SleepTool: 自主循环等待工具 | OPEN P2 | — |
 | vscode-extension-zje | SessionMemory: 会话内笔记服务 | OPEN P2 | — |
 | vscode-extension-kqy | ConfigTool: 设置读写工具 | OPEN P2 | — |
+| vscode-extension-0wm | TeamCreate/TeamDelete/SendMessage: 命名团队管理工具 | OPEN P3 (blocked by vrw) | — |
 | vscode-extension-650 | Micro-compact：长会话工具结果轻量清理 | ✓ CLOSED | `.kiro/primers/vscode-extension-650.md` |
 | vscode-extension-tgx | CronCreate / CronDelete / CronList 工具 | ✓ CLOSED | `.kiro/primers/vscode-extension-tgx.md` |
 | vscode-extension-uyl | Plan Mode V2 多阶段规划提示词升级 | ✓ CLOSED | `.kiro/primers/vscode-extension-uyl.md` |
