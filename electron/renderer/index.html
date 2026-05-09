@@ -1128,6 +1128,16 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-seri
               <label class="midtai-form-label">设计需求</label>
               <textarea id="midtai-design-prompt" class="midtai-form-textarea" placeholder="在这里填写设计需求…"></textarea>
             </div>
+            <div style="margin-bottom:12px">
+              <button type="button" onclick="toggleShowcase()"
+                style="width:100%;text-align:left;background:#fffdfb;border:1px solid #eadfd2;border-radius:8px;padding:8px 12px;font-size:12px;color:#78716c;cursor:pointer;display:flex;justify-content:space-between;align-items:center">
+                <span>从示例开始</span>
+                <span id="showcase-toggle-icon">▾</span>
+              </button>
+              <div id="midtai-showcase-panel" style="display:none;margin-top:6px;max-height:320px;overflow-y:auto">
+                <div id="midtai-showcase-grid" style="display:grid;grid-template-columns:1fr 1fr;gap:6px;padding:2px"></div>
+              </div>
+            </div>
             <div id="design-advanced-fields" style="display:none;flex-direction:column;gap:0">
               <div class="midtai-form-group">
                 <label class="midtai-form-label">输出类型</label>
@@ -1136,6 +1146,14 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-seri
                   <option value="slide">幻灯片</option>
                   <option value="infographic">信息图</option>
                   <option value="animation">动效页</option>
+                  <option value="social-carousel">小红书图文</option>
+                  <option value="email">邮件模板</option>
+                  <option value="mobile-app">移动端 App</option>
+                  <option value="magazine-poster">杂志海报</option>
+                  <option value="dashboard">数据看板</option>
+                  <option value="doc-report">文档报告</option>
+                  <option value="pricing-page">定价对比页</option>
+                  <option value="landing-page">产品落地页</option>
                 </select>
               </div>
               <div style="margin-bottom:10px">
@@ -1155,8 +1173,17 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-seri
               </div>
             </div>
           </div>
-          <div id="midtai-design-cta-wrap" class="midtai-cta-wrap">
+          <div id="midtai-guide-form" style="display:none;background:#fffdfb;border:1px solid #eadfd2;border-radius:10px;padding:12px 14px;margin-bottom:10px;font-size:12px">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
+              <span style="font-weight:600;color:#292524">引导填写</span>
+              <button type="button" onclick="closeGuideForm()" style="background:none;border:none;cursor:pointer;color:#a8a29e;font-size:14px;padding:0">×</button>
+            </div>
+            <div id="midtai-guide-fields"></div>
+            <button class="btn-red" style="width:100%;margin-top:10px" onclick="submitGuideForm()">生成设计</button>
+          </div>
+          <div id="midtai-design-cta-wrap" class="midtai-cta-wrap" style="display:flex;gap:8px">
             <button class="btn-red" onclick="generateDesignWorkbench()">生成设计</button>
+            <button type="button" onclick="openGuideForm()" style="background:#fff;border:1px solid #eadfd2;border-radius:8px;padding:0 14px;font-size:12px;color:#78716c;cursor:pointer;white-space:nowrap">引导填写</button>
           </div>
         </div>
       </div>
@@ -1515,6 +1542,14 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-seri
               <option value="slide">Slide</option>
               <option value="infographic">Infographic</option>
               <option value="animation">Animation</option>
+              <option value="social-carousel">Social Carousel</option>
+              <option value="email">Email</option>
+              <option value="mobile-app">Mobile App</option>
+              <option value="magazine-poster">Magazine Poster</option>
+              <option value="dashboard">Dashboard</option>
+              <option value="doc-report">Doc Report</option>
+              <option value="pricing-page">Pricing Page</option>
+              <option value="landing-page">Landing Page</option>
             </select>
           </div>
           <div id="design-style-field-wrap" class="imglab-lib-field">
@@ -1784,6 +1819,98 @@ const MIDTAI_DIRECTIONS = {
     { label:'玻璃信号', summary:'透明层叠但仍强调结构，适合未来感产品讲解动画', stylePrompt:'glass signal motion UI, translucent layers, precise spacing, future-facing explanation layout, calm luminous controls', preview:'linear-gradient(135deg,#09131c 0%,#dae7f2 52%,#7ed9d1 100%)' },
   ],
 };
+const SHOWCASE_TEMPLATES = [
+  {
+    id: 'landing-saas',
+    title: '产品落地页',
+    skill: 'landing-page',
+    tags: ['市场', '桌面端'],
+    color: '#e8f4fd',
+    accentColor: '#2563eb',
+    prompt: '为一款 SaaS 工具设计产品落地页，包含 hero 区、核心功能介绍、用户评价和定价方案，风格简洁专业，突出转化。',
+  },
+  {
+    id: 'dashboard-ops',
+    title: '运营数据看板',
+    skill: 'dashboard',
+    tags: ['工程', '桌面端'],
+    color: '#f0fdf4',
+    accentColor: '#16a34a',
+    prompt: '设计一个运营数据看板，展示 DAU、GMV、转化率、留存率等核心指标，支持日、周、月切换，数据用占位符。',
+  },
+  {
+    id: 'xhs-post',
+    title: '小红书图文 9 张',
+    skill: 'social-carousel',
+    tags: ['市场', '移动端'],
+    color: '#fff1f2',
+    accentColor: '#e11d48',
+    prompt: '制作一组 9 张小红书图文（3:4 竖版），主题自定，封面 + 7 页内容 + 结尾 CTA，每页一句标题 + 一段正文。',
+  },
+  {
+    id: 'pitch-deck',
+    title: '融资 Pitch Deck',
+    skill: 'slide',
+    tags: ['市场', '幻灯片'],
+    color: '#faf5ff',
+    accentColor: '#7c3aed',
+    prompt: '为早期创业公司设计融资 Pitch Deck，10 页，包含问题、解决方案、市场规模、产品、商业模式、团队、融资需求。',
+  },
+  {
+    id: 'mobile-app-proto',
+    title: '移动端 App 原型',
+    skill: 'mobile-app',
+    tags: ['产品', '移动端'],
+    color: '#fff7ed',
+    accentColor: '#ea580c',
+    prompt: '设计一个移动端 App 的核心页面原型，包含首页、列表页、详情页和个人中心，iOS 风格，375px 宽。',
+  },
+  {
+    id: 'pricing-compare',
+    title: '定价对比页',
+    skill: 'pricing-page',
+    tags: ['市场', '桌面端'],
+    color: '#f0f9ff',
+    accentColor: '#0284c7',
+    prompt: '设计一个 SaaS 产品的定价对比页，三档方案（免费/专业/企业），高亮推荐方案，列出核心功能对比，CTA 突出。',
+  },
+  {
+    id: 'data-report',
+    title: '数据分析报告',
+    skill: 'doc-report',
+    tags: ['财务', '文档'],
+    color: '#fefce8',
+    accentColor: '#ca8a04',
+    prompt: '设计一份数据分析报告，A4 纵向，包含执行摘要、数据图表、关键发现和建议，适合打印，专业商务风格。',
+  },
+  {
+    id: 'personal-site',
+    title: '个人主页',
+    skill: 'prototype',
+    tags: ['个人', '桌面端'],
+    color: '#fdf4ff',
+    accentColor: '#a21caf',
+    prompt: '设计一个设计师/开发者个人主页，包含 hero 自我介绍、作品集展示、技能标签和联系方式，风格有个性。',
+  },
+  {
+    id: 'email-newsletter',
+    title: '邮件通讯模板',
+    skill: 'email',
+    tags: ['运营', '邮件'],
+    color: '#f0fdf4',
+    accentColor: '#15803d',
+    prompt: '设计一个产品更新邮件模板，600px 宽，包含 logo、本期亮点、功能更新列表、CTA 按钮和页脚，全内联样式。',
+  },
+  {
+    id: 'magazine-cover',
+    title: '杂志封面海报',
+    skill: 'magazine-poster',
+    tags: ['设计', '海报'],
+    color: '#fff1f2',
+    accentColor: '#be123c',
+    prompt: '设计一张杂志风格封面海报，A4 比例，强排版层级，大标题 + 副标题 + 期号，印刷感，高级克制。',
+  },
+];
 
 let midtaiState = {
   type: 'img',
@@ -1982,6 +2109,7 @@ const designBridgeState = {
   prompt: '',
   outputType: 'prototype',
   style: '',
+  userContext: '',
   sliders: [],
   sliderValues: {},
   canvasMode: 'view',
@@ -2003,6 +2131,116 @@ const designBridgeState = {
   versionsPanelExpanded: false,
   exportPanelExpanded: false,
 };
+
+const GUIDE_FORM_CONFIG = {
+  'prototype': [
+    { id: 'theme', label: '内容方向', type: 'chips', options: ['产品展示', '企业官网', '个人主页', '活动页', '其他'] },
+    { id: 'audience', label: '目标受众', type: 'text', placeholder: '例如：25-35岁职场女性' },
+    { id: 'style', label: '视觉风格', type: 'chips', options: ['高级简约', '活泼年轻', '专业商务', '温暖亲切'] },
+  ],
+  'social-carousel': [
+    { id: 'theme', label: '内容主题', type: 'chips', options: ['职场/效率', '生活方式', '美食/探店', '旅行', '美妆/穿搭', '其他'] },
+    { id: 'keywords', label: '具体关键词', type: 'text', placeholder: '例如：早起习惯、咖啡馆推荐' },
+    { id: 'audience', label: '目标读者', type: 'text', placeholder: '例如：职场新人、25-35岁女性' },
+    { id: 'style', label: '内容风格', type: 'chips', options: ['干货实用', '温暖治愈', '活泼有趣', '高级感'] },
+  ],
+  'slide': [
+    { id: 'topic', label: '演讲主题', type: 'text', placeholder: '例如：2024年Q3业务复盘' },
+    { id: 'audience', label: '受众', type: 'chips', options: ['内部团队', '投资人', '客户', '公开演讲'] },
+    { id: 'slides', label: '页数', type: 'chips', options: ['5页', '10页', '15页', '20页'] },
+  ],
+  'dashboard': [
+    { id: 'domain', label: '业务领域', type: 'chips', options: ['电商', '金融', '运营', '产品', '人力'] },
+    { id: 'metrics', label: '核心指标', type: 'text', placeholder: '例如：GMV、DAU、转化率' },
+  ],
+  'landing-page': [
+    { id: 'product', label: '产品类型', type: 'chips', options: ['SaaS工具', '移动App', '实体产品', '服务', '课程'] },
+    { id: 'audience', label: '目标用户', type: 'text', placeholder: '例如：中小企业主' },
+    { id: 'cta', label: '核心行动', type: 'chips', options: ['免费试用', '立即购买', '预约演示', '下载App'] },
+  ],
+};
+
+function getGuideFormConfig(outputType) {
+  return GUIDE_FORM_CONFIG[outputType] || GUIDE_FORM_CONFIG['prototype'];
+}
+
+function renderGuideField(field) {
+  if (field.type === 'chips') {
+    return `<div style="margin-bottom:10px">
+      <div style="color:#78716c;margin-bottom:5px">${escapeHtml(field.label)}</div>
+      <div style="display:flex;flex-wrap:wrap;gap:6px">
+        ${field.options.map(opt =>
+          `<button type="button" class="guide-chip" data-field="${escapeHtml(field.id)}" data-value="${escapeHtml(opt)}"
+            onclick="toggleGuideChip(this)"
+            style="padding:4px 10px;border-radius:20px;border:1px solid #eadfd2;background:#fff;font-size:11px;cursor:pointer;color:#57534e">${escapeHtml(opt)}</button>`
+        ).join('')}
+      </div>
+    </div>`;
+  }
+  return `<div style="margin-bottom:10px">
+    <div style="color:#78716c;margin-bottom:5px">${escapeHtml(field.label)}</div>
+    <input type="text" data-field="${escapeHtml(field.id)}" placeholder="${escapeHtml(field.placeholder || '')}"
+      style="width:100%;box-sizing:border-box;border:1px solid #eadfd2;border-radius:6px;padding:6px 10px;font-size:12px;outline:none">
+  </div>`;
+}
+
+function openGuideForm() {
+  const outputType = document.getElementById('midtai-output-type')?.value || 'prototype';
+  const config = getGuideFormConfig(outputType);
+  const fieldsEl = document.getElementById('midtai-guide-fields');
+  const formEl = document.getElementById('midtai-guide-form');
+  if (!fieldsEl || !formEl) return;
+  toggleShowcase(false);
+  fieldsEl.innerHTML = config.map(renderGuideField).join('');
+  formEl.style.display = 'block';
+}
+
+function toggleGuideChip(btn) {
+  const field = btn?.dataset?.field;
+  if (!field) return;
+  const isActive = btn.dataset.active === 'true';
+  document.querySelectorAll(`.guide-chip[data-field="${field}"]`).forEach(chip => {
+    chip.dataset.active = 'false';
+    chip.style.background = '#fff';
+    chip.style.color = '#57534e';
+    chip.style.borderColor = '#eadfd2';
+  });
+  if (!isActive) {
+    btn.dataset.active = 'true';
+    btn.style.background = '#c9502e';
+    btn.style.color = '#fff';
+    btn.style.borderColor = '#c9502e';
+  }
+}
+
+function closeGuideForm() {
+  const formEl = document.getElementById('midtai-guide-form');
+  if (formEl) {
+    formEl.style.display = 'none';
+  }
+}
+
+function submitGuideForm() {
+  const answers = {};
+  document.querySelectorAll('.guide-chip[data-active="true"]').forEach(chip => {
+    const field = chip.dataset.field;
+    const value = chip.dataset.value;
+    if (field && value) {
+      answers[field] = value;
+    }
+  });
+  document.querySelectorAll('#midtai-guide-fields input[data-field]').forEach(input => {
+    const field = input.dataset.field;
+    const value = input.value?.trim();
+    if (field && value) {
+      answers[field] = value;
+    }
+  });
+  const parts = Object.entries(answers).map(([key, value]) => `${key}: ${value}`);
+  designBridgeState.userContext = parts.join('；');
+  closeGuideForm();
+  generateDesignWorkbench();
+}
 let designBridgeRenderedToken = 0;
 let designBridgeFrameLoading = false;
 
@@ -3586,6 +3824,62 @@ function renderMidtaiDirectionPicker() {
   </button>`).join('');
 
   picker.innerHTML = autoCard + dirCards;
+}
+
+function toggleShowcase(forceOpen) {
+  const panel = document.getElementById('midtai-showcase-panel');
+  const icon = document.getElementById('showcase-toggle-icon');
+  if (!panel) return;
+  const nextOpen = typeof forceOpen === 'boolean'
+    ? forceOpen
+    : panel.style.display === 'none';
+  panel.style.display = nextOpen ? 'block' : 'none';
+  if (icon) icon.textContent = nextOpen ? '▴' : '▾';
+  if (nextOpen) {
+    closeGuideForm();
+    renderShowcaseGrid();
+  }
+}
+
+function renderShowcaseGrid() {
+  const grid = document.getElementById('midtai-showcase-grid');
+  if (!grid) return;
+  grid.innerHTML = SHOWCASE_TEMPLATES.map(template => `
+    <div onclick="applyShowcaseTemplate('${template.id}')"
+      style="background:${template.color};border:1px solid ${template.accentColor}22;border-radius:8px;padding:10px;cursor:pointer;transition:transform .1s"
+      onmouseover="this.style.transform='scale(1.02)'"
+      onmouseout="this.style.transform=''">
+      <div style="font-size:11px;font-weight:600;color:#292524;margin-bottom:4px">${escapeHtml(template.title)}</div>
+      <div style="display:flex;gap:3px;flex-wrap:wrap">
+        ${template.tags.map(tag => `<span style="font-size:10px;background:${template.accentColor}18;color:${template.accentColor};border-radius:4px;padding:1px 5px">${escapeHtml(tag)}</span>`).join('')}
+      </div>
+    </div>
+  `).join('');
+}
+
+function applyShowcaseTemplate(id) {
+  const template = SHOWCASE_TEMPLATES.find(item => item.id === id);
+  if (!template) return;
+
+  const skillSelect = document.getElementById('midtai-output-type');
+  if (skillSelect) {
+    skillSelect.value = template.skill;
+  }
+  midtaiState.designDirection = '';
+  renderMidtaiDirectionPicker();
+
+  const promptInput = document.getElementById('midtai-design-prompt');
+  if (promptInput) {
+    promptInput.value = template.prompt;
+  }
+
+  const panel = document.getElementById('midtai-showcase-panel');
+  const icon = document.getElementById('showcase-toggle-icon');
+  if (panel) panel.style.display = 'none';
+  if (icon) icon.textContent = '▾';
+
+  setMidtaiDesignMode('pro');
+  promptInput?.focus();
 }
 
 function selectMidtaiDirection(stylePrompt) {
@@ -6312,11 +6606,14 @@ function generateDesignWorkbench() {
   document.getElementById('dpv-loading').classList.add('active');
 
   if (designBridgeState.mode === 'edit' && designBridgeState.html) {
+    const userContext = designBridgeState.userContext || '';
+    designBridgeState.userContext = '';
     send({
       type: 'design:editCurrent',
       prompt: designBridgeState.prompt,
       outputType: designBridgeState.outputType,
       style: designBridgeState.style,
+      userContext,
       html: designBridgeState.html,
       sliders: designBridgeState.sliders,
       ...(designBridgeState.referenceImage ? {
@@ -6327,11 +6624,14 @@ function generateDesignWorkbench() {
     return;
   }
 
+  const userContext = designBridgeState.userContext || '';
+  designBridgeState.userContext = '';
   send({
     type: 'design:requestDirections',
     prompt: designBridgeState.prompt,
     outputType: designBridgeState.outputType,
     style: designBridgeState.style,
+    userContext,
     ...(designBridgeState.referenceImage ? {
       referenceImageDataUrl: designBridgeState.referenceImage.dataUrl,
       referenceImageMimeType: designBridgeState.referenceImage.mimeType,
@@ -6342,14 +6642,17 @@ function generateDesignWorkbench() {
 function chooseDesignDirection(directionId) {
   const suggestion = (designBridgeState.directionSuggestions || []).find(item => item.id === directionId);
   if (!suggestion) return;
+  const userContext = designBridgeState.userContext || '';
   designBridgeState.style = suggestion.stylePrompt;
   designBridgeState.suggestionVisible = false;
+  designBridgeState.userContext = '';
   renderDesignBridgePage();
   send({
     type: 'design:generate',
     prompt: designBridgeState.prompt,
     outputType: designBridgeState.outputType,
     style: designBridgeState.style,
+    userContext,
     ...(designBridgeState.referenceImage ? {
       referenceImageDataUrl: designBridgeState.referenceImage.dataUrl,
       referenceImageMimeType: designBridgeState.referenceImage.mimeType,
@@ -6358,13 +6661,16 @@ function chooseDesignDirection(directionId) {
 }
 
 function skipDesignDirectionSuggestions() {
+  const userContext = designBridgeState.userContext || '';
   designBridgeState.suggestionVisible = false;
+  designBridgeState.userContext = '';
   renderDesignBridgePage();
   send({
     type: 'design:generate',
     prompt: designBridgeState.prompt,
     outputType: designBridgeState.outputType,
     style: designBridgeState.style,
+    userContext,
     ...(designBridgeState.referenceImage ? {
       referenceImageDataUrl: designBridgeState.referenceImage.dataUrl,
       referenceImageMimeType: designBridgeState.referenceImage.mimeType,

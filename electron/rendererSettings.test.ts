@@ -99,6 +99,15 @@ describe("Electron renderer settings", () => {
     expect(html).toContain("function exportDesignWorkbench(format)");
     expect(html).toContain("function chooseDesignDirection(directionId)");
     expect(html).toContain("function skipDesignDirectionSuggestions()");
+    expect(html).toContain('id="midtai-showcase-panel"');
+    expect(html).toContain("const SHOWCASE_TEMPLATES = [");
+    expect(html).toContain("function toggleShowcase(");
+    expect(html).toContain("function applyShowcaseTemplate(id)");
+    expect(html).toContain('id="midtai-guide-form"');
+    expect(html).toContain("const GUIDE_FORM_CONFIG = {");
+    expect(html).toContain("function openGuideForm()");
+    expect(html).toContain("function submitGuideForm()");
+    expect(html).toContain("designBridgeState.userContext");
     expect(html).toContain("function renderDesignReferencePanel(metaEl, previewEl)");
     expect(html).toContain("function handleDesignReferenceUpload(event)");
     expect(html).toContain("function pickLatestImageLabResultForDesign()");

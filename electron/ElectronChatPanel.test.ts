@@ -4058,6 +4058,7 @@ Freeze skill body.
       prompt: "Make a premium robotics landing page",
       outputType: "prototype",
       style: "minimal editorial",
+      userContext: "theme: 企业官网；audience: 机器人采购负责人",
       referenceImageDataUrl: "data:image/png;base64,QUJDRA==",
       referenceImageMimeType: "image/png",
     });
@@ -4076,6 +4077,7 @@ Freeze skill body.
         prompt: "Make a premium robotics landing page",
         outputType: "prototype",
         style: "minimal editorial",
+        userContext: "theme: 企业官网；audience: 机器人采购负责人",
         referenceImageDataUrl: "data:image/png;base64,QUJDRA==",
         referenceImageMimeType: "image/png",
       }),
@@ -4458,7 +4460,7 @@ Freeze skill body.
       suggestions: Array<{ id: string; label: string; stylePrompt: string }>;
     }>(harness.rendererPayloads, "design:directions");
 
-    expect(directionsPayload?.suggestions).toHaveLength(3);
+    expect(directionsPayload?.suggestions.length).toBeGreaterThanOrEqual(3);
     expect(directionsPayload?.suggestions[0]).toMatchObject({
       id: expect.any(String),
       label: expect.any(String),

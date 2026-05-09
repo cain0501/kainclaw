@@ -9,10 +9,10 @@
 
 | Metric | Value | Last Updated |
 |--------|-------|--------------|
-| Test files | 171 | 2026-05-06 |
-| Tests passing | 1349 | 2026-05-09 |
+| Test files | 172 | 2026-05-09 |
+| Tests passing | 1358 | 2026-05-09 |
 | Last verified commit | see `git log --oneline -1` | — |
-| Last clean verification | 2026-05-08 — Midtai patch no-op 回归修复：DOM 归一化 no-op 检测 + debug 日志 + 回归测试 (`npm test`, `npm run check`, `npm run build:electron`) | — |
+| Last clean verification | 2026-05-09 — Midtai guide form + showcase templates integrated (`vitest: designPrompt/ElectronChatPanel/rendererSettings`, `npm run build:electron`, renderer JS syntax check, UTF-8 decode check) | — |
 
 **Required passing commands:**
 ```bash
@@ -22,12 +22,19 @@ npm run build
 npm run build:electron   # only when Electron behavior changed
 ```
 
-Latest verification note: 2026-05-09 - MCP OAuth refresh quality upgrade verified (`npm test -- src/mcpOAuth.test.ts`, `npm test`, `npm run check`, `npm run build`).
+Latest verification note: 2026-05-09 - Midtai guide form + showcase templates integrated (`vitest: designPrompt/ElectronChatPanel/rendererSettings`, `npm run build:electron`, renderer JS syntax check, UTF-8 decode check). Full repo `npm run check`/`npm run build` still blocked by existing `NormalizedMessage` type issues; full `npm test` still has existing `conversationRuntimeStateHost` failures.
 
 ## Active Tasks
 
 | Beads ID | Title | Status | Primer |
 |----------|-------|--------|--------|
+| vscode-extension-lb4 | Design Skill 扩展：输出类型从5个扩展到12个 | ✓ CLOSED | `.kiro/primers/vscode-extension-lb4.md` |
+| vscode-extension-e3m | 引导问题表单：输入框展开态（静态版） | ✓ CLOSED | `.kiro/primers/vscode-extension-e3m.md` |
+| vscode-extension-wsy | 示例库 Showcase：设计页面预置 prompt 模板 | ✓ CLOSED | `.kiro/primers/vscode-extension-wsy.md` |
+| vscode-extension-40p | 品牌设计系统库：左侧面板品牌参考 tab | OPEN | `.kiro/primers/vscode-extension-40p.md` |
+| vscode-extension-8ib | 导出 ZIP：HTML + 资源打包下载 | OPEN P3 | — |
+| vscode-extension-26q | Kanban 视图：我的作品看板模式 | OPEN P3 | — |
+| vscode-extension-0z5 | 画布草图标注工具：iframe 上层 canvas overlay | OPEN P3 | — |
 | vscode-extension-650 | Micro-compact：长会话工具结果轻量清理 | OPEN | `.kiro/primers/vscode-extension-650.md` |
 | vscode-extension-tgx | CronCreate / CronDelete / CronList 工具 | OPEN | `.kiro/primers/vscode-extension-tgx.md` |
 | vscode-extension-uyl | Plan Mode V2 多阶段规划提示词升级 | OPEN | `.kiro/primers/vscode-extension-uyl.md` |
@@ -92,6 +99,8 @@ Latest verification note: 2026-05-09 - MCP OAuth refresh quality upgrade verifie
 - Midtai Canvas Controls (3q7/wnz bridge: 调节 sliders → `__kc_apply_slider_values` iframe bridge / 调节浮层可拖拽 / 导出 HTML+PDF+PPTX 菜单 / 版本历史按当前项目过滤并可恢复)
 - KainClaw Design Prompt 质量升级 (Anti-Slop 9 条规则 + DesignDirectionSpec OKLch 调色板 + posture 注入，4 套方向含完整 spec)
 - Midtai 设计表单 (输出类型 select + 视觉方向卡片选择器，按输出类型动态渲染，选中值传入 generateDesignWorkbench)
+- Midtai Design Skill 扩展 (12 个输出类型，含 8 个新 skill prompt 约束 + renderer 双入口 select + directions fallback)
+- Midtai Guide Form + Showcase (静态引导问题表单、模板卡片库、skill/prompt 一键回填、`userContext` 透传链路)
 - Midtai 图像整合 (左侧图像表单 + 比例/数量控件 + 生成预览 shimmer/结果卡片 + 静态提示词库 + 插入到对话)
 - Local Bridge / Word Add-in (read + write-back + Track Changes + comments)
 - Electron i18n (shellStrings covering all surfaces)

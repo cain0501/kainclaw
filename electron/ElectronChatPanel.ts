@@ -158,6 +158,8 @@ import {
 import {
   buildKainClawDesignSystemPrompt,
   DESIGN_CRITIQUE_SYSTEM_PROMPT,
+  normalizeDesignOutputType,
+  type DesignOutputType,
 } from "../src/design/designPrompt";
 import {
   buildKainClawDesignPatchSystemPrompt,
@@ -3310,12 +3312,10 @@ export class ElectronChatPanel {
       return;
     }
 
-    const outputType = message.outputType === "slide" ||
-      message.outputType === "infographic" ||
-      message.outputType === "animation"
-      ? message.outputType
-      : "prototype";
+    const outputType = normalizeDesignOutputType(message.outputType);
     const style = typeof message.style === "string" ? message.style.trim() : "";
+    const userContext =
+      typeof message.userContext === "string" ? message.userContext.trim() : "";
     const referenceImageDataUrl =
       typeof message.referenceImageDataUrl === "string" &&
         message.referenceImageDataUrl.trim()
@@ -3348,6 +3348,7 @@ export class ElectronChatPanel {
         prompt,
         outputType,
         ...(style ? { style } : {}),
+        ...(userContext ? { userContext } : {}),
         ...(referenceImageDataUrl ? { referenceImageDataUrl } : {}),
         ...(referenceImageMimeType ? { referenceImageMimeType } : {}),
         onToken: (token: string) => {
@@ -3461,11 +3462,7 @@ ${html.slice(0, 8000)}
       return;
     }
 
-    const outputType = message.outputType === "slide" ||
-      message.outputType === "infographic" ||
-      message.outputType === "animation"
-      ? message.outputType
-      : "prototype";
+    const outputType = normalizeDesignOutputType(message.outputType);
     const style = typeof message.style === "string" ? message.style.trim() : "";
     const referenceImageDataUrl =
       typeof message.referenceImageDataUrl === "string" &&
@@ -3544,11 +3541,7 @@ ${html.slice(0, 8000)}
     message: Record<string, unknown>,
   ): Promise<void> {
     const prompt = String(message.prompt ?? "").trim();
-    const outputType = message.outputType === "slide" ||
-      message.outputType === "infographic" ||
-      message.outputType === "animation"
-      ? message.outputType
-      : "prototype";
+    const outputType = normalizeDesignOutputType(message.outputType);
 
     if (!prompt || !isAmbiguousDesignPrompt(prompt)) {
       await this.generateDesignWorkbench(message);
@@ -3602,11 +3595,7 @@ ${html.slice(0, 8000)}
         });
         const version = await this.saveDesignVersion({
           ...(typeof message.prompt === "string" ? { prompt: String(message.prompt) } : {}),
-          ...(message.outputType === "slide" ||
-          message.outputType === "infographic" ||
-          message.outputType === "animation"
-            ? { outputType: message.outputType }
-            : { outputType: "prototype" as const }),
+          outputType: normalizeDesignOutputType(message.outputType),
           ...(typeof message.style === "string" ? { style: String(message.style) } : {}),
           html: nextHtml,
           sliders: Array.isArray(message.sliders) ? message.sliders : [],
@@ -3648,11 +3637,7 @@ ${html.slice(0, 8000)}
       });
       const version = await this.saveDesignVersion({
         ...(typeof message.prompt === "string" ? { prompt: String(message.prompt) } : {}),
-        ...(message.outputType === "slide" ||
-        message.outputType === "infographic" ||
-        message.outputType === "animation"
-          ? { outputType: message.outputType }
-          : { outputType: "prototype" as const }),
+        outputType: normalizeDesignOutputType(message.outputType),
         ...(typeof message.style === "string" ? { style: String(message.style) } : {}),
         html: result.html,
         sliders: Array.isArray(message.sliders) ? message.sliders : [],
@@ -3756,7 +3741,7 @@ ${html.slice(0, 8000)}
 
   private async saveDesignVersion(options: {
     prompt?: string;
-    outputType?: "prototype" | "slide" | "infographic" | "animation";
+    outputType?: DesignOutputType;
     style?: string;
     html: string;
     sliders: unknown[];

@@ -16,6 +16,7 @@ export type DesignGenerateOptions = {
   prompt: string;
   outputType: DesignOutputType;
   style?: string;
+  userContext?: string;
   referenceImageDataUrl?: string;
   referenceImageMimeType?: string;
   customSystemInstructions?: string;
@@ -59,6 +60,7 @@ export async function generateKainClawDesign(
     prompt: options.prompt,
     outputType: options.outputType,
     ...(options.style?.trim() ? { style: options.style.trim() } : {}),
+    ...(options.userContext?.trim() ? { userContext: options.userContext.trim() } : {}),
     ...(options.referenceImageDataUrl ? { referenceImageDataUrl: options.referenceImageDataUrl } : {}),
   });
 

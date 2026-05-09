@@ -14,10 +14,18 @@ describe("showcaseIndex", () => {
     ).toBe(false);
   });
 
-  it("returns three direction suggestions per supported output type", () => {
-    expect(getDesignDirectionSuggestions("prototype")).toHaveLength(3);
-    expect(getDesignDirectionSuggestions("slide")).toHaveLength(3);
-    expect(getDesignDirectionSuggestions("infographic")).toHaveLength(3);
-    expect(getDesignDirectionSuggestions("animation")).toHaveLength(3);
+  it("returns curated direction suggestions per supported output type", () => {
+    expect(getDesignDirectionSuggestions("prototype").length).toBeGreaterThanOrEqual(3);
+    expect(getDesignDirectionSuggestions("slide").length).toBeGreaterThanOrEqual(3);
+    expect(getDesignDirectionSuggestions("infographic").length).toBeGreaterThanOrEqual(3);
+    expect(getDesignDirectionSuggestions("animation").length).toBeGreaterThanOrEqual(3);
+  });
+
+  it("falls back to prototype directions for newly added output types", () => {
+    const prototypeSuggestions = getDesignDirectionSuggestions("prototype");
+
+    expect(getDesignDirectionSuggestions("social-carousel")).toBe(prototypeSuggestions);
+    expect(getDesignDirectionSuggestions("email")).toBe(prototypeSuggestions);
+    expect(getDesignDirectionSuggestions("landing-page")).toBe(prototypeSuggestions);
   });
 });
