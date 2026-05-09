@@ -10,7 +10,7 @@
 | Metric | Value | Last Updated |
 |--------|-------|--------------|
 | Test files | 171 | 2026-05-06 |
-| Tests passing | 1333 | 2026-05-08 |
+| Tests passing | 1349 | 2026-05-09 |
 | Last verified commit | see `git log --oneline -1` | — |
 | Last clean verification | 2026-05-08 — Midtai patch no-op 回归修复：DOM 归一化 no-op 检测 + debug 日志 + 回归测试 (`npm test`, `npm run check`, `npm run build:electron`) | — |
 
@@ -22,20 +22,24 @@ npm run build
 npm run build:electron   # only when Electron behavior changed
 ```
 
-Latest verification note: 2026-05-07 - codebase-memory-mcp integration verified (`codebase-memory-mcp --version`, MCP `index_repository` / `list_projects` / `search_graph`, `npm test`, `npm run check`, `npm run build`).
+Latest verification note: 2026-05-09 - MCP OAuth refresh quality upgrade verified (`npm test -- src/mcpOAuth.test.ts`, `npm test`, `npm run check`, `npm run build`).
 
 ## Active Tasks
 
 | Beads ID | Title | Status | Primer |
 |----------|-------|--------|--------|
+| vscode-extension-650 | Micro-compact：长会话工具结果轻量清理 | OPEN | `.kiro/primers/vscode-extension-650.md` |
+| vscode-extension-tgx | CronCreate / CronDelete / CronList 工具 | OPEN | `.kiro/primers/vscode-extension-tgx.md` |
+| vscode-extension-uyl | Plan Mode V2 多阶段规划提示词升级 | OPEN | `.kiro/primers/vscode-extension-uyl.md` |
 | vscode-extension-9pz | codebase-memory-mcp integration | CLOSED | `.kiro/primers/vscode-extension-9pz.md` |
 | vscode-extension-u7w | 图像我的作品：缩略图持久化（对齐设计列表机制） | ✓ CLOSED | `.kiro/primers/vscode-extension-u7w.md` |
-| vscode-extension-f4v | extension.ts 宿主总控继续下沉 | IN_PROGRESS | `.kiro/primers/vscode-extension-f4v.md` |
+| vscode-extension-f4v | extension.ts 宿主总控继续下沉 | DEFERRED | `.kiro/primers/vscode-extension-f4v.md` |
 | vscode-extension-3q7 | Midtai 画布：调节/导出/版本历史三项能力接入 | ✓ CLOSED | `.kiro/primers/vscode-extension-3q7.md` |
 | vscode-extension-wnz | Midtai 画布：滑块面板浮层化 + 版本历史按项目过滤 | ✓ CLOSED | `.kiro/primers/vscode-extension-wnz.md` |
 | vscode-extension-ahb | Hooks: Stop + SessionEnd + UserPromptSubmit | ✓ CLOSED | — |
 | vscode-extension-a41 | Hooks: PostToolUseFailure + PreCompact + PostCompact | ✓ CLOSED | — |
-| vscode-extension-7vl | Hooks: SubagentStart/Stop + TaskCreated/TaskCompleted | OPEN | `.kiro/primers/vscode-extension-7vl.md` |
+| vscode-extension-7vl | Hooks: SubagentStart/Stop + TaskCreated/TaskCompleted | ✓ CLOSED | — |
+| vscode-extension-crs | Hooks: WorktreeCreate + WorktreeRemove | ✓ CLOSED | `.kiro/primers/vscode-extension-crs.md` |
 | vscode-extension-lca | Hooks: 用户配置接入触发链 | ✓ CLOSED | — |
 | vscode-extension-vwq | Hooks: 官方事件名兼容 + Notification/SessionStart | ✓ CLOSED | — |
 | vscode-extension-pnz | Fast mode: state persistence | ✓ CLOSED | — |
@@ -66,6 +70,7 @@ Latest verification note: 2026-05-07 - codebase-memory-mcp integration verified 
 - Provider chain: Anthropic / OpenAI / OpenAI-compatible / Claude CLI
 - Session persistence / export / restore
 - MCP runtime (transport / resource / result / name normalization / remote OAuth / prompt commands)
+- MCP OAuth refresh hardening (`normalizeOAuthErrorBody`, proactive refresh <=300s, invalid_grant cleanup, transient retry, exported `revokeServerTokens`)
 - File tools / command tools / browser tools
 - Tasks / background commands
 - built-in Review / Verification (/review, /verify)
@@ -74,7 +79,7 @@ Latest verification note: 2026-05-07 - codebase-memory-mcp integration verified 
 - Auto-Memory
 - LSP phase 1 + partial phase 2
 - Worktree phase 1
-- Hooks execution chain (user .cain/hooks.json 接入触发链 / PreToolUse 官方别名 / Notification + SessionStart 事件)
+- Hooks execution chain (user .cain/hooks.json 接入触发链 / PreToolUse 官方别名 / Notification + SessionStart 事件 / WorktreeCreate + WorktreeRemove 20/27 事件已接线)
 - Custom Agents registry / Skills registry
 - codebase-memory-mcp integration (global install, project indexed as `E-claudecodejingiang-vscode-extension`, `auto_index=true`, repo `AGENTS.md` index-first guidance)
 - User modeling
@@ -98,7 +103,7 @@ Latest verification note: 2026-05-07 - codebase-memory-mcp integration verified 
 
 ## Key Risks (still active)
 
-- `src/extension.ts` — still large; reduction is ongoing via vscode-extension-f4v
+- `src/extension.ts` — still large; **f4v 减债已降级**，等功能速度放缓后再做（频繁加功能期间减债 ROI 低）
 - `electron/renderer/index.html` — single-file renderer; prone to inline script regressions
 - `src/webviewHtml.ts` — large template string; fragile escaping
 
