@@ -22,7 +22,7 @@ npm run build
 npm run build:electron   # only when Electron behavior changed
 ```
 
-Latest verification note: 2026-05-09 - 品牌参考 tab integrated (`vitest: designPrompt/ElectronChatPanel/rendererSettings`, renderer JS syntax check, UTF-8 decode check). `npm run build:electron` currently still blocked by existing `ElectronChatPanel.test.ts` / `compactHost.ts` type issues; full repo `npm run check`/`npm run build` remain blocked by existing `NormalizedMessage` type issues; full `npm test` still has existing `conversationRuntimeStateHost` failures.
+Latest verification note: 2026-05-09 - micro-compact (650) verified: `npm test`, `npm run check`, `npm run build` passing (172 files, 1358 tests). `npm run build:electron` currently still blocked by existing `ElectronChatPanel.test.ts` / `compactHost.ts` type issues; full repo `npm run check`/`npm run build` remain blocked by existing `NormalizedMessage` type issues; full `npm test` still has existing `conversationRuntimeStateHost` failures.
 
 ## Active Tasks
 
@@ -35,7 +35,7 @@ Latest verification note: 2026-05-09 - 品牌参考 tab integrated (`vitest: des
 | vscode-extension-8ib | 导出 ZIP：HTML + 资源打包下载 | OPEN P3 | — |
 | vscode-extension-26q | Kanban 视图：我的作品看板模式 | OPEN P3 | — |
 | vscode-extension-0z5 | 画布草图标注工具：iframe 上层 canvas overlay | OPEN P3 | — |
-| vscode-extension-650 | Micro-compact：长会话工具结果轻量清理 | OPEN | `.kiro/primers/vscode-extension-650.md` |
+| vscode-extension-650 | Micro-compact：长会话工具结果轻量清理 | ✓ CLOSED | `.kiro/primers/vscode-extension-650.md` |
 | vscode-extension-tgx | CronCreate / CronDelete / CronList 工具 | OPEN | `.kiro/primers/vscode-extension-tgx.md` |
 | vscode-extension-uyl | Plan Mode V2 多阶段规划提示词升级 | OPEN | `.kiro/primers/vscode-extension-uyl.md` |
 | vscode-extension-9pz | codebase-memory-mcp integration | CLOSED | `.kiro/primers/vscode-extension-9pz.md` |
@@ -83,6 +83,7 @@ Latest verification note: 2026-05-09 - 品牌参考 tab integrated (`vitest: des
 - built-in Review / Verification (/review, /verify)
 - Thinking / Effort / Fast mode
 - Compact / Auto-compact
+- Micro-compact (lightweight tool result clearing before auto-compact, `src/compact/microCompact.ts`)
 - Auto-Memory
 - LSP phase 1 + partial phase 2
 - Worktree phase 1
