@@ -43,6 +43,7 @@ Latest verification note: 2026-05-10 - design artifact manual entry integrated (
 | vscode-extension-p1y | midtai-p3a: design chat 与 project 真绑定 | OPEN | `.kiro/primers/vscode-extension-p1y.md` |
 | vscode-extension-1vp | midtai-p3b: conversationHistory 迁移到 project 层 | OPEN (blocks: p1y) | `.kiro/primers/vscode-extension-1vp.md` |
 | vscode-extension-1t6 | midtai-p3c: 主 chat 侧栏 design session 下沉 | OPEN (blocks: p1y, 1vp) | `.kiro/primers/vscode-extension-1t6.md` |
+| vscode-extension-jzu | midtai-p4: Unified Workbench UI 整体改造 | OPEN (blocks: p1y) | `.kiro/primers/vscode-extension-jzu.md` |
 | vscode-extension-lb4 | Design Skill 扩展：输出类型从5个扩展到12个 | ✓ CLOSED | `.kiro/primers/vscode-extension-lb4.md` |
 | vscode-extension-e3m | 引导问题表单：输入框展开态（静态版） | ✓ CLOSED | `.kiro/primers/vscode-extension-e3m.md` |
 | vscode-extension-wsy | 示例库 Showcase：设计页面预置 prompt 模板 | ✓ CLOSED | `.kiro/primers/vscode-extension-wsy.md` |
