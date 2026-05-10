@@ -27,11 +27,22 @@ Latest verification note: 2026-05-09 - design chat lane + designFlowId protocol 
 Latest verification note: 2026-05-09 - design chat workflow integrated (`npx vitest run electron/ElectronChatPanel.test.ts --testNamePattern "question-form|design flow|design lane|design:generate|filters design:loadVersions|returns direction suggestions"`, `npm run check`, `npm run build`, `npm run build:electron`, renderer JS syntax check).
 Latest verification note: 2026-05-10 - renderer inline question-form integrated (`npx vitest run electron/questionForm.test.ts electron/rendererSettings.test.ts`, `npm run check`, `npm run build`, `npm run build:electron`, renderer JS syntax check).
 Latest verification note: 2026-05-10 - design session entry integrated (`npx vitest run electron/ElectronChatPanel.test.ts --testNamePattern "design session|sessionType|design flow|question-form|design lane|workspace roots bound"`, `npm run check`, `npm run build`, `npm run build:electron`, renderer JS syntax check).
+Latest verification note: 2026-05-10 - design artifact manual entry integrated (`npx vitest run electron/ElectronChatPanel.test.ts --testNamePattern "artifact:enter-design|tombstone|design artifact|question-form|design flow|open the active html artifact"`, `npx vitest run electron/rendererSettings.test.ts`, `npm run check`, `npm run build`, `npm run build:electron`, renderer JS syntax check).
 
 ## Active Tasks
 
 | Beads ID | Title | Status | Primer |
 |----------|-------|--------|--------|
+| vscode-extension-73d | midtai-p1a: 图像 tab 右侧三段式重排 | ✓ CLOSED | `.kiro/primers/vscode-extension-73d.md` |
+| vscode-extension-h82 | midtai-p1b: 设计 tab 左侧最近作品列表 | ✓ CLOSED | `.kiro/primers/vscode-extension-h82.md` |
+| vscode-extension-qj9 | midtai-p1c: 新建作品进入临时工作态 | ✓ CLOSED | `.kiro/primers/vscode-extension-qj9.md` |
+| vscode-extension-0uv | midtai-p1d: 顶部作品库入口与壳层页 | ✓ CLOSED | `.kiro/primers/vscode-extension-0uv.md` |
+| vscode-extension-kfr | midtai-p2a: 作品库统一页完善 | ✓ CLOSED | `.kiro/primers/vscode-extension-kfr.md` |
+| vscode-extension-3f1 | midtai-p2b: 分流弹框 | ✓ CLOSED | `.kiro/primers/vscode-extension-3f1.md` |
+| vscode-extension-vlv | midtai-p2c: 临时工作态升级完整流程 | ✓ CLOSED | `.kiro/primers/vscode-extension-vlv.md` |
+| vscode-extension-p1y | midtai-p3a: design chat 与 project 真绑定 | OPEN | `.kiro/primers/vscode-extension-p1y.md` |
+| vscode-extension-1vp | midtai-p3b: conversationHistory 迁移到 project 层 | OPEN (blocks: p1y) | `.kiro/primers/vscode-extension-1vp.md` |
+| vscode-extension-1t6 | midtai-p3c: 主 chat 侧栏 design session 下沉 | OPEN (blocks: p1y, 1vp) | `.kiro/primers/vscode-extension-1t6.md` |
 | vscode-extension-lb4 | Design Skill 扩展：输出类型从5个扩展到12个 | ✓ CLOSED | `.kiro/primers/vscode-extension-lb4.md` |
 | vscode-extension-e3m | 引导问题表单：输入框展开态（静态版） | ✓ CLOSED | `.kiro/primers/vscode-extension-e3m.md` |
 | vscode-extension-wsy | 示例库 Showcase：设计页面预置 prompt 模板 | ✓ CLOSED | `.kiro/primers/vscode-extension-wsy.md` |
