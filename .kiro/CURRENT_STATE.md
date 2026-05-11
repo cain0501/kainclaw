@@ -30,8 +30,7 @@ npm run build:electron   # only when Electron behavior changed
 |----------|-------|--------|--------|
 | vscode-extension-79t | Midtai Unified Workbench 视觉 QA 与交互收口 | **OPEN — ready** | `.kiro/primers/vscode-extension-79t.md` |
 | vscode-extension-a9o | renderer 减债清理：donor 容器与旧兼容函数名 | OPEN (blocks 79t) | — |
-| vscode-extension-cs9 | 删除 page-images 页面壳与隐藏入口 | OPEN P3 — ready | `.kiro/primers/vscode-extension-cs9.md` |
-| vscode-extension-uru | imglab-* namespace 与图片渲染函数最终清理 | OPEN P3 (blocks: cs9) | `.kiro/primers/vscode-extension-uru.md` |
+| vscode-extension-uru | imglab-* namespace 与图片渲染函数最终清理 | OPEN P3 — ready | `.kiro/primers/vscode-extension-uru.md` |
 | vscode-extension-vrw | AgentTool: 通用子 Agent 派发工具 | OPEN P1 | `.kiro/primers/vscode-extension-vrw.md` |
 | vscode-extension-yck | PowerShellTool: Windows PowerShell 专用工具 | OPEN P2 | — |
 | vscode-extension-qhf | SleepTool: 自主循环等待工具 | OPEN P2 | — |
