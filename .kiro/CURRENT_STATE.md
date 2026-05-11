@@ -30,8 +30,7 @@ npm run build:electron   # only when Electron behavior changed
 |----------|-------|--------|--------|
 | vscode-extension-79t | Midtai Unified Workbench 视觉 QA 与交互收口 | **OPEN — ready** | `.kiro/primers/vscode-extension-79t.md` |
 | vscode-extension-a9o | renderer 减债清理：donor 容器与旧兼容函数名 | OPEN (blocks 79t) | — |
-| vscode-extension-axn | applyImageLabState legacy sync 收口：旧页面 DOM 写入隔离 | OPEN P3 — ready | `.kiro/primers/vscode-extension-axn.md` |
-| vscode-extension-7q8 | 旧页面尾部依赖迁移：imglab-results/history/workflow/prompt-library | OPEN P3 (blocks: axn) | `.kiro/primers/vscode-extension-7q8.md` |
+| vscode-extension-7q8 | 旧页面尾部依赖迁移：imglab-results/history/workflow/prompt-library | OPEN P3 — ready | `.kiro/primers/vscode-extension-7q8.md` |
 | vscode-extension-cs9 | 删除 page-images 页面壳与隐藏入口 | OPEN P3 (blocks: 7q8) | `.kiro/primers/vscode-extension-cs9.md` |
 | vscode-extension-uru | imglab-* namespace 与图片渲染函数最终清理 | OPEN P3 (blocks: cs9) | `.kiro/primers/vscode-extension-uru.md` |
 | vscode-extension-8jn | postCompactCleanup: 压缩后状态清理 | OPEN P1 | `.kiro/primers/vscode-extension-8jn.md` |
