@@ -30,8 +30,6 @@ npm run build:electron   # only when Electron behavior changed
 |----------|-------|--------|--------|
 | vscode-extension-79t | Midtai Unified Workbench 视觉 QA 与交互收口 | **OPEN — ready** | `.kiro/primers/vscode-extension-79t.md` |
 | vscode-extension-a9o | renderer 减债清理：donor 容器与旧兼容函数名 | OPEN (blocks 79t) | — |
-| vscode-extension-uru | imglab-* namespace 与图片渲染函数最终清理 | OPEN P3 — 暂停，需重新 scope（见 primer 风险区）| `.kiro/primers/vscode-extension-uru.md` |
-| vscode-extension-vrw | AgentTool: 通用子 Agent 派发工具 | OPEN P1 | `.kiro/primers/vscode-extension-vrw.md` |
 | vscode-extension-yck | PowerShellTool: Windows PowerShell 专用工具 | OPEN P2 | — |
 | vscode-extension-qhf | SleepTool: 自主循环等待工具 | OPEN P2 | — |
 | vscode-extension-zje | SessionMemory: 会话内笔记服务 | OPEN P2 | — |
@@ -96,6 +94,7 @@ npm run build:electron   # only when Electron behavior changed
 | vscode-extension-ahb | Hooks: Stop + SessionEnd + UserPromptSubmit |
 | vscode-extension-pnz | Fast mode: state persistence |
 | vscode-extension-8jn | postCompactCleanup: 压缩后状态清理 |
+| vscode-extension-vrw | AgentTool: 通用子 Agent 派发工具 |
 
 </details>
 
