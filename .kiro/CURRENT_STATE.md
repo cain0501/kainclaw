@@ -28,12 +28,11 @@ npm run build:electron   # only when Electron behavior changed
 
 | Beads ID | Title | Status | Primer |
 |----------|-------|--------|--------|
-| vscode-extension-79t | Midtai Unified Workbench 视觉 QA 与交互收口 | **OPEN — ready** | `.kiro/primers/vscode-extension-79t.md` |
-| vscode-extension-a9o | renderer 减债清理：donor 容器与旧兼容函数名 | OPEN (blocks 79t) | — |
-| vscode-extension-yck | PowerShellTool: Windows PowerShell 专用工具 | OPEN P2 | — |
-| vscode-extension-qhf | SleepTool: 自主循环等待工具 | OPEN P2 | — |
-| vscode-extension-zje | SessionMemory: 会话内笔记服务 | OPEN P2 | — |
-| vscode-extension-kqy | ConfigTool: 设置读写工具 | OPEN P2 | — |
+| vscode-extension-a9o | renderer 减债清理：donor 容器与旧兼容函数名 | OPEN P3 | — |
+| vscode-extension-yck | PowerShellTool: Windows PowerShell 专用工具 | OPEN P2 | `.kiro/primers/vscode-extension-yck.md` |
+| vscode-extension-qhf | SleepTool: 自主循环等待工具 | OPEN P2 | `.kiro/primers/vscode-extension-qhf.md` |
+| vscode-extension-zje | SessionMemory: 会话内笔记服务 | OPEN P2 | `.kiro/primers/vscode-extension-zje.md` |
+| vscode-extension-kqy | ConfigTool: 设置读写工具 | OPEN P2 | `.kiro/primers/vscode-extension-kqy.md` |
 | vscode-extension-26q | Kanban 视图：我的作品看板模式 | OPEN P3 | — |
 | vscode-extension-0z5 | 画布草图标注工具：iframe 上层 canvas overlay | OPEN P3 | — |
 | vscode-extension-f4v | extension.ts 宿主总控继续下沉 | DEFERRED | `.kiro/primers/vscode-extension-f4v.md` |
