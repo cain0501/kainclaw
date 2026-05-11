@@ -10,6 +10,30 @@ page-images 删除后，遗留的 `imglab-*` 函数名和孤立函数做最终�
 
 ---
 
+## ⚠️ 风险评估（2026-05-11 Codex 首轮尝试后补充）
+
+实际范围比"纯重命名 + 删除"大，不能盲目推进。已识别的运行时风险：
+
+1. **`setImageLabStatus()`** 当前指向 `image-status` 节点（该节点在 page-images 内，cs9 已删）。
+   必须先改为写 Midtai 侧的状态节点，否则删/改名后状态提示失效。
+
+2. **`renderImageLabReference()` / `renderImageWorkflowPlan()`** 仍访问 cs9 已删的 DOM 节点。
+   需先把这两个函数的写目标改到 Midtai 侧，才能安全删除。
+
+3. **`ImageLab`（大驼峰）命名残留**：`grep imglab` 看不到，但运行链里仍在用。
+   需用 `grep -i imagelab` 全量扫描，确认哪些是死代码、哪些仍被调用。
+
+**建议执行顺序（必须按序，不能跳步）：**
+
+1. 先修 `setImageLabStatus` → 写 Midtai 安全实现
+2. 修 `renderImageLabReference` / `renderImageWorkflowPlan` → 改到 Midtai 侧
+3. 确认无调用后删死函数：`renderImageLabResults`、`rerunImageLab`、`handleImageLabPromptInput`
+4. 重命名核心函数（见下方清单）
+5. `imageLabState` → `imageState` 全局重命名（单独一步，替换后立即验证）
+6. 删 `openPromptLibraryEditor` 内剩余的 `imglab-prompt` fallback（节点已不存在）
+
+---
+
 ## 涉及文件
 
 `electron/renderer/index.html`
