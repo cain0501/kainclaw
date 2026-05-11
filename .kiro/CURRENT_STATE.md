@@ -12,7 +12,7 @@
 | Test files | 172 | 2026-05-09 |
 | Tests passing | 1358 | 2026-05-09 |
 | Last verified commit | see `git log --oneline -1` | — |
-| Last clean verification | 2026-05-09 — ZIP export integrated (`vitest: exporters/rendererSettings`, `npm run build:electron`, renderer JS syntax check, UTF-8 decode check) | — |
+| Last clean verification | 2026-05-11 — midtai unified workbench visual QA pass 1 | — |
 
 **Required passing commands:**
 ```bash
@@ -22,83 +22,86 @@ npm run build
 npm run build:electron   # only when Electron behavior changed
 ```
 
-Latest verification note: 2026-05-09 - ZIP export integrated (`npx vitest run src/design/exporters.test.ts electron/rendererSettings.test.ts`, `npm run build:electron`, renderer JS syntax check, UTF-8 decode check). Full repo `npm run check`/`npm run build` remain blocked by existing `NormalizedMessage` type issues; full `npm test` still has existing `conversationRuntimeStateHost` failures.
-Latest verification note: 2026-05-09 - design chat lane + designFlowId protocol integrated (`npx vitest run electron/ElectronChatPanel.test.ts --testNamePattern "design flow|design lane|design:generate|filters design:loadVersions|returns direction suggestions"`, `npm run check`, `npm run build`, `npm run build:electron`, renderer JS syntax check).
-Latest verification note: 2026-05-09 - design chat workflow integrated (`npx vitest run electron/ElectronChatPanel.test.ts --testNamePattern "question-form|design flow|design lane|design:generate|filters design:loadVersions|returns direction suggestions"`, `npm run check`, `npm run build`, `npm run build:electron`, renderer JS syntax check).
-Latest verification note: 2026-05-10 - renderer inline question-form integrated (`npx vitest run electron/questionForm.test.ts electron/rendererSettings.test.ts`, `npm run check`, `npm run build`, `npm run build:electron`, renderer JS syntax check).
-Latest verification note: 2026-05-10 - design session entry integrated (`npx vitest run electron/ElectronChatPanel.test.ts --testNamePattern "design session|sessionType|design flow|question-form|design lane|workspace roots bound"`, `npm run check`, `npm run build`, `npm run build:electron`, renderer JS syntax check).
-Latest verification note: 2026-05-10 - design artifact manual entry integrated (`npx vitest run electron/ElectronChatPanel.test.ts --testNamePattern "artifact:enter-design|tombstone|design artifact|question-form|design flow|open the active html artifact"`, `npx vitest run electron/rendererSettings.test.ts`, `npm run check`, `npm run build`, `npm run build:electron`, renderer JS syntax check).
-Latest verification note: 2026-05-11 - p3c design session sidebar removal integrated (`npx vitest run electron/ElectronChatPanel.test.ts --testNamePattern "omits design sessions from the main sessions:data sidebar payload|creates a dedicated design session with sessionType design|switches design sessions into midtai and pushes design chat history"`, `npx vitest run electron/rendererSettings.test.ts`, `npm run build:electron`, `npm run check`, `npm run build`, renderer JS syntax check, UTF-8 check).
-Latest verification note: 2026-05-11 - p3b conversationHistory project-layer persistence integrated (`npx vitest run src/design/designProjectStore.test.ts electron/ElectronChatPanel.test.ts --testNamePattern "persists and reloads conversationHistory at the project level|writes design conversationHistory to the current project after each design chat turn|prefers project-level conversationHistory and lazily migrates legacy session history|switches design chat history and flow context by project|creates an empty bound design session"`, `npm run build:electron`, `npm run check`, `npm run build`, renderer JS syntax check, UTF-8 check).
-Latest verification note: 2026-05-11 - p3a design:switch-project integrated (`npx vitest run electron/ElectronChatPanel.test.ts --testNamePattern "switches design chat history and flow context by project|creates an empty bound design session when switching to a project without an existing design session|switches design sessions into midtai and pushes design chat history|starts a transient design work state"`, `npx vitest run electron/rendererSettings.test.ts`, `npm run check`, `npm run build`, `npm run build:electron`, renderer JS syntax check, UTF-8 check).
-
 ## Active Tasks
+
+> 只列 OPEN / DEFERRED 任务。CLOSED 任务见下方折叠区。
 
 | Beads ID | Title | Status | Primer |
 |----------|-------|--------|--------|
-| vscode-extension-73d | midtai-p1a: 图像 tab 右侧三段式重排 | ✓ CLOSED | `.kiro/primers/vscode-extension-73d.md` |
-| vscode-extension-h82 | midtai-p1b: 设计 tab 左侧最近作品列表 | ✓ CLOSED | `.kiro/primers/vscode-extension-h82.md` |
-| vscode-extension-qj9 | midtai-p1c: 新建作品进入临时工作态 | ✓ CLOSED | `.kiro/primers/vscode-extension-qj9.md` |
-| vscode-extension-0uv | midtai-p1d: 顶部作品库入口与壳层页 | ✓ CLOSED | `.kiro/primers/vscode-extension-0uv.md` |
-| vscode-extension-kfr | midtai-p2a: 作品库统一页完善 | ✓ CLOSED | `.kiro/primers/vscode-extension-kfr.md` |
-| vscode-extension-3f1 | midtai-p2b: 分流弹框 | ✓ CLOSED | `.kiro/primers/vscode-extension-3f1.md` |
-| vscode-extension-vlv | midtai-p2c: 临时工作态升级完整流程 | ✓ CLOSED | `.kiro/primers/vscode-extension-vlv.md` |
-| vscode-extension-p1y | midtai-p3a: design chat 与 project 真绑定 | ✓ CLOSED | `.kiro/primers/vscode-extension-p1y.md` |
-| vscode-extension-1vp | midtai-p3b: conversationHistory 迁移到 project 层 | ✓ CLOSED | `.kiro/primers/vscode-extension-1vp.md` |
-| vscode-extension-1t6 | midtai-p3c: 主 chat 侧栏 design session 下沉 | ✓ CLOSED | `.kiro/primers/vscode-extension-1t6.md` |
-| vscode-extension-jzu | midtai-p4: Unified Workbench UI 整体改造 | ✓ CLOSED | `.kiro/primers/vscode-extension-jzu.md` |
-| vscode-extension-79t | Midtai Unified Workbench 视觉 QA 与交互收口 | OPEN (ready) | `.kiro/primers/vscode-extension-79t.md` |
-| vscode-extension-a9o | renderer 减债清理：donor 容器与旧兼容函数名 | OPEN (blocks: 79t) | — |
-| vscode-extension-lb4 | Design Skill 扩展：输出类型从5个扩展到12个 | ✓ CLOSED | `.kiro/primers/vscode-extension-lb4.md` |
-| vscode-extension-e3m | 引导问题表单：输入框展开态（静态版） | ✓ CLOSED | `.kiro/primers/vscode-extension-e3m.md` |
-| vscode-extension-wsy | 示例库 Showcase：设计页面预置 prompt 模板 | ✓ CLOSED | `.kiro/primers/vscode-extension-wsy.md` |
-| vscode-extension-40p | 品牌设计系统库：左侧面板品牌参考 tab | ✓ CLOSED | `.kiro/primers/vscode-extension-40p.md` |
-| vscode-extension-8ib | 导出 ZIP：HTML + 资源打包下载 | ✓ CLOSED | `.kiro/primers/vscode-extension-8ib.md` |
-| vscode-extension-26q | Kanban 视图：我的作品看板模式 | OPEN P3 | — |
-| vscode-extension-0z5 | 画布草图标注工具：iframe 上层 canvas overlay | OPEN P3 | — |
+| vscode-extension-79t | Midtai Unified Workbench 视觉 QA 与交互收口 | **OPEN — ready** | `.kiro/primers/vscode-extension-79t.md` |
+| vscode-extension-a9o | renderer 减债清理：donor 容器与旧兼容函数名 | OPEN (blocks 79t) | — |
+| vscode-extension-8b5 | image request 解耦：去掉对 imglab-* DOM 的参数读取 | OPEN P3 — ready | `.kiro/primers/vscode-extension-8b5.md` |
+| vscode-extension-axn | applyImageLabState legacy sync 收口：旧页面 DOM 写入隔离 | OPEN P3 (blocks: 8b5) | `.kiro/primers/vscode-extension-axn.md` |
+| vscode-extension-7q8 | 旧页面尾部依赖迁移：imglab-results/history/workflow/prompt-library | OPEN P3 (blocks: axn) | `.kiro/primers/vscode-extension-7q8.md` |
+| vscode-extension-cs9 | 删除 page-images 页面壳与隐藏入口 | OPEN P3 (blocks: 7q8) | `.kiro/primers/vscode-extension-cs9.md` |
+| vscode-extension-uru | imglab-* namespace 与图片渲染函数最终清理 | OPEN P3 (blocks: cs9) | `.kiro/primers/vscode-extension-uru.md` |
 | vscode-extension-8jn | postCompactCleanup: 压缩后状态清理 | OPEN P1 | `.kiro/primers/vscode-extension-8jn.md` |
 | vscode-extension-vrw | AgentTool: 通用子 Agent 派发工具 | OPEN P1 | `.kiro/primers/vscode-extension-vrw.md` |
 | vscode-extension-yck | PowerShellTool: Windows PowerShell 专用工具 | OPEN P2 | — |
 | vscode-extension-qhf | SleepTool: 自主循环等待工具 | OPEN P2 | — |
 | vscode-extension-zje | SessionMemory: 会话内笔记服务 | OPEN P2 | — |
 | vscode-extension-kqy | ConfigTool: 设置读写工具 | OPEN P2 | — |
-| vscode-extension-0wm | TeamCreate/TeamDelete/SendMessage: 命名团队管理工具 | DEFERRED | — |
-| vscode-extension-650 | Micro-compact：长会话工具结果轻量清理 | ✓ CLOSED | `.kiro/primers/vscode-extension-650.md` |
-| vscode-extension-tgx | CronCreate / CronDelete / CronList 工具 | ✓ CLOSED | `.kiro/primers/vscode-extension-tgx.md` |
-| vscode-extension-uyl | Plan Mode V2 多阶段规划提示词升级 | ✓ CLOSED | `.kiro/primers/vscode-extension-uyl.md` |
-| vscode-extension-9pz | codebase-memory-mcp integration | CLOSED | `.kiro/primers/vscode-extension-9pz.md` |
-| vscode-extension-u7w | 图像我的作品：缩略图持久化（对齐设计列表机制） | ✓ CLOSED | `.kiro/primers/vscode-extension-u7w.md` |
+| vscode-extension-26q | Kanban 视图：我的作品看板模式 | OPEN P3 | — |
+| vscode-extension-0z5 | 画布草图标注工具：iframe 上层 canvas overlay | OPEN P3 | — |
 | vscode-extension-f4v | extension.ts 宿主总控继续下沉 | DEFERRED | `.kiro/primers/vscode-extension-f4v.md` |
-| vscode-extension-3q7 | Midtai 画布：调节/导出/版本历史三项能力接入 | ✓ CLOSED | `.kiro/primers/vscode-extension-3q7.md` |
-| vscode-extension-wnz | Midtai 画布：滑块面板浮层化 + 版本历史按项目过滤 | ✓ CLOSED | `.kiro/primers/vscode-extension-wnz.md` |
-| vscode-extension-ahb | Hooks: Stop + SessionEnd + UserPromptSubmit | ✓ CLOSED | — |
-| vscode-extension-a41 | Hooks: PostToolUseFailure + PreCompact + PostCompact | ✓ CLOSED | — |
-| vscode-extension-7vl | Hooks: SubagentStart/Stop + TaskCreated/TaskCompleted | ✓ CLOSED | — |
-| vscode-extension-crs | Hooks: WorktreeCreate + WorktreeRemove | ✓ CLOSED | `.kiro/primers/vscode-extension-crs.md` |
-| vscode-extension-lca | Hooks: 用户配置接入触发链 | ✓ CLOSED | — |
-| vscode-extension-vwq | Hooks: 官方事件名兼容 + Notification/SessionStart | ✓ CLOSED | — |
-| vscode-extension-pnz | Fast mode: state persistence | ✓ CLOSED | — |
-| vscode-extension-e0i | Midtai 图像整合：左侧表单 + 生成预览 + 提示词库 | ✓ CLOSED | — |
-| vscode-extension-0pq | ~~Design Home UI（阶段 1）~~ | ✓ CLOSED | — |
-| vscode-extension-0pq-2 | Tweaks 右侧抽屉 | ✓ CLOSED | — |
-| vscode-extension-w0i | design_versions 缺列迁移补丁 | ✓ CLOSED | — |
-| vscode-extension-0pq-3 | 左侧面板阶段 A/B | ✓ CLOSED | — |
-| vscode-extension-0pq-4 | Patch Popover 贴近元素 | ✓ CLOSED | — |
-| vscode-extension-ged | Canvas Toolbar（View/Select/Tweaks）| ✓ CLOSED | — |
-| vscode-extension-yi9 | lastOpenedDesignProjectId 跨 session | ✓ CLOSED | — |
-| vscode-extension-j31 | LLM 意图路由器超时 800ms → 5000ms | ✓ CLOSED | — |
-| vscode-extension-bdi | Design 导出全部失效（HTML/PDF/PPTX） | ✓ CLOSED | — |
-| vscode-extension-nce | 首屏设计入口默认显示 Design Home | ✓ CLOSED | — |
-| vscode-extension-a4o | Design 项目删除 + 重命名 | ✓ CLOSED | — |
-| vscode-extension-pmh | Design Home UI 升级（缩略图+网格） | ✓ CLOSED | — |
-| vscode-extension-175 | Design 生成流式输出（onToken + shimmer）| ✓ CLOSED | — |
-| vscode-extension-e38 | My Works 真实数据接入 | ✓ CLOSED | — |
-| vscode-extension-o6a | My Works UI 对齐设计稿（design-wcard 样式）| ✓ CLOSED | — |
-| vscode-extension-fo7 | Midtai 画布选择模式 + Replace 流 | ✓ CLOSED | — |
-| vscode-extension-aw5 | Design Prompt 质量升级（Anti-Slop + Direction Spec）| ✓ CLOSED | — |
-| vscode-extension-mjj | 中台设计表单：输出类型 + 视觉方向选择器 | ✓ CLOSED | — |
+| vscode-extension-0wm | TeamCreate/TeamDelete/SendMessage: 命名团队管理工具 | DEFERRED | — |
 
-**→ Design UX 全部已完成。下一批由 Claude PM 按需拆解。**
+<details>
+<summary>已关闭任务（展开查看完整历史）</summary>
+
+| Beads ID | Title |
+|----------|-------|
+| vscode-extension-jzu | midtai-p4: Unified Workbench UI 整体改造 |
+| vscode-extension-1t6 | midtai-p3c: 主 chat 侧栏 design session 下沉 |
+| vscode-extension-1vp | midtai-p3b: conversationHistory 迁移到 project 层 |
+| vscode-extension-p1y | midtai-p3a: design chat 与 project 真绑定 |
+| vscode-extension-vlv | midtai-p2c: 临时工作态升级完整流程 |
+| vscode-extension-3f1 | midtai-p2b: 分流弹框 |
+| vscode-extension-kfr | midtai-p2a: 作品库统一页完善 |
+| vscode-extension-0uv | midtai-p1d: 顶部作品库入口与壳层页 |
+| vscode-extension-qj9 | midtai-p1c: 新建作品进入临时工作态 |
+| vscode-extension-h82 | midtai-p1b: 设计 tab 左侧最近作品列表 |
+| vscode-extension-73d | midtai-p1a: 图像 tab 右侧三段式重排 |
+| vscode-extension-3q7 | Midtai 画布：调节/导出/版本历史三项能力接入 |
+| vscode-extension-wnz | Midtai 画布：滑块面板浮层化 + 版本历史按项目过滤 |
+| vscode-extension-u7w | 图像我的作品：缩略图持久化 |
+| vscode-extension-9pz | codebase-memory-mcp integration |
+| vscode-extension-uyl | Plan Mode V2 多阶段规划提示词升级 |
+| vscode-extension-tgx | CronCreate / CronDelete / CronList 工具 |
+| vscode-extension-650 | Micro-compact：长会话工具结果轻量清理 |
+| vscode-extension-8ib | 导出 ZIP：HTML + 资源打包下载 |
+| vscode-extension-40p | 品牌设计系统库：左侧面板品牌参考 tab |
+| vscode-extension-wsy | 示例库 Showcase：设计页面预置 prompt 模板 |
+| vscode-extension-e3m | 引导问题表单：输入框展开态（静态版） |
+| vscode-extension-lb4 | Design Skill 扩展：输出类型从5个扩展到12个 |
+| vscode-extension-e0i | Midtai 图像整合：左侧表单 + 生成预览 + 提示词库 |
+| vscode-extension-mjj | 中台设计表单：输出类型 + 视觉方向选择器 |
+| vscode-extension-aw5 | Design Prompt 质量升级（Anti-Slop + Direction Spec）|
+| vscode-extension-fo7 | Midtai 画布选择模式 + Replace 流 |
+| vscode-extension-o6a | My Works UI 对齐设计稿（design-wcard 样式）|
+| vscode-extension-e38 | My Works 真实数据接入 |
+| vscode-extension-175 | Design 生成流式输出（onToken + shimmer）|
+| vscode-extension-pmh | Design Home UI 升级（缩略图+网格）|
+| vscode-extension-a4o | Design 项目删除 + 重命名 |
+| vscode-extension-nce | 首屏设计入口默认显示 Design Home |
+| vscode-extension-bdi | Design 导出全部失效（HTML/PDF/PPTX）|
+| vscode-extension-j31 | LLM 意图路由器超时 800ms → 5000ms |
+| vscode-extension-yi9 | lastOpenedDesignProjectId 跨 session |
+| vscode-extension-ged | Canvas Toolbar（View/Select/Tweaks）|
+| vscode-extension-0pq-4 | Patch Popover 贴近元素 |
+| vscode-extension-0pq-3 | 左侧面板阶段 A/B |
+| vscode-extension-w0i | design_versions 缺列迁移补丁 |
+| vscode-extension-0pq-2 | Tweaks 右侧抽屉 |
+| vscode-extension-0pq | Design Home UI（阶段 1）|
+| vscode-extension-vwq | Hooks: 官方事件名兼容 + Notification/SessionStart |
+| vscode-extension-lca | Hooks: 用户配置接入触发链 |
+| vscode-extension-crs | Hooks: WorktreeCreate + WorktreeRemove |
+| vscode-extension-7vl | Hooks: SubagentStart/Stop + TaskCreated/TaskCompleted |
+| vscode-extension-a41 | Hooks: PostToolUseFailure + PreCompact + PostCompact |
+| vscode-extension-ahb | Hooks: Stop + SessionEnd + UserPromptSubmit |
+| vscode-extension-pnz | Fast mode: state persistence |
+
+</details>
 
 ## Stable Capabilities (don't need re-verification)
 
@@ -134,6 +137,7 @@ Latest verification note: 2026-05-11 - p3a design:switch-project integrated (`np
 - Midtai Brand Systems (视觉方向 / 品牌参考双 tab、15 个品牌卡片、`brandContext` system prompt 注入)
 - Midtai ZIP Export (导出 ZIP，包含 `index.html` 与从 HTML 内抽出的本地 data URL 资源文件)
 - Midtai 图像整合 (左侧图像表单 + 比例/数量控件 + 生成预览 shimmer/结果卡片 + 静态提示词库 + 插入到对话)
+- Midtai Unified Workbench (p1-p4: 统一工作台 UI / design:switch-project / conversationHistory project 层 / design session 侧栏下沉)
 - Local Bridge / Word Add-in (read + write-back + Track Changes + comments)
 - Electron i18n (shellStrings covering all surfaces)
 
