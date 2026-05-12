@@ -36,9 +36,12 @@
 **Do:** 把 `runDesignChatTurn()` 从 `provider.runStep` 单步改为 `runAgent` 受限循环，工具白名单 `read_file` + `glob_files`，最终输出仍然要求 `<artifact>` 标签
 
 **Files:**
-- `electron/ElectronChatPanel.ts`（只改 `runDesignChatTurn` 函数体，lines ~2568–2684）
+- `electron/ElectronChatPanel.ts`
+  - 主改动：`runDesignChatTurn` 函数体（lines ~2568–2684）
+  - 允许在文件顶部或 class 级别增加 `DESIGN_CHAT_ALLOWED_TOOLS` 常量及相关 helper
+  - 参考现有模式：`getSupportedElectronTools()` 在 line 274，用同样的风格添加 design chat 专用过滤逻辑，不要把匿名白名单堆在方法体内
 
-**Test:** `npm run build && npm test`
+**Test:** `npm run build && npm run check`（详见 Verification）
 
 ---
 
@@ -68,22 +71,24 @@ private async runDesignChatTurn(options: { ... }): Promise<DesignChatRunResult> 
 }
 ```
 
-**工具白名单的写法：**
+**工具白名单——推荐写成 class 级常量（不要堆在方法内）：**
 
 ```typescript
-import { getBuiltInToolDefinitions } from "../src/toolRuntime";
-
+// 在 class 顶部或与 getSupportedElectronTools() 相邻处添加
 const DESIGN_CHAT_ALLOWED_TOOLS = new Set(["read_file", "glob_files"]);
 
-const designChatTools = getBuiltInToolDefinitions({ askUserQuestionAvailable: false })
-  .filter(t => DESIGN_CHAT_ALLOWED_TOOLS.has(t.name));
+function getDesignChatTools(): ToolDefinition[] {
+  return getBuiltInToolDefinitions({ askUserQuestionAvailable: false })
+    .filter(t => DESIGN_CHAT_ALLOWED_TOOLS.has(t.name));
+}
 ```
 
 **`toolContext` 怎么来：**
 
-参考 `createPromptRuntime`（line 5267）的实现。`runDesignChatTurn` 已经有 `workspaceRoot`（`this.getSelectedWorkspaceRoot()`），用它建一个最小 toolContext 即可：
+参考 `createPromptRuntime`（line 5267）的实现。`runDesignChatTurn` 已经有 `workspaceRoot`（`this.getSelectedWorkspaceRoot()`），用它建 toolContext：
 
 ```typescript
+const designChatTools = getDesignChatTools();
 const promptRuntime = this.createPromptRuntime(
   workspaceRoot,
   config,
@@ -95,6 +100,8 @@ const promptRuntime = this.createPromptRuntime(
 );
 const toolContext = promptRuntime.getToolContext("main");
 ```
+
+> **注意（定义层白名单 vs 沙箱隔离）：** `createPromptRuntime()` 会把 browser、mcp、tasks、worktree 等能力注入 toolContext，这些不受 `designChatTools` 数组控制。`runAgent` 只会把 `tools` 数组里的工具定义暴露给模型，所以模型只能 _调用_ `read_file` 和 `glob_files`，但 toolContext 本身仍有更大的上下文能力。这是**定义层白名单**，不是完整的沙箱隔离。现阶段这已经够用——模型看不到其他工具定义就不会调用它们。
 
 **`runAgent` 调用：**
 
@@ -134,14 +141,31 @@ if (step.toolCalls.length > 0) {
 
 ## Verification
 
+**命令验证（Codex 自行跑，不需要用户）：**
+
 ```bash
-npm run build
-npm test
-npm run check
-npm run build:electron
+npm run build          # 必须通过，0 TypeScript error
+npm run check          # 必须通过
+npm run build:electron # 必须通过
+npm test               # 见下方说明
 ```
 
-手测（需要用户配合）：
+> **npm test 说明：** 当前基线是 172 files / 1358 tests（2026-05-09），但 `npm test` 已被以下已知失败阻塞，与本任务无关：
+> - `electron/rendererMarkdown.test.ts`
+> - `electron/rendererThinkingSummary.test.ts`
+> - `src/design/versionStore.test.ts`
+> - `electron/ElectronChatPanel.test.ts`（`__trigger_discovery__` session lifecycle case）
+>
+> 要求：本次改动**不能引入新失败**。跑完 `npm test` 后，对比失败列表——若只有上述已知失败，则视为通过。若出现新增失败，必须修复后再提交。
+
+**白名单生效验证（运行时确认，Codex 负责）：**
+
+在路径 B Turn 2 生成时，通过日志或调试确认：
+- design chat lane 发给模型的 tool definitions 只包含 `read_file` 和 `glob_files`
+- 没有出现 `write_file`、`run_command`、`browser`、MCP 工具等
+- 可通过在 `runAgent` 调用前 `console.log(designChatTools.map(t => t.name))` 临时打印后删除验证
+
+**手测（需要用户配合）：**
 1. 打开 KainClaw，进入设计对话，选"先聊需求"
 2. 输入任意设计需求，确认 Turn 1 AI 仍然返回 `<question-form>`，没有报错
 3. 回答表单，确认 Turn 2 AI 生成 `<artifact>` HTML，画布正常打开
@@ -163,12 +187,15 @@ npm run build:electron
 
 ## High-Risk Files Touched
 
-- `electron/ElectronChatPanel.ts` → 只改 `runDesignChatTurn` 函数体（lines ~2568–2684）
-- **不要碰这个文件的其他任何区域**
+- `electron/ElectronChatPanel.ts`
+  - `runDesignChatTurn` 函数体（核心改动）
+  - 允许在 class/模块级别添加 `DESIGN_CHAT_ALLOWED_TOOLS` 常量和 `getDesignChatTools()` helper
+  - 除此之外不碰其他区域
 
 ## Reference (only load if stuck)
 
 - `src/agent/agentRunner.ts` line 319 — `runAgent` 签名和 loop 实现
+- `electron/ElectronChatPanel.ts` line 274 — `getSupportedElectronTools()`（工具过滤 helper 的现有模式）
 - `electron/ElectronChatPanel.ts` line 5267 — `createPromptRuntime` 实现（toolContext 怎么建）
 - `electron/ElectronChatPanel.ts` line 3686 — 主聊天 lane 的 `runAgent` 调用方式（参考写法）
 - `src/toolRuntime.ts` line 2906 — `read_file` 工具
@@ -179,10 +206,11 @@ npm run build:electron
 
 > **Codex 负责验证命令，用户只做手测。提交前必须自己跑完以下命令。**
 
-- [ ] `npm test` 通过（baseline: 168 files, 1299 tests）
+- [ ] `npm run build` 通过（0 TypeScript error）
 - [ ] `npm run check` 通过
-- [ ] `npm run build` 通过
 - [ ] `npm run build:electron` 通过
+- [ ] `npm test`：无新增失败（已知失败列表见 Verification 说明，不计入本任务责任范围）
+- [ ] 白名单验证：design lane tool definitions 只有 `read_file` + `glob_files`（日志确认）
 - [ ] 路径 B Turn 1 仍返回 question-form，Turn 2 仍输出 artifact（手测，告知用户）
 - [ ] 主聊天 lane 行为无变化（手测，告知用户）
 - [ ] Beads notes 已更新
