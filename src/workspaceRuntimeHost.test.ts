@@ -17,6 +17,8 @@ const {
     const instance = {
       updateEnvMap: vi.fn(),
       dispose: vi.fn(async () => undefined),
+      getToolDefinitions: vi.fn(async () => []),
+      getToolContext: vi.fn(() => ({ workspaceRoot: "E:\\repo", invokerKind: "worker" })),
     };
     instances.push(instance);
     return instance;
@@ -117,6 +119,9 @@ describe("workspaceRuntimeHost", () => {
       taskId: "review-1",
       report: "ok",
     }));
+    const spawnSubAgent = vi.fn(async () => ({
+      text: "subagent result",
+    }));
     const runCommandInBackground = vi.fn(async () => ({
       taskId: "cmd-1",
       command: "npm run build",
@@ -124,6 +129,8 @@ describe("workspaceRuntimeHost", () => {
     }));
     const findReusableBackgroundCommand = vi.fn(async () => null);
     const extractWebContent = vi.fn(async () => "summary");
+    const readConfig = vi.fn((key: string) => (key === "fastMode" ? true : undefined));
+    const writeConfig = vi.fn(async () => undefined);
 
     const host = new WorkspaceRuntimeHost({
       getWorkspaceRoot: workspaceFolderPath => `${workspaceFolderPath}\\.wt`,
@@ -138,9 +145,12 @@ describe("workspaceRuntimeHost", () => {
       stopSwarmWorker,
       runVerification,
       runReview,
+      spawnSubAgent,
       runCommandInBackground,
       findReusableBackgroundCommand,
       extractWebContent,
+      readConfig,
+      writeConfig,
     });
 
     return {
@@ -156,9 +166,12 @@ describe("workspaceRuntimeHost", () => {
       stopSwarmWorker,
       runVerification,
       runReview,
+      spawnSubAgent,
       runCommandInBackground,
       findReusableBackgroundCommand,
       extractWebContent,
+      readConfig,
+      writeConfig,
       tasksRuntime,
       worktreeRuntime,
     };
@@ -190,8 +203,10 @@ describe("workspaceRuntimeHost", () => {
       stopSwarmWorker,
       runVerification,
       runReview,
+      spawnSubAgent,
       runCommandInBackground,
       findReusableBackgroundCommand,
+      writeConfig,
       tasksRuntime,
       worktreeRuntime,
     } = createHost();
@@ -223,11 +238,24 @@ describe("workspaceRuntimeHost", () => {
     const runReviewCallback = constructorArgs?.[11] as
       | ((request: { extraGuidance?: string; diffRef?: string }) => Promise<Record<string, unknown>>)
       | undefined;
-    const runCommandInBackgroundCallback = constructorArgs?.[12] as
+    const spawnSubAgentCallback = constructorArgs?.[12] as
+      | ((request: {
+          agentType: string;
+          prompt: string;
+          description?: string;
+        }) => Promise<Record<string, unknown>>)
+      | undefined;
+    const runCommandInBackgroundCallback = constructorArgs?.[13] as
       | ((request: { command: string }) => Promise<Record<string, unknown>>)
       | undefined;
-    const findReusableBackgroundCommandCallback = constructorArgs?.[13] as
+    const findReusableBackgroundCommandCallback = constructorArgs?.[14] as
       | ((request: { command: string }) => Promise<Record<string, unknown> | null>)
+      | undefined;
+    const readConfigCallback = constructorArgs?.[21] as
+      | ((key: string) => unknown)
+      | undefined;
+    const writeConfigCallback = constructorArgs?.[22] as
+      | ((key: string, value: unknown) => Promise<void>)
       | undefined;
 
     expect(getWorkspaceRoot?.()).toBe("E:\\repo\\.wt");
@@ -244,8 +272,15 @@ describe("workspaceRuntimeHost", () => {
     await stopBackgroundTaskCallback?.("task-1");
     await runVerificationCallback?.({ extraGuidance: "verify", diffRef: "HEAD~2..HEAD" });
     await runReviewCallback?.({ extraGuidance: "review", diffRef: "main...HEAD" });
+    await spawnSubAgentCallback?.({
+      agentType: "general-purpose",
+      prompt: "inspect the workspace",
+      description: "Inspect workspace",
+    });
     await runCommandInBackgroundCallback?.({ command: "npm run build" });
     await findReusableBackgroundCommandCallback?.({ command: "npm run build" });
+    expect(readConfigCallback?.("fastMode")).toBe(true);
+    await writeConfigCallback?.("fastMode", false);
 
     expect(requestFileApproval).toHaveBeenCalledWith("E:\\repo", {
       filePath: "a.ts",
@@ -264,12 +299,18 @@ describe("workspaceRuntimeHost", () => {
       extraGuidance: "review",
       diffRef: "main...HEAD",
     });
+    expect(spawnSubAgent).toHaveBeenCalledWith("E:\\repo", {
+      agentType: "general-purpose",
+      prompt: "inspect the workspace",
+      description: "Inspect workspace",
+    });
     expect(runCommandInBackground).toHaveBeenCalledWith("E:\\repo", {
       command: "npm run build",
     });
     expect(findReusableBackgroundCommand).toHaveBeenCalledWith("E:\\repo", {
       command: "npm run build",
     });
+    expect(writeConfig).toHaveBeenCalledWith("fastMode", false);
   });
 
   it("disposes cached runtimes and clears the cache", async () => {
@@ -296,7 +337,8 @@ describe("workspaceRuntimeHost", () => {
     const getWorkspaceRuntime = vi.fn(async () => ({
       getToolDefinitions: async () => [],
       getMcpStatusSummary: async () => [],
-      getToolContext: () => ({}) as any,
+      getToolContext: () =>
+        ({ workspaceRoot: "E:\\repo\\.wt", invokerKind: "worker" as const }) as any,
     }));
     const stopTask = vi.fn(async () => null);
     const findActiveBuiltInAgentTask = vi.fn(async () => undefined);
@@ -307,10 +349,15 @@ describe("workspaceRuntimeHost", () => {
       workspaceRoot: "E:\\repo",
     }));
     const findReusableBackgroundCommand = vi.fn(async () => null);
+    const readConfig = vi.fn((key: string) => (key === "model" ? "claude-sonnet" : undefined));
+    const writeConfig = vi.fn(async () => undefined);
     const stopSwarmWorker = vi.fn(async taskId => ({
       taskId,
       taskType: "worker",
       command: "stop",
+    }));
+    const spawnSubAgent = vi.fn(async () => ({
+      text: "subagent result",
     }));
     let planModeState: {
       active: boolean;
@@ -358,6 +405,8 @@ describe("workspaceRuntimeHost", () => {
       createProviderAdapter,
       runCommandInBackground,
       findReusableBackgroundCommand,
+      readConfig,
+      writeConfig,
       getSessionInstalledSkillHooks: () => [],
       registerSessionInstalledSkillHooks: (
         hooks: import("./hooksRegistry").HookDefinition[],
@@ -412,11 +461,24 @@ describe("workspaceRuntimeHost", () => {
     const runReviewCallback = constructorArgs?.[11] as
       | ((request: { extraGuidance?: string; diffRef?: string }) => Promise<Record<string, unknown>>)
       | undefined;
-    const runCommandInBackgroundCallback = constructorArgs?.[12] as
+    const spawnSubAgentCallback = constructorArgs?.[12] as
+      | ((request: {
+          agentType: string;
+          prompt: string;
+          description?: string;
+        }) => Promise<Record<string, unknown>>)
+      | undefined;
+    const runCommandInBackgroundCallback = constructorArgs?.[13] as
       | ((request: { command: string }) => Promise<Record<string, unknown>>)
       | undefined;
-    const findReusableBackgroundCommandCallback = constructorArgs?.[13] as
+    const findReusableBackgroundCommandCallback = constructorArgs?.[14] as
       | ((request: { command: string }) => Promise<Record<string, unknown> | null>)
+      | undefined;
+    const readConfigCallback = constructorArgs?.[21] as
+      | ((key: string) => unknown)
+      | undefined;
+    const writeConfigCallback = constructorArgs?.[22] as
+      | ((key: string, value: unknown) => Promise<void>)
       | undefined;
 
     await planModeController?.enter();
@@ -433,6 +495,8 @@ describe("workspaceRuntimeHost", () => {
     });
     await runCommandInBackgroundCallback?.({ command: "npm run build" });
     await findReusableBackgroundCommandCallback?.({ command: "npm run build" });
+    expect(readConfigCallback?.("model")).toBe("claude-sonnet");
+    await writeConfigCallback?.("fastMode", true);
 
     expect(enterPlanModeWithHostMock).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -475,5 +539,126 @@ describe("workspaceRuntimeHost", () => {
     expect(findReusableBackgroundCommand).toHaveBeenCalledWith("E:\\repo", {
       command: "npm run build",
     });
+    expect(writeConfig).toHaveBeenCalledWith("fastMode", true);
+  });
+
+  it("filters Explore subagent tools down to read-only tools and excludes Agent", async () => {
+    const createProviderRuntimeOptions = vi.fn(() => ({
+      effortLevel: "high" as const,
+    }));
+    const getWorkspaceRuntime = vi.fn(async () => ({
+      getToolDefinitions: async () => [
+        { name: "list_files", annotations: { readOnlyHint: true } },
+        { name: "read_file", annotations: { readOnlyHint: true } },
+        { name: "search_files", annotations: { readOnlyHint: true } },
+        { name: "glob_files", annotations: { readOnlyHint: true } },
+        { name: "run_command", annotations: { readOnlyHint: true } },
+        { name: "Agent", annotations: { readOnlyHint: true } },
+        { name: "write_file", annotations: { destructiveHint: true } },
+      ] as any,
+      getMcpStatusSummary: async () => [],
+      getToolContext: vi.fn(() => ({
+        workspaceRoot: "E:\\repo\\.wt",
+        invokerKind: "worker" as const,
+      })),
+    }));
+    const createProviderAdapter = vi.fn(() => ({ runStep: vi.fn() } as any));
+
+    const factory = createWorkspaceRuntimeHostFactory({
+      requestFileApproval: vi.fn(async () => true),
+      requestToolApproval: vi.fn(async () => true),
+      onToolLifecycle: vi.fn(),
+      resolveProviderConfig: async workspaceFolderPath => ({
+        config: {
+          type: "anthropic",
+          apiKey: "secret",
+          model: "claude-sonnet",
+        },
+        envMap: { WORKSPACE: workspaceFolderPath },
+      }),
+      getEffortLevel: () => "high",
+      createProviderRuntimeOptions,
+      ensureConversationWorktreeHydrated: async () => undefined,
+      getEffectiveWorkspaceRoot: workspaceFolderPath =>
+        `${workspaceFolderPath}\\.wt`,
+      getWorkspaceRuntime,
+      backgroundTaskHost: {
+        stopTask: vi.fn(async () => null),
+        runBuiltInAgentSession: vi.fn(),
+      } as any,
+      findActiveBuiltInAgentTask: vi.fn(async () => undefined),
+      createProviderAdapter,
+      runCommandInBackground: vi.fn(async () => ({
+        taskId: "cmd-1",
+        command: "npm run build",
+        workspaceRoot: "E:\\repo",
+      })),
+      findReusableBackgroundCommand: vi.fn(async () => null),
+      getSessionInstalledSkillHooks: () => [],
+      registerSessionInstalledSkillHooks: hooks => hooks,
+    });
+
+    const host = factory({
+      getConversationKey: () => "conversation-1",
+      clearSwarm: vi.fn(),
+      getPlanModeState: () => ({ active: false }),
+      setPlanModeState: vi.fn(),
+      clearPendingPlanVerification: vi.fn(),
+      setPendingPlanVerification: vi.fn(),
+      postState: vi.fn(),
+      getPendingPlanVerification: () => undefined,
+      markPendingPlanVerificationStarted: vi.fn(),
+      markPendingPlanVerificationCompleted: vi.fn(),
+      resetPendingPlanVerificationToAwaitingStart: vi.fn(),
+      getConversationHistory: () => [],
+      getSessionInstalledSkillHooks: () => [],
+      registerSessionInstalledSkillHooks: hooks => hooks,
+      getSessionMessages: () => [],
+      getTasks: vi.fn(() => ({ kind: "tasks" } as any)),
+      getWorktree: vi.fn(() => ({ kind: "worktree" } as any)),
+      stopSwarmWorker: vi.fn(async taskId => ({
+        taskId,
+        taskType: "worker",
+        command: "stop",
+      })),
+    });
+
+    await host.getRuntime("E:\\repo", { TOKEN: "abc" });
+    const constructorArgs = workspaceRuntimeConstructor.mock.calls.at(-1) as unknown[];
+    const spawnSubAgentCallback = constructorArgs?.[12] as
+      | ((request: {
+          agentType: string;
+          prompt: string;
+          description?: string;
+        }) => Promise<Record<string, unknown>>)
+      | undefined;
+
+    const runAgentSpy = vi
+      .spyOn(await import("./agent/agentRunner.js"), "runAgent")
+      .mockResolvedValue({
+        text: "explore result",
+        messages: [],
+      });
+
+    try {
+      const result = await spawnSubAgentCallback?.({
+        agentType: "Explore",
+        prompt: "Find compact files",
+      });
+
+      expect(result).toEqual({ text: "explore result" });
+      expect(runAgentSpy).toHaveBeenCalledTimes(1);
+      const runAgentOptions = runAgentSpy.mock.calls[0]?.[1];
+      expect(runAgentOptions?.toolContext?.invokerKind).toBe("worker");
+      expect(runAgentOptions?.tools.map((tool: { name: string }) => tool.name)).toEqual([
+        "list_files",
+        "read_file",
+        "search_files",
+        "glob_files",
+        "run_command",
+      ]);
+    } finally {
+      runAgentSpy.mockRestore();
+    }
   });
 });

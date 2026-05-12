@@ -72,7 +72,7 @@ beforeEach(() => {
 });
 
 describe("workspaceRuntimeShell", () => {
-  it("exposes a tool context wired to plan mode, plan verification, and host callbacks", () => {
+  it("exposes a tool context wired to plan mode, plan verification, and host callbacks", async () => {
     const requestFileApproval = vi.fn(async () => true);
     const requestToolApproval = vi.fn(async () => true);
     const onToolLifecycle = vi.fn();
@@ -94,12 +94,17 @@ describe("workspaceRuntimeShell", () => {
       taskId: "review-1",
       report: "ok",
     }));
+    const spawnSubAgent = vi.fn(async () => ({
+      text: "subagent result",
+    }));
     const runCommandInBackground = vi.fn(async () => ({
       taskId: "cmd-1",
       command: "npm run build",
       workspaceRoot: "E:\\repo",
     }));
     const findReusableBackgroundCommand = vi.fn(async () => null);
+    const readConfig = vi.fn((key: string) => (key === "fastMode" ? true : undefined));
+    const writeConfig = vi.fn(async () => undefined);
 
     const runtime = new WorkspaceRuntime(
       () => "E:\\repo",
@@ -123,10 +128,17 @@ describe("workspaceRuntimeShell", () => {
       stopBackgroundTask,
       runVerification,
       runReview,
+      spawnSubAgent,
       runCommandInBackground,
       findReusableBackgroundCommand,
       undefined,
       undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      readConfig,
+      writeConfig,
     );
 
     const toolContext = runtime.getToolContext("main");
@@ -146,8 +158,12 @@ describe("workspaceRuntimeShell", () => {
     expect(toolContext.stopBackgroundTask).toBe(stopBackgroundTask);
     expect(toolContext.runVerification).toBe(runVerification);
     expect(toolContext.runReview).toBe(runReview);
+    expect(toolContext.spawnSubAgent).toBe(spawnSubAgent);
     expect(toolContext.runCommandInBackground).toBe(runCommandInBackground);
     expect(toolContext.findReusableBackgroundCommand).toBe(findReusableBackgroundCommand);
+    expect(toolContext.readConfig?.("fastMode")).toBe(true);
+    await toolContext.writeConfig?.("fastMode", false);
+    expect(writeConfig).toHaveBeenCalledWith("fastMode", false);
   });
 
   it("forwards env changes, MCP invalidation, tool lookups, and dispose to runtime dependencies", async () => {
@@ -169,6 +185,7 @@ describe("workspaceRuntimeShell", () => {
       vi.fn(async () => ({ taskId: "", taskType: "", command: "" })),
       vi.fn(async () => ({ taskId: "", verdict: "PASS" as const, report: "" })),
       vi.fn(async () => ({ taskId: "", report: "" })),
+      vi.fn(async () => ({ text: "" })),
       vi.fn(async () => ({ taskId: "", command: "", workspaceRoot: "" })),
       vi.fn(async () => null),
       undefined,
@@ -232,6 +249,7 @@ describe("workspaceRuntimeShell", () => {
       vi.fn(async () => ({ taskId: "", taskType: "", command: "" })),
       vi.fn(async () => ({ taskId: "", verdict: "PASS" as const, report: "" })),
       vi.fn(async () => ({ taskId: "", report: "" })),
+      vi.fn(async () => ({ text: "" })),
       vi.fn(async () => ({ taskId: "", command: "", workspaceRoot: "" })),
       vi.fn(async () => null),
       undefined,
@@ -271,6 +289,7 @@ describe("workspaceRuntimeShell", () => {
       vi.fn(async () => ({ taskId: "", taskType: "", command: "" })),
       vi.fn(async () => ({ taskId: "", verdict: "PASS" as const, report: "" })),
       vi.fn(async () => ({ taskId: "", report: "" })),
+      vi.fn(async () => ({ text: "" })),
       vi.fn(async () => ({ taskId: "", command: "", workspaceRoot: "" })),
       vi.fn(async () => null),
       undefined,

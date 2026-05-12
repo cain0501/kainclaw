@@ -70,6 +70,11 @@ export class WorkspaceRuntime {
       extraGuidance?: string;
       diffRef?: string;
     }) => Promise<{ taskId: string; report: string }>,
+    private readonly spawnSubAgent: (request: {
+      agentType: string;
+      prompt: string;
+      description?: string;
+    }) => Promise<{ text: string }>,
     private readonly runCommandInBackground: (request: {
       command: string;
     }) => Promise<{
@@ -89,6 +94,8 @@ export class WorkspaceRuntime {
     enableLsp = true,
     private readonly mcpOAuthHost?: McpOAuthHost,
     private readonly extractWebContent?: ToolContext["extractWebContent"],
+    private readonly readConfig?: ToolContext["readConfig"],
+    private readonly writeConfig?: ToolContext["writeConfig"],
   ) {
     this.browserRuntime = new BrowserRuntime(this.getWorkspaceRoot);
     this.mcpRuntime = new McpRuntime(
@@ -144,6 +151,8 @@ export class WorkspaceRuntime {
         return getWorkspaceRoot();
       },
       invokerKind,
+      readConfig: this.readConfig,
+      writeConfig: this.writeConfig,
       extractWebContent: this.extractWebContent,
       requestFileApproval: this.requestFileApproval,
       requestToolApproval: this.requestToolApproval,
@@ -171,6 +180,7 @@ export class WorkspaceRuntime {
       stopBackgroundTask: this.stopBackgroundTask,
       runVerification: this.runVerification,
       runReview: this.runReview,
+      spawnSubAgent: this.spawnSubAgent,
       runCommandInBackground: this.runCommandInBackground,
       findReusableBackgroundCommand: this.findReusableBackgroundCommand,
       planMode: {

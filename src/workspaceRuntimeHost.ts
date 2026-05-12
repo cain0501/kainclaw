@@ -99,6 +99,8 @@ export type WorkspaceRuntimeHostOptions = {
     workspaceFolderPath: string,
     request: WebContentExtractionRequest,
   ) => Promise<string>;
+  readConfig?: (key: string) => unknown;
+  writeConfig?: (key: string, value: unknown) => Promise<void>;
   spawnSubAgent: (
     workspaceFolderPath: string,
     request: {
@@ -204,6 +206,8 @@ export function createWorkspaceRuntimeHostFactory<
     workspaceFolderPath: string,
     request: { command: string },
   ) => Promise<BackgroundCommandResult | null>;
+  readConfig?: (key: string) => unknown;
+  writeConfig?: (key: string, value: unknown) => Promise<void>;
   getSessionInstalledSkillHooks?: () => HookDefinition[];
   registerSessionInstalledSkillHooks?: (
     hooks: HookDefinition[],
@@ -332,6 +336,8 @@ export function createWorkspaceRuntimeHostFactory<
           abortSignal: request.abortSignal,
         });
       },
+      readConfig: options.readConfig,
+      writeConfig: options.writeConfig,
       spawnSubAgent: async (workspaceFolderPath, request) => {
         const providerContext = await options.resolveProviderConfig(
           workspaceFolderPath,
@@ -479,6 +485,8 @@ export class WorkspaceRuntimeHost {
       this.options.mcpOAuthHost,
       request =>
         this.options.extractWebContent(workspaceFolderPath, request),
+      this.options.readConfig,
+      this.options.writeConfig,
     );
     this.runtimeByWorkspace.set(workspaceFolderPath, runtime);
     return runtime;

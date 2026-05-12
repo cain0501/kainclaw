@@ -99,6 +99,145 @@ describe("toolRuntime PowerShell helpers", () => {
   });
 });
 
+describe("toolRuntime built-in utility tools", () => {
+  it("Sleep waits for the requested duration without using shell execution", async () => {
+    const startedAt = Date.now();
+
+    const result = await executeTool(
+      "Sleep",
+      { duration: 25 },
+      { workspaceRoot: "E:\\claudecodejingiang\\vscode-extension" },
+    );
+
+    expect(Date.now() - startedAt).toBeGreaterThanOrEqual(20);
+    expect(result.summary).toBe("Slept for 25ms");
+    expect(result.content).toBe("Waited 25ms.");
+  });
+
+  it("PowerShell requires main-session execution and returns command output after approval", async () => {
+    const requestToolApproval = vi.fn(async () => true);
+
+    await expect(
+      executeTool(
+        "PowerShell",
+        { command: "Write-Output blocked" },
+        {
+          workspaceRoot: "E:\\claudecodejingiang\\vscode-extension",
+          invokerKind: "worker",
+          requestToolApproval,
+        },
+      ),
+    ).rejects.toThrow("PowerShell is only available to the main session.");
+
+    const result = await executeTool(
+      "PowerShell",
+      {
+        command: 'Write-Output "hello-powershell"',
+        description: "Return a test marker",
+        timeout: 5_000,
+      },
+      {
+        workspaceRoot: "E:\\claudecodejingiang\\vscode-extension",
+        requestToolApproval,
+      },
+    );
+
+    expect(requestToolApproval).toHaveBeenCalledWith(
+      expect.objectContaining({
+        toolName: "PowerShell",
+        summary: "Return a test marker",
+      }),
+    );
+    expect(result.summary).toContain("PowerShell:");
+    expect(result.content).toContain("hello-powershell");
+  });
+
+  it("SessionMemory supports write, read, list, and delete operations", async () => {
+    const context = {
+      workspaceRoot: "E:\\claudecodejingiang\\vscode-extension",
+    } satisfies ToolContext;
+
+    const writeResult = await executeTool(
+      "SessionMemory",
+      { operation: "write", key: "plan", value: "ship it" },
+      context,
+    );
+    const readResult = await executeTool(
+      "SessionMemory",
+      { operation: "read", key: "plan" },
+      context,
+    );
+    const listResult = await executeTool(
+      "SessionMemory",
+      { operation: "list" },
+      context,
+    );
+    const deleteResult = await executeTool(
+      "SessionMemory",
+      { operation: "delete", key: "plan" },
+      context,
+    );
+    const emptyListResult = await executeTool(
+      "SessionMemory",
+      { operation: "list" },
+      context,
+    );
+
+    expect(writeResult.summary).toBe('SessionMemory: wrote "plan"');
+    expect(readResult.content).toBe("ship it");
+    expect(listResult.content).toBe("plan");
+    expect(deleteResult.content).toBe('Deleted "plan".');
+    expect(emptyListResult.content).toBe("(no notes)");
+  });
+
+  it("Config reads settings, writes approved changes, and blocks writes to read-only keys", async () => {
+    const requestToolApproval = vi.fn(async () => true);
+    const writeConfig = vi.fn(async () => undefined);
+    const context = {
+      workspaceRoot: "E:\\claudecodejingiang\\vscode-extension",
+      requestToolApproval,
+      readConfig: (key: string) => {
+        switch (key) {
+          case "effortLevel":
+            return "auto";
+          case "fastMode":
+            return false;
+          case "model":
+            return "claude-sonnet";
+          default:
+            return undefined;
+        }
+      },
+      writeConfig,
+    } satisfies ToolContext;
+
+    const readResult = await executeTool(
+      "Config",
+      { setting: "effortLevel" },
+      context,
+    );
+    const writeResult = await executeTool(
+      "Config",
+      { setting: "fastMode", value: "true" },
+      context,
+    );
+
+    expect(readResult.content).toBe('effortLevel = "auto"');
+    expect(writeConfig).toHaveBeenCalledWith("fastMode", true);
+    expect(requestToolApproval).toHaveBeenCalledWith(
+      expect.objectContaining({
+        toolName: "Config",
+        summary: "Set fastMode to true",
+      }),
+    );
+    expect(writeResult.content).toBe("Set fastMode to true");
+
+    await expect(
+      executeTool("Config", { setting: "model", value: "other" }, context),
+    ).rejects.toThrow("model is read-only.");
+  });
+});
+
 describe("toolRuntime installed skill model execution", () => {
   it("SkillTool loads a model-invocable installed skill and expands its prompt", async () => {
     const kainclawHome = await fs.mkdtemp(path.join(os.tmpdir(), "cain-kainclaw-home-"));
@@ -2867,6 +3006,87 @@ describe("toolRuntime background task semantics", () => {
     await expect(
       executeTool("ExitWorktree", { action: "keep" }, context),
     ).rejects.toThrow("ExitWorktree is only available to the main session.");
+  });
+
+  it("Agent launches a subagent through the host callback and returns its output", async () => {
+    const spawnSubAgent = vi.fn(async () => ({
+      text: "exploration results",
+    }));
+    const context: ToolContext = {
+      workspaceRoot: "E:\\claudecodejingiang\\vscode-extension",
+      spawnSubAgent,
+    };
+
+    const result = await executeTool(
+      "Agent",
+      {
+        subagent_type: "Explore",
+        prompt: "Find compact host files",
+        description: "Locate compact files",
+      },
+      context,
+    );
+
+    expect(spawnSubAgent).toHaveBeenCalledWith({
+      agentType: "Explore",
+      prompt: "Find compact host files",
+      description: "Locate compact files",
+    });
+    expect(result).toEqual({
+      summary: "Agent (Explore) completed",
+      content: "exploration results",
+    });
+  });
+
+  it("Agent defaults to general-purpose when subagent_type is omitted", async () => {
+    const spawnSubAgent = vi.fn(async () => ({
+      text: "general result",
+    }));
+
+    await executeTool(
+      "Agent",
+      {
+        prompt: "Inspect the workspace",
+      },
+      {
+        workspaceRoot: "E:\\claudecodejingiang\\vscode-extension",
+        spawnSubAgent,
+      },
+    );
+
+    expect(spawnSubAgent).toHaveBeenCalledWith({
+      agentType: "general-purpose",
+      prompt: "Inspect the workspace",
+      description: undefined,
+    });
+  });
+
+  it("Agent rejects worker invocations and missing spawn support", async () => {
+    await expect(
+      executeTool(
+        "Agent",
+        {
+          prompt: "Inspect the workspace",
+        },
+        {
+          workspaceRoot: "E:\\claudecodejingiang\\vscode-extension",
+          invokerKind: "worker",
+          spawnSubAgent: vi.fn(async () => ({ text: "unused" })),
+        },
+      ),
+    ).rejects.toThrow("Agent is only available to the main session.");
+
+    await expect(
+      executeTool(
+        "Agent",
+        {
+          prompt: "Inspect the workspace",
+        },
+        {
+          workspaceRoot: "E:\\claudecodejingiang\\vscode-extension",
+        },
+      ),
+    ).rejects.toThrow("Agent spawning is unavailable in the current session.");
   });
 
   it("remote background tasks survive runtime reload and surface remote metadata", async () => {

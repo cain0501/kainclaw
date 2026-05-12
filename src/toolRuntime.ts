@@ -42,6 +42,41 @@ const DIRECTORY_SKIP_SET = new Set([
   ".turbo",
 ]);
 
+const MAX_SLEEP_DURATION_MS = 300_000;
+const DEFAULT_POWERSHELL_TIMEOUT_MS = 120_000;
+const MAX_POWERSHELL_TIMEOUT_MS = 600_000;
+
+const sessionMemoryStore = new Map<string, string>();
+
+const CONFIG_SUPPORTED_SETTINGS = {
+  effortLevel: {
+    type: "string" as const,
+    options: ["low", "medium", "high", "auto"],
+    description: "Thinking effort level",
+  },
+  fastMode: {
+    type: "boolean" as const,
+    description: "Enable Fast mode",
+  },
+  showThinkingSummaries: {
+    type: "boolean" as const,
+    description: "Show thinking summaries in chat",
+  },
+  verbose: {
+    type: "boolean" as const,
+    description: "Show verbose debug output",
+  },
+  uiLanguage: {
+    type: "string" as const,
+    description: "UI language (for example zh-CN or en-US)",
+  },
+  model: {
+    type: "string" as const,
+    readonly: true,
+    description: "Current active model (read-only)",
+  },
+} as const;
+
 const WALK_FILES_LIMIT = 10_000;
 const SEARCH_MATCH_LIMIT = 2_000;
 const SEARCH_MATCH_DISPLAY_LIMIT = 200;
@@ -183,6 +218,30 @@ export function buildUtf8PowerShellEncodedCommand(command: string): string {
   return Buffer.from(script, "utf16le").toString("base64");
 }
 
+let psExeCache: string | undefined;
+
+async function detectPowerShellExe(): Promise<string> {
+  if (psExeCache) {
+    return psExeCache;
+  }
+
+  try {
+    await execFileAsync("pwsh.exe", ["--version"], {
+      timeout: 3_000,
+      windowsHide: true,
+    });
+    psExeCache = "pwsh.exe";
+  } catch {
+    psExeCache = "powershell.exe";
+  }
+
+  return psExeCache;
+}
+
+export function clearSessionMemoryStore(): void {
+  sessionMemoryStore.clear();
+}
+
 export type ToolDefinition = {
   name: string;
   description: string;
@@ -319,6 +378,8 @@ export type ToolContext = {
   workspaceRoot: string;
   invokerKind?: "main" | "worker";
   abortSignal?: AbortSignal;
+  readConfig?: (key: string) => unknown;
+  writeConfig?: (key: string, value: unknown) => Promise<void>;
   extractWebContent?: (request: {
     url: string;
     prompt: string;
@@ -2971,6 +3032,237 @@ const handlers: Record<string, ToolHandler> = {
     };
   },
 
+  async Sleep(input, context) {
+    const rawDuration =
+      typeof input.duration === "number" && Number.isFinite(input.duration)
+        ? input.duration
+        : 0;
+    const duration = Math.max(
+      0,
+      Math.min(Math.trunc(rawDuration), MAX_SLEEP_DURATION_MS),
+    );
+
+    await new Promise<void>(resolve => {
+      const timer = setTimeout(resolve, duration);
+      if (context.abortSignal) {
+        context.abortSignal.addEventListener(
+          "abort",
+          () => {
+            clearTimeout(timer);
+            resolve();
+          },
+          { once: true },
+        );
+      }
+    });
+
+    return {
+      summary: `Slept for ${duration}ms`,
+      content: `Waited ${duration}ms.`,
+    };
+  },
+
+  async PowerShell(input, context) {
+    const command = typeof input.command === "string" ? input.command.trim() : "";
+    if (!command) {
+      throw new Error("command is required");
+    }
+    if (context.invokerKind === "worker") {
+      throw new Error("PowerShell is only available to the main session.");
+    }
+
+    assertPlanModeCommandAccess(context, command);
+    if (context.verificationMode?.active) {
+      assertVerificationModeCommandAccess(command);
+    }
+
+    const timeoutMs =
+      typeof input.timeout === "number" && Number.isFinite(input.timeout)
+        ? Math.max(1, Math.min(Math.trunc(input.timeout), MAX_POWERSHELL_TIMEOUT_MS))
+        : DEFAULT_POWERSHELL_TIMEOUT_MS;
+    const description =
+      typeof input.description === "string" && input.description.trim()
+        ? input.description.trim()
+        : `Run: ${command.slice(0, 80)}`;
+
+    await requestActionApproval(context, {
+      kind: "tool_action",
+      toolName: "PowerShell",
+      title: "Confirm PowerShell execution",
+      summary: description,
+      inputPreview: command,
+    });
+
+    const psExe = await detectPowerShellExe();
+    const { stdout, stderr } = await execFileAsync(
+      psExe,
+      [
+        "-NoLogo",
+        "-NoProfile",
+        "-NonInteractive",
+        "-EncodedCommand",
+        buildUtf8PowerShellEncodedCommand(command),
+      ],
+      {
+        cwd: context.workspaceRoot,
+        timeout: timeoutMs,
+        ...(context.abortSignal ? { signal: context.abortSignal } : {}),
+        windowsHide: true,
+        maxBuffer: 4 * 1024 * 1024,
+      },
+    );
+
+    const mergedOutput = stripAnsiEscapeCodes(
+      [stdout.trim(), stderr.trim()].filter(Boolean).join("\n"),
+    );
+
+    return {
+      summary: `PowerShell: ${command.slice(0, 80)}`,
+      content: toSafeText(mergedOutput || "[no output]"),
+    };
+  },
+
+  async SessionMemory(input) {
+    const operation =
+      typeof input.operation === "string" ? input.operation.trim() : "";
+    const key = typeof input.key === "string" ? input.key.trim() : "";
+    const value = typeof input.value === "string" ? input.value : undefined;
+
+    switch (operation) {
+      case "write": {
+        if (!key) {
+          throw new Error("key is required for write");
+        }
+        if (value === undefined) {
+          throw new Error("value is required for write");
+        }
+        sessionMemoryStore.set(key, value);
+        return {
+          summary: `SessionMemory: wrote "${key}"`,
+          content: `Wrote note "${key}".`,
+        };
+      }
+      case "read": {
+        if (!key) {
+          throw new Error("key is required for read");
+        }
+        const stored = sessionMemoryStore.get(key);
+        if (stored === undefined) {
+          return {
+            summary: `SessionMemory: "${key}" not found`,
+            content: `Note "${key}" not found.`,
+          };
+        }
+        return {
+          summary: `SessionMemory: read "${key}"`,
+          content: stored,
+        };
+      }
+      case "list": {
+        const keys = [...sessionMemoryStore.keys()];
+        if (keys.length === 0) {
+          return {
+            summary: "SessionMemory: empty",
+            content: "(no notes)",
+          };
+        }
+        return {
+          summary: `SessionMemory: ${keys.length} note(s)`,
+          content: keys.join("\n"),
+        };
+      }
+      case "delete": {
+        if (!key) {
+          throw new Error("key is required for delete");
+        }
+        const existed = sessionMemoryStore.delete(key);
+        return {
+          summary: `SessionMemory: deleted "${key}"`,
+          content: existed ? `Deleted "${key}".` : `Note "${key}" not found.`,
+        };
+      }
+      default:
+        throw new Error(
+          `Unknown operation: "${operation}". Use: write, read, list, delete`,
+        );
+    }
+  },
+
+  async Config(input, context) {
+    const setting = typeof input.setting === "string" ? input.setting.trim() : "";
+    if (!setting) {
+      throw new Error("setting is required");
+    }
+    if (!(setting in CONFIG_SUPPORTED_SETTINGS)) {
+      const available = Object.keys(CONFIG_SUPPORTED_SETTINGS).join(", ");
+      throw new Error(`Unknown setting: "${setting}". Available: ${available}`);
+    }
+
+    const config =
+      CONFIG_SUPPORTED_SETTINGS[setting as keyof typeof CONFIG_SUPPORTED_SETTINGS];
+
+    if (input.value === undefined) {
+      if (!context.readConfig) {
+        throw new Error("Config read is not available in the current session.");
+      }
+      const value = context.readConfig(setting);
+      return {
+        summary: `Config: ${setting} = ${JSON.stringify(value)}`,
+        content: `${setting} = ${JSON.stringify(value)}`,
+      };
+    }
+
+    if ("readonly" in config && config.readonly) {
+      throw new Error(`${setting} is read-only.`);
+    }
+    if (!context.writeConfig) {
+      throw new Error("Config write is not available in the current session.");
+    }
+
+    let finalValue: unknown = input.value;
+    if (config.type === "boolean") {
+      if (typeof input.value === "boolean") {
+        finalValue = input.value;
+      } else if (typeof input.value === "string") {
+        const normalized = input.value.trim().toLowerCase();
+        if (normalized !== "true" && normalized !== "false") {
+          throw new Error(`${setting} requires true or false.`);
+        }
+        finalValue = normalized === "true";
+      } else {
+        throw new Error(`${setting} requires true or false.`);
+      }
+    } else if ("options" in config && config.options) {
+      if (typeof finalValue !== "string") {
+        throw new Error(
+          `${setting} requires one of: ${config.options.join(", ")}`,
+        );
+      }
+      if (!config.options.includes(finalValue as never)) {
+        throw new Error(
+          `Invalid value "${String(input.value)}". Options: ${config.options.join(", ")}`,
+        );
+      }
+    } else if (typeof finalValue !== "string") {
+      throw new Error(`${setting} requires a string value.`);
+    }
+
+    await requestActionApproval(context, {
+      kind: "tool_action",
+      toolName: "Config",
+      title: "Confirm setting change",
+      summary: `Set ${setting} to ${JSON.stringify(finalValue)}`,
+      inputPreview: `${setting} = ${JSON.stringify(finalValue)}`,
+    });
+
+    await context.writeConfig(setting, finalValue);
+
+    return {
+      summary: `Config: set ${setting} = ${JSON.stringify(finalValue)}`,
+      content: `Set ${setting} to ${JSON.stringify(finalValue)}`,
+    };
+  },
+
   async AskUserQuestion(input, context) {
     if (!context.requestUserQuestion) {
       throw new Error("AskUserQuestion is not available in the current host runtime.");
@@ -5062,6 +5354,151 @@ export const toolDefinitions: ToolDefinition[] = [
     annotations: {
       readOnlyHint: true,
       title: "Run read-only command",
+    },
+  },
+  {
+    name: "PowerShell",
+    description: `Executes a given PowerShell command in the workspace. Working directory is the workspace root.
+
+IMPORTANT: Use dedicated tools for file operations (Glob, Grep, Read, Edit, Write). Use PowerShell for git, npm, docker, process management, and Windows-specific cmdlets.
+
+PowerShell Syntax Notes:
+- Variables use $ prefix: $myVar = "value"
+- Escape character is backtick (\`), not backslash
+- Common aliases: ls (Get-ChildItem), cd (Set-Location), cat (Get-Content)
+- Never use Read-Host, Get-Credential, or other interactive cmdlets (runs with -NonInteractive)
+- Destructive cmdlets (Remove-Item, etc.) may need -Confirm:$false or -Force
+
+Git commands:
+- Prefer new commits over amending
+- Never skip hooks (--no-verify) unless user explicitly requests it`,
+    input_schema: {
+      type: "object",
+      properties: {
+        command: {
+          type: "string",
+          description: "The PowerShell command to execute.",
+        },
+        timeout: {
+          type: "number",
+          description: "Optional timeout in milliseconds (max 600000). Default: 120000.",
+        },
+        description: {
+          type: "string",
+          description: "Short description of what this command does (shown to user for approval).",
+        },
+      },
+      required: ["command"],
+    },
+    annotations: {
+      title: "Run PowerShell",
+    },
+  },
+  {
+    name: "Sleep",
+    description: `Wait for a specified duration in milliseconds.
+
+Use this when:
+- Waiting for a background process or build to complete
+- Polling for state that's about to change
+- Following user instruction to pause
+
+Prefer this over PowerShell(Start-Sleep ...) - it does not hold a shell process.
+
+Maximum duration: 300000ms (5 minutes). Longer sleeps waste prompt cache TTL.`,
+    input_schema: {
+      type: "object",
+      properties: {
+        duration: {
+          type: "number",
+          description: "Duration to wait in milliseconds (max 300000).",
+        },
+      },
+      required: ["duration"],
+    },
+    annotations: {
+      readOnlyHint: true,
+      title: "Wait",
+    },
+  },
+  {
+    name: "SessionMemory",
+    description: `Read and write short notes within the current session. Notes are cleared after compaction.
+
+Use this to track intermediate results, context summaries, or reminders that span multiple tool calls within one session.
+Do NOT use for cross-session tasks - use the beads task tracker for that.
+
+## Operations
+- write: Store a note by key
+- read: Retrieve a note by key
+- list: List all note keys
+- delete: Remove a note by key
+
+## Examples
+- Write: { "operation": "write", "key": "plan-step", "value": "Implement the handler first, then tests" }
+- Read: { "operation": "read", "key": "plan-step" }
+- List: { "operation": "list" }
+- Delete: { "operation": "delete", "key": "plan-step" }`,
+    input_schema: {
+      type: "object",
+      properties: {
+        operation: {
+          type: "string",
+          enum: ["write", "read", "list", "delete"],
+          description: "Operation to perform.",
+        },
+        key: {
+          type: "string",
+          description: "Note key. Required for write, read, delete.",
+        },
+        value: {
+          type: "string",
+          description: "Note content. Required for write.",
+        },
+      },
+      required: ["operation"],
+    },
+    annotations: {
+      title: "Session note",
+    },
+  },
+  {
+    name: "Config",
+    description: `Get or set KainClaw configuration settings.
+
+## Usage
+- Get current value: Omit the "value" parameter
+- Set new value: Include the "value" parameter
+
+## Available settings
+
+- effortLevel: "low", "medium", "high", "auto" - Thinking effort level
+- fastMode: true/false - Enable Fast mode
+- showThinkingSummaries: true/false - Show thinking summaries in chat
+- verbose: true/false - Show verbose debug output
+- uiLanguage: string - UI language (e.g. "zh-CN", "en-US")
+- model: (read-only) Current active model
+
+## Examples
+- Get effort level: { "setting": "effortLevel" }
+- Set high effort: { "setting": "effortLevel", "value": "high" }
+- Enable fast mode: { "setting": "fastMode", "value": true }`,
+    input_schema: {
+      type: "object",
+      properties: {
+        setting: {
+          type: "string",
+          description: "The setting key",
+        },
+        value: {
+          type: "string",
+          description: "The new value. Omit to get current value. Booleans accepted as string 'true'/'false'.",
+        },
+      },
+      required: ["setting"],
+    },
+    annotations: {
+      title: "Config",
     },
   },
   {
