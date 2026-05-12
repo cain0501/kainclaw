@@ -17,6 +17,7 @@ export type ChatMessage = {
   content: string;
   kind?: "chat" | "error" | "thinking" | "tool_use" | "tool_result";
   timestamp?: number;
+  designProjectId?: string;
   excludeFromConversation?: boolean;
   toolName?: string;
   toolInputPreview?: string;
@@ -82,7 +83,7 @@ export type ArtifactPanelSessionState = {
 
 export type DesignFlowState = {
   flowId: string;
-  projectId: string;
+  projectId?: string;
   conversationId?: string;
   createdAt: number;
   conversationHistory?: Array<{
@@ -408,10 +409,40 @@ export class SessionRepository {
       return raw
         .split("\n")
         .filter(line => line.trim())
-        .map(line => JSON.parse(line) as ChatMessage);
+        .map(line => JSON.parse(line) as ChatMessage)
+        .map(message => ({
+          ...message,
+          ...(typeof message.designProjectId === "string" && message.designProjectId.trim()
+            ? { designProjectId: message.designProjectId.trim() }
+            : {}),
+        }));
     } catch {
       return [];
     }
+  }
+
+  async updateMessageAt(
+    sessionId: string,
+    index: number,
+    transform: (message: ChatMessage) => ChatMessage,
+  ): Promise<void> {
+    const messages = await this.loadMessages(sessionId);
+    if (index < 0 || index >= messages.length) {
+      return;
+    }
+
+    const nextMessages = [...messages];
+    const nextMessage = transform(nextMessages[index]!);
+    nextMessages[index] = {
+      ...nextMessage,
+      timestamp: nextMessage.timestamp ?? nextMessages[index]!.timestamp ?? Date.now(),
+    };
+
+    await this.ensureDir();
+    const lines = nextMessages
+      .map(message => JSON.stringify(message) + "\n")
+      .join("");
+    await fs.writeFile(this.getTranscriptPath(sessionId), lines, "utf8");
   }
 
   async loadRuntimeState(sessionId: string): Promise<SessionRuntimeState> {
@@ -509,13 +540,14 @@ export class SessionRepository {
           : {}),
         ...(parsed.designFlowState &&
         typeof parsed.designFlowState.flowId === "string" &&
-        typeof parsed.designFlowState.projectId === "string" &&
         typeof parsed.designFlowState.createdAt === "number"
           ? {
               designFlowState: {
                 flowId: parsed.designFlowState.flowId,
-                projectId: parsed.designFlowState.projectId,
                 createdAt: parsed.designFlowState.createdAt,
+                ...(typeof parsed.designFlowState.projectId === "string"
+                  ? { projectId: parsed.designFlowState.projectId }
+                  : {}),
                 ...(typeof parsed.designFlowState.conversationId === "string"
                   ? { conversationId: parsed.designFlowState.conversationId }
                   : {}),
@@ -579,13 +611,14 @@ export class SessionRepository {
         : {}),
       ...(state.designFlowState &&
       typeof state.designFlowState.flowId === "string" &&
-      typeof state.designFlowState.projectId === "string" &&
       typeof state.designFlowState.createdAt === "number"
         ? {
             designFlowState: {
               flowId: state.designFlowState.flowId,
-              projectId: state.designFlowState.projectId,
               createdAt: state.designFlowState.createdAt,
+              ...(typeof state.designFlowState.projectId === "string"
+                ? { projectId: state.designFlowState.projectId }
+                : {}),
               ...(typeof state.designFlowState.conversationId === "string"
                 ? { conversationId: state.designFlowState.conversationId }
                 : {}),

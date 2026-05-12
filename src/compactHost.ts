@@ -19,6 +19,7 @@ import {
   microCompactMessages,
   shouldMicroCompact,
 } from "./compact/microCompact";
+import { runPostCompactCleanup } from "./compact/postCompactCleanup";
 import { getPartialCompactPrompt } from "./compact/prompt";
 import { triggerHooks } from "./hooks/hooksTrigger";
 import type { HookDefinition } from "./hooksRegistry";
@@ -90,6 +91,7 @@ export async function performConversationCompaction(options: {
         transcriptPath,
       }),
     );
+    runPostCompactCleanup();
   }
 
   return result;

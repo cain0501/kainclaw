@@ -85,6 +85,35 @@ describe("DesignProjectStore", () => {
     });
   });
 
+  it("persists and reloads conversationHistory at the project level", async () => {
+    const storageRoot = await fs.mkdtemp(path.join(os.tmpdir(), "kc-design-projects-"));
+    tempDirs.push(storageRoot);
+    const store = new DesignProjectStore(storageRoot);
+
+    const created = await store.createProject({
+      name: "History Project",
+      source: "blank",
+      activeVersionId: "pending-version",
+    });
+
+    await store.saveConversationHistory(created.projectId, [
+      { role: "user", content: "用户需求" },
+      { role: "assistant", content: "助手回复" },
+    ]);
+
+    await expect(store.loadConversationHistory(created.projectId)).resolves.toEqual([
+      { role: "user", content: "用户需求" },
+      { role: "assistant", content: "助手回复" },
+    ]);
+
+    await expect(store.getProject(created.projectId)).resolves.toMatchObject({
+      conversationHistory: [
+        { role: "user", content: "用户需求" },
+        { role: "assistant", content: "助手回复" },
+      ],
+    });
+  });
+
   it("runs schema migrations and exposes non-deleted version counts", async () => {
     const storageRoot = await fs.mkdtemp(path.join(os.tmpdir(), "kc-design-projects-"));
     tempDirs.push(storageRoot);
@@ -123,8 +152,10 @@ describe("DesignProjectStore", () => {
     const projectColumns = database.prepare("PRAGMA table_info(design_projects)").all() as Array<{ name: string }>;
     database.close();
 
-    expect(migrationVersions.map(row => row.version)).toEqual([1, 2, 3]);
-    expect(projectColumns.map(column => column.name)).toContain("thumbnail");
+    expect(migrationVersions.map(row => row.version)).toEqual([1, 2, 3, 4]);
+    expect(projectColumns.map(column => column.name)).toEqual(
+      expect.arrayContaining(["thumbnail", "conversation_history"]),
+    );
   });
 
   it("cascades version deletion when a project is deleted", async () => {

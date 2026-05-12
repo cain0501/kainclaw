@@ -9,6 +9,8 @@ describe("builtInAgents registry", () => {
     expect(agents.map(agent => agent.agentType)).toEqual([
       VERIFICATION_AGENT_TYPE,
       REVIEW_AGENT_TYPE,
+      "Explore",
+      "general-purpose",
     ]);
   });
 

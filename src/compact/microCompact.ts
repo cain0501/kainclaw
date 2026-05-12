@@ -114,3 +114,8 @@ export function shouldMicroCompact(
     autoCompactThresholdTokens - MICRO_COMPACT_TRIGGER_BUFFER_TOKENS;
   return currentTokens >= microCompactThreshold;
 }
+
+export function resetMicrocompactState(): void {
+  // The current KainClaw micro-compact flow has no module-level mutable state.
+  // Keep this reset hook as the canonical post-compact cleanup entrypoint.
+}

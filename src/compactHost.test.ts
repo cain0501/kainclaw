@@ -1,5 +1,12 @@
 import { describe, expect, it, vi } from "vitest";
 
+vi.mock("./compact/postCompactCleanup", () => ({
+  runPostCompactCleanup: vi.fn(),
+}));
+
+import { runPostCompactCleanup } from "./compact/postCompactCleanup";
+import { getCompactUserSummaryMessage } from "./compact/prompt";
+
 import {
   buildCompactBoundarySessionState,
   createAutoCompactConversationRunner,
@@ -44,6 +51,7 @@ describe("compactHost", () => {
   });
 
   it("performs conversation compaction and replaces history when compaction happens", async () => {
+    vi.mocked(runPostCompactCleanup).mockClear();
     const replaceConversationHistory = vi.fn();
     const createProvider = vi.fn(() => ({
       runStep: vi.fn(async () => ({
@@ -95,6 +103,43 @@ describe("compactHost", () => {
         transcriptPath: "E:\\claudecodejingiang\\vscode-extension\\.transcript.jsonl",
       }),
     );
+    expect(runPostCompactCleanup).toHaveBeenCalledTimes(1);
+  });
+
+  it("skips post-compact cleanup when no compaction is needed", async () => {
+    vi.mocked(runPostCompactCleanup).mockClear();
+    const replaceConversationHistory = vi.fn();
+    const createProvider = vi.fn(() => ({
+      runStep: vi.fn(async () => ({
+        text: "should not be used",
+        toolCalls: [],
+        done: true,
+      })),
+    }));
+
+    const result = await performConversationCompaction({
+      workspaceRoot: "E:\\claudecodejingiang\\vscode-extension",
+      config: {
+        type: "anthropic",
+        apiKey: "secret",
+        model: "claude-sonnet",
+      },
+      envMap: {},
+      getConversationHistory: () => [
+        {
+          role: "user",
+          content: getCompactUserSummaryMessage("Summary:\nAlready compacted."),
+        },
+      ],
+      getTranscriptPath: () => undefined,
+      replaceConversationHistory,
+      createProvider,
+    });
+
+    expect(result.wasCompacted).toBe(false);
+    expect(createProvider).toHaveBeenCalledTimes(1);
+    expect(replaceConversationHistory).not.toHaveBeenCalled();
+    expect(runPostCompactCleanup).not.toHaveBeenCalled();
   });
 
   it("handles /compact command success and non-compaction paths", async () => {

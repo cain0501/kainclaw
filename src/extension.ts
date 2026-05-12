@@ -592,6 +592,44 @@ class ChatSidebarProvider implements vscode.WebviewViewProvider, vscode.Disposab
             workspaceFolderPath,
             request.command,
           ),
+        readConfig: key => {
+          switch (key) {
+            case "effortLevel":
+              return this.settings.getEffortLevel() ?? "auto";
+            case "fastMode":
+              return this.settings.getFastMode();
+            case "showThinkingSummaries":
+            case "verbose":
+              return this.settings.getShowThinkingSummaries();
+            case "uiLanguage":
+              return this.settings.getLanguage();
+            case "model":
+              return this.settings.getActiveProviderMeta()?.model ?? "unknown";
+            default:
+              return undefined;
+          }
+        },
+        writeConfig: async (key, value) => {
+          switch (key) {
+            case "effortLevel":
+              await this.settings.setEffortLevel(
+                value === "auto" ? undefined : (value as EffortLevel),
+              );
+              return;
+            case "fastMode":
+              await this.settings.setFastMode(Boolean(value));
+              return;
+            case "showThinkingSummaries":
+            case "verbose":
+              await this.settings.setShowThinkingSummaries(Boolean(value));
+              return;
+            case "uiLanguage":
+              await this.settings.setLanguage(String(value));
+              return;
+            default:
+              throw new Error(`Unsupported config setting: ${key}`);
+          }
+        },
         skillStore: this.skillStore,
         mcpOAuthHost: this.host,
       });

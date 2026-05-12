@@ -216,6 +216,34 @@ export function detectArtifact(
     return null;
   }
 
+  const wrappedArtifactMatch = trimmed.match(
+    /^<artifact\b([^>]*)>([\s\S]*?)<\/artifact>$/i,
+  );
+  if (wrappedArtifactMatch) {
+    const attrs = wrappedArtifactMatch[1] ?? "";
+    const body = (wrappedArtifactMatch[2] ?? "").trim();
+    const type = attrs.match(/\btype="([^"]+)"/i)?.[1]?.trim().toLowerCase();
+    const title = attrs.match(/\btitle="([^"]+)"/i)?.[1]?.trim();
+
+    if (type === "text/html" && looksLikeHtml(body)) {
+      return buildArtifact({
+        type: "html",
+        content: body,
+        title: title || extractHtmlTitle(body),
+        ...options,
+      });
+    }
+
+    if (type === "image/svg+xml" && looksLikeSvg(body)) {
+      return buildArtifact({
+        type: "svg",
+        content: body,
+        title: title || extractSvgTitle(body),
+        ...options,
+      });
+    }
+  }
+
   const unwrapped = unwrapSingleOuterFence(trimmed);
   if (unwrapped?.language === "markdown") {
     return null;

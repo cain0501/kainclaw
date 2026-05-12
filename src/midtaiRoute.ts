@@ -13,5 +13,7 @@ export type MidtaiOpenPayload = {
   view?: MidtaiView;
   projectId?: string;
   artifactId?: string;
+  designChat?: boolean;
+  sessionType?: "design" | "default";
   replaceCtx?: MidtaiReplaceContext | null;
 };

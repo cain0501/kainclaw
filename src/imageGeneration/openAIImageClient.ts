@@ -30,7 +30,20 @@ type ImageGenerationApiResponse = {
     url?: string;
     revised_prompt?: string;
     mime_type?: string;
+    error?: {
+      message?: string;
+      code?: string;
+    };
+    message?: string;
+    refusal?: string;
+    finish_reason?: string;
   }>;
+  error?: {
+    message?: string;
+    code?: string;
+  };
+  message?: string;
+  refusal?: string;
 };
 
 type JsonObject = Record<string, unknown>;
@@ -153,7 +166,7 @@ function buildImageErrorMessage(status: number, bodyText: string): string {
     };
     const message = parsed.error?.message || parsed.message;
     if (message) {
-      return message;
+      return normalizeImageRefusalMessage(message);
     }
   } catch {
     // Fall back to the raw response body when the provider returns plain text.
@@ -173,6 +186,45 @@ function buildImageErrorMessage(status: number, bodyText: string): string {
   }
 
   return normalizedBody;
+}
+
+function normalizeImageRefusalMessage(rawMessage: string): string {
+  const normalized = rawMessage.trim();
+  if (!normalized) {
+    return normalized;
+  }
+
+  const lower = normalized.toLowerCase();
+  if (
+    lower.includes("content_filter") ||
+    lower.includes("content policy") ||
+    lower.includes("safety system") ||
+    lower.includes("safety policy") ||
+    lower.includes("violat") ||
+    lower.includes("moderation") ||
+    lower.includes("not expected") ||
+    lower.includes("cannot generate") ||
+    lower.includes("cannot comply") ||
+    lower.includes("request was rejected") ||
+    lower.includes("request is not allowed") ||
+    normalized.includes("没有按照预期生成图片") ||
+    normalized.includes("重新调整提示词后重试") ||
+    normalized.includes("违反平台政策") ||
+    normalized.includes("立即停止或调整") ||
+    normalized.includes("停止或调整你的提交内容") ||
+    normalized.includes("内容安全") ||
+    normalized.includes("安全策略") ||
+    normalized.includes("违规") ||
+    normalized.includes("敏感内容") ||
+    normalized.includes("不适合生成")
+  ) {
+    return "图片生成被安全策略拦截。当前提示词或参考图可能涉及敏感、违规或不适合生成的内容，请调整描述后再试。";
+  }
+
+  return normalized
+    .replace(/\s*\(traceid:[^)]+\)/ig, "")
+    .replace(/\s*\(request id:[^)]+\)/ig, "")
+    .trim();
 }
 
 function buildAuthorizationHeader(config: ImageGenerationProviderConfig): string {
@@ -314,6 +366,41 @@ function toGeneratedImages(payload: ImageGenerationApiResponse): GeneratedImageB
   }).filter(Boolean) as GeneratedImageResult[] | undefined;
 
   if (!images || images.length === 0) {
+    const refusalMessage =
+      payload.error?.message ||
+      payload.message ||
+      payload.refusal ||
+      payload.data?.find(item =>
+        !!(
+          item?.error?.message ||
+          item?.message ||
+          item?.refusal ||
+          item?.finish_reason === "content_filter"
+        ),
+      )?.error?.message ||
+      payload.data?.find(item =>
+        !!(
+          item?.error?.message ||
+          item?.message ||
+          item?.refusal ||
+          item?.finish_reason === "content_filter"
+        ),
+      )?.message ||
+      payload.data?.find(item =>
+        !!(
+          item?.error?.message ||
+          item?.message ||
+          item?.refusal ||
+          item?.finish_reason === "content_filter"
+        ),
+      )?.refusal;
+    if (refusalMessage) {
+      throw new Error(normalizeImageRefusalMessage(refusalMessage));
+    }
+    const contentFiltered = payload.data?.some(item => item?.finish_reason === "content_filter");
+    if (contentFiltered) {
+      throw new Error("图片生成被安全策略拦截。请调整描述，避免涉及违规、敏感或不安全内容后再试。");
+    }
     throw new Error("Image provider returned no image data.");
   }
 
