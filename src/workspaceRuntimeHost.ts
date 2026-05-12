@@ -28,6 +28,9 @@ import type { ConversationWorktreeRuntime } from "./worktree/types";
 import type { VerificationVerdict } from "./verification/prompt";
 import type { ProviderResolution, WorkspaceRuntimeLike } from "./workspaceHost";
 import type { McpOAuthHost } from "./mcpOAuth";
+import { getBuiltInAgent } from "./agent/builtInAgents";
+import { runAgent } from "./agent/agentRunner";
+import { createAgentProviderRuntimeContext } from "./promptTurnHost";
 import {
   WorkspaceRuntime,
   type WorkspacePlanModeController,
@@ -35,6 +38,7 @@ import {
 } from "./workspaceRuntimeShell";
 import { runProviderExtractionStep } from "./providerHost";
 import type { HookDefinition } from "./hooksRegistry";
+import { getReadOnlyAgentToolContext, getReadOnlyAgentTools } from "./agent/built-in/agentUtils";
 
 type StoppedBackgroundTask = {
   taskId: string;
@@ -95,6 +99,14 @@ export type WorkspaceRuntimeHostOptions = {
     workspaceFolderPath: string,
     request: WebContentExtractionRequest,
   ) => Promise<string>;
+  spawnSubAgent: (
+    workspaceFolderPath: string,
+    request: {
+      agentType: string;
+      prompt: string;
+      description?: string;
+    },
+  ) => Promise<{ text: string }>;
   skillStore?: SkillStore;
   getSessionInstalledSkillHooks?: () => HookDefinition[];
   registerSessionInstalledSkillHooks?: (
@@ -320,6 +332,88 @@ export function createWorkspaceRuntimeHostFactory<
           abortSignal: request.abortSignal,
         });
       },
+      spawnSubAgent: async (workspaceFolderPath, request) => {
+        const providerContext = await options.resolveProviderConfig(
+          workspaceFolderPath,
+        );
+        await options.ensureConversationWorktreeHydrated(workspaceFolderPath);
+        const workspaceRoot = options.getEffectiveWorkspaceRoot(
+          workspaceFolderPath,
+        );
+        const runtime = await options.getWorkspaceRuntime(
+          workspaceFolderPath,
+          providerContext.envMap,
+        );
+        const tools = await runtime.getToolDefinitions();
+        const builtInAgent = getBuiltInAgent(request.agentType);
+        if (!builtInAgent) {
+          throw new Error(
+            `Unknown agent type: ${request.agentType}. Available: general-purpose, Explore, verification`,
+          );
+        }
+
+        const runtimeOptions = options.createProviderRuntimeOptions(
+          providerContext.config,
+        );
+        const buildWorkspaceSystemPrompt = async () =>
+          builtInAgent.getSystemPrompt();
+
+        const provider = options.createProviderAdapter({
+          config: providerContext.config,
+          workspaceRoot,
+          systemPrompt: builtInAgent.getSystemPrompt(),
+          envMap: providerContext.envMap,
+          runtimeOptions,
+        });
+
+        const agentTools =
+          builtInAgent.agentType === "Explore"
+            ? getReadOnlyAgentTools(
+                tools.filter(tool =>
+                  [
+                    "list_files",
+                    "read_file",
+                    "search_files",
+                    "glob_files",
+                    "run_command",
+                  ].includes(tool.name),
+                ),
+                ["Agent"],
+              )
+            : builtInAgent.agentType === "verification"
+              ? getReadOnlyAgentTools(
+                  tools.filter(tool => tool.name !== "Agent"),
+                  builtInAgent.disallowedTools,
+                )
+              : tools.filter(tool => tool.name !== "Agent");
+
+        const toolContext =
+          builtInAgent.agentType === "Explore" ||
+          builtInAgent.agentType === "verification"
+            ? getReadOnlyAgentToolContext(runtime.getToolContext("worker"))
+            : runtime.getToolContext("worker");
+
+        const result = await runAgent(
+          [{ role: "user", content: request.prompt }],
+          {
+            provider,
+            tools: agentTools,
+            toolContext,
+            providerRuntimeContext: createAgentProviderRuntimeContext({
+              workspaceRoot,
+              config: providerContext.config,
+              envMap: providerContext.envMap,
+              runtimeOptions,
+              effortLevel: undefined,
+              buildWorkspaceSystemPrompt,
+              buildProviderAdapter: options.createProviderAdapter,
+            }),
+            maxTurns: 30,
+          },
+        );
+
+        return { text: result.text };
+      },
       skillStore: options.skillStore,
       getSessionInstalledSkillHooks:
         state.getSessionInstalledSkillHooks,
@@ -370,6 +464,7 @@ export class WorkspaceRuntimeHost {
       request =>
         this.options.runVerification(workspaceFolderPath, request),
       request => this.options.runReview(workspaceFolderPath, request),
+      request => this.options.spawnSubAgent(workspaceFolderPath, request),
       request =>
         this.options.runCommandInBackground(workspaceFolderPath, request),
       request =>

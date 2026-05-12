@@ -326,6 +326,16 @@ type DesignChatRunResult =
       history: DesignChatHistoryMessage[];
     };
 
+type DesignChatRendererMessage = {
+  messageId: string;
+  role: "user" | "assistant";
+  content: string;
+  timestamp: number;
+  kind?: ChatMessage["kind"] | "text" | "artifact" | "question-form";
+  artifactId?: string;
+  designProjectId?: string;
+};
+
 /**
  * Electron equivalent of ChatSidebarProvider.
  *
@@ -371,6 +381,7 @@ export class ElectronChatPanel {
   private readonly artifactRegistries = new Map<string, InMemoryArtifactRegistry>();
   private currentDesignProjectId: string | undefined;
   private currentDesignFlowState: DesignFlowState | undefined;
+  private pendingDiversionPrompt: string | undefined;
   private pendingQuestion: PendingQuestionState | undefined;
   private sessionMessageWriteQueue: Promise<void> = Promise.resolve();
   private backgroundTaskNotificationTimer: NodeJS.Timeout | undefined;
@@ -805,7 +816,23 @@ export class ElectronChatPanel {
     if (type === "sessions:close") { this.sendToRenderer({ type: "hideSessions" }); return; }
     if (type === "sessions:new") { await this.createNewSession(); return; }
     if (type === "sessions:new-design") { await this.createNewDesignSession(); return; }
-    if (type === "sessions:switch") { await this.switchSession(String(message.id ?? "")); return; }
+    if (type === "design:new-transient-work") {
+      await this.handleNewTransientWork();
+      return;
+    }
+    if (type === "sessions:switch") {
+      await this.switchSession(String(message.id ?? ""));
+      if (await this.isCurrentSessionDesignType()) {
+        await this.openMidtai({
+          contentType: "design",
+          view: "preview",
+          designChat: true,
+          sessionType: "design",
+        });
+        await this.handleDesignChatLoadHistory();
+      }
+      return;
+    }
     if (type === "sessions:rename") { await this.renameSession(String(message.id ?? ""), String(message.title ?? "")); return; }
     if (type === "sessions:delete") { await this.deleteSession(String(message.id ?? "")); return; }
     if (type === "sessions:export") { await this.exportSession(String(message.id ?? "")); return; }
@@ -951,6 +978,22 @@ export class ElectronChatPanel {
       );
       return;
     }
+    if (type === "design:chat:send") {
+      await this.handleDesignChatSend(message);
+      return;
+    }
+    if (type === "design:diversion-choice") {
+      await this.handleDiversionChoice(message);
+      return;
+    }
+    if (type === "design:chat:load-history") {
+      await this.handleDesignChatLoadHistory();
+      return;
+    }
+    if (type === "design:session:reset") {
+      await this.handleDesignSessionReset();
+      return;
+    }
     if (type === "chat:imageRun") {
       await this.runChatImageJob(message);
       return;
@@ -1042,6 +1085,10 @@ export class ElectronChatPanel {
     }
     if (type === "design:openProject") {
       await this.openDesignProjectMessage(message);
+      return;
+    }
+    if (type === "design:switch-project") {
+      await this.handleSwitchDesignProject(String(message.projectId ?? ""));
       return;
     }
     if (type === "design:deleteProject") {
@@ -1194,13 +1241,19 @@ export class ElectronChatPanel {
 
   private async loadSessions(): Promise<void> {
     const index = await this.sessions.readIndex();
-    const sessions = await Promise.all(index.sessions.map(async session => {
-      const runtimeState = await this.loadSessionRuntimeState(session.id);
-      return {
-        ...session,
-        sessionType: runtimeState.sessionType === "design" ? "design" : "default",
-      };
-    }));
+    const sessions = (
+      await Promise.all(index.sessions.map(async session => {
+        const runtimeState = await this.loadSessionRuntimeState(session.id);
+        const sessionType = runtimeState.sessionType === "design" ? "design" : "default";
+        if (sessionType === "design") {
+          return null;
+        }
+        return {
+          ...session,
+          sessionType,
+        };
+      }))
+    ).filter((session): session is typeof index.sessions[number] & { sessionType: "default" } => !!session);
     this.sendToRenderer({
       type: "sessions:data",
       sessions,
@@ -1252,7 +1305,7 @@ export class ElectronChatPanel {
     await this.switchSession(session.id);
   }
 
-  private async createNewDesignSession(): Promise<void> {
+  private async createNewDesignSessionSilent(): Promise<void> {
     const workspaceRoot = this.getSelectedWorkspaceRoot();
     const session = await this.sessions.createSession(
       randomUUID(),
@@ -1264,7 +1317,17 @@ export class ElectronChatPanel {
       sessionType: "design",
     });
     await this.switchSession(session.id);
-    this.sendToRenderer({ type: "sessions:switch-to-chat" });
+  }
+
+  private async createNewDesignSession(): Promise<void> {
+    await this.createNewDesignSessionSilent();
+    await this.openMidtai({
+      contentType: "design",
+      view: "preview",
+      designChat: true,
+      sessionType: "design",
+    });
+    await this.handleDesignChatLoadHistory();
   }
 
   private isViewingSession(sessionId: string): boolean {
@@ -1353,6 +1416,68 @@ export class ElectronChatPanel {
       .catch(() => undefined)
       .then(runWrite);
     await this.sessionMessageWriteQueue;
+  }
+
+  private async appendUserMessageToSession(
+    sessionId: string,
+    content: string,
+  ): Promise<ChatMessage> {
+    const message: ChatMessage = {
+      role: "user",
+      content,
+      timestamp: Date.now(),
+    };
+    await this.appendAssistantMessageToSession(sessionId, message);
+    return message;
+  }
+
+  private buildSessionMessageId(
+    sessionId: string,
+    message: ChatMessage,
+    index: number,
+  ): string {
+    return `${sessionId}:${message.timestamp ?? 0}:${index}:${message.role}`;
+  }
+
+  private normalizeDesignChatMessageKind(message: ChatMessage): DesignChatRendererMessage["kind"] {
+    if (message.kind === "error") {
+      return "error";
+    }
+    if (/<question-form\b/i.test(message.content || "")) {
+      return "question-form";
+    }
+    if (message.role === "assistant") {
+      try {
+        this.extractArtifactHtmlFromDesignChatOutput(String(message.content || ""));
+        return "artifact";
+      } catch {
+        // fall through
+      }
+    }
+    return "text";
+  }
+
+  private toDesignChatRendererMessage(
+    sessionId: string,
+    message: ChatMessage,
+    index: number,
+  ): DesignChatRendererMessage {
+    const kind = this.normalizeDesignChatMessageKind(message);
+    const artifact =
+      kind === "artifact"
+        ? this.detectArtifactFromSessionMessage(sessionId, message, index)
+        : null;
+    return {
+      messageId: this.buildSessionMessageId(sessionId, message, index),
+      role: message.role,
+      content: message.content,
+      timestamp: message.timestamp ?? Date.now(),
+      kind,
+      ...(artifact?.id ? { artifactId: artifact.id } : {}),
+      ...(typeof message.designProjectId === "string" && message.designProjectId.trim()
+        ? { designProjectId: message.designProjectId.trim() }
+        : {}),
+    };
   }
 
   private async deleteSession(id: string): Promise<void> {
@@ -2353,22 +2478,16 @@ export class ElectronChatPanel {
 
   private async createDesignFlowState(
     sessionId: string,
-    prompt: string,
+    _prompt: string,
   ): Promise<DesignFlowState> {
-    const project = await this.designProjectStore.createProject({
-      name: (prompt.trim() || "KainClaw Design").slice(0, 80),
-      source: "blank",
-      activeVersionId: "pending-version",
-    });
     const flow: DesignFlowState = {
       flowId: this.buildDesignFlowId(sessionId),
-      projectId: project.projectId,
       conversationId: sessionId,
       createdAt: Date.now(),
       conversationHistory: [],
     };
     this.currentDesignFlowState = flow;
-    await this.setCurrentDesignProject(project);
+    await this.setCurrentDesignProject(null);
     await this.saveCurrentSessionRuntimeState(sessionId);
     return flow;
   }
@@ -2380,20 +2499,33 @@ export class ElectronChatPanel {
   ): Promise<DesignLaneRequestContext> {
     const activeFlow = this.currentDesignFlowState;
     if (activeFlow && (!requestedFlowId || requestedFlowId === activeFlow.flowId)) {
-      const project = await this.designProjectStore.getProject(activeFlow.projectId);
-      if (project) {
-        await this.setCurrentDesignProject(project);
-        return {
-          flow: {
-            ...activeFlow,
-            conversationHistory: Array.isArray(activeFlow.conversationHistory)
-              ? activeFlow.conversationHistory
-              : [],
-          },
-          prompt,
-          requestedFlowId,
-        };
+      if (activeFlow.projectId) {
+        const project = await this.designProjectStore.getProject(activeFlow.projectId);
+        if (project) {
+          await this.setCurrentDesignProject(project);
+          return {
+            flow: {
+              ...activeFlow,
+              conversationHistory: Array.isArray(activeFlow.conversationHistory)
+                ? activeFlow.conversationHistory
+                : [],
+            },
+            prompt,
+            requestedFlowId,
+          };
+        }
       }
+      await this.setCurrentDesignProject(null);
+      return {
+        flow: {
+          ...activeFlow,
+          conversationHistory: Array.isArray(activeFlow.conversationHistory)
+            ? activeFlow.conversationHistory
+            : [],
+        },
+        prompt,
+        requestedFlowId,
+      };
     }
 
     const nextFlow = await this.createDesignFlowState(sessionId, prompt);
@@ -2440,6 +2572,7 @@ export class ElectronChatPanel {
     brandContext?: string;
     flow: DesignFlowState;
     signal: AbortSignal;
+    target?: "default" | "design-chat";
   }): Promise<DesignChatRunResult> {
     const workspaceRoot = this.getSelectedWorkspaceRoot();
     const { config, envMap } = await resolveProviderConfig(
@@ -2456,6 +2589,8 @@ export class ElectronChatPanel {
           : {}),
       }),
     );
+    const target = options.target === "design-chat" ? "design-chat" : "default";
+    const streamingId = `${options.sessionId}:design-stream:${Date.now()}`;
 
     const isFormAnswerTurn = /^\[form answers\s*-\s*discovery\]/i.test(options.prompt);
     const userPrompt = isFormAnswerTurn
@@ -2499,6 +2634,13 @@ export class ElectronChatPanel {
       token => {
         streamedText += token;
         this.appendStreamingToken(options.sessionId, token);
+        if (target === "design-chat") {
+          this.sendToRenderer({
+            type: "design:chat:token",
+            token,
+            streamingId,
+          });
+        }
       },
       options.signal,
     );
@@ -2557,6 +2699,14 @@ export class ElectronChatPanel {
       prompt,
       typeof message.designFlowId === "string" ? message.designFlowId.trim() : undefined,
     );
+    this.currentDesignFlowState = {
+      ...context.flow,
+      conversationHistory: Array.isArray(context.flow.conversationHistory)
+        ? context.flow.conversationHistory
+        : [],
+    };
+    await this.saveCurrentSessionRuntimeState(this.currentSessionId);
+    const target = message.target === "design-chat" ? "design-chat" : "default";
     const outputType = normalizeDesignOutputType(message.outputType);
     const brandContext =
       typeof message.brandContext === "string" ? message.brandContext.trim() : "";
@@ -2573,15 +2723,6 @@ export class ElectronChatPanel {
       kind: "chat",
     });
 
-    const userMessage: ChatMessage = {
-      role: "user",
-      content: prompt,
-      timestamp: Date.now(),
-    };
-    this.sessionMessages = [...this.sessionMessages, userMessage];
-    await this.sessions.appendMessages(requestSessionId, [userMessage]);
-    await this.postState();
-
     try {
       const result = await this.runDesignChatTurn({
         sessionId: requestSessionId,
@@ -2590,52 +2731,98 @@ export class ElectronChatPanel {
         ...(brandContext ? { brandContext } : {}),
         flow: context.flow,
         signal: abortController.signal,
+        target,
       });
 
       this.currentDesignFlowState = {
         ...context.flow,
         conversationHistory: result.history,
       };
+      if (this.currentDesignProjectId) {
+        await this.designProjectStore.saveConversationHistory(
+          this.currentDesignProjectId,
+          result.history,
+        );
+      }
 
       if (result.kind === "question-form") {
-        await this.appendAssistantMessageToSession(requestSessionId, {
+        const assistantMessage: ChatMessage = {
           role: "assistant",
           content: result.content,
           timestamp: Date.now(),
-        });
+        };
+        await this.appendAssistantMessageToSession(requestSessionId, assistantMessage);
+        if (target === "design-chat") {
+          this.sendToRenderer({
+            type: "design:chat:append",
+            msg: this.toDesignChatRendererMessage(
+              requestSessionId,
+              assistantMessage,
+              this.sessionMessages.length - 1,
+            ),
+          });
+        }
         await this.saveCurrentSessionRuntimeState(requestSessionId);
         return;
       }
 
-      await this.appendAssistantMessageToSession(requestSessionId, {
+      const assistantMessage: ChatMessage = {
         role: "assistant",
         content: result.rawOutput,
         timestamp: Date.now(),
-      });
+      };
+      await this.appendAssistantMessageToSession(requestSessionId, assistantMessage);
       const assistantMessageIndex = this.sessionMessages.length - 1;
-      const assistantMessage = this.sessionMessages[assistantMessageIndex];
-      if (assistantMessage) {
+      const storedAssistantMessage = this.sessionMessages[assistantMessageIndex];
+      if (storedAssistantMessage) {
         const detectedArtifact = this.detectArtifactFromSessionMessage(
           requestSessionId,
-          assistantMessage,
+          storedAssistantMessage,
           assistantMessageIndex,
         );
         if (detectedArtifact) {
           this.getArtifactRegistry(requestSessionId).push(detectedArtifact);
           await this.setArtifactPanelCollapsedState(requestSessionId, false);
         }
+        if (target === "design-chat") {
+          this.sendToRenderer({
+            type: "design:chat:append",
+            msg: this.toDesignChatRendererMessage(
+              requestSessionId,
+              storedAssistantMessage,
+              assistantMessageIndex,
+            ),
+          });
+        }
       }
       await this.saveCurrentSessionRuntimeState(requestSessionId);
+      if (target === "design-chat") {
+        await this.openMidtai({
+          contentType: "design",
+          view: "preview",
+        });
+      }
     } catch (error) {
       if (abortController.signal.aborted) {
         return;
       }
-      await this.appendAssistantMessageToSession(requestSessionId, {
+      const errorMessage: ChatMessage = {
         role: "assistant",
         content: `设计任务失败：${error instanceof Error ? error.message : String(error)}`,
         kind: "error",
         timestamp: Date.now(),
-      });
+      };
+      await this.appendAssistantMessageToSession(requestSessionId, errorMessage);
+      if (target === "design-chat") {
+        this.sendToRenderer({
+          type: "design:chat:append",
+          msg: this.toDesignChatRendererMessage(
+            requestSessionId,
+            errorMessage,
+            this.sessionMessages.length - 1,
+          ),
+        });
+      }
       this.sendToRenderer({
         type: "design:error",
         message: error instanceof Error ? error.message : String(error),
@@ -2645,6 +2832,327 @@ export class ElectronChatPanel {
       this.clearStreamingForSession(requestSessionId);
       await this.postState();
     }
+  }
+
+  private async handleDesignChatSend(message: Record<string, unknown>): Promise<void> {
+    const prompt = String(message.prompt ?? "").trim();
+    if (!prompt) {
+      return;
+    }
+
+    const currentRuntimeState = this.currentSessionId
+      ? await this.loadSessionRuntimeState(this.currentSessionId)
+      : null;
+    if (currentRuntimeState?.sessionType !== "design") {
+      await this.createNewDesignSessionSilent();
+    }
+    if (!this.currentSessionId) {
+      return;
+    }
+
+    const effectivePrompt = prompt;
+    const isFormAnswer = /^\[form answers\s*-\s*discovery\]/i.test(prompt);
+    if (!isFormAnswer && this.currentDesignProjectId) {
+      const project = await this.designProjectStore.getProject(this.currentDesignProjectId);
+      const hasVersion = !!(project?.activeVersionId && project.activeVersionId !== "pending-version");
+      if (hasVersion) {
+        const userMessage = await this.appendUserMessageToSession(this.currentSessionId, effectivePrompt);
+        this.sendToRenderer({
+          type: "design:chat:append",
+          msg: this.toDesignChatRendererMessage(
+            this.currentSessionId,
+            userMessage,
+            this.sessionMessages.length - 1,
+          ),
+        });
+        this.pendingDiversionPrompt = effectivePrompt;
+        this.sendToRenderer({
+          type: "design:show-diversion",
+          projectName: project?.name ?? "当前作品",
+          pendingPrompt: effectivePrompt,
+        });
+        return;
+      }
+    }
+
+    const userMessage = await this.appendUserMessageToSession(this.currentSessionId, prompt);
+    this.sendToRenderer({
+      type: "design:chat:append",
+      msg: this.toDesignChatRendererMessage(
+        this.currentSessionId,
+        userMessage,
+        this.sessionMessages.length - 1,
+      ),
+    });
+
+    await this.handleDesignChatLane({
+      ...message,
+      prompt: effectivePrompt,
+      target: "design-chat",
+    });
+  }
+
+  private async handleDesignSessionReset(): Promise<void> {
+    if (this.currentSessionId && this.settings.getActiveSessionId() === this.currentSessionId) {
+      await this.settings.setActiveSessionId("");
+    }
+    this.currentSessionId = undefined;
+    this.sessionMessages = [];
+    this.modelConversationMessages = [];
+    this.compactBoundary = undefined;
+    this.currentSessionWorkspaceRoot = "";
+    this.currentDesignFlowState = undefined;
+    this.currentDesignProjectId = undefined;
+    this.pendingDiversionPrompt = undefined;
+    this.pendingQuestion = undefined;
+    this.streamingText = "";
+    await this.postState();
+  }
+
+  private async handleDiversionChoice(message: Record<string, unknown>): Promise<void> {
+    const choice = String(message.choice ?? "").trim();
+    const prompt = this.pendingDiversionPrompt ?? "";
+    const originalName = this.currentDesignProjectId
+      ? (await this.designProjectStore.getProject(this.currentDesignProjectId))?.name ?? "原作品"
+      : "原作品";
+    this.pendingDiversionPrompt = undefined;
+    if (!prompt || !this.currentSessionId) {
+      return;
+    }
+
+    if (choice === "continue") {
+      await this.handleDesignChatLane({ prompt, target: "design-chat" });
+      return;
+    }
+
+    if (choice === "new-work") {
+      await this.handleNewTransientWork();
+      await this.handleDesignChatLane({ prompt, target: "design-chat" });
+      return;
+    }
+
+    if (choice === "fork") {
+      await this.handleNewTransientWork();
+      if (this.currentSessionId) {
+        await this.appendAssistantMessageToSession(this.currentSessionId, {
+          role: "assistant",
+          content: `正在基于《${originalName}》另起一版。`,
+          timestamp: Date.now(),
+        });
+        this.sendToRenderer({
+          type: "design:chat:append",
+          msg: this.toDesignChatRendererMessage(
+            this.currentSessionId,
+            this.sessionMessages[this.sessionMessages.length - 1]!,
+            this.sessionMessages.length - 1,
+          ),
+        });
+      }
+      await this.handleDesignChatLane({ prompt, target: "design-chat" });
+      return;
+    }
+
+    if (choice === "cancel") {
+      this.sendToRenderer({
+        type: "design:restore-prompt",
+        prompt,
+      });
+    }
+  }
+
+  private async handleDesignChatLoadHistory(): Promise<void> {
+    await this.postDesignChatHistoryForSession(this.currentSessionId);
+    await this.postDesignFlowContext(
+      this.currentDesignProjectId,
+      await this.getCurrentDesignProject(),
+    );
+  }
+
+  private async handleNewTransientWork(): Promise<void> {
+    await this.createNewDesignSessionSilent();
+    this.currentDesignFlowState = undefined;
+    if (this.currentSessionId) {
+      await this.saveCurrentSessionRuntimeState(this.currentSessionId);
+    }
+    this.sendToRenderer({
+      type: "design:transient-work-ready",
+      sessionId: this.currentSessionId ?? "",
+    });
+    this.sendToRenderer({ type: "design:chat:history", messages: [] });
+    await this.openMidtai({
+      contentType: "design",
+      view: "preview",
+      designChat: true,
+      sessionType: "design",
+    });
+  }
+
+  private async postDesignChatHistoryForSession(
+    sessionId?: string,
+  ): Promise<void> {
+    if (!sessionId) {
+      this.sendToRenderer({ type: "design:chat:history", messages: [] });
+      return;
+    }
+    const state = await this.sessions.loadRuntimeState(sessionId);
+    if (state.sessionType !== "design") {
+      this.sendToRenderer({ type: "design:chat:history", messages: [] });
+      return;
+    }
+    const messages = await this.sessions.loadMessages(sessionId);
+    this.sendToRenderer({
+      type: "design:chat:history",
+      messages: messages.map((entry, index) =>
+        this.toDesignChatRendererMessage(sessionId, entry, index),
+      ),
+    });
+  }
+
+  private async postDesignFlowContext(
+    projectId: string | undefined,
+    project?: DesignProjectRecord | null,
+  ): Promise<void> {
+    const normalizedProjectId = typeof projectId === "string" ? projectId.trim() : "";
+    const resolvedProject = project ?? (
+      normalizedProjectId
+        ? await this.designProjectStore.getProject(normalizedProjectId)
+        : null
+    );
+    const hasVersion = !!(
+      resolvedProject?.activeVersionId &&
+      resolvedProject.activeVersionId !== "pending-version"
+    );
+    this.sendToRenderer({
+      type: "design:flow-context",
+      projectId: normalizedProjectId,
+      projectName: resolvedProject?.name ?? "",
+      hasVersion,
+    });
+  }
+
+  private async findSessionByProjectId(
+    projectId: string,
+  ): Promise<string | undefined> {
+    const normalizedProjectId = projectId.trim();
+    if (!normalizedProjectId) {
+      return undefined;
+    }
+    const index = await this.sessions.readIndex();
+    for (const session of index.sessions) {
+      const state = await this.sessions.loadRuntimeState(session.id);
+      if (
+        state.sessionType === "design" &&
+        state.designFlowState?.projectId === normalizedProjectId
+      ) {
+        return session.id;
+      }
+    }
+    return undefined;
+  }
+
+  private async ensureDesignSessionForProject(
+    projectId: string,
+  ): Promise<string | undefined> {
+    const normalizedProjectId = projectId.trim();
+    if (!normalizedProjectId) {
+      return undefined;
+    }
+
+    const existingSessionId = await this.findSessionByProjectId(normalizedProjectId);
+    if (existingSessionId) {
+      return existingSessionId;
+    }
+
+    const project = await this.designProjectStore.getProject(normalizedProjectId);
+    if (!project) {
+      return undefined;
+    }
+
+    const workspaceRoot = this.getSelectedWorkspaceRoot();
+    const session = await this.sessions.createSession(
+      randomUUID(),
+      getWorkspaceHash(workspaceRoot),
+      project.name?.trim() || (
+        this.settings.getLanguage() === "en-US" ? "Design chat" : "设计对话"
+      ),
+    );
+    const nextFlowState: DesignFlowState = {
+      flowId: this.buildDesignFlowId(session.id),
+      projectId: normalizedProjectId,
+      conversationId: session.id,
+      createdAt: Date.now(),
+      conversationHistory: [],
+    };
+    await this.sessions.saveRuntimeState(session.id, {
+      workspaceRoot,
+      sessionType: "design",
+      designFlowState: nextFlowState,
+    });
+    return session.id;
+  }
+
+  private async handleSwitchDesignProject(
+    projectId: string,
+  ): Promise<void> {
+    const normalizedProjectId = projectId.trim();
+    if (!normalizedProjectId) {
+      return;
+    }
+
+    const project = await this.openDesignProject(normalizedProjectId);
+    if (!project) {
+      this.sendToRenderer({ type: "design:chat:history", messages: [] });
+      await this.postDesignFlowContext(normalizedProjectId, null);
+      return;
+    }
+
+    const targetSessionId = await this.ensureDesignSessionForProject(project.projectId);
+    if (targetSessionId && targetSessionId !== this.currentSessionId) {
+      await this.switchSession(targetSessionId);
+    }
+
+    if (this.currentSessionId) {
+      const state = await this.sessions.loadRuntimeState(this.currentSessionId);
+      const projectHistory = await this.designProjectStore.loadConversationHistory(project.projectId);
+      let conversationHistory = projectHistory;
+      if (conversationHistory.length === 0) {
+        const legacyHistory = Array.isArray(state?.designFlowState?.conversationHistory)
+          ? state.designFlowState.conversationHistory
+          : [];
+        if (legacyHistory.length > 0) {
+          await this.designProjectStore.saveConversationHistory(project.projectId, legacyHistory);
+          conversationHistory = legacyHistory;
+        }
+      }
+      this.currentDesignFlowState = state?.designFlowState
+        ? {
+            ...state.designFlowState,
+            projectId: project.projectId,
+            conversationHistory,
+          }
+        : {
+            flowId: this.buildDesignFlowId(this.currentSessionId),
+            projectId: project.projectId,
+            conversationId: this.currentSessionId,
+            createdAt: Date.now(),
+            conversationHistory,
+          };
+      await this.saveCurrentSessionRuntimeState(this.currentSessionId);
+    } else {
+      this.currentDesignFlowState = undefined;
+    }
+
+    const activeVersion = project.activeVersionId && project.activeVersionId !== "pending-version"
+      ? await this.designVersionStore.getVersion(project.activeVersionId)
+      : null;
+
+    this.sendToRenderer({
+      type: "design:projectOpened",
+      project,
+      activeVersion,
+    });
+    await this.postDesignChatHistoryForSession(this.currentSessionId);
+    await this.postDesignFlowContext(project.projectId, project);
   }
 
   private async routePrompt(
@@ -3499,6 +4007,13 @@ export class ElectronChatPanel {
       options.messageIndex,
       project.projectId,
     );
+    this.sendToRenderer({
+      type: "design:project-created",
+      projectId: project.projectId,
+      name: project.name,
+      versionCount: 1,
+      updatedAt: version.createdAt,
+    });
     return { projectId: project.projectId, versionId: version.id };
   }
 
@@ -3706,6 +4221,7 @@ export class ElectronChatPanel {
     if (!project) {
       return;
     }
+    await this.handleSwitchDesignProject(project.projectId);
     const activeVersion = project.activeVersionId && project.activeVersionId !== "pending-version"
       ? await this.designVersionStore.getVersion(project.activeVersionId)
       : null;
@@ -3877,6 +4393,10 @@ export class ElectronChatPanel {
         : {}),
       ...(typeof payload?.artifactId === "string" && payload.artifactId.trim()
         ? { artifactId: payload.artifactId.trim() }
+        : {}),
+      ...(payload?.designChat ? { designChat: true } : {}),
+      ...(payload?.sessionType === "design" || payload?.sessionType === "default"
+        ? { sessionType: payload.sessionType }
         : {}),
       ...(payload?.replaceCtx
         ? {

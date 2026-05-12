@@ -335,6 +335,11 @@ export type ToolContext = {
     extraGuidance?: string;
     diffRef?: string;
   }) => Promise<{ taskId: string; report: string }>;
+  spawnSubAgent?: (request: {
+    agentType: string;
+    prompt: string;
+    description?: string;
+  }) => Promise<{ text: string }>;
   runCommandInBackground?: (request: {
     command: string;
   }) => Promise<{ taskId: string; command: string; workspaceRoot: string; outputPath?: string; alreadyRunning?: boolean }>;
@@ -4227,6 +4232,47 @@ const handlers: Record<string, ToolHandler> = {
     };
   },
 
+  async Agent(input, context) {
+    if (context.invokerKind === "worker") {
+      throw new Error("Agent is only available to the main session.");
+    }
+
+    if (context.verificationMode?.active) {
+      throw new Error(
+        "Agent is unavailable while a read-only inspector agent is already running.",
+      );
+    }
+
+    if (typeof context.spawnSubAgent !== "function") {
+      throw new Error("Agent spawning is unavailable in the current session.");
+    }
+
+    const agentType =
+      typeof input.subagent_type === "string" && input.subagent_type.trim() !== ""
+        ? input.subagent_type.trim()
+        : "general-purpose";
+    const prompt = typeof input.prompt === "string" ? input.prompt.trim() : "";
+    if (!prompt) {
+      throw new Error("prompt is required");
+    }
+
+    const description =
+      typeof input.description === "string" && input.description.trim() !== ""
+        ? input.description.trim()
+        : undefined;
+
+    const result = await context.spawnSubAgent({
+      agentType,
+      prompt,
+      description,
+    });
+
+    return {
+      summary: `Agent (${agentType}) completed`,
+      content: result.text,
+    };
+  },
+
   async RunCommandInBackground(input, context) {
     if (context.invokerKind === "worker") {
       throw new Error("RunCommandInBackground is only available to the main session.");
@@ -5336,6 +5382,35 @@ export const toolDefinitions: ToolDefinition[] = [
     annotations: {
       readOnlyHint: true,
       title: "Run built-in review agent",
+    },
+  },
+  {
+    name: "Agent",
+    description:
+      "Launch a new built-in agent to handle complex, multi-step tasks. Available subagent_type values: 'general-purpose' (default), 'Explore' (fast read-only code search), 'verification' (build/test verification).",
+    input_schema: {
+      type: "object",
+      properties: {
+        subagent_type: {
+          type: "string",
+          description:
+            "The type of specialized agent to use. Defaults to 'general-purpose'.",
+        },
+        prompt: {
+          type: "string",
+          description: "The task for the agent to perform.",
+        },
+        description: {
+          type: "string",
+          description:
+            "Optional short description of what the agent will do.",
+        },
+      },
+      required: ["prompt"],
+    },
+    annotations: {
+      readOnlyHint: false,
+      title: "Launch built-in agent",
     },
   },
   {
