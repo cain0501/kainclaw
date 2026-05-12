@@ -136,3 +136,14 @@ function submitMidtaiImageEdit() {
 - 不删 `page-images` DOM（那是 Issue D）
 - 不改 `imglab-prompt` 节点的读取（`openPromptLibraryEditor` 那条是 Issue C）
 - 不改 `applyImageLabState()` 的 13 个 DOM 写入（那是 Issue B = axn）
+
+---
+
+## Already Completed
+
+- `buildImageLabPayload(overrides = {})` 已支持 `sizePreset` / `batchCount` / `responseFormat` / `referenceImages` 显式覆盖，未传时再 fallback 到现有 DOM / config。
+- `runImageLab(overrides = {})` 已支持从 overrides 读取 `prompt`，并将 `recordPromptHistory` 做成可覆盖项。
+- `runMidtaiImage()` / `submitMidtaiImageEdit()` 已改为直接调用 `runImageLab({ prompt, sizePreset, batchCount })`，不再写 `imglab-prompt` / `imglab-size-preset` / `imglab-batchcount`。
+- `rerunImageLab()` 已改为从 `imageLabState.lastRequest` 取值并重调 `runImageLab()`，不再写 `imglab-prompt` DOM。
+- `rerunMidtaiImage()` 已改为从 `imageLabState.lastRequest` 取 prompt / size / batchCount，直接重调 `runImageLab()`。
+- 已验证：`npm run build:electron`、renderer JS syntax check、`electron/renderer/index.html` UTF-8 decode check 全部通过。

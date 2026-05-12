@@ -179,6 +179,38 @@ describe("Electron renderer settings", () => {
     expect(html).toContain("正在加载版本记录...");
   });
 
+  it("uses the Midtai design tab as a project workbench instead of the legacy preview and works tabs", async () => {
+    const rendererPath = path.join(__dirname, "renderer", "index.html");
+    const html = await readFile(rendererPath, "utf8");
+
+    expect(html).toContain('data-view="design-chat"');
+    expect(html).toContain("设计对话");
+    expect(html).toContain("画布预览");
+    expect(html).toContain("版本记录");
+    expect(html).toContain('id="midtai-design-chat-project-name"');
+    expect(html).toContain('id="midtai-design-versions-list"');
+    expect(html).toContain("function syncMidtaiDesignWorkspaceHeader()");
+    expect(html).toContain("showDesignView('design-chat')");
+  });
+
+  it("renders Midtai inside the unified workbench shell structure from jzu", async () => {
+    const rendererPath = path.join(__dirname, "renderer", "index.html");
+    const html = await readFile(rendererPath, "utf8");
+
+    expect(html).toContain('class="midtai-app"');
+    expect(html).toContain('class="midtai-shell"');
+    expect(html).toContain('class="midtai-workspace"');
+    expect(html).toContain('id="midtai-topbar-headline"');
+    expect(html).toContain('id="midtai-goal-text"');
+    expect(html).toContain('id="midtai-shell-context"');
+    expect(html).toContain('midtai-board-image');
+    expect(html).toContain('midtai-board-design');
+    expect(html).toContain('midtai-board-library');
+    expect(html).toContain("function renderShellContext()");
+    expect(html).toContain("const BOARD_META = {");
+    expect(html).toContain("function showMidtaiTab(boardName)");
+  });
+
   it("returns image replacement success back to Midtai canvas instead of the legacy design page", async () => {
     const rendererPath = path.join(__dirname, "renderer", "index.html");
     const html = await readFile(rendererPath, "utf8");

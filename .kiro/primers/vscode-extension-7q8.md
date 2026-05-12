@@ -87,3 +87,16 @@ text: source?.text || options.text || currentPrompt,
 - 不删 `page-images` DOM（Issue D）
 - 不删 `renderImageLabResults()` 函数体（Issue E）
 - 不改 `applyImageLabState` 的任何逻辑（Issue B = axn 已处理）
+
+---
+
+## Already Completed
+
+- `runImageLab()` 与 `makeImageVariant()` 的结果刷新已改为 `renderMidtaiImagePreview()`，不再主动调用 `renderImageLabResults()`。
+- `renderImageLabHistory()` 已改写到 `midtai-img-history-list`，并在 Midtai 图像左栏新增该节点。
+- `useImageHistoryPrompt()` / `applyLatestImagePrompt()` 已改写 `midtai-img-prompt`，不再写 `imglab-prompt`。
+- Prompt Library 相关的当前 prompt 读取/回填已迁到 Midtai：`getCurrentPromptLibrarySourceText()`、`applyPromptLibraryEntryToCurrentContext()`、`usePromptLibraryEntry()`、`usePromptLibraryInferencePrompt()`、`beginImageResultEdit()`。
+- `openPromptLibraryEditor()` 现在先读 `midtai-img-prompt`，仅保留一处 `imglab-prompt` fallback。
+- 额外收口：`image:promptInferred`、`image:workflowOrchestrated`、`inferMidtaiPrompt()`、`orchestrateImageWorkflow()`、`applyImageWorkflowKeyword()`、材料搜索 `imglab` sourceContext 聚合，都已切到 Midtai prompt。
+- 已验证：`npm run build:electron`、renderer JS syntax check、UTF-8 decode check 通过。
+- 边界说明：`renderImageLabResults()` 函数体和旧 `imglab-results` / `imglab-history` / `imglab-prompt` DOM 壳仍保留在文件中，供后续删除 `page-images` 时一并清理；本任务已去除活跃写入调用。

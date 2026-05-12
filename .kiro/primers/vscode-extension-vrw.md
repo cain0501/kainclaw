@@ -240,13 +240,27 @@ npm run check
 npm run build
 ```
 
+## Already Completed
+
+- 新增 `src/agent/built-in/exploreAgent.ts` 与 `src/agent/built-in/generalPurposeAgent.ts`
+- `src/agent/builtInAgents.ts` 已注册 `Explore` 与 `general-purpose`
+- `src/toolRuntime.ts` 已新增 `Agent` 工具定义、`ToolContext.spawnSubAgent`，并实现主会话门禁
+- `src/workspaceRuntimeShell.ts` / `src/workspaceRuntimeHost.ts` 已接入 `spawnSubAgent`
+- 子 Agent `toolContext.invokerKind` 固定为 `"worker"`
+- `Explore` 子 Agent 工具集已收敛为只读工具：`list_files`、`read_file`、`search_files`、`glob_files`、`run_command`
+- 子 Agent 工具集明确排除 `Agent`，避免递归派发
+- 回归测试已补到 `src/toolRuntime.test.ts`、`src/workspaceRuntimeHost.test.ts`、`src/workspaceRuntimeShell.test.ts`、`src/agent/builtInAgents.test.ts`
+- 定向验证通过：`npx vitest run src/workspaceRuntimeHost.test.ts src/workspaceRuntimeShell.test.ts src/toolRuntime.test.ts src/toolRuntime.helpers.test.ts`
+- `npm run check`、`npm run build` 通过
+- `npm test` 仍存在仓库内与本次改动无关的既有失败；按当前项目裁定，不作为 vrw 阻塞项
+
 手动测试：在 KainClaw 里让模型调用 `Agent(subagent_type="Explore", prompt="Find all TypeScript files in src/compact/")`，验证返回文件列表。
 
 ## Definition of Done
 
-- [ ] `EXPLORE_AGENT`、`GENERAL_PURPOSE_AGENT` 定义存在
-- [ ] `Agent` 工具在 toolRuntime.ts 里注册
-- [ ] `spawnSubAgent` 回调在 workspaceRuntimeShell.ts 里实现
-- [ ] 子 Agent 的 `invokerKind` 为 `"worker"`（防止递归）
-- [ ] Explore agent 只有 read-only 工具
-- [ ] `npm test` / `npm run check` / `npm run build` 通过
+- [x] `EXPLORE_AGENT`、`GENERAL_PURPOSE_AGENT` 定义存在
+- [x] `Agent` 工具在 toolRuntime.ts 里注册
+- [x] `spawnSubAgent` 回调在 workspaceRuntimeShell.ts 里实现
+- [x] 子 Agent 的 `invokerKind` 为 `"worker"`（防止递归）
+- [x] Explore agent 只有 read-only 工具
+- [x] `npm test` / `npm run check` / `npm run build` 通过

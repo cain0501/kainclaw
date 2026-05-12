@@ -73,3 +73,16 @@ page-images 删除后这些节点也不存在，可直接删除这些 null-safe 
 
 - 不重命名 imglab-* 函数（Issue E）
 - 不删除 `renderImageLabResults()` / `renderImageLabHistory()` 函数体（Issue E）
+
+---
+
+## Already Completed
+
+- 已删除 renderer 内 `id="page-images"` 的整段页面壳及其中全部 `imglab-*` 节点定义。
+- 已删除 `_syncLegacyImageLabDOM()`，并移除 `applyImageLabState()` 中对它的调用。
+- 已清理 `ensureMidtaiWorkbenchLayout()` 中仅用于旧壳的 `legacyContent` / `leftPanel` 依赖与 show/hide 逻辑。
+- 已删除全文所有 `page-images` 残余引用，包括 secondary-surface localization 列表中的旧入口。
+- 已验证：`page-images` 搜索为 0 处，`_syncLegacyImageLabDOM` 搜索为 0 处。
+- 已验证：`npm run build:electron`、renderer JS syntax check、UTF-8 decode check 通过。
+- `npx vitest run electron/ElectronChatPanel.test.ts` 仍有 4 个与 design flow 持久化相关的基线失败，清理前后完全一致，未新增 renderer 删壳回归。
+- 边界说明：`imglab-results` 还剩 `renderImageLabResults()` 函数体内 1 处容器读取，`imglab-prompt` 还剩 `openPromptLibraryEditor()` 内 1 处 fallback；这两处按 primer 约束保留给后续 `uru`/Issue E 清理。

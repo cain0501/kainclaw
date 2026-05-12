@@ -88,3 +88,15 @@ page-images 删除后，遗留的 `imglab-*` 函数名和孤立函数做最终�
 - 不改图像功能逻辑
 - 不改 IPC 协议（`image:run` 等）
 - 不改 Midtai 外壳结构
+
+---
+
+## Already Completed
+
+- 已先做运行时防崩：`setImageLabStatus()` 增加空节点 guard；`renderImageLabReference()` 在旧 DOM 不存在时静默 return 并回退到 `renderMidtaiImageRefList()`；旧 `image-reference` 清空路径均加 guard。
+- 已确认无调用后删除孤立函数：`renderImageLabResults()`、`rerunImageRequest()`、`handleImageLabPromptInput()`。
+- 已完成本轮核心重命名：`runImageRequest()`、`buildImagePayload()`、`renderImageHistory()`、`applyImageState()`，并把 `imageLabState` 全量替换为 `imageState`（renderer 内 0 处残留）。
+- 已删除 `openPromptLibraryEditor()` 内最后一个不存在节点的 prompt fallback。
+- 已验证：`npm run build:electron`、renderer JS syntax check、UTF-8 decode check 通过。
+- `npm run start:electron` 在本环境里因长驻进程超时退出，未看到启动即崩溃的错误栈；未能自动完成手工图像流交互证明。
+- 边界说明：按本轮放宽验收完成，不再追求 `全文搜索 imglab: 0`。`ImageLab`/`setImageLabReferenceFromSource`/`renderImageLabReference`/`renderImageWorkflowPlan` 等旧命名仍有残留，后续可单独开 issue 做第二轮语义收口。

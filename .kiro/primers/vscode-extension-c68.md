@@ -1,383 +1,330 @@
 # Primer: vscode-extension-c68
-# 专业模式：midtai 内嵌 design chat（替换错误的主窗口跳转实现）
+# 设计入口重构：弹框引导替换 小白/专业 toggle
 
-## 产品全局规则（必须在开始前理解）
+## 背景与产品决策
 
-系统允许两种设计生成来源，互不干扰：
+旧方案（小白/专业 tab toggle）因概念模糊被废弃。
 
-| 来源 | 入口 | 展示位置 | 精修入口 |
-|------|------|---------|---------|
-| midtai 专业页 design chat | midtai → 设计 tab → 专业 | design chat 面板内 | 直接在 midtai 内进入画布 |
-| 主 chat | 主 chat 正常对话生成 artifact | 主 chat artifact panel | 点"进入 KainClaw Design" → midtai 画布 |
+**新方案**：进入设计区域时弹出一个引导弹框，让用户一键选择路径，无需输入文字。
 
-**c68 只负责来源 1（midtai design chat）。来源 2（主 chat）不动。**
+```
+进入 midtai 设计 tab
+  → 弹出 DesignEntryDialog（居中蒙层）
+  → 两个大按钮：
+      [ 快速生成一稿 ]  ←  填 3 个核心问题，直接生成
+      [ 先聊需求，再生成 ]  ←  走完整 discovery 表单流程
+```
 
 ---
 
 ## 绝对禁止
 
-- 调用 `showPage('chat')`
-- 发 `sessions:switch-to-chat`
-- 在主 chat 窗口展开 design session 的消息内容
-- renderer 侧维护独立永久的 design chat 消息数组（必须以 host session store 为唯一真相）
+- 保留任何 小白/专业 tab 按钮或 toggle
+- 调用 `showPage('chat')`、发 `sessions:switch-to-chat`
+- renderer 侧维护独立永久的 design chat 消息数组
 
 ---
 
-## 前置条件
+## 前置说明
 
-依赖 A（by7）、B（jns）、C（04q）已完成。
+p1-p4（jzu 及其前置）已完成：
+- `#midtai-design-chat` 面板已存在
+- design:chat:send / design:chat:append / design:chat:token / design:chat:load-history IPC 已接通
+- `handleDesignChatSend()` / `handleDesignChatLane()` / `handleDesignChatLoadHistory()` 已实现
+- `setMidtaiDesignMode()` / `applyMidtaiDesignMode()` 已实现
 
-317 的实现是错的（点专业 → 跳主 chat），需要完全替换。317 留下了有用的基础：
-- `sessionType: 'design'` 字段（sessionRepository.ts）
-- `isCurrentSessionDesignType()` helper（ElectronChatPanel.ts）
-- `sessionType` 加入 `postState()` → 主 chat 侧边栏的 ✦ 图标
+**c68 只做入口层改造，不动 design chat 本身的消息/IPC 逻辑。**
 
 ---
 
 ## 目标行为
 
-### 进入专业模式
+### 1. 弹框触发时机
+
+每次用户打开 midtai 设计 tab（且当前无进行中的 design session）时弹出。
+若已有 design session 进行中，直接跳过弹框，进入 design chat 面板。
+
+### 2. 弹框 UI（DesignEntryDialog）
+
 ```
-midtai 设计 tab → 点「专业」
-  → midtai 左栏：隐藏小白表单，显示 #midtai-design-chat 面板
-  → 如果有未完成的 design session：加载并重放已有消息
-  → 如果没有：显示空状态
-（不跳页面，不跳窗口）
+┌─────────────────────────────────────┐
+│  你想怎么开始？                        │
+│                                       │
+│  ┌─────────────────────────────────┐ │
+│  │  ⚡ 快速生成一稿                   │ │
+│  │  回答 3 个问题，AI 直接出稿        │ │
+│  └─────────────────────────────────┘ │
+│                                       │
+│  ┌─────────────────────────────────┐ │
+│  │  ✦ 先聊需求，再生成              │ │
+│  │  AI 引导你确认细节，再生成       │ │
+│  └─────────────────────────────────┘ │
+└─────────────────────────────────────┘
 ```
 
-### 发送消息
-```
-用户在 design chat 输入框写 brief → 回车/点发送
-  → host 确认有活跃 design session（没有则创建，不跳主 chat）
-  → handleDesignChatSend() → handleDesignChatLane(target:'design-chat')
-  → token 流 → design:chat:token
-  → 完整消息 → design:chat:append
-  → renderer 渲染在 design chat 面板内
-```
+点击任一按钮后弹框消失，不再出现（同一 session 内）。
 
-### 生成 artifact
-```
-LLM 返回 artifact HTML
-  → design chat 面板显示「已生成设计」+ [进入画布] 按钮
-  → 点 [进入画布] → midtai 主区打开 Phase B 画布
-（artifact 入库逻辑由 pul 任务处理，c68 只管显示按钮）
-```
+### 3. 快速路径（Quick）
 
-### 切回小白模式
-```
-点「小白」→ 隐藏 design chat 面板，显示传统表单
-（不删除当前 design session，只切换 UI）
-```
+弹框消失后，在 design chat 面板内显示一个简短的 3 问表单：
 
-### 主 chat 侧边栏点击 design session
-```
-侧边栏显示 design session（✦ 图标）→ 用户点击
-  → host switchSession() 切换到该 session
-  → renderer 不调 showPage('chat')
-  → 而是 openMidtai({ contentType:'design', view:'design-preview' }) + 加载消息历史
-```
+| 问题 | 字段 | 类型 |
+|------|------|------|
+| 你想做什么？ | surface | 单选：落地页 / 移动 App / 后台界面 / 演示 PPT / 其他 |
+| 主要给谁看？ | audience | 单行文本（placeholder: 如：投资人、消费者、内部团队） |
+| 视觉感觉？ | direction | 单选：简洁现代 / 温暖亲切 / 科技感 / 高端品牌 |
+
+用户填完点「生成」→ 拼成 prompt 发送到 design chat（走现有 `handleDesignChatSend`）。
+
+### 4. 详细路径（Detailed）
+
+弹框消失后，直接触发 design chat 的 AI 首轮问题（发一条空 trigger 消息）。
+AI 按现有 discovery prompt 流程走：question-form → 填表 → 生成。
+
+### 5. 已有 session 时的行为
+
+再次进入 design tab 时如果已有 design session：
+- 不弹弹框
+- 直接显示 design chat 面板并重放消息历史
+- 提供「新建设计」按钮，点击后清空 session 并重新弹出弹框
 
 ---
 
-## 消息历史：以 host session store 为唯一真相
-
-- renderer **不得**维护独立永久 design chat 消息数组
-- 每次进入专业模式：向 host 请求消息历史（`design:chat:load-history`）
-- 新消息由 host append 后通过 `design:chat:append` 推给 renderer
-- 流式 token 通过 `design:chat:token` 更新最后一条 assistant 消息
-
----
-
-## 现有代码需要改动的位置
+## 需要改动的位置
 
 ### electron/renderer/index.html
 
-**`setMidtaiDesignMode(mode)` 改造**（line ~3787）：
-```javascript
-// 改造前（错的）：
-function setMidtaiDesignMode(mode) {
-  if (mode === 'pro') {
-    send({ type: 'sessions:new-design' });
-    return;
-  }
-  midtaiState.designMode = mode === 'pro' ? 'pro' : 'simple';
-  localStorage.setItem('kc_design_mode', midtaiState.designMode);
-  applyMidtaiDesignMode();
-}
+**1. 删除** 小白/专业 toggle 按钮的 HTML（找 `design-mode-simple-btn` / `design-mode-pro-btn`，整段删掉）。
 
-// 改造后：
-function setMidtaiDesignMode(mode) {
-  midtaiState.designMode = mode === 'pro' ? 'pro' : 'simple';
-  localStorage.setItem('kc_design_mode', midtaiState.designMode);
-  applyMidtaiDesignMode();
-  if (mode === 'pro') {
-    send({ type: 'design:chat:load-history' });
-  }
-}
-```
+**2. 删除** `applyMidtaiDesignMode()` 中对 simple/pro 按钮样式的切换逻辑（因为按钮已删）。
 
-**`applyMidtaiDesignMode()` 改造**：
-```javascript
-function applyMidtaiDesignMode() {
-  const isPro = midtaiState.designMode === 'pro';
-  const formFields = document.getElementById('midtai-design-form-fields');
-  const chatPanel  = document.getElementById('midtai-design-chat');
-  if (formFields) formFields.style.display = isPro ? 'none' : '';
-  if (chatPanel)  chatPanel.style.display  = isPro ? 'flex' : 'none';
-  const simpleBtn = document.getElementById('design-mode-simple-btn');
-  const proBtn    = document.getElementById('design-mode-pro-btn');
-  if (simpleBtn) { simpleBtn.style.background = isPro ? 'none' : '#c9502e'; simpleBtn.style.color = isPro ? '#78716c' : '#fff'; }
-  if (proBtn)    { proBtn.style.background    = isPro ? '#c9502e' : 'none'; proBtn.style.color    = isPro ? '#fff' : '#78716c'; }
-}
-```
+**3. 新增** `DesignEntryDialog` HTML（蒙层 + 弹框，加在 `#midtai-form-design` 内部顶部）：
 
-**删掉**：
-```javascript
-// 删除这个处理器：
-if (type === 'sessions:switch-to-chat') {
-  showPage('chat');
-  return;
-}
-```
-
-**新增 HTML：`#midtai-design-chat` 面板**（加在 `midtai-form-design` 内，紧跟小白表单区后面）：
 ```html
-<div id="midtai-design-chat" style="display:none;flex-direction:column;flex:1;overflow:hidden;min-height:0">
-  <div id="design-chat-messages"
-    style="flex:1;overflow-y:auto;padding:10px 11px;display:flex;flex-direction:column;gap:10px">
-    <div id="design-chat-empty" style="display:flex;flex-direction:column;align-items:center;
-      justify-content:center;flex:1;gap:8px;color:#a8a29e;text-align:center;padding:20px 0">
-      <div style="font-size:24px;opacity:.4">✦</div>
-      <div style="font-size:13px;font-weight:500;color:#78716c">描述你想要的设计</div>
-      <div style="font-size:11px;line-height:1.6">AI 会引导你完善需求，然后生成设计稿</div>
+<div id="design-entry-dialog"
+  style="display:none;position:absolute;inset:0;background:rgba(28,25,23,.45);
+    z-index:100;align-items:center;justify-content:center">
+  <div style="background:#fdfcfb;border-radius:14px;padding:24px 22px;width:280px;
+    box-shadow:0 8px 32px rgba(0,0,0,.18)">
+    <div style="font-size:14px;font-weight:700;color:#1c1917;margin-bottom:16px;text-align:center">
+      你想怎么开始？
     </div>
-  </div>
-  <div style="padding:8px 11px 10px;border-top:1px solid #f0ebe3;flex-shrink:0">
-    <textarea id="design-chat-input"
-      placeholder="描述你想要的设计…"
-      rows="3"
-      style="width:100%;padding:8px 10px;border:1.5px solid #e5ddd0;border-radius:8px;
-        font-size:12px;resize:none;font-family:inherit;line-height:1.5;background:#fdfcfb"
-      onkeydown="handleDesignChatKeydown(event)"></textarea>
-    <div style="display:flex;justify-content:flex-end;margin-top:5px">
-      <button onclick="sendDesignChatMessage()"
-        style="padding:6px 16px;background:#c94c2e;color:#fff;border:none;border-radius:7px;
-          font-size:12px;font-weight:600;cursor:pointer">发送</button>
-    </div>
+    <button onclick="chooseDesignEntryPath('quick')"
+      style="width:100%;padding:14px 16px;background:#fdf8f2;border:1.5px solid #e5ddd0;
+        border-radius:10px;text-align:left;cursor:pointer;margin-bottom:10px;display:block">
+      <div style="font-size:13px;font-weight:600;color:#1c1917;margin-bottom:3px">⚡ 快速生成一稿</div>
+      <div style="font-size:11px;color:#78716c">回答 3 个问题，AI 直接出稿</div>
+    </button>
+    <button onclick="chooseDesignEntryPath('detailed')"
+      style="width:100%;padding:14px 16px;background:#fdf8f2;border:1.5px solid #e5ddd0;
+        border-radius:10px;text-align:left;cursor:pointer;display:block">
+      <div style="font-size:13px;font-weight:600;color:#1c1917;margin-bottom:3px">✦ 先聊需求，再生成</div>
+      <div style="font-size:11px;color:#78716c">AI 引导你确认细节，再生成</div>
+    </button>
   </div>
 </div>
 ```
 
-**新增 JS 函数**：
+**4. 新增** Quick 路径的 3 问表单 HTML（加在 `#design-chat-messages` 之前，默认隐藏）：
+
+```html
+<div id="design-quick-form"
+  style="display:none;padding:14px 12px;border-bottom:1px solid #f0ebe3">
+  <div style="font-size:12px;font-weight:600;color:#1c1917;margin-bottom:12px">快速生成 · 3 个问题</div>
+
+  <div style="margin-bottom:10px">
+    <div style="font-size:11px;color:#78716c;margin-bottom:4px">你想做什么？</div>
+    <select id="dqf-surface"
+      style="width:100%;padding:6px 8px;border:1.5px solid #e5ddd0;border-radius:7px;font-size:12px;background:#fdfcfb">
+      <option value="">请选择…</option>
+      <option value="落地页">落地页</option>
+      <option value="移动 App">移动 App</option>
+      <option value="后台界面">后台界面</option>
+      <option value="演示 PPT">演示 PPT</option>
+      <option value="其他">其他</option>
+    </select>
+  </div>
+
+  <div style="margin-bottom:10px">
+    <div style="font-size:11px;color:#78716c;margin-bottom:4px">主要给谁看？</div>
+    <input id="dqf-audience" type="text" placeholder="如：投资人、消费者、内部团队"
+      style="width:100%;padding:6px 8px;border:1.5px solid #e5ddd0;border-radius:7px;
+        font-size:12px;background:#fdfcfb;box-sizing:border-box">
+  </div>
+
+  <div style="margin-bottom:14px">
+    <div style="font-size:11px;color:#78716c;margin-bottom:4px">视觉感觉？</div>
+    <select id="dqf-direction"
+      style="width:100%;padding:6px 8px;border:1.5px solid #e5ddd0;border-radius:7px;font-size:12px;background:#fdfcfb">
+      <option value="">请选择…</option>
+      <option value="简洁现代">简洁现代</option>
+      <option value="温暖亲切">温暖亲切</option>
+      <option value="科技感">科技感</option>
+      <option value="高端品牌">高端品牌</option>
+    </select>
+  </div>
+
+  <button onclick="submitDesignQuickForm()"
+    style="width:100%;padding:8px;background:#c94c2e;color:#fff;border:none;border-radius:8px;
+      font-size:12px;font-weight:600;cursor:pointer">生成</button>
+</div>
+```
+
+**5. 新增 JS 函数**：
+
 ```javascript
-function handleDesignChatKeydown(e) {
-  if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendDesignChatMessage(); }
-}
-
-function sendDesignChatMessage() {
-  const input = document.getElementById('design-chat-input');
-  const prompt = input?.value.trim();
-  if (!prompt) return;
-  input.value = '';
-  // 不在本地 append 用户消息！host session store 是唯一真相。
-  // 只进入 pending 态（可选：显示发送中 spinner），消息一律等 host 经 design:chat:append 回推。
-  send({ type: 'design:chat:send', prompt });
-}
-
-// msg 完整 schema（design:chat:append / history 里的每条消息都必须带齐这些字段）：
-// {
-//   messageId: string,          // 唯一 ID，去重 & streaming 定位用
-//   role: 'user' | 'assistant',
-//   content: string,
-//   timestamp: number,
-//   kind: 'text' | 'question-form' | 'artifact',
-//   artifactId?: string,        // kind==='artifact' 时必填，用于发 artifact:enter-design
-//   designProjectId?: string,   // 入库后填入，用于 version sync / tombstone
-// }
-function appendDesignChatMessageToUI(msg) {
-  const container = document.getElementById('design-chat-messages');
-  const empty     = document.getElementById('design-chat-empty');
-  if (!container) return;
-  // 去重：同一个 messageId 不重复渲染
-  if (msg.messageId && container.querySelector(`[data-message-id="${msg.messageId}"]`)) return;
-  if (empty) empty.style.display = 'none';
-
-  const bubble = document.createElement('div');
-  bubble.style.cssText = msg.role === 'user'
-    ? 'align-self:flex-end;background:#c94c2e;color:#fff;padding:8px 12px;border-radius:10px 10px 2px 10px;font-size:12px;max-width:90%;line-height:1.5'
-    : 'align-self:flex-start;background:#f5f0e8;color:#1c1917;padding:8px 12px;border-radius:10px 10px 10px 2px;font-size:12px;max-width:90%;line-height:1.5';
-  if (msg.messageId) bubble.dataset.messageId = msg.messageId;
-
-  if (msg.kind === 'question-form') {
-    renderDesignChatQuestionForm(bubble, msg.content);
-  } else if (msg.kind === 'artifact') {
-    // 用 artifactId 发 enter-design；若已入库则用 designProjectId 做 version sync
-    const artifactId = msg.artifactId ?? '';
-    bubble.innerHTML = '<div style="font-size:12px;font-weight:600;margin-bottom:8px">✦ 设计已生成</div>' +
-      `<button onclick="send({type:'artifact:enter-design',artifactId:'${artifactId}'})"` +
-      ' style="padding:6px 14px;background:#1c1917;color:#fff;border:none;border-radius:7px;font-size:12px;cursor:pointer">进入画布</button>';
-    // version sync：如果已入库，请求最新版本
-    if (msg.designProjectId) {
-      send({ type: 'design:get-active-version', projectId: msg.designProjectId });
-    }
-  } else {
-    bubble.textContent = msg.content;
+function showDesignEntryDialog() {
+  const dialog = document.getElementById('design-entry-dialog');
+  if (dialog) {
+    dialog.style.display = 'flex';
+    // 确保 design chat 面板可见（dialog 叠在上方）
+    const chatPanel = document.getElementById('midtai-design-chat');
+    if (chatPanel) chatPanel.style.display = 'flex';
   }
-
-  if (msg.streamingId) bubble.dataset.streamingId = msg.streamingId;
-  container.appendChild(bubble);
-  container.scrollTop = container.scrollHeight;
 }
 
-function updateDesignChatStreamingMessage(token, streamingId) {
-  const el = document.querySelector(`[data-streaming-id="${streamingId}"]`);
-  if (el) el.textContent += token;
+function hideDesignEntryDialog() {
+  const dialog = document.getElementById('design-entry-dialog');
+  if (dialog) dialog.style.display = 'none';
 }
 
-function renderDesignChatQuestionForm(container, content) {
-  // 用 KainClawQuestionForm.splitOnQuestionForms() 解析
-  // 渲染 question-form 卡片（复用现有逻辑）
-  // 提交时发 send({ type: 'design:chat:send', prompt: formattedAnswers })
+function chooseDesignEntryPath(path) {
+  hideDesignEntryDialog();
+  if (path === 'quick') {
+    const form = document.getElementById('design-quick-form');
+    if (form) form.style.display = 'block';
+  } else {
+    // detailed: 触发 AI 首轮问题
+    send({ type: 'design:chat:send', prompt: '__trigger_discovery__' });
+  }
+}
+
+function submitDesignQuickForm() {
+  const surface   = document.getElementById('dqf-surface')?.value;
+  const audience  = document.getElementById('dqf-audience')?.value?.trim();
+  const direction = document.getElementById('dqf-direction')?.value;
+  if (!surface || !audience || !direction) {
+    alert('请填写全部 3 个问题');
+    return;
+  }
+  const form = document.getElementById('design-quick-form');
+  if (form) form.style.display = 'none';
+  const prompt = `我想做一个${surface}，主要给${audience}看，视觉风格是${direction}。`;
+  send({ type: 'design:chat:send', prompt });
 }
 ```
 
-**新增消息处理**：
+**6. 改造 `setMidtaiDesignMode()` 或 midtai 设计 tab 入口逻辑**：
+
 ```javascript
-if (type === 'design:chat:append') {
-  appendDesignChatMessageToUI(message.msg);
-  return;
+// 进入设计 tab 时：
+// - 如果有进行中的 design session → 跳过弹框，加载历史
+// - 如果无 design session → 显示弹框
+function onMidtaiDesignTabOpen() {
+  // 检查是否已有 design session（通过 host 状态或 midtaiState.currentDesignSessionId）
+  const hasSession = !!midtaiState.currentDesignSessionId;
+  if (hasSession) {
+    send({ type: 'design:chat:load-history' });
+  } else {
+    showDesignEntryDialog();
+  }
 }
-if (type === 'design:chat:token') {
-  updateDesignChatStreamingMessage(message.token, message.streamingId);
-  return;
-}
-if (type === 'design:chat:history') {
+```
+
+**7. 新增「新建设计」按钮**（在 design chat 面板顶部区域，替换原来可能存在的标题区）：
+
+```html
+<div style="padding:8px 12px;border-bottom:1px solid #f0ebe3;display:flex;
+  align-items:center;justify-content:space-between;flex-shrink:0">
+  <span style="font-size:12px;font-weight:600;color:#78716c">设计对话</span>
+  <button onclick="resetDesignSession()"
+    style="font-size:11px;color:#78716c;background:none;border:none;cursor:pointer;padding:2px 6px">
+    新建设计
+  </button>
+</div>
+```
+
+```javascript
+function resetDesignSession() {
+  // 清空当前 design session，重新弹出入口弹框
+  midtaiState.currentDesignSessionId = null;
   const container = document.getElementById('design-chat-messages');
   const empty = document.getElementById('design-chat-empty');
   if (container) {
-    Array.from(container.children).forEach(c => { if (c.id !== 'design-chat-empty') c.remove(); });
+    Array.from(container.children).forEach(c => {
+      if (c.id !== 'design-chat-empty') c.remove();
+    });
   }
-  if (message.messages?.length) {
-    if (empty) empty.style.display = 'none';
-    message.messages.forEach(m => appendDesignChatMessageToUI(m));
-  } else {
-    if (empty) empty.style.display = '';
-  }
-  return;
+  if (empty) empty.style.display = '';
+  showDesignEntryDialog();
+  send({ type: 'design:session:reset' });  // host 侧退出当前 design session
 }
-```
-
-**主 chat 侧边栏 session click 改造**（找到 session item click 逻辑）：
-```javascript
-// 点击 session 时，如果 sessionType === 'design'，进 midtai 专业页而不是主 chat
-if (session.sessionType === 'design') {
-  send({ type: 'sessions:switch', id: session.id });  // host 路由读 message.id，不是 sessionId
-  // 目标：打开 midtai 设计 tab 并切到专业模式，然后加载/重放 design chat 历史。
-  // 不要写死 view:'design-preview'（那是 Phase B 画布），而是打开 midtai 后直接切专业模式。
-  openMidtai({ contentType: 'design' });   // 打开 midtai 设计 tab（不指定 view）
-  setMidtaiDesignMode('pro');              // 切专业模式，内部会发 design:chat:load-history
-  return;
-}
-// 普通 session：原有逻辑不变
 ```
 
 ---
 
 ### electron/ElectronChatPanel.ts
 
-**删除**：
-- `createNewDesignSession()` 里的 `this.sendToRenderer({ type: 'sessions:switch-to-chat' })`
-
 **新增路由**：
+
 ```typescript
-if (type === 'design:chat:send')         { await this.handleDesignChatSend(message); return; }
-if (type === 'design:chat:load-history') { await this.handleDesignChatLoadHistory(); return; }
+if (type === 'design:session:reset') {
+  // 退出当前 design session，回到 no-session 状态
+  // 不删除历史，只解除 currentSessionId 与 design 的绑定
+  // 下次 design:chat:send 时会新建
+  this.currentSessionId = null;
+  await this.postState();
+  return;
+}
 ```
 
-**新增方法**：
+**改造 `handleDesignChatSend()`**：
+当 prompt 为 `'__trigger_discovery__'` 时，发一条系统 trigger，让 AI 按 discovery prompt 发出第一个 question-form，而不是把 trigger 字符串直接追加到会话：
+
 ```typescript
 private async handleDesignChatSend(message: Record<string, unknown>): Promise<void> {
-  const prompt = String(message.prompt ?? '');
-  if (!prompt) return;
+  const rawPrompt = String(message.prompt ?? '');
+  const isDiscoveryTrigger = rawPrompt === '__trigger_discovery__';
+  const prompt = isDiscoveryTrigger ? '' : rawPrompt;
 
-  const isDesign = this.currentSessionId
-    && (await this.sessions.loadRuntimeState(this.currentSessionId))?.sessionType === 'design';
-  if (!isDesign) {
-    await this.createNewDesignSessionSilent();
+  // ... 原有 session 创建 / 切换逻辑 ...
+
+  if (!isDiscoveryTrigger) {
+    const userMsg = await this.appendUserMessageToSession(this.currentSessionId!, prompt);
+    this.sendToRenderer({ type: 'design:chat:append', msg: { ...userMsg, kind: 'text' } });
   }
 
-  const userMsg = await this.appendUserMessageToSession(this.currentSessionId!, prompt);
-  // Blocker 补丁：host 存完后必须立即回推用户消息，renderer 才能显示。
-  // renderer 不本地 append，所以这一步不能省。
-  this.sendToRenderer({
-    type: 'design:chat:append',
-    msg: {
-      messageId: userMsg.id,          // 唯一 ID，用于去重和 streaming 定位
-      role: 'user',
-      content: prompt,
-      timestamp: userMsg.timestamp,
-      kind: 'text',
-      artifactId: undefined,
-      designProjectId: undefined,
-    },
+  await this.handleDesignChatLane({
+    prompt: isDiscoveryTrigger ? '' : prompt,
+    target: 'design-chat',
+    triggerDiscovery: isDiscoveryTrigger,
   });
-  await this.handleDesignChatLane({ prompt, target: 'design-chat' });
 }
-
-private async createNewDesignSessionSilent(): Promise<void> {
-  const workspaceRoot = this.getSelectedWorkspaceRoot();
-  const session = await this.sessions.createSession(
-    randomUUID(), getWorkspaceHash(workspaceRoot), '设计对话',
-  );
-  await this.sessions.saveRuntimeState(session.id, { workspaceRoot, sessionType: 'design' });
-  await this.switchSession(session.id);
-  await this.postState();  // 刷新侧边栏，不发 switch-to-chat
-}
-
-private async handleDesignChatLoadHistory(): Promise<void> {
-  if (!this.currentSessionId) {
-    this.sendToRenderer({ type: 'design:chat:history', messages: [] });
-    return;
-  }
-  const state = await this.sessions.loadRuntimeState(this.currentSessionId);
-  if (state.sessionType !== 'design') {
-    this.sendToRenderer({ type: 'design:chat:history', messages: [] });
-    return;
-  }
-  const msgs = await this.sessions.loadMessages(this.currentSessionId);  // 正确接口名：loadMessages，不是 getMessages
-  this.sendToRenderer({ type: 'design:chat:history', messages: msgs });
-}
-```
-
-**改造 `handleDesignChatLane()`**：加 `target` 参数：
-```typescript
-// 当 target === 'design-chat' 时：
-//   token → sendToRenderer({ type: 'design:chat:token', token, streamingId })
-//   完整消息 → sendToRenderer({ type: 'design:chat:append', msg: { role, content, kind } })
-//   artifact 生成后 → openMidtai({ contentType:'design', view:'preview', projectId })
-// 当 target 未传（普通 sendPrompt 路径）→ 保持现有行为不变
 ```
 
 ---
 
 ## 验收标准
 
-1. 点「专业」→ midtai 左栏变 design chat，**页面不跳转**
-2. 点「小白」→ 恢复传统表单
-3. 重新进入专业模式 → 已有消息从 host 重放，不丢失
-4. design chat 内：brief → question-form 卡片 → 填表 → artifact → [进入画布]
-5. artifact 生成后 midtai 主区打开 Phase B 画布
-6. 主 chat 侧边栏显示 design session（✦）→ 点击 → 进 midtai 专业页（不展开在主 chat）
-7. 主 chat 里的普通对话完全不受影响
-8. 全程不调用 `showPage('chat')`
+1. 进入设计 tab（无 session）→ 弹框出现，显示两个大按钮
+2. 点「快速生成一稿」→ 弹框消失，3 问表单出现
+3. 填完 3 问点「生成」→ 表单消失，prompt 发送，AI 开始回复
+4. 点「先聊需求，再生成」→ 弹框消失，AI 发出 discovery question-form
+5. 再次进入设计 tab（有进行中 session）→ 不弹弹框，直接加载历史
+6. 点「新建设计」→ 清空对话，重新弹出弹框
+7. **不存在** 小白/专业 tab 按钮
+8. 主 chat 侧边栏 design session 点击 → 进 midtai 设计页（p1-p4 已覆盖，回归验证即可）
+9. `npm run build:electron` + renderer JS syntax check 通过
 
 ---
 
 ## Out of scope
 
-- 不做多个 design session 切换 UI
-- 不做 design chat 内消息删除/撤回
-- artifact 入库逻辑由 pul 任务处理，c68 只管显示「已生成设计」+ [进入画布]
+- 不改 design chat IPC 协议（已由 p1-p4 实现）
+- 不改 discovery question-form 内容（`buildDesignChatSystemPrompt` 已有）
+- 不做 3 问表单内容的 AI 个性化（静态选项即可）
+- 不做方向选择器（OD 复刻放后续 issue）
+- artifact 入库逻辑由 pul 任务处理
 
 ---
 
@@ -385,19 +332,5 @@ private async handleDesignChatLoadHistory(): Promise<void> {
 
 | 文件 | 风险 | 说明 |
 |------|------|------|
-| `electron/renderer/index.html` | 高 | setMidtaiDesignMode + design chat UI + 消息处理 + 侧边栏 click 路由 |
-| `electron/ElectronChatPanel.ts` | 高 | handleDesignChatSend + handleDesignChatLane target 参数 |
-| `src/storage/sessionRepository.ts` | 低 | sessionType 已有，不需改 |
-
----
-
-## 实现建议
-
-1. 先加 HTML 结构（`#midtai-design-chat`）+ `applyMidtaiDesignMode()` 切换逻辑
-2. 删掉 `setMidtaiDesignMode('pro')` 里的旧跳转，删掉 `sessions:switch-to-chat` 处理器
-3. 加 `sendDesignChatMessage()` + `appendDesignChatMessageToUI()` JS 函数
-4. host 加 `design:chat:send` + `design:chat:load-history` 路由及对应方法
-5. 改造 `handleDesignChatLane()` 加 target 参数，接通 token/message 分发
-6. 接通 question-form 渲染（复用 `KainClawQuestionForm`）
-7. 改造侧边栏 session click（design session → midtai 专业页）
-8. 写测试：不调 showPage、消息历史重放、target 分发逻辑
+| `electron/renderer/index.html` | 高 | 弹框 + 3 问表单 + JS 函数 + tab 入口逻辑 |
+| `electron/ElectronChatPanel.ts` | 低 | design:session:reset + __trigger_discovery__ 处理 |

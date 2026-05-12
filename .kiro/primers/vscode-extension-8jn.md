@@ -93,10 +93,19 @@ npm run check
 npm run build
 ```
 
+## Already Completed
+
+- `src/compact/microCompact.ts` 已导出 `resetMicrocompactState()`，当前作为幂等 reset 占位入口
+- 新增 `src/compact/postCompactCleanup.ts`，统一承接 compact 后状态清理
+- `src/compactHost.ts` 已在 `result.wasCompacted` 成功分支调用 `runPostCompactCleanup()`
+- `src/compactHost.test.ts` 已补回归测试，覆盖 compact 成功触发 cleanup 与未 compact 不触发 cleanup
+- 定向验证通过：`npx vitest run src/compactHost.test.ts src/compact/microCompact.test.ts`
+- `npm run check`、`npm run build` 通过；`npm test` 仍存在仓库内与本任务无关的既有失败
+
 ## Definition of Done
 
-- [ ] `microCompact.ts` 导出 `resetMicrocompactState()`
-- [ ] `src/compact/postCompactCleanup.ts` 存在，导出 `runPostCompactCleanup()`
-- [ ] `compactHost.ts` 在 `wasCompacted` 后调用 `runPostCompactCleanup()`
-- [ ] 现有 compact 测试通过
+- [x] `microCompact.ts` 导出 `resetMicrocompactState()`
+- [x] `src/compact/postCompactCleanup.ts` 存在，导出 `runPostCompactCleanup()`
+- [x] `compactHost.ts` 在 `wasCompacted` 后调用 `runPostCompactCleanup()`
+- [x] 现有 compact 测试通过
 - [ ] `npm test` / `npm run check` / `npm run build` 通过

@@ -101,6 +101,7 @@ vi.mock("../src/toolRuntime", () => ({
   },
   getBuiltInToolDefinitions: () => mockedBuiltinToolDefinitions,
   toolDefinitions: mockedBuiltinToolDefinitions,
+  clearSessionMemoryStore: vi.fn(),
 }));
 
 vi.mock("../src/electronPromptCommandHost", () => ({
@@ -3122,7 +3123,7 @@ Freeze skill body.
     });
   });
 
-  it("creates a dedicated design session with sessionType design and switches the renderer to chat", async () => {
+  it("creates a dedicated design session with sessionType design and opens midtai instead of switching chat", async () => {
     const harness = await createHarness();
     tempDirs.push(harness.storagePath);
 
@@ -3141,13 +3142,895 @@ Freeze skill body.
       harness.rendererPayloads,
       "sessions:switch-to-chat",
     );
-    expect(switchPayload?.type).toBe("sessions:switch-to-chat");
+    expect(switchPayload).toBeUndefined();
+
+    const midtaiPayload = getLastRendererPayloadOfType<{
+      type: "midtai:open";
+      payload?: {
+        contentType?: string;
+        designChat?: boolean;
+        sessionType?: string;
+      };
+    }>(harness.rendererPayloads, "midtai:open");
+    expect(midtaiPayload?.payload).toMatchObject({
+      contentType: "design",
+      designChat: true,
+      sessionType: "design",
+    });
 
     const statePayload = getLastRendererPayloadOfType<{
       type: "state";
       sessionType: string;
     }>(harness.rendererPayloads, "state");
     expect(statePayload?.sessionType).toBe("design");
+  });
+
+  it("switches design sessions into midtai and pushes design chat history", async () => {
+    const harness = await createHarness();
+    tempDirs.push(harness.storagePath);
+
+    await harness.settings.setOnboardingDone(true);
+    await harness.panel.handleMessage({ type: "ready" });
+
+    const designSession = await harness.sessions.createSession("session-design", "electron", "设计对话");
+    await harness.sessions.saveRuntimeState(designSession.id, {
+      workspaceRoot: "",
+      sessionType: "design",
+    });
+    await harness.sessions.appendMessages(designSession.id, [
+      { role: "user", content: "做一个落地页", timestamp: 1001 },
+      { role: "assistant", content: "先告诉我想要的风格。", timestamp: 1002 },
+    ]);
+
+    await harness.panel.handleMessage({
+      type: "sessions:switch",
+      id: designSession.id,
+    });
+
+    const midtaiPayload = getLastRendererPayloadOfType<{
+      type: "midtai:open";
+      payload?: {
+        contentType?: string;
+        designChat?: boolean;
+        sessionType?: string;
+      };
+    }>(harness.rendererPayloads, "midtai:open");
+    expect(midtaiPayload?.payload).toMatchObject({
+      contentType: "design",
+      designChat: true,
+      sessionType: "design",
+    });
+
+    const historyPayload = getLastRendererPayloadOfType<{
+      type: "design:chat:history";
+      messages: Array<{ role: string; content: string }>;
+    }>(harness.rendererPayloads, "design:chat:history");
+    expect(historyPayload?.messages).toEqual([
+      expect.objectContaining({ role: "user", content: "做一个落地页" }),
+      expect.objectContaining({ role: "assistant", content: "先告诉我想要的风格。" }),
+    ]);
+  });
+
+  it("omits design sessions from the main sessions:data sidebar payload while keeping normal sessions visible", async () => {
+    const harness = await createHarness();
+    tempDirs.push(harness.storagePath);
+
+    await harness.settings.setOnboardingDone(true);
+
+    const defaultSession = await harness.sessions.createSession("session-default", "electron", "普通会话");
+    await harness.sessions.saveRuntimeState(defaultSession.id, {
+      workspaceRoot: "",
+      sessionType: "default",
+    });
+    const designSession = await harness.sessions.createSession("session-design-hidden", "electron", "设计对话");
+    await harness.sessions.saveRuntimeState(designSession.id, {
+      workspaceRoot: "",
+      sessionType: "design",
+    });
+
+    await harness.settings.setActiveSessionId(defaultSession.id);
+    await harness.panel.handleMessage({ type: "ready" });
+    await harness.panel.handleMessage({ type: "sessions:load" });
+
+    const sessionsPayload = getLastRendererPayloadOfType<{
+      type: "sessions:data";
+      sessions: Array<{ id: string; sessionType?: string }>;
+      activeId: string | null;
+    }>(harness.rendererPayloads, "sessions:data");
+
+    expect(sessionsPayload?.activeId).toBe(defaultSession.id);
+    expect(sessionsPayload?.sessions).toEqual([
+      expect.objectContaining({
+        id: defaultSession.id,
+        sessionType: "default",
+      }),
+    ]);
+    expect(sessionsPayload?.sessions.some(session => session.id === designSession.id)).toBe(false);
+  });
+
+  it("starts a transient design work state without creating a formal design project", async () => {
+    const harness = await createHarness();
+    tempDirs.push(harness.storagePath);
+
+    await harness.settings.setOnboardingDone(true);
+    await harness.panel.handleMessage({ type: "ready" });
+
+    await harness.panel.handleMessage({ type: "design:new-transient-work" });
+
+    const sessionId = harness.settings.getActiveSessionId();
+    expect(sessionId).toBeTruthy();
+    await expect(harness.sessions.loadRuntimeState(sessionId!)).resolves.toMatchObject({
+      sessionType: "design",
+    });
+
+    const transientPayload = getLastRendererPayloadOfType<{
+      type: "design:transient-work-ready";
+      sessionId: string;
+    }>(harness.rendererPayloads, "design:transient-work-ready");
+    expect(transientPayload?.sessionId).toBe(sessionId);
+
+    const historyPayload = getLastRendererPayloadOfType<{
+      type: "design:chat:history";
+      messages: unknown[];
+    }>(harness.rendererPayloads, "design:chat:history");
+    expect(historyPayload?.messages).toEqual([]);
+
+    const projects = await (harness.panel as any).designProjectStore.listProjects();
+    expect(projects).toHaveLength(0);
+  });
+
+  it("switches design chat history and flow context by project instead of keeping the previous project session", async () => {
+    const harness = await createHarness();
+    tempDirs.push(harness.storagePath);
+
+    await harness.settings.setOnboardingDone(true);
+    await harness.panel.handleMessage({ type: "ready" });
+
+    const projectA = await (harness.panel as any).designProjectStore.createProject({
+      name: "Project A",
+      source: "blank",
+      activeVersionId: "pending-version",
+    });
+    const projectB = await (harness.panel as any).designProjectStore.createProject({
+      name: "Project B",
+      source: "blank",
+      activeVersionId: "pending-version",
+    });
+
+    const sessionA = await harness.sessions.createSession("session-design-a", "electron", "设计对话 A");
+    await harness.sessions.saveRuntimeState(sessionA.id, {
+      workspaceRoot: "",
+      sessionType: "design",
+      designFlowState: {
+        flowId: "flow-a",
+        projectId: projectA.projectId,
+        conversationId: sessionA.id,
+        createdAt: 1001,
+        conversationHistory: [
+          { role: "user", content: "A 用户消息" },
+          { role: "assistant", content: "A 助手消息" },
+        ],
+      },
+    });
+    await harness.sessions.appendMessages(sessionA.id, [
+      { role: "user", content: "A 用户消息", timestamp: 1001 },
+      { role: "assistant", content: "A 助手消息", timestamp: 1002 },
+    ]);
+
+    const sessionB = await harness.sessions.createSession("session-design-b", "electron", "设计对话 B");
+    await harness.sessions.saveRuntimeState(sessionB.id, {
+      workspaceRoot: "",
+      sessionType: "design",
+      designFlowState: {
+        flowId: "flow-b",
+        projectId: projectB.projectId,
+        conversationId: sessionB.id,
+        createdAt: 1003,
+        conversationHistory: [
+          { role: "user", content: "B 用户消息" },
+          { role: "assistant", content: "B 助手消息" },
+        ],
+      },
+    });
+    await harness.sessions.appendMessages(sessionB.id, [
+      { role: "user", content: "B 用户消息", timestamp: 1003 },
+      { role: "assistant", content: "B 助手消息", timestamp: 1004 },
+    ]);
+
+    await harness.panel.handleMessage({
+      type: "design:switch-project",
+      projectId: projectA.projectId,
+    });
+
+    let historyPayload = getLastRendererPayloadOfType<{
+      type: "design:chat:history";
+      messages: Array<{ role: string; content: string }>;
+    }>(harness.rendererPayloads, "design:chat:history");
+    let flowContextPayload = getLastRendererPayloadOfType<{
+      type: "design:flow-context";
+      projectId: string;
+      projectName: string;
+      hasVersion: boolean;
+    }>(harness.rendererPayloads, "design:flow-context");
+
+    expect(harness.settings.getActiveSessionId()).toBe(sessionA.id);
+    expect(historyPayload?.messages).toEqual([
+      expect.objectContaining({ role: "user", content: "A 用户消息" }),
+      expect.objectContaining({ role: "assistant", content: "A 助手消息" }),
+    ]);
+    expect(flowContextPayload).toMatchObject({
+      projectId: projectA.projectId,
+      projectName: "Project A",
+      hasVersion: false,
+    });
+
+    await harness.panel.handleMessage({
+      type: "design:switch-project",
+      projectId: projectB.projectId,
+    });
+
+    historyPayload = getLastRendererPayloadOfType<{
+      type: "design:chat:history";
+      messages: Array<{ role: string; content: string }>;
+    }>(harness.rendererPayloads, "design:chat:history");
+    flowContextPayload = getLastRendererPayloadOfType<{
+      type: "design:flow-context";
+      projectId: string;
+      projectName: string;
+      hasVersion: boolean;
+    }>(harness.rendererPayloads, "design:flow-context");
+
+    expect(harness.settings.getActiveSessionId()).toBe(sessionB.id);
+    expect(historyPayload?.messages).toEqual([
+      expect.objectContaining({ role: "user", content: "B 用户消息" }),
+      expect.objectContaining({ role: "assistant", content: "B 助手消息" }),
+    ]);
+    expect(flowContextPayload).toMatchObject({
+      projectId: projectB.projectId,
+      projectName: "Project B",
+      hasVersion: false,
+    });
+  });
+
+  it("sends activeVersion payload when switching design project so the renderer can open canvas immediately", async () => {
+    const harness = await createHarness();
+    tempDirs.push(harness.storagePath);
+
+    await harness.settings.setOnboardingDone(true);
+    await harness.panel.handleMessage({ type: "ready" });
+
+    const project = await (harness.panel as any).designProjectStore.createProject({
+      name: "小红书图文原型",
+      source: "artifact",
+      activeVersionId: "pending-version",
+    });
+    const version = await (harness.panel as any).designVersionStore.saveVersion({
+      projectId: project.projectId,
+      prompt: "生成小红书图文原型",
+      title: "生成",
+      outputType: "prototype",
+      style: "",
+      html: "<!doctype html><html><body><main>canvas html</main></body></html>",
+      sliders: [],
+      sliderValues: {},
+      source: "generate",
+    });
+    await (harness.panel as any).designProjectStore.updateProject(project.projectId, {
+      activeVersionId: version.id,
+      updatedAt: version.createdAt,
+      lastOpenedAt: Date.now(),
+    });
+
+    await harness.panel.handleMessage({
+      type: "design:switch-project",
+      projectId: project.projectId,
+    });
+
+    const openedPayload = getLastRendererPayloadOfType<{
+      type: "design:projectOpened";
+      project?: { projectId: string; activeVersionId?: string | null } | null;
+      activeVersion?: { id: string; html?: string | null } | null;
+    }>(harness.rendererPayloads, "design:projectOpened");
+
+    expect(openedPayload?.project).toMatchObject({
+      projectId: project.projectId,
+      activeVersionId: version.id,
+    });
+    expect(openedPayload?.activeVersion).toMatchObject({
+      id: version.id,
+      html: "<!doctype html><html><body><main>canvas html</main></body></html>",
+    });
+  });
+
+  it("creates an empty bound design session when switching to a project without an existing design session", async () => {
+    const harness = await createHarness();
+    tempDirs.push(harness.storagePath);
+
+    await harness.settings.setOnboardingDone(true);
+    await harness.panel.handleMessage({ type: "ready" });
+
+    const previousSession = await harness.sessions.createSession("session-design-prev", "electron", "旧设计会话");
+    await harness.sessions.saveRuntimeState(previousSession.id, {
+      workspaceRoot: "",
+      sessionType: "design",
+      designFlowState: {
+        flowId: "flow-prev",
+        projectId: "legacy-project",
+        conversationId: previousSession.id,
+        createdAt: 1000,
+        conversationHistory: [
+          { role: "user", content: "旧项目消息" },
+        ],
+      },
+    });
+    await harness.sessions.appendMessages(previousSession.id, [
+      { role: "user", content: "旧项目消息", timestamp: 1000 },
+    ]);
+    await harness.settings.setActiveSessionId(previousSession.id);
+    await harness.panel.handleMessage({ type: "ready" });
+
+    const project = await (harness.panel as any).designProjectStore.createProject({
+      name: "Fresh Project",
+      source: "blank",
+      activeVersionId: "pending-version",
+    });
+
+    await harness.panel.handleMessage({
+      type: "design:switch-project",
+      projectId: project.projectId,
+    });
+
+    const activeSessionId = harness.settings.getActiveSessionId();
+    expect(activeSessionId).toBeTruthy();
+    expect(activeSessionId).not.toBe(previousSession.id);
+
+    const activeRuntimeState = await harness.sessions.loadRuntimeState(activeSessionId!);
+    expect(activeRuntimeState).toMatchObject({
+      sessionType: "design",
+      designFlowState: expect.objectContaining({
+        projectId: project.projectId,
+        conversationId: activeSessionId,
+      }),
+    });
+
+    const historyPayload = getLastRendererPayloadOfType<{
+      type: "design:chat:history";
+      messages: unknown[];
+    }>(harness.rendererPayloads, "design:chat:history");
+    const flowContextPayload = getLastRendererPayloadOfType<{
+      type: "design:flow-context";
+      projectId: string;
+      projectName: string;
+      hasVersion: boolean;
+    }>(harness.rendererPayloads, "design:flow-context");
+
+    expect(historyPayload?.messages).toEqual([]);
+    expect(flowContextPayload).toMatchObject({
+      projectId: project.projectId,
+      projectName: "Fresh Project",
+      hasVersion: false,
+    });
+  });
+
+  it("writes design conversationHistory to the current project after each design chat turn", async () => {
+    const harness = await createHarness();
+    tempDirs.push(harness.storagePath);
+
+    await harness.settings.setOnboardingDone(true);
+    await harness.panel.handleMessage({ type: "ready" });
+    await harness.panel.handleMessage({ type: "sessions:new-design" });
+
+    const project = await (harness.panel as any).designProjectStore.createProject({
+      name: "History Sink",
+      source: "blank",
+      activeVersionId: "pending-version",
+    });
+    (harness.panel as any).currentDesignProjectId = project.projectId;
+    (harness.panel as any).currentDesignFlowState = {
+      flowId: "flow-history",
+      projectId: project.projectId,
+      conversationId: harness.settings.getActiveSessionId(),
+      createdAt: 1000,
+      conversationHistory: [],
+    };
+    await (harness.panel as any).saveCurrentSessionRuntimeState(harness.settings.getActiveSessionId()!);
+
+    vi.mocked(resolveProviderConfig).mockResolvedValue({
+      config: {
+        type: "anthropic",
+        apiKey: "test-key",
+        model: "claude-sonnet-4-6",
+      },
+      envMap: {},
+    });
+    const providerRunStep = vi.fn().mockResolvedValue({
+      text: [
+        "请先补充信息。",
+        '<question-form id="sink" title="Quick brief">',
+        '{"questions":[{"id":"tone","label":"Tone","type":"radio","options":["Editorial","Minimal"]}]}',
+        "</question-form>",
+      ].join("\n"),
+      toolCalls: [],
+      done: true,
+    });
+    vi.mocked(buildProviderAdapter).mockReturnValue({
+      runStep: providerRunStep,
+    } as never);
+
+    await harness.panel.handleMessage({
+      type: "design:chat:send",
+      prompt: "把这个作品做成一个企业官网",
+    });
+
+    await expect((harness.panel as any).designProjectStore.loadConversationHistory(project.projectId)).resolves.toEqual([
+      { role: "user", content: "把这个作品做成一个企业官网" },
+      expect.objectContaining({ role: "assistant", content: expect.stringContaining("<question-form") }),
+    ]);
+  });
+
+  it("treats __trigger_discovery__ as an internal discovery trigger without appending a user message", async () => {
+    const harness = await createHarness();
+    tempDirs.push(harness.storagePath);
+
+    await harness.settings.setOnboardingDone(true);
+    await harness.panel.handleMessage({ type: "ready" });
+
+    vi.mocked(resolveProviderConfig).mockResolvedValue({
+      config: {
+        type: "anthropic",
+        apiKey: "test-key",
+        model: "claude-sonnet-4-6",
+      },
+      envMap: {},
+    });
+    const providerRunStep = vi.fn().mockResolvedValue({
+      text: [
+        "先确认几个关键问题。",
+        '<question-form id="discovery" title="Tell us about your design">',
+        '{"questions":[{"id":"audience","label":"Audience","type":"text","placeholder":"Who is it for?"}]}',
+        "</question-form>",
+      ].join("\n"),
+      toolCalls: [],
+      done: true,
+    });
+    vi.mocked(buildProviderAdapter).mockReturnValue({
+      runStep: providerRunStep,
+    } as never);
+
+    await harness.panel.handleMessage({
+      type: "design:chat:send",
+      prompt: "__trigger_discovery__",
+    });
+
+    const sessionId = harness.settings.getActiveSessionId();
+    expect(sessionId).toBeTruthy();
+    const messages = await harness.sessions.loadMessages(sessionId!);
+    expect(messages).toHaveLength(1);
+    expect(messages[0]?.role).toBe("assistant");
+    expect(messages[0]?.content).toContain("<question-form");
+    expect(providerRunStep).toHaveBeenCalledTimes(1);
+  });
+
+  it("resets the active design session state when design:session:reset is received", async () => {
+    const harness = await createHarness();
+    tempDirs.push(harness.storagePath);
+
+    await harness.settings.setOnboardingDone(true);
+    await harness.panel.handleMessage({ type: "ready" });
+    await harness.panel.handleMessage({ type: "sessions:new-design" });
+
+    const designSessionId = harness.settings.getActiveSessionId();
+    expect(designSessionId).toBeTruthy();
+
+    await harness.panel.handleMessage({ type: "design:session:reset" });
+
+    expect(harness.settings.getActiveSessionId()).toBe("");
+    expect((harness.panel as any).currentSessionId).toBeUndefined();
+    expect((harness.panel as any).currentDesignFlowState).toBeUndefined();
+    expect((harness.panel as any).currentDesignProjectId).toBeUndefined();
+
+    const statePayload = getLastRendererPayloadOfType<{
+      type: "state";
+      sessionType: "design" | "default";
+      designState: {
+        currentFlowId: string | null;
+        currentProjectId: string | null;
+      };
+    }>(harness.rendererPayloads, "state");
+    expect(statePayload?.sessionType).toBe("default");
+    expect(statePayload?.designState.currentFlowId).toBeNull();
+    expect(statePayload?.designState.currentProjectId).toBeNull();
+  });
+
+  it("prefers project-level conversationHistory and lazily migrates legacy session history when project history is empty", async () => {
+    const harness = await createHarness();
+    tempDirs.push(harness.storagePath);
+
+    await harness.settings.setOnboardingDone(true);
+    await harness.panel.handleMessage({ type: "ready" });
+
+    const projectA = await (harness.panel as any).designProjectStore.createProject({
+      name: "Project With Project History",
+      source: "blank",
+      activeVersionId: "pending-version",
+    });
+    const sessionA = await harness.sessions.createSession("session-project-history", "electron", "项目历史会话");
+    await harness.sessions.saveRuntimeState(sessionA.id, {
+      workspaceRoot: "",
+      sessionType: "design",
+      designFlowState: {
+        flowId: "flow-project-history",
+        projectId: projectA.projectId,
+        conversationId: sessionA.id,
+        createdAt: 1001,
+        conversationHistory: [
+          { role: "user", content: "旧 session 历史 A" },
+        ],
+      },
+    });
+    await harness.sessions.appendMessages(sessionA.id, [
+      { role: "user", content: "session transcript A", timestamp: 1001 },
+    ]);
+    await (harness.panel as any).designProjectStore.saveConversationHistory(projectA.projectId, [
+      { role: "user", content: "project 历史 A" },
+      { role: "assistant", content: "project 回复 A" },
+    ]);
+
+    await harness.panel.handleMessage({
+      type: "design:switch-project",
+      projectId: projectA.projectId,
+    });
+
+    let runtimeState = await harness.sessions.loadRuntimeState(sessionA.id);
+    let historyPayload = getLastRendererPayloadOfType<{
+      type: "design:chat:history";
+      messages: Array<{ role: string; content: string }>;
+    }>(harness.rendererPayloads, "design:chat:history");
+
+    expect(runtimeState.designFlowState?.conversationHistory).toEqual([
+      { role: "user", content: "project 历史 A" },
+      { role: "assistant", content: "project 回复 A" },
+    ]);
+    expect(historyPayload?.messages).toEqual([
+      expect.objectContaining({ role: "user", content: "session transcript A" }),
+    ]);
+
+    const projectB = await (harness.panel as any).designProjectStore.createProject({
+      name: "Project With Legacy Session History",
+      source: "blank",
+      activeVersionId: "pending-version",
+    });
+    const sessionB = await harness.sessions.createSession("session-legacy-history", "electron", "旧历史会话");
+    await harness.sessions.saveRuntimeState(sessionB.id, {
+      workspaceRoot: "",
+      sessionType: "design",
+      designFlowState: {
+        flowId: "flow-legacy-history",
+        projectId: projectB.projectId,
+        conversationId: sessionB.id,
+        createdAt: 1002,
+        conversationHistory: [
+          { role: "user", content: "legacy 历史 B" },
+          { role: "assistant", content: "legacy 回复 B" },
+        ],
+      },
+    });
+    await harness.sessions.appendMessages(sessionB.id, [
+      { role: "user", content: "session transcript B", timestamp: 1002 },
+    ]);
+
+    await harness.panel.handleMessage({
+      type: "design:switch-project",
+      projectId: projectB.projectId,
+    });
+
+    runtimeState = await harness.sessions.loadRuntimeState(sessionB.id);
+    historyPayload = getLastRendererPayloadOfType<{
+      type: "design:chat:history";
+      messages: Array<{ role: string; content: string }>;
+    }>(harness.rendererPayloads, "design:chat:history");
+
+    await expect((harness.panel as any).designProjectStore.loadConversationHistory(projectB.projectId)).resolves.toEqual([
+      { role: "user", content: "legacy 历史 B" },
+      { role: "assistant", content: "legacy 回复 B" },
+    ]);
+    expect(runtimeState.designFlowState?.conversationHistory).toEqual([
+      { role: "user", content: "legacy 历史 B" },
+      { role: "assistant", content: "legacy 回复 B" },
+    ]);
+    expect(historyPayload?.messages).toEqual([
+      expect.objectContaining({ role: "user", content: "session transcript B" }),
+    ]);
+  });
+
+  it("shows diversion modal instead of generating when current design project already has a version", async () => {
+    const harness = await createHarness();
+    tempDirs.push(harness.storagePath);
+
+    await harness.settings.setOnboardingDone(true);
+    await harness.panel.handleMessage({ type: "ready" });
+    await harness.panel.handleMessage({ type: "sessions:new-design" });
+
+    const version = await (harness.panel as any).saveDesignVersion({
+      prompt: "existing design",
+      outputType: "prototype",
+      style: "",
+      html: "<!DOCTYPE html><html><body><main>Existing</main></body></html>",
+      sliders: [],
+      source: "generate",
+    });
+    expect(version.id).toBeTruthy();
+
+    await harness.panel.handleMessage({
+      type: "design:chat:send",
+      prompt: "做一个完全新的官网首页",
+    });
+
+    const diversionPayload = getLastRendererPayloadOfType<{
+      type: "design:show-diversion";
+      projectName: string;
+      pendingPrompt: string;
+    }>(harness.rendererPayloads, "design:show-diversion");
+    expect(diversionPayload).toMatchObject({
+      type: "design:show-diversion",
+      pendingPrompt: "做一个完全新的官网首页",
+    });
+  });
+
+  it("continues current work after choosing continue from the diversion modal", async () => {
+    const harness = await createHarness();
+    tempDirs.push(harness.storagePath);
+
+    await harness.settings.setOnboardingDone(true);
+    await harness.panel.handleMessage({ type: "ready" });
+    await harness.panel.handleMessage({ type: "sessions:new-design" });
+
+    await (harness.panel as any).saveDesignVersion({
+      prompt: "existing design",
+      outputType: "prototype",
+      style: "",
+      html: "<!DOCTYPE html><html><body><main>Existing</main></body></html>",
+      sliders: [],
+      source: "generate",
+    });
+
+    vi.mocked(resolveProviderConfig).mockResolvedValue({
+      config: {
+        type: "anthropic",
+        apiKey: "test-key",
+        model: "claude-sonnet-4-6",
+      },
+      envMap: {},
+    });
+    const providerRunStep = vi.fn().mockResolvedValue({
+      text: [
+        '<artifact identifier="continued-artifact" type="text/html" title="Continued Artifact">',
+        "<!DOCTYPE html>",
+        "<html><head><title>Continued</title></head><body><main>Continued Artifact</main></body></html>",
+        "</artifact>",
+      ].join("\n"),
+      toolCalls: [],
+      done: true,
+    });
+    vi.mocked(buildProviderAdapter).mockReturnValue({
+      runStep: providerRunStep,
+    } as never);
+
+    await harness.panel.handleMessage({
+      type: "design:chat:send",
+      prompt: "继续做一个新的迭代方向",
+    });
+    await harness.panel.handleMessage({
+      type: "design:diversion-choice",
+      choice: "continue",
+    });
+
+    expect(providerRunStep).toHaveBeenCalledTimes(1);
+    const messages = await harness.sessions.loadMessages(harness.settings.getActiveSessionId()!);
+    expect(messages.at(-1)?.content).toContain("<artifact");
+  });
+
+  it("starts a new transient work after choosing new-work from the diversion modal", async () => {
+    const harness = await createHarness();
+    tempDirs.push(harness.storagePath);
+
+    await harness.settings.setOnboardingDone(true);
+    await harness.panel.handleMessage({ type: "ready" });
+    await harness.panel.handleMessage({ type: "sessions:new-design" });
+
+    await (harness.panel as any).saveDesignVersion({
+      prompt: "existing design",
+      outputType: "prototype",
+      style: "",
+      html: "<!DOCTYPE html><html><body><main>Existing</main></body></html>",
+      sliders: [],
+      source: "generate",
+    });
+    const originalSessionId = harness.settings.getActiveSessionId()!;
+
+    vi.mocked(resolveProviderConfig).mockResolvedValue({
+      config: {
+        type: "anthropic",
+        apiKey: "test-key",
+        model: "claude-sonnet-4-6",
+      },
+      envMap: {},
+    });
+    const providerRunStep = vi.fn().mockResolvedValue({
+      text: [
+        "New work started.",
+        '<question-form id="fresh" title="Quick brief">',
+        '{"questions":[{"id":"tone","label":"Tone","type":"radio","options":["Editorial","Minimal"]}]}',
+        "</question-form>",
+      ].join("\n"),
+      toolCalls: [],
+      done: true,
+    });
+    vi.mocked(buildProviderAdapter).mockReturnValue({
+      runStep: providerRunStep,
+    } as never);
+
+    await harness.panel.handleMessage({
+      type: "design:chat:send",
+      prompt: "再做一个完全不同的新作品",
+    });
+    await harness.panel.handleMessage({
+      type: "design:diversion-choice",
+      choice: "new-work",
+    });
+
+    const newSessionId = harness.settings.getActiveSessionId()!;
+    expect(newSessionId).not.toBe(originalSessionId);
+    await expect(harness.sessions.loadRuntimeState(newSessionId)).resolves.toMatchObject({
+      sessionType: "design",
+    });
+  });
+
+  it("does not generate anything after choosing cancel from the diversion modal", async () => {
+    const harness = await createHarness();
+    tempDirs.push(harness.storagePath);
+
+    await harness.settings.setOnboardingDone(true);
+    await harness.panel.handleMessage({ type: "ready" });
+    await harness.panel.handleMessage({ type: "sessions:new-design" });
+
+    await (harness.panel as any).saveDesignVersion({
+      prompt: "existing design",
+      outputType: "prototype",
+      style: "",
+      html: "<!DOCTYPE html><html><body><main>Existing</main></body></html>",
+      sliders: [],
+      source: "generate",
+    });
+
+    const providerRunStep = vi.fn();
+    vi.mocked(buildProviderAdapter).mockReturnValue({
+      runStep: providerRunStep,
+    } as never);
+
+    await harness.panel.handleMessage({
+      type: "design:chat:send",
+      prompt: "我要开始另一个作品",
+    });
+    await harness.panel.handleMessage({
+      type: "design:diversion-choice",
+      choice: "cancel",
+    });
+
+    expect(providerRunStep).not.toHaveBeenCalled();
+  });
+
+  it("handles design:chat:send by creating a silent design session and streaming through design chat IPC", async () => {
+    const harness = await createHarness();
+    tempDirs.push(harness.storagePath);
+
+    await harness.settings.setOnboardingDone(true);
+    await harness.panel.handleMessage({ type: "ready" });
+
+    vi.mocked(resolveProviderConfig).mockResolvedValue({
+      config: {
+        type: "anthropic",
+        apiKey: "test-key",
+        model: "claude-sonnet-4-6",
+      },
+      envMap: {},
+    });
+    const providerRunStep = vi.fn().mockImplementation(async (_history, _tools, onToken) => {
+      onToken?.("Hello");
+      onToken?.(" world");
+      return {
+        text: [
+          "Hello world",
+          '<question-form id="brief" title="Quick brief">',
+          '{"questions":[{"id":"tone","label":"Tone","type":"radio","options":["Editorial","Minimal"]}]}',
+          "</question-form>",
+        ].join("\n"),
+        toolCalls: [],
+        done: true,
+      };
+    });
+    vi.mocked(buildProviderAdapter).mockReturnValue({
+      runStep: providerRunStep,
+    } as never);
+
+    await harness.panel.handleMessage({
+      type: "design:chat:send",
+      prompt: "做一个简洁企业官网",
+    });
+
+    const runtimeState = await harness.sessions.loadRuntimeState(harness.settings.getActiveSessionId()!);
+    expect(runtimeState.sessionType).toBe("design");
+
+    const appendPayloads = harness.rendererPayloads.filter(
+      payload => (payload as { type?: string }).type === "design:chat:append",
+    ) as Array<{
+      type: "design:chat:append";
+      msg: { role: string; content: string };
+    }>;
+    expect(appendPayloads[0]?.msg).toMatchObject({
+      role: "user",
+      content: "做一个简洁企业官网",
+    });
+    expect(appendPayloads.at(-1)?.msg).toMatchObject({
+      role: "assistant",
+      content: expect.stringContaining("<question-form"),
+    });
+
+    const tokenPayloads = harness.rendererPayloads.filter(
+      payload => (payload as { type?: string }).type === "design:chat:token",
+    ) as Array<{
+      type: "design:chat:token";
+      token: string;
+    }>;
+    expect(tokenPayloads.map(payload => payload.token)).toEqual(["Hello", " world"]);
+  });
+
+  it("includes artifactId in design chat append payloads for generated artifacts", async () => {
+    const harness = await createHarness();
+    tempDirs.push(harness.storagePath);
+
+    await harness.settings.setOnboardingDone(true);
+    await harness.panel.handleMessage({ type: "ready" });
+
+    vi.mocked(resolveProviderConfig).mockResolvedValue({
+      config: {
+        type: "anthropic",
+        apiKey: "test-key",
+        model: "claude-sonnet-4-6",
+      },
+      envMap: {},
+    });
+    const providerRunStep = vi.fn().mockResolvedValue({
+      text: [
+        '<artifact identifier="robotics-landing" type="text/html" title="Robotics Landing">',
+        "<!DOCTYPE html>",
+        "<html><head><title>Robotics Landing</title></head><body><main>Robotics Landing</main></body></html>",
+        "</artifact>",
+      ].join("\n"),
+      toolCalls: [],
+      done: true,
+    });
+    vi.mocked(buildProviderAdapter).mockReturnValue({
+      runStep: providerRunStep,
+    } as never);
+
+    await harness.panel.handleMessage({
+      type: "design:chat:send",
+      prompt: "做一个机器人落地页",
+    });
+
+    const artifactAppend = harness.rendererPayloads.find(
+      payload =>
+        (payload as { type?: string }).type === "design:chat:append" &&
+        (payload as { msg?: { role?: string; kind?: string } }).msg?.role === "assistant" &&
+        (payload as { msg?: { role?: string; kind?: string } }).msg?.kind === "artifact",
+    ) as {
+      type: "design:chat:append";
+      msg: { artifactId?: string; kind?: string };
+    } | undefined;
+
+    expect(artifactAppend?.msg.kind).toBe("artifact");
+    expect(artifactAppend?.msg.artifactId).toBeTruthy();
   });
 
   it("uses the legacy global workspace only to migrate the initially active session", async () => {
@@ -4506,9 +5389,9 @@ Freeze skill body.
     const runtimeState = await harness.sessions.loadRuntimeState(currentSessionId!);
     expect(runtimeState.designFlowState).toMatchObject({
       flowId: expect.stringContaining(`design-flow-${currentSessionId}`),
-      projectId: expect.any(String),
       conversationId: currentSessionId,
     });
+    expect(runtimeState.designFlowState?.projectId ?? null).toBeNull();
 
     const statePayload = getLastRendererPayloadOfType<{
       type: "state";
@@ -4518,7 +5401,7 @@ Freeze skill body.
       };
     }>(harness.rendererPayloads, "state");
     expect(statePayload?.designState.currentFlowId).toBe(runtimeState.designFlowState?.flowId ?? null);
-    expect(statePayload?.designState.currentFlowProjectId).toBe(runtimeState.designFlowState?.projectId ?? null);
+    expect(statePayload?.designState.currentFlowProjectId ?? null).toBeNull();
   });
 
   it("routes all prompts through the design lane when the current sessionType is design", async () => {
@@ -4673,7 +5556,8 @@ Freeze skill body.
     expect(firstRuntimeState.designFlowState?.flowId).toBeTruthy();
     expect(secondRuntimeState.designFlowState?.flowId).toBeTruthy();
     expect(secondRuntimeState.designFlowState?.flowId).not.toBe(firstRuntimeState.designFlowState?.flowId);
-    expect(secondRuntimeState.designFlowState?.projectId).not.toBe(firstRuntimeState.designFlowState?.projectId);
+    expect(firstRuntimeState.designFlowState?.projectId ?? null).toBeNull();
+    expect(secondRuntimeState.designFlowState?.projectId ?? null).toBeNull();
   });
 
   it("returns a question-form on the first design-lane turn instead of generating HTML immediately", async () => {
@@ -4780,20 +5664,258 @@ Freeze skill body.
       designFlowId: (await harness.sessions.loadRuntimeState(harness.settings.getActiveSessionId()!)).designFlowState?.flowId,
     });
 
-    const resultPayload = getLastRendererPayloadOfType<{
-      type: "design:result";
-      html: string;
-      outputType: string;
-    }>(harness.rendererPayloads, "design:result");
-    expect(resultPayload).toMatchObject({
-      type: "design:result",
-      html: expect.stringContaining("Robotics Landing"),
-      outputType: "landing-page",
-    });
+    const messages = await harness.sessions.loadMessages(harness.settings.getActiveSessionId()!);
+    expect(messages.at(-1)?.role).toBe("assistant");
+    expect(messages.at(-1)?.content).toContain("<artifact");
 
     const runtimeState = await harness.sessions.loadRuntimeState(harness.settings.getActiveSessionId()!);
     expect(runtimeState.designFlowState?.conversationHistory?.length).toBeGreaterThanOrEqual(4);
     expect(runtimeState.designFlowState?.conversationHistory?.at(-1)?.content).toContain("<artifact");
+  });
+
+  it("does not auto-save a design-session artifact into design projects before enter-design is triggered", async () => {
+    const harness = await createHarness();
+    tempDirs.push(harness.storagePath);
+
+    await harness.settings.setOnboardingDone(true);
+    await harness.panel.handleMessage({ type: "ready" });
+    await harness.panel.handleMessage({ type: "sessions:new-design" });
+
+    vi.mocked(resolveProviderConfig).mockResolvedValue({
+      config: {
+        type: "anthropic",
+        apiKey: "test-key",
+        model: "claude-sonnet-4-6",
+      },
+      envMap: {},
+    });
+    const providerRunStep = vi.fn()
+      .mockResolvedValueOnce({
+        text: [
+          "Got it — I need a few design choices first.",
+          '<question-form id="discovery" title="Quick brief">',
+          '{"questions":[{"id":"tone","label":"Tone","type":"radio","options":["Editorial","Minimal"]}]}',
+          "</question-form>",
+        ].join("\n"),
+        toolCalls: [],
+        done: true,
+      })
+      .mockResolvedValueOnce({
+        text: [
+          '<artifact identifier="robotics-landing" type="text/html" title="Robotics Landing">',
+          "<!DOCTYPE html>",
+          "<html><head><title>Robotics Landing</title></head><body><main>Robotics Landing</main></body></html>",
+          "</artifact>",
+        ].join("\n"),
+        toolCalls: [],
+        done: true,
+      });
+    vi.mocked(buildProviderAdapter).mockReturnValue({
+      runStep: providerRunStep,
+    } as never);
+
+    await harness.panel.handleMessage({
+      type: "sendPrompt",
+      prompt: "Design a premium robotics landing page",
+      outputType: "landing-page",
+    });
+    await harness.panel.handleMessage({
+      type: "sendPrompt",
+      prompt: "[form answers - discovery]\n- Tone: Editorial",
+      outputType: "landing-page",
+      designFlowId: (await harness.sessions.loadRuntimeState(harness.settings.getActiveSessionId()!)).designFlowState?.flowId,
+    });
+
+    const projectsPayload = await (harness.panel as any).designProjectStore.listProjects();
+    expect(projectsPayload).toHaveLength(0);
+  });
+
+  it("saves a design-session artifact to a project only when artifact:enter-design is triggered, then reuses it", async () => {
+    const harness = await createHarness();
+    tempDirs.push(harness.storagePath);
+
+    await harness.settings.setOnboardingDone(true);
+    await harness.panel.handleMessage({ type: "ready" });
+    await harness.panel.handleMessage({ type: "sessions:new-design" });
+
+    vi.mocked(resolveProviderConfig).mockResolvedValue({
+      config: {
+        type: "anthropic",
+        apiKey: "test-key",
+        model: "claude-sonnet-4-6",
+      },
+      envMap: {},
+    });
+    const providerRunStep = vi.fn()
+      .mockResolvedValueOnce({
+        text: [
+          "Got it — I need a few design choices first.",
+          '<question-form id="discovery" title="Quick brief">',
+          '{"questions":[{"id":"tone","label":"Tone","type":"radio","options":["Editorial","Minimal"]}]}',
+          "</question-form>",
+        ].join("\n"),
+        toolCalls: [],
+        done: true,
+      })
+      .mockResolvedValueOnce({
+        text: [
+          '<artifact identifier="robotics-landing" type="text/html" title="Robotics Landing">',
+          "<!DOCTYPE html>",
+          "<html><head><title>Robotics Landing</title></head><body><main>Robotics Landing</main></body></html>",
+          "</artifact>",
+        ].join("\n"),
+        toolCalls: [],
+        done: true,
+      });
+    vi.mocked(buildProviderAdapter).mockReturnValue({
+      runStep: providerRunStep,
+    } as never);
+
+    await harness.panel.handleMessage({
+      type: "sendPrompt",
+      prompt: "Design a premium robotics landing page",
+      outputType: "landing-page",
+    });
+    await harness.panel.handleMessage({
+      type: "sendPrompt",
+      prompt: "[form answers - discovery]\n- Tone: Editorial",
+      outputType: "landing-page",
+      designFlowId: (await harness.sessions.loadRuntimeState(harness.settings.getActiveSessionId()!)).designFlowState?.flowId,
+    });
+
+    const artifactState = getLastRendererPayloadOfType<{
+      type: "state";
+      artifactState?: {
+        activeArtifactId?: string | null;
+      };
+    }>(harness.rendererPayloads, "state");
+    const artifactId = artifactState?.artifactState?.activeArtifactId;
+    expect(artifactId).toBeTruthy();
+
+    await harness.panel.handleMessage({
+      type: "artifact:enter-design",
+      artifactId,
+    });
+
+    const firstOpenPayload = getLastRendererPayloadOfType<{
+      type: "midtai:open";
+      payload?: { projectId?: string };
+    }>(harness.rendererPayloads, "midtai:open");
+    expect(firstOpenPayload?.payload?.projectId).toBeTruthy();
+
+    const createdPayload = getLastRendererPayloadOfType<{
+      type: "design:project-created";
+      projectId: string;
+      versionCount: number;
+    }>(harness.rendererPayloads, "design:project-created");
+    expect(createdPayload).toMatchObject({
+      type: "design:project-created",
+      projectId: firstOpenPayload?.payload?.projectId,
+      versionCount: 1,
+    });
+
+    const messages = await harness.sessions.loadMessages(harness.settings.getActiveSessionId()!);
+    const artifactMessage = messages.find(message => message.designProjectId);
+    expect(artifactMessage?.designProjectId).toBeTruthy();
+
+    const firstProjectId = artifactMessage?.designProjectId;
+
+    await harness.panel.handleMessage({
+      type: "artifact:enter-design",
+      artifactId,
+    });
+
+    const secondOpenPayload = getLastRendererPayloadOfType<{
+      type: "midtai:open";
+      payload?: { projectId?: string };
+    }>(harness.rendererPayloads, "midtai:open");
+    expect(secondOpenPayload?.payload?.projectId).toBe(firstProjectId);
+  });
+
+  it("returns a tombstone response for deleted design artifact projects", async () => {
+    const harness = await createHarness();
+    tempDirs.push(harness.storagePath);
+
+    await harness.settings.setOnboardingDone(true);
+    await harness.panel.handleMessage({ type: "ready" });
+    await harness.panel.handleMessage({ type: "sessions:new-design" });
+
+    vi.mocked(resolveProviderConfig).mockResolvedValue({
+      config: {
+        type: "anthropic",
+        apiKey: "test-key",
+        model: "claude-sonnet-4-6",
+      },
+      envMap: {},
+    });
+    const providerRunStep = vi.fn()
+      .mockResolvedValueOnce({
+        text: [
+          "Got it — I need a few design choices first.",
+          '<question-form id="discovery" title="Quick brief">',
+          '{"questions":[{"id":"tone","label":"Tone","type":"radio","options":["Editorial","Minimal"]}]}',
+          "</question-form>",
+        ].join("\n"),
+        toolCalls: [],
+        done: true,
+      })
+      .mockResolvedValueOnce({
+        text: [
+          '<artifact identifier="robotics-landing" type="text/html" title="Robotics Landing">',
+          "<!DOCTYPE html>",
+          "<html><head><title>Robotics Landing</title></head><body><main>Robotics Landing</main></body></html>",
+          "</artifact>",
+        ].join("\n"),
+        toolCalls: [],
+        done: true,
+      });
+    vi.mocked(buildProviderAdapter).mockReturnValue({
+      runStep: providerRunStep,
+    } as never);
+
+    await harness.panel.handleMessage({
+      type: "sendPrompt",
+      prompt: "Design a premium robotics landing page",
+      outputType: "landing-page",
+    });
+    await harness.panel.handleMessage({
+      type: "sendPrompt",
+      prompt: "[form answers - discovery]\n- Tone: Editorial",
+      outputType: "landing-page",
+      designFlowId: (await harness.sessions.loadRuntimeState(harness.settings.getActiveSessionId()!)).designFlowState?.flowId,
+    });
+
+    const artifactId = getLastRendererPayloadOfType<{
+      type: "state";
+      artifactState?: { activeArtifactId?: string | null };
+    }>(harness.rendererPayloads, "state")?.artifactState?.activeArtifactId;
+    await harness.panel.handleMessage({
+      type: "artifact:enter-design",
+      artifactId,
+    });
+
+    const messages = await harness.sessions.loadMessages(harness.settings.getActiveSessionId()!);
+    const projectId = messages.find(message => message.designProjectId)?.designProjectId;
+    expect(projectId).toBeTruthy();
+
+    await (harness.panel as any).designVersionStore.deleteByProjectId(projectId);
+    await (harness.panel as any).designProjectStore.deleteProject(projectId);
+
+    await harness.panel.handleMessage({
+      type: "design:get-active-version",
+      projectId,
+    });
+
+    const deletedPayload = getLastRendererPayloadOfType<{
+      type: "design:active-version";
+      projectId: string;
+      deleted?: boolean;
+    }>(harness.rendererPayloads, "design:active-version");
+    expect(deletedPayload).toMatchObject({
+      type: "design:active-version",
+      projectId,
+      deleted: true,
+    });
   });
 
   it("returns direction suggestions for ambiguous design prompts before generation", async () => {

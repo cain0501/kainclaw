@@ -1,22 +1,51 @@
 # Primer: vscode-extension-317
-# 专业模式入口：点「专业」直接进设计专用 chat session
+# 专业模式入口：midtai 设计 tab 内嵌 design chat
+
+## 产品决策（已与用户确认）
+
+KainClaw 有两个独立 chat 窗口：
+1. **主 chat**（page-chat）：全能，现有，不动
+2. **设计 chat**（嵌在 midtai 设计 tab 的专业模式里）：只做设计，永不跳出 midtai
+
+设计 chat 产生的 session 数据共享（`sessionType: 'design'`，出现在主 chat 侧边栏），但 UI 永远留在 midtai 内。
+
+**绝对禁止**：点「专业」后调用 `showPage('chat')` 或发 `sessions:switch-to-chat`。
+
+---
 
 ## 前置条件
 
 依赖 A（by7）、B（jns）、C（04q）已完成。
 
-现状：点「专业」只是切换 midtai 表单里的高级字段显示（`setMidtaiDesignMode('pro')`），用户根本进不了 chat 流程。A/B/C 的后端协议和渲染逻辑全部就绪，缺的是入口。
+现状：点「专业」发 `sessions:new-design` → host 创建 session → renderer 调 `showPage('chat')` 跳主窗口。**这是错的，需要完全重写。**
 
 ---
 
-## 产品决策
+## 目标行为
 
-**专业模式 = 设计专用 chat session。**
+```
+用户在 midtai 设计 tab
+    ↓
+点「专业」按钮
+    ↓
+midtai 左栏：隐藏小白表单，显示 #midtai-design-chat 面板
+（不跳页面，不跳窗口）
+    ↓
+用户在 design chat 输入框写 brief → 发送
+    ↓
+host 创建 sessionType:'design' session（如果没有活跃的）
+host 通过 handleDesignChatLane() 处理
+    ↓
+LLM 回 question-form → 渲染在 design chat 面板
+用户填表 → 提交
+    ↓
+LLM 生成 artifact HTML
+    ↓
+midtai 主区打开 Phase B 画布
+设计 chat 面板显示「已生成设计」+ 进入按钮
+```
 
-- 点「专业」→ 新建 `sessionType: 'design'` 的 session → 跳到 chat 界面
-- 这个 session 的所有消息自动走 `handleDesignChatLane()`，不需要前端带任何 `lane` 标记
-- system prompt 限定只处理设计需求，其他请求一律拒绝
-- 小白模式不动，继续走 midtai 老路径
+点「小白」→ 恢复显示传统表单，隐藏 design chat。
 
 ---
 
@@ -24,193 +53,200 @@
 
 ### electron/renderer/index.html
 
-**专业按钮**（line ~1124）：
+**`setMidtaiDesignMode(mode)`**（line ~3787）：
 ```javascript
-<button id="design-mode-pro-btn" onclick="setMidtaiDesignMode('pro')">专业</button>
-```
+// 现在（错的）：
+function setMidtaiDesignMode(mode) {
+  if (mode === 'pro') {
+    send({ type: 'sessions:new-design' });
+    return;
+  }
+  ...
+}
 
-**setMidtaiDesignMode()**（line ~3778）：
-```javascript
+// 改成：
 function setMidtaiDesignMode(mode) {
   midtaiState.designMode = mode === 'pro' ? 'pro' : 'simple';
   localStorage.setItem('kc_design_mode', midtaiState.designMode);
   applyMidtaiDesignMode();
 }
 ```
-→ 改造：`mode === 'pro'` 时改为 `send({ type: 'sessions:new-design' })`，不再切换表单字段。
 
-**sendPrompt()**（line ~5576）：当前所有消息都从这里发出，不带 lane 标记。设计 session 里不需要改这里，host 侧看 session 类型路由。
+**`applyMidtaiDesignMode()`**（line ~3797）：加切换逻辑：
+```javascript
+// 小白：显示 #midtai-form-fields，隐藏 #midtai-design-chat
+// 专业：隐藏 #midtai-form-fields，显示 #midtai-design-chat
+```
 
-**showPage()**（line ~5007）：切换页面的函数，`showPage('chat')` 跳到 chat 界面。
+**`midtai-form-design` div**（line ~1118）：在现有表单后面新增：
+```html
+<div id="midtai-design-chat" style="display:none;flex-direction:column;flex:1;overflow:hidden">
+  <!-- 消息列表 -->
+  <div id="design-chat-messages" style="flex:1;overflow-y:auto;padding:10px 11px;display:flex;flex-direction:column;gap:10px">
+    <!-- 空状态 -->
+    <div id="design-chat-empty" style="...">
+      <div>描述你想要的设计</div>
+      <div style="font-size:11px;color:#a8a29e">AI 会引导你完善需求，然后生成设计稿</div>
+    </div>
+  </div>
+  <!-- 输入区 -->
+  <div style="padding:10px 11px;border-top:1px solid #f0ebe3;flex-shrink:0">
+    <textarea id="design-chat-input"
+      placeholder="描述你想要的设计…"
+      style="width:100%;min-height:60px;...resize:none"
+      onkeydown="handleDesignChatKeydown(event)"></textarea>
+    <button onclick="sendDesignChatMessage()" style="...">发送</button>
+  </div>
+</div>
+```
 
-**session 列表渲染**：搜索 `renderSessionList` 或 `sessions:data`，找到 session item 渲染逻辑，加设计图标。
+**新增 JS 函数**：
+```javascript
+function handleDesignChatKeydown(e) {
+  if (e.key === 'Enter' && !e.shiftKey) {
+    e.preventDefault();
+    sendDesignChatMessage();
+  }
+}
 
-**chat 输入框 placeholder**：搜索 `chat-input` 或 `sendPrompt` 附近的 placeholder，设计 session 里改为「描述你想要的设计…」。
+function sendDesignChatMessage() {
+  const input = document.getElementById('design-chat-input');
+  const prompt = input?.value.trim();
+  if (!prompt) return;
+  input.value = '';
+  // 追加用户消息到 UI
+  appendDesignChatMessage({ role: 'user', content: prompt });
+  send({ type: 'design:chat:send', prompt });
+}
+
+function appendDesignChatMessage(msg) {
+  // 渲染 text / question-form / artifact
+  // 复用现有 KainClawQuestionForm + artifact 渲染逻辑
+}
+```
+
+**处理 host → renderer 消息**（`sessions:switch-to-chat` 处理器**删掉**，新增）：
+```javascript
+if (type === 'design:chat:append') {
+  appendDesignChatMessage(message.msg);
+  return;
+}
+if (type === 'design:chat:token') {
+  updateDesignChatStreamingMessage(message.token, message.messageId);
+  return;
+}
+```
 
 ### electron/ElectronChatPanel.ts
 
-**handleRendererMessage() sendPrompt 路由**（line ~940）：
+**删除**：
+- `createNewDesignSession()` 里的 `this.sendToRenderer({ type: 'sessions:switch-to-chat' })`
+- `handleRendererMessage` 里 `sessions:new-design` 路由（或保留但去掉跳转）
+
+**新增**：`handleRendererMessage` 加路由：
 ```typescript
-const lane = message.lane === "design" ? "design" : "default";
-if (lane === "design") {
-  await this.handleDesignChatLane(message);
-  return;
-}
-```
-→ 改造：不再看 `message.lane`，改看当前 session 的 `sessionType`：
-```typescript
-const isDesignSession = await this.isCurrentSessionDesignType();
-if (isDesignSession) {
-  await this.handleDesignChatLane(message);
+if (type === 'design:chat:send') {
+  await this.handleDesignChatSend(message);
   return;
 }
 ```
 
-**createNewSession()**（line ~1210）：新增 `createNewDesignSession()` 方法，创建 session 时写入 `sessionType: 'design'`。
-
-**handleRendererMessage() sessions 路由**（line ~803-809）：加一行：
+**新增方法 `handleDesignChatSend()`**：
 ```typescript
-if (type === "sessions:new-design") { await this.createNewDesignSession(); return; }
-```
+private async handleDesignChatSend(message: Record<string, unknown>): Promise<void> {
+  const prompt = String(message.prompt ?? '');
+  if (!prompt) return;
 
-### src/storage/sessionRepository.ts
+  // 确保有活跃的 design session
+  const hasDesignSession = this.currentSessionId
+    && (await this.sessions.loadRuntimeState(this.currentSessionId))?.sessionType === 'design';
 
-**SessionRuntimeState**（line ~94）：加 `sessionType` 字段：
-```typescript
-export type SessionRuntimeState = {
-  // ...现有字段
-  sessionType?: 'design' | 'default';
-};
-```
-序列化/反序列化要同步更新（参考 `designFlowState` 的处理方式）。
+  if (!hasDesignSession) {
+    // 创建新 design session，但不跳主 chat
+    await this.createNewDesignSessionSilent();
+  }
 
----
+  // 存用户消息
+  await this.appendUserMessageToSession(this.currentSessionId!, prompt);
 
-## 本任务需要做的事
+  // 走 design chat lane，响应走 design:chat:append / design:chat:token
+  await this.handleDesignChatLane({ prompt, target: 'design-chat' });
+}
 
-### 1. 扩展 SessionRuntimeState
-
-```typescript
-// src/storage/sessionRepository.ts
-export type SessionRuntimeState = {
-  pendingPlanVerification?: PendingPlanVerificationSessionState;
-  modelConversation?: PersistedConversationMessage[];
-  compactBoundary?: CompactBoundarySessionState;
-  artifactPanel?: ArtifactPanelSessionState;
-  designFlowState?: DesignFlowState;
-  workspaceRoot?: string;
-  sessionType?: 'design' | 'default';  // 新增
-};
-```
-
-序列化时加入 `sessionType`，反序列化时验证值为 `'design'` 或 `'default'`。
-
-### 2. host 新增 createNewDesignSession()
-
-```typescript
-private async createNewDesignSession(): Promise<void> {
+private async createNewDesignSessionSilent(): Promise<void> {
   const workspaceRoot = this.getSelectedWorkspaceRoot();
   const session = await this.sessions.createSession(
     randomUUID(),
     getWorkspaceHash(workspaceRoot),
-    '设计对话',  // 默认标题
+    '设计对话',
   );
   await this.sessions.saveRuntimeState(session.id, {
     workspaceRoot,
     sessionType: 'design',
   });
   await this.switchSession(session.id);
-  // 通知 renderer 跳到 chat 界面
-  this.sendToRenderer({ type: 'sessions:switch-to-chat' });
+  // 不发 sessions:switch-to-chat！只刷新侧边栏数据
+  await this.postState();
 }
 ```
 
-### 3. host 新增 isCurrentSessionDesignType()
-
+**改造 `handleDesignChatLane()`**：支持 `target` 参数，根据 target 决定响应走哪个 IPC：
 ```typescript
-private async isCurrentSessionDesignType(): Promise<boolean> {
-  if (!this.currentSessionId) return false;
-  const state = await this.sessions.loadRuntimeState(this.currentSessionId);
-  return state.sessionType === 'design';
-}
+// target === 'design-chat' 时：
+// token 走 design:chat:token
+// 最终消息走 design:chat:append
+// artifact 生成后额外调用 openMidtai({ contentType:'design', view:'preview', ... })
+// （Phase B 画布在 midtai 主区打开——这是合法的，用户已在 midtai 内）
 ```
 
-### 4. host 改造 sendPrompt 路由
+### src/storage/sessionRepository.ts
 
-```typescript
-if (type === 'sendPrompt') {
-  const isDesignSession = await this.isCurrentSessionDesignType();
-  if (isDesignSession) {
-    await this.handleDesignChatLane(message);
-    return;
-  }
-  await this.routePrompt(...);
-  return;
-}
-```
+`SessionRuntimeState` 加 `sessionType` 字段（317 已加，不需重复）。
 
-同时在 `sessions:new-design` 加路由：
-```typescript
-if (type === 'sessions:new-design') { await this.createNewDesignSession(); return; }
-```
+---
 
-### 5. renderer 改造 setMidtaiDesignMode()
+## 需要删除/撤销的 317 旧代码
 
-```javascript
-function setMidtaiDesignMode(mode) {
-  if (mode === 'pro') {
-    send({ type: 'sessions:new-design' });
-    return;
-  }
-  // 小白模式保持原样
-  midtaiState.designMode = 'simple';
-  localStorage.setItem('kc_design_mode', 'simple');
-  applyMidtaiDesignMode();
-}
-```
+| 位置 | 删掉什么 |
+|------|---------|
+| `renderer/index.html` `setMidtaiDesignMode` | `send({ type: 'sessions:new-design' })` 分支 |
+| `renderer/index.html` 消息处理 | `sessions:switch-to-chat` → `showPage('chat')` |
+| `ElectronChatPanel.ts` `createNewDesignSession()` | `sendToRenderer({ type: 'sessions:switch-to-chat' })` |
+| `ElectronChatPanel.ts` 路由 | `sessions:new-design` → `createNewDesignSession()` 调用链（可保留方法，去掉路由或保留为内部工具） |
 
-### 6. renderer 处理 sessions:switch-to-chat
+---
 
-在 host → renderer 消息处理里加：
-```javascript
-if (type === 'sessions:switch-to-chat') {
-  showPage('chat');
-  return;
-}
-```
+## 渲染细节：design chat 内的消息类型
 
-### 7. renderer chat 输入框 placeholder
+| 消息类型 | 渲染方式 |
+|---------|---------|
+| 普通文本 | 简单文本气泡 |
+| `<question-form>` | 复用 `KainClawQuestionForm.splitOnQuestionForms()` + 现有 question-form 渲染 |
+| `<artifact>` | 显示「设计已生成」chip + 「进入画布」按钮（点击调 `openDesignHub()`） |
+| 流式 token | 追加到最后一条 assistant 消息 |
 
-设计 session 里 placeholder 改为「描述你想要的设计…」。
-判断方式：`appState.sessionType === 'design'`（host 在 `postState()` 里带上 sessionType）。
-
-host `postState()` 需要把 `sessionType` 加入发给 renderer 的 state 对象。
-
-### 8. renderer session 列表视觉区分
-
-session item 渲染时，`sessionType === 'design'` 的 session 在标题前加设计图标（用 SVG 或 emoji 均可，保持和现有 session item 风格一致）。
+question-form 填表提交走现有 `submitQuestionForm()` 逻辑，但结果发送到 `design:chat:send`（或复用现有 `sendPrompt`，host 侧看 sessionType 路由到 `handleDesignChatLane`）。
 
 ---
 
 ## 验收标准
 
-1. 点「专业」→ 新建设计 session → 自动跳到 chat 界面
-2. 在设计 session 里发消息 → 自动走 `handleDesignChatLane()`，LLM 第一轮返回 `<question-form>` 卡片
-3. 填表提交 → LLM 第二轮生成 `<artifact>`
-4. 发非设计请求（如"帮我写代码"）→ LLM 拒绝（system prompt 限定）
-5. chat 侧边栏设计 session 有视觉区分（图标或标签）
-6. 设计 session 输入框 placeholder 为「描述你想要的设计…」
-7. 小白模式不受影响，点「小白」继续走 midtai 老路径
-8. 普通 session 发消息走普通路径，不受影响
+1. 点「专业」→ midtai 左栏变为 design chat 面板，**页面不跳转**
+2. 点「小白」→ 恢复传统表单
+3. 在 design chat 输入 brief → 发送 → LLM 回 question-form 卡片，渲染在 design chat 内
+4. 填表提交 → LLM 生成 artifact → midtai 主区打开 Phase B 画布
+5. 设计 session 出现在主 chat 侧边栏（✦ 图标）
+6. 全程不调用 `showPage('chat')`
+7. 普通 session 发消息不受影响
 
 ---
 
 ## Out of scope
 
-- 不做 D 任务（artifact 入库）
-- 不删除 midtai 老入口
-- 不重构 index.html
-- 不实现设计 session 的特殊 UI（只改入口和路由）
+- 不重构 index.html 整体结构
+- 不做设计 chat 的历史消息加载（首次进入专业模式是空白状态）
+- 不做「继续上次设计对话」功能（每次进专业模式是新 session）
+- 不删除 midtai 老路径（小白模式继续走表单）
 
 ---
 
@@ -218,17 +254,18 @@ session item 渲染时，`sessionType === 'design'` 的 session 在标题前加�
 
 | 文件 | 风险 | 说明 |
 |------|------|------|
-| `electron/ElectronChatPanel.ts` | 高 | sendPrompt 路由改动影响所有消息处理 |
-| `electron/renderer/index.html` | 高 | setMidtaiDesignMode 改动影响专业/小白切换 |
-| `src/storage/sessionRepository.ts` | 中 | 加字段，序列化要同步 |
+| `electron/renderer/index.html` | 高 | setMidtaiDesignMode + 新 design chat UI + 消息处理 |
+| `electron/ElectronChatPanel.ts` | 高 | handleDesignChatSend + handleDesignChatLane 分发改造 |
+| `src/storage/sessionRepository.ts` | 低 | sessionType 已有，不需改 |
 
 ---
 
 ## 实现建议
 
-1. **先加 sessionType 字段**：sessionRepository.ts，序列化/反序列化同步
-2. **再写 host 方法**：`createNewDesignSession()`、`isCurrentSessionDesignType()`
-3. **再改路由**：`sendPrompt` 路由 + `sessions:new-design` 路由
-4. **再改 renderer**：`setMidtaiDesignMode()` + `sessions:switch-to-chat` 处理
-5. **最后加视觉**：placeholder + session 列表图标
-6. **写测试**：`ElectronChatPanel.test.ts` 验证设计 session 路由行为
+1. 先在 `index.html` 加 `#midtai-design-chat` HTML 结构 + `applyMidtaiDesignMode()` 切换
+2. 再加 `sendDesignChatMessage()` + `appendDesignChatMessage()` JS 函数（先 stub）
+3. 在 host 加 `design:chat:send` 路由 + `handleDesignChatSend()`
+4. 改造 `handleDesignChatLane()` 加 target 参数
+5. 接通 token 流和最终消息
+6. 测试 question-form 渲染、artifact 生成
+7. 写测试：`ElectronChatPanel.test.ts` 验证 `handleDesignChatSend` 不调 `showPage`

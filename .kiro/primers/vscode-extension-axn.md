@@ -105,3 +105,13 @@ function applyImageLabState() {
 - 不删 `page-images` DOM（Issue D）
 - 不迁移 renderImageLabHistory / renderImageLabResults（Issue C）
 - 不删 `_syncLegacyImageLabDOM`（等 Issue D 删 page-images 后再一起删）
+
+---
+
+## Already Completed
+
+- 已把 `applyImageLabState()` 中的 legacy `imglab-*` DOM 写入提取到 `_syncLegacyImageLabDOM()`。
+- `_syncLegacyImageLabDOM()` 已覆盖 primer 列出的 13 个节点，并顺带纳入 `imglab-size` 自定义尺寸输入框；每个节点访问都加了 null guard。
+- `applyImageLabState()` 内已不再直接调用 `getElementById('imglab-*')`，并保留一行 `_syncLegacyImageLabDOM()` 调用。
+- 已验证：`npm run build:electron`、renderer JS syntax check、UTF-8 decode check、`npm run build`、`npm run check` 全部通过。
+- `npm test` 当前仍有与本次改动无关的已有失败：`electron/rendererMarkdown.test.ts`、`electron/rendererThinkingSummary.test.ts`、`src/design/versionStore.test.ts`、`electron/ElectronChatPanel.test.ts`。

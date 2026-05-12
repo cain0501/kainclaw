@@ -13,6 +13,16 @@
 - Do not fix unrelated issues encountered along the way
 - Do not touch these files: <!-- list -->
 
+## Resume Context (MANDATORY — update after every session)
+
+<!-- 每次 session 结束时必须更新这块，新 session 第一件事就是读这里，不要读其它文档来重建上下文 -->
+
+**Last session date:** <!-- e.g. 2026-05-11 -->
+**Last action taken:** <!-- one sentence: what was actually done -->
+**Why it was done that way:** <!-- key decision rationale — so next session doesn't re-debate it -->
+**Exact next action:** <!-- copy this into Next Step below when resuming -->
+**Known blockers / watch out:** <!-- anything that made last session slow or tricky -->
+
 ## Already Completed
 
 <!-- Bullet list of sub-steps already done with brief note on what changed. -->

@@ -28,11 +28,7 @@ npm run build:electron   # only when Electron behavior changed
 
 | Beads ID | Title | Status | Primer |
 |----------|-------|--------|--------|
-| vscode-extension-a9o | renderer 减债清理：donor 容器与旧兼容函数名 | OPEN P3 | — |
-| vscode-extension-yck | PowerShellTool: Windows PowerShell 专用工具 | OPEN P2 | `.kiro/primers/vscode-extension-yck.md` |
-| vscode-extension-qhf | SleepTool: 自主循环等待工具 | OPEN P2 | `.kiro/primers/vscode-extension-qhf.md` |
-| vscode-extension-zje | SessionMemory: 会话内笔记服务 | OPEN P2 | `.kiro/primers/vscode-extension-zje.md` |
-| vscode-extension-kqy | ConfigTool: 设置读写工具 | OPEN P2 | `.kiro/primers/vscode-extension-kqy.md` |
+| vscode-extension-79t | Midtai Unified Workbench 视觉 QA 与交互收口（含 a9o 减债清理） | **OPEN — ready** | `.kiro/primers/vscode-extension-79t.md` |
 | vscode-extension-26q | Kanban 视图：我的作品看板模式 | OPEN P3 | — |
 | vscode-extension-0z5 | 画布草图标注工具：iframe 上层 canvas overlay | OPEN P3 | — |
 | vscode-extension-f4v | extension.ts 宿主总控继续下沉 | DEFERRED | `.kiro/primers/vscode-extension-f4v.md` |
@@ -43,6 +39,10 @@ npm run build:electron   # only when Electron behavior changed
 
 | Beads ID | Title |
 |----------|-------|
+| vscode-extension-kqy | ConfigTool: 设置读写工具 |
+| vscode-extension-zje | SessionMemory: 会话内笔记服务 |
+| vscode-extension-yck | PowerShellTool: Windows PowerShell 专用工具 |
+| vscode-extension-qhf | SleepTool: 自主循环等待工具 |
 | vscode-extension-jzu | midtai-p4: Unified Workbench UI 整体改造 |
 | vscode-extension-1t6 | midtai-p3c: 主 chat 侧栏 design session 下沉 |
 | vscode-extension-1vp | midtai-p3b: conversationHistory 迁移到 project 层 |
@@ -110,6 +110,7 @@ npm run build:electron   # only when Electron behavior changed
 - Cron / Scheduler (CronCreate / CronDelete / CronList tools, `.cain/scheduled_tasks.json` persistence, session-only in-memory tasks, 1s scheduler loop)
 - Plan Mode V2 (Phase 1: Explore → Phase 2: Design → Phase 3: Present, `src/planMode/planModePrompt.ts`)
 - Micro-compact (lightweight tool result clearing before auto-compact, `src/compact/microCompact.ts`)
+- ToolRuntime utility set: Sleep / PowerShell / SessionMemory / Config (effortLevel, fastMode, showThinkingSummaries, verbose, uiLanguage, read-only model)
 - Auto-Memory
 - LSP phase 1 + partial phase 2
 - Worktree phase 1
@@ -139,6 +140,7 @@ npm run build:electron   # only when Electron behavior changed
 
 - Deleting the last provider may show "Provider not found" in chat area
 - `supabase` MCP may occasionally show `Connection closed`
+- Full `npm test` is currently blocked by unrelated existing failures in `electron/rendererMarkdown.test.ts`, `electron/rendererThinkingSummary.test.ts`, `src/design/versionStore.test.ts`, and `electron/ElectronChatPanel.test.ts` (`__trigger_discovery__` session lifecycle case in the current dirty worktree)
 
 ## Key Risks (still active)
 

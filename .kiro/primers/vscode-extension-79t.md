@@ -80,6 +80,18 @@ mock 里的 `@media (max-width: 1240px)` 规则：
 
 ---
 
+## F. Renderer 减债清理（合并自 a9o）
+
+视觉 QA 通过后，在同一 PR 内顺手清理 jzu 重布局遗留的旧兼容代码：
+
+- **donor 容器**：搜索 `donor`、`left-panel`、`right-panel`（旧兼容节点），确认已无实际引用后删除
+- **旧兼容函数名**：搜索 `renderer/index.html` 内 `@deprecated` 或以 `_old`/`_legacy` 命名的函数，确认无调用后删除
+- 不改 IPC 协议，不动 p3 project/session 逻辑，只删死代码
+
+完成后关闭 beads issue `vscode-extension-a9o`（已合并入 79t）。
+
+---
+
 ## 明确不做
 
 - 不改 IPC 协议（design:switch-project、design:flow-context 等）
@@ -111,3 +123,16 @@ npm run build             # 全量 build
 npx vitest run electron/rendererSettings.test.ts
 npx vitest run electron/ElectronChatPanel.test.ts --testNamePattern "switches design chat history and flow context by project|omits design sessions from the main sessions:data sidebar payload"
 ```
+
+---
+
+## Already Completed
+
+- 2026-05-11：修复 Midtai 主内容区高度链，`midtai-content / midtai-shell-body / midtai-main-area / midtai-board-shell / midtai-panel-design` 现在按窗口高度撑满，不再在设计主内容区底部留下大块空白。
+- 2026-05-11：把画布工具条从画布 frame 内部提到 `画布预览` 子视图的第二层，并增加 `画布预览 / 查看与操作` 层级标题，避免与 `设计对话 / 画布预览 / 版本记录` 误读成同一排。
+- 2026-05-11：重做设计对话底部 composer，输入框改为满宽卡片式 footer，不再被裁剪，发送按钮与提示文案同层收口。
+- 2026-05-11：将 `设计对话 / 画布预览 / 版本记录` 子 tab 的样式收口到原型同类 pill 视觉，保持只改 renderer UI，不碰 IPC 与 p3 project/session 绑定逻辑。
+
+## Next Step
+
+- 继续对照 `.kiro/midtai-unified-workbench-mock.html` 做剩余视觉 QA，重点检查 shell sidebar、image/library 两个 board 的 spacing / hierarchy / responsive 细节，确认 `79t` 是否可以整体关闭。
