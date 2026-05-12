@@ -28,11 +28,10 @@ npm run build:electron   # only when Electron behavior changed
 
 | Beads ID | Title | Status | Primer |
 |----------|-------|--------|--------|
-| vscode-extension-79t | Midtai Unified Workbench 视觉 QA 与交互收口（含 a9o 减债清理） | **OPEN — ready** | `.kiro/primers/vscode-extension-79t.md` |
 | vscode-extension-26q | Kanban 视图：我的作品看板模式 | OPEN P3 | — |
 | vscode-extension-0z5 | 画布草图标注工具：iframe 上层 canvas overlay | OPEN P3 | — |
 | vscode-extension-f4v | extension.ts 宿主总控继续下沉 | DEFERRED | `.kiro/primers/vscode-extension-f4v.md` |
-| vscode-extension-0wm | TeamCreate/TeamDelete/SendMessage: 命名团队管理工具 | DEFERRED | — |
+| vscode-extension-0wm | TeamCreate/TeamDelete/SendMessage: 命名团队管理工具 | OPEN P3 — ready | `.kiro/primers/vscode-extension-0wm.md` |
 
 <details>
 <summary>已关闭任务（展开查看完整历史）</summary>
