@@ -1421,7 +1421,6 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-seri
               <button class="btn-red" onclick="generateDesignWorkbench()">生成设计</button>
             </div>
             <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:12px">
-              <button class="btn-secondary" type="button" onclick="showDesignView('design-chat')">去设计对话</button>
               <button class="btn-secondary" type="button" onclick="openProductDrawer('library','design')">提示词库</button>
             </div>
           </div>
@@ -2288,6 +2287,7 @@ let designChatPendingUserPrompt = '';
 let designChatPendingFormId = null;
 let designEntryPath = null;
 let designEntryDialogActive = false;
+let pendingProjectSwitch = false;
 const expandedDesignChatArtifacts = new Set();
 const thumbnailCache = new Map();
 const imageThumbCache = new Map(); // imageId → src
@@ -3263,6 +3263,7 @@ function handleMessage(msg) {
       openMidtai(msg.payload || {});
       break;
     case 'design:chat:history':
+      pendingProjectSwitch = false;
       designChatMessages = Array.isArray(msg.messages) ? msg.messages : [];
       designChatStreamingId = null;
       designChatStreamingText = '';
@@ -3380,6 +3381,7 @@ function handleMessage(msg) {
       showMidtaiTab(midtaiState.shellTab);
       break;
     case 'design:flow-context':
+      pendingProjectSwitch = false;
       if (!designEntryDialogActive) {
         midtaiState.currentDesignProjectId = String(msg.projectId || '').trim() || null;
         midtaiState.currentProject = String(msg.projectName || '').trim();
@@ -4446,14 +4448,15 @@ function handleMidtaiDesignTabOpen() {
   const hasWork = !!(
     designBridgeState.html ||
     midtaiState.currentDesignProjectId ||
-    midtaiState.transientWork
+    midtaiState.transientWork ||
+    pendingProjectSwitch
   );
 
   if (hasWork && !designEntryDialogActive) {
     hideDesignEntryDialog();
     hideDesignQuickForm();
     showDesignView(designBridgeState.html ? 'canvas' : 'design-chat');
-    if (hasActiveDesignSession()) {
+    if (hasActiveDesignSession() && !pendingProjectSwitch) {
       send({ type: 'design:chat:load-history' });
     }
     return;
@@ -5306,10 +5309,26 @@ function observeMidtaiImageThumbs(container) {
       const card = cards[i++];
       const id = card.dataset.imgid;
       delete card.dataset.imgid;
-      const src = imageThumbCache.get(id);
-      if (!src) continue;
       const wrap = card.querySelector('.midtai-img-thumb-wrap');
       if (!wrap) continue;
+      if (imageDecodeCache.has(id) && imageThumbCache.has(id)) {
+        const img = new Image();
+        img.className = 'midtai-img-thumb';
+        img.alt = 'generated';
+        img.src = imageThumbCache.get(id);
+        const actionOverlay = wrap.querySelector('.midtai-image-card-actions');
+        wrap.querySelector('.thumb-shimmer')?.remove();
+        wrap.querySelector('img.midtai-img-thumb')?.remove();
+        if (actionOverlay) {
+          wrap.insertBefore(img, actionOverlay);
+        } else {
+          wrap.innerHTML = '';
+          wrap.appendChild(img);
+        }
+        continue;
+      }
+      const src = imageThumbCache.get(id);
+      if (!src) continue;
       const img = new Image();
       img.className = 'midtai-img-thumb';
       img.alt = 'generated';
@@ -5667,7 +5686,7 @@ function renderMidtaiLibraryImagePanel() {
 
   items.forEach(result => {
     if (!result?.id || !result?.src) return;
-    if (!imageDecodeCache.has(result.id) || !imageThumbCache.has(result.id)) {
+    if (!imageDecodeCache.has(result.id)) {
       imageThumbCache.set(result.id, result.src);
     }
   });
@@ -5675,13 +5694,10 @@ function renderMidtaiLibraryImagePanel() {
   panel.innerHTML = `
     <div class="midtai-img-grid">
       ${items.map(result => {
-        const cachedThumb = thumbnailCache.get(result.id) || (imageDecodeCache.has(result.id) ? imageThumbCache.get(result.id) : null);
         return `
-        <div class="midtai-img-card" ${cachedThumb ? '' : `data-imgid="${result.id}"`}>
+        <div class="midtai-img-card" data-imgid="${result.id}">
           <div class="midtai-img-thumb-wrap midtai-image-card-preview" style="cursor:pointer" onclick="openImageLightbox(event, '${result.src}')">
-            ${cachedThumb
-              ? `<img loading="lazy" src="${cachedThumb}" class="midtai-img-thumb" alt="generated">`
-              : '<div class="thumb-shimmer"></div>'}
+            <div class="thumb-shimmer"></div>
             <div class="midtai-image-card-actions">
               <button
                 class="midtai-image-card-icon"
@@ -5757,7 +5773,7 @@ function setMidtaiShellTab(tab) {
     document.getElementById('midtai-state-chip')?.classList.remove('visible');
     send({ type: 'midtai:request-design-library' });
     send({ type: 'image:loadState' });
-    renderMidtaiLibraryView();
+    requestAnimationFrame(() => renderMidtaiLibraryView());
     return;
   }
   switchMidtaiType(midtaiState.shellTab);
@@ -6778,9 +6794,8 @@ function createNewDesignProject() {
 
 function openDesignProjectFromHome(projectId) {
   if (!projectId) return;
-  midtaiState.currentDesignProjectId = projectId;
+  pendingProjectSwitch = true;
   midtaiState.canvasOpen = false;
-  midtaiState.transientWork = null;
   if (document.getElementById('page-midtai')?.classList.contains('active')) {
     setMidtaiShellTab('design');
     showDesignView('design-chat');
