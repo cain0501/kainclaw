@@ -87,19 +87,19 @@ describe("designPrompt", () => {
         outputType: "landing-page",
       });
 
-      expect(prompt).toContain("视觉风格方向");
-      expect(prompt).toContain("lifestyle-redbook");
-      expect(prompt).toContain("streetwear-dark");
-      expect(prompt).toContain("tech-flagship");
-      expect(prompt).toContain("ecommerce-convert");
-      expect(prompt).toContain("short-video");
+      expect(prompt).toContain("direction-cards");
+      expect(prompt).toContain("editorial-monocle");
+      expect(prompt).toContain("modern-minimal");
+      expect(prompt).toContain("human-approachable");
+      expect(prompt).toContain("tech-utility");
+      expect(prompt).toContain("brutalist-experimental");
     });
 
     it("injects the selected direction palette into turn 2 prompts", () => {
       const formAnswer = [
         "[form answers - discovery]",
         "- 产品名称: TestApp",
-        "- 视觉风格方向: lifestyle-redbook",
+        "- direction: modern-minimal",
       ].join("\n");
       const prompt = buildDesignChatUserPrompt({
         prompt: formAnswer,
@@ -107,16 +107,16 @@ describe("designPrompt", () => {
         isFormAnswerTurn: true,
       });
 
-      expect(prompt).toContain("oklch(97% 0.012 58)");
-      expect(prompt).toContain("oklch(55% 0.20 20)");
-      expect(prompt).toContain("Noto Serif SC");
+      expect(prompt).toContain("oklch(58% 0.18 255)");
+      expect(prompt).toContain("oklch(99% 0.002 240)");
+      expect(prompt).toContain("SF Pro Display");
     });
 
     it("does not inject a direction spec block when turn 2 is skipped", () => {
       const formAnswer = [
         "[form answers - discovery]",
         "- 产品名称: TestApp",
-        "- 视觉风格方向: skip",
+        "- direction: skip",
       ].join("\n");
       const prompt = buildDesignChatUserPrompt({
         prompt: formAnswer,

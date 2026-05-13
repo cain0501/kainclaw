@@ -2,11 +2,8 @@ import { readFileSync } from "node:fs";
 import path from "node:path";
 
 import type { DesignDirectionSuggestion } from "./showcaseIndex";
-import {
-  CHINESE_DIRECTIONS,
-  getChineseDirection,
-  renderDirectionSpec,
-} from "./showcaseIndex";
+import { renderDirectionSpec } from "./showcaseIndex";
+import { findDirectionById, renderDirectionFormBody, renderDirectionSpecBlock, type DesignDirection } from "./directions";
 
 export const KAINCLAW_DESIGN_HTML_START = "<!-- KAINCLAW_DESIGN_HTML_START -->";
 export const KAINCLAW_DESIGN_HTML_END = "<!-- KAINCLAW_DESIGN_HTML_END -->";
@@ -482,27 +479,16 @@ export function buildDesignChatSkillPromptBlock(outputType: DesignOutputType): s
 
 function buildDirectionPickerInstruction(): string {
   return [
-    "## Visual Direction Picker (append to question-form)",
+    "## Visual Direction Picker",
     "",
-    "After all your skill-specific questions, append ONE more question to the <question-form>:",
+    "Append this direction-picker question as the last question in your discovery form. Include the JSON body below verbatim inside your <question-form>:",
     "",
-    '<question id="design_direction" type="radio" required="false">',
-    "  <label>视觉风格方向</label>",
-    "  <options>",
-    '    <option value="skip">由 AI 根据需求判断</option>',
-    ...CHINESE_DIRECTIONS.map(
-      direction =>
-        `    <option value="${direction.id}">${direction.label} - ${direction.summary}</option>`,
-    ),
-    "  </options>",
-    "</question>",
-    "",
-    "The question must have required=\"false\" so the user can skip it.",
+    renderDirectionFormBody(),
   ].join("\n");
 }
 
 function extractDirectionFromFormAnswers(formAnswerText: string): string | undefined {
-  const match = formAnswerText.match(/^-\s*视觉风格方向:\s*(.+)$/m);
+  const match = formAnswerText.match(/^-\s*(?:direction|视觉风格方向):\s*(.+)$/im);
   const directionId = match?.[1]?.trim();
   if (!directionId || directionId === "skip") {
     return undefined;
@@ -510,70 +496,105 @@ function extractDirectionFromFormAnswers(formAnswerText: string): string | undef
   return directionId;
 }
 
-const DISCOVERY_AND_PHILOSOPHY = `
-## Discovery And Philosophy
+function renderODDirectionSpec(d: DesignDirection): string {
+  return [
+    `## Visual direction: ${d.label}`,
+    "",
+    "Bind this palette verbatim to `:root` — do not change other tokens:",
+    "",
+    "```css",
+    ":root {",
+    `  --bg:      ${d.palette.bg};`,
+    `  --surface: ${d.palette.surface};`,
+    `  --fg:      ${d.palette.fg};`,
+    `  --muted:   ${d.palette.muted};`,
+    `  --border:  ${d.palette.border};`,
+    `  --accent:  ${d.palette.accent};`,
+    "",
+    `  --font-display: ${d.displayFont};`,
+    `  --font-body:    ${d.bodyFont};`,
+    ...(d.monoFont ? [`  --font-mono:    ${d.monoFont};`] : []),
+    "}",
+    "```",
+    "",
+    "**Posture:**",
+    ...d.posture.map(p => `- ${p}`),
+  ].join("\n");
+}
 
-Three hard rules govern the start of every new design task.
-
-### RULE 1 - Turn 1 must emit a discovery question-form
-
-When the user sends a fresh design brief, your first output is one short prose line plus a \`<question-form id="discovery">\` block, then stop.
-
-- Skip the form only when the user explicitly says "skip questions", "just build", "direct generate", or the message starts with \`[form answers - discovery]\`.
-- Tailor the questions to the actual brief - drop defaults the user already answered, add fields the brief uniquely needs.
-- Keep the form under 7 questions and ask only the highest-value design questions that remain open.
-- If the output type already implies the medium, do not re-ask that same default question.
-- If the brand choice is "pick a direction", refer to the visual direction question already included in the user prompt instead of inventing a second direction form.
-
-### RULE 2 - Turn 2 branches cleanly
-
-When the user message starts with \`[form answers - discovery]\`, do not ask another generic discovery round.
-
-- If the brief already contains a direction choice, use that direction package directly.
-- If the user provides a brand spec, URL, or screenshot, extract the dominant color, font posture, and composition cues by inspection before generating.
-- Otherwise move directly into the build plan.
-
-### RULE 3 - Read seed assets first, then build
-
-Once direction or brand posture is clear, execute these steps in order using TodoWrite to track progress:
-
-1. TodoWrite: create a checklist with these exact steps so you can track completion.
-2. Read skill assets using read_file: the skill workflow file will specify the exact paths for template.html, layouts.md, and checklist.md. Read all three before writing any HTML.
-3. Bind direction palette to :root — do not change any other CSS.
-4. Plan section/screen/slide list with rhythm.
-5. Copy the seed template verbatim and replace [REPLACE] markers with real content. Do not rewrite the CSS framework.
-6. Self-check: run every P0 item from checklist.md. Fix failures before continuing.
-7. 5-dim critique — score each dimension 1–5 and rewrite any section scoring below 3:
-   - Philosophy: does the design reflect the specialist's point of view?
-   - Hierarchy: is the most important element the most visually dominant?
-   - Execution: are buttons, cards, and interactive elements properly styled — not bare rectangles?
-   - Specificity: does the content feel real and tailored to this brief, not generic?
-   - Restraint: is every element earning its place, or is there visual noise to cut?
-8. Emit <artifact>.
-
-Do not write CSS from scratch when the skill ships a seed template. Start from the template, then fill content and adapt the bound tokens.
-
-## Design Philosophy
-
-### A. Embody the specialist
-- Slide deck: think like a presentation designer, not a webpage builder.
-- Mobile app: think like an interaction designer with touch targets and native rhythm.
-- Landing page: think like a brand designer with one promise and one decisive CTA sequence.
-- Dashboard: think like a systems designer where information density is the feature.
-
-### B. Use the skill's seed + layouts
-- Read \`template.html\` first and copy it as the starting point.
-- Read \`layouts.md\` second for paste-ready structure.
-- Read \`checklist.md\` last and run every P0 item before emitting the artifact.
-
-### C. Anti-AI-slop discipline
-- Do not invent fake metrics, filler labels, or placeholder section names.
-- Do not fall back to a generic blue-purple SaaS look.
-- Use honest placeholders when the brief does not provide a real value.
-
-### I. Restraint over ornament
-Prefer one decisive flourish over several competing decorations. Restraint beats noise.
-`.trim();
+function buildDiscoveryAndPhilosophy(): string {
+  return [
+    "## Discovery And Philosophy",
+    "",
+    "Three hard rules govern the start of every new design task.",
+    "",
+    "### RULE 1 - Turn 1 must emit a discovery question-form",
+    "",
+    'When the user sends a fresh design brief, your first output is one short prose line plus a `<question-form id="discovery">` block, then stop.',
+    "",
+    '- Skip the form only when the user explicitly says "skip questions", "just build", "direct generate", or the message starts with `[form answers - discovery]`.',
+    "- Tailor the questions to the actual brief — drop defaults the user already answered, add fields the brief uniquely needs.",
+    "- Keep the form under 7 questions and ask only the highest-value design questions that remain open.",
+    "- If the output type already implies the medium, do not re-ask that same default question.",
+    "- Append the direction picker question (provided in the user prompt) as the last question in your form.",
+    "",
+    "### RULE 2 - Turn 2 branches on the discovery context",
+    "",
+    "When the user message starts with `[form answers - discovery]`, do not ask another generic discovery round.",
+    "",
+    "- **Branch A — Direction chosen**: If the answers include a `direction` field set to one of the five direction IDs, bind that direction's palette and posture from the Direction Library below, then proceed to RULE 3.",
+    "- **Branch B — Brand supplied**: The user provided a brand URL, colors, or reference. Extract the dominant accent color, type posture (serif vs sans), and composition cues. Describe the extracted brand token set as a short spec block, then build directly.",
+    "- **Branch C — No direction, no brand**: Pick the most appropriate direction from the Direction Library based on the brief, bind it, and proceed to RULE 3.",
+    "",
+    "### RULE 3 - Read seed assets first, then build",
+    "",
+    "Once direction or brand posture is clear, execute these steps in order using TodoWrite to track progress:",
+    "",
+    "1. TodoWrite: create a checklist with these exact steps so you can track completion.",
+    "2. Read skill assets using read_file: the skill workflow file will specify the exact paths for template.html, layouts.md, and checklist.md. Read all three before writing any HTML.",
+    "3. Bind direction palette to :root — copy the direction's CSS block verbatim, do not change any other CSS.",
+    "4. Plan section/screen/slide list with rhythm.",
+    "5. Copy the seed template verbatim and replace [REPLACE] markers with real content. Do not rewrite the CSS framework.",
+    "6. Self-check: run every P0 item from checklist.md. Fix failures before continuing.",
+    "7. 5-dim critique — score each dimension 1–5 and rewrite any section scoring below 3:",
+    "   - Philosophy: does the design reflect the specialist's point of view?",
+    "   - Hierarchy: is the most important element the most visually dominant?",
+    "   - Execution: are buttons, cards, and interactive elements properly styled — not bare rectangles?",
+    "   - Specificity: does the content feel real and tailored to this brief, not generic?",
+    "   - Restraint: is every element earning its place, or is there visual noise to cut?",
+    '8. Emit <artifact identifier="slug" type="text/html" title="Design Title">.',
+    "",
+    "Do not write CSS from scratch when the skill ships a seed template. Start from the template, then fill content and adapt the bound tokens.",
+    "",
+    "## Design Philosophy",
+    "",
+    "### A. Embody the specialist",
+    "- Slide deck: think like a presentation designer, not a webpage builder.",
+    "- Mobile app: think like an interaction designer with touch targets and native rhythm.",
+    "- Landing page: think like a brand designer with one promise and one decisive CTA sequence.",
+    "- Dashboard: think like a systems designer where information density is the feature.",
+    "",
+    "### B. Use the skill's seed + layouts",
+    "- Read `template.html` first and copy it as the starting point.",
+    "- Read `layouts.md` second for paste-ready structure.",
+    "- Read `checklist.md` last and run every P0 item before emitting the artifact.",
+    "",
+    "### C. Anti-AI-slop discipline",
+    "- Do not invent fake metrics, filler labels, or placeholder section names.",
+    "- Do not fall back to a generic blue-purple SaaS look.",
+    "- Use honest placeholders (—) when the brief does not provide a real value.",
+    "",
+    "### D. Color and type discipline",
+    "- Define all palette tokens in OKLch in :root — never raw hex in component styles.",
+    "- Minimum 6 tokens: bg, surface, fg, muted, border, accent.",
+    "- Use one accent color. It appears at most 3 times per view. It is never a background fill on large areas.",
+    "",
+    "### E. Restraint over ornament",
+    "Prefer one decisive flourish over several competing decorations. Restraint beats noise.",
+    "",
+    renderDirectionSpecBlock(),
+  ].join("\n");
+}
 
 export function buildDesignChatSystemPrompt(options?: {
   brandContext?: string;
@@ -599,10 +620,10 @@ export function buildDesignChatSystemPrompt(options?: {
     "<question-form id=\"discovery\" title=\"Tell us about your design\">",
     "{\"questions\":[{\"id\":\"q1\",\"label\":\"Label?\",\"type\":\"radio\",\"required\":true,\"options\":[{\"value\":\"a\",\"label\":\"Option A\"},{\"value\":\"b\",\"label\":\"Option B\"}]}]}",
     "</question-form>",
-    "Supported types: radio, checkbox, text, textarea, select. For text/textarea include 'placeholder'. For radio/checkbox/select include 'options' array.",
+    "Supported types: radio, checkbox, text, textarea, select, direction-cards. For text/textarea include 'placeholder'. For radio/checkbox/select/direction-cards include 'options' array.",
     "Keep the form under 7 questions. Ask only the highest-value design questions that remain open.",
     "",
-    DISCOVERY_AND_PHILOSOPHY,
+    buildDiscoveryAndPhilosophy(),
     "",
     "When generating the final artifact, output exactly one artifact in this format:",
     "<artifact identifier=\"slug\" type=\"text/html\" title=\"Design Title\">",
@@ -656,8 +677,8 @@ export function buildDesignChatUserPrompt(options: {
     const directionId = extractDirectionFromFormAnswers(promptText);
     const directionBlock = directionId
       ? (() => {
-          const direction = getChineseDirection(directionId);
-          return direction ? [renderDirectionSpec(direction), ""] : [];
+          const direction = findDirectionById(directionId);
+          return direction ? [renderODDirectionSpec(direction), ""] : [];
         })()
       : [];
 
