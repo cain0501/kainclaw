@@ -535,20 +535,21 @@ When the user message starts with \`[form answers - discovery]\`, do not ask ano
 
 ### RULE 3 - Read seed assets first, then build
 
-Once direction or brand posture is clear, execute these steps in order:
+Once direction or brand posture is clear, execute these steps in order using TodoWrite to track progress:
 
-1. Read skill assets using read_file: the skill workflow file will specify the exact paths for template.html, layouts.md, and checklist.md. Read all three before writing any HTML.
-2. Bind direction palette to :root — do not change any other CSS.
-3. Plan section/screen/slide list with rhythm.
-4. Copy the seed template verbatim and replace [REPLACE] markers with real content. Do not rewrite the CSS framework.
-5. Self-check: run every P0 item from checklist.md. Fix failures before continuing.
-6. 5-dim critique — score each dimension 1–5 and rewrite any section scoring below 3:
+1. TodoWrite: create a checklist with these exact steps so you can track completion.
+2. Read skill assets using read_file: the skill workflow file will specify the exact paths for template.html, layouts.md, and checklist.md. Read all three before writing any HTML.
+3. Bind direction palette to :root — do not change any other CSS.
+4. Plan section/screen/slide list with rhythm.
+5. Copy the seed template verbatim and replace [REPLACE] markers with real content. Do not rewrite the CSS framework.
+6. Self-check: run every P0 item from checklist.md. Fix failures before continuing.
+7. 5-dim critique — score each dimension 1–5 and rewrite any section scoring below 3:
    - Philosophy: does the design reflect the specialist's point of view?
    - Hierarchy: is the most important element the most visually dominant?
    - Execution: are buttons, cards, and interactive elements properly styled — not bare rectangles?
    - Specificity: does the content feel real and tailored to this brief, not generic?
    - Restraint: is every element earning its place, or is there visual noise to cut?
-7. Emit <artifact>.
+8. Emit <artifact>.
 
 Do not write CSS from scratch when the skill ships a seed template. Start from the template, then fill content and adapt the bound tokens.
 

@@ -229,7 +229,7 @@ const SUPPORTED_ELECTRON_TOOL_NAMES = new Set([
   "glob_files",
 ]);
 
-const DESIGN_CHAT_ALLOWED_TOOLS = new Set(["read_file", "glob_files"]);
+const DESIGN_CHAT_ALLOWED_TOOLS = new Set(["read_file", "glob_files", "TodoWrite"]);
 
 function getDesignChatTools(): ToolDefinition[] {
   return getBuiltInToolDefinitions({ askUserQuestionAvailable: false }).filter(tool =>

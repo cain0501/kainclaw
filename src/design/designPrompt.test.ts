@@ -140,6 +140,7 @@ describe("designPrompt", () => {
 
     expect(prompt).toContain("Tailor the questions to the actual brief");
     expect(prompt).toContain("read_file");
+    expect(prompt).toContain("TodoWrite");
     expect(prompt).toContain("checklist");
     expect(prompt).toContain("Embody the specialist");
   });
