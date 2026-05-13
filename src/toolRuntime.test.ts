@@ -236,6 +236,77 @@ describe("toolRuntime built-in utility tools", () => {
       executeTool("Config", { setting: "model", value: "other" }, context),
     ).rejects.toThrow("model is read-only.");
   });
+
+  it("TeamCreate, SendMessage, and TeamDelete manage named teammates", async () => {
+    const spawnSubAgent = vi.fn(async ({ agentType, prompt }: {
+      agentType: string;
+      prompt: string;
+    }) => ({
+      text: `${agentType}:${prompt}`,
+    }));
+    const context = {
+      workspaceRoot: "E:\\claudecodejingiang\\vscode-extension",
+      spawnSubAgent,
+    } satisfies ToolContext;
+
+    const createResult = await executeTool(
+      "TeamCreate",
+      { name: "reviewer", subagent_type: "Explore" },
+      context,
+    );
+    const sendResult = await executeTool(
+      "SendMessage",
+      { to: "reviewer", message: "inspect compact files" },
+      context,
+    );
+    const deleteResult = await executeTool(
+      "TeamDelete",
+      { name: "reviewer" },
+      context,
+    );
+
+    expect(createResult.summary).toBe('TeamCreate: registered "reviewer" (Explore)');
+    expect(createResult.content).toBe('{"name":"reviewer","subagent_type":"Explore"}');
+    expect(spawnSubAgent).toHaveBeenCalledWith({
+      agentType: "Explore",
+      prompt: "inspect compact files",
+    });
+    expect(sendResult.summary).toBe("SendMessage -> reviewer: done");
+    expect(sendResult.content).toBe("Explore:inspect compact files");
+    expect(deleteResult.content).toBe('Teammate "reviewer" deleted.');
+
+    await expect(
+      executeTool(
+        "SendMessage",
+        { to: "reviewer", message: "inspect compact files" },
+        context,
+      ),
+    ).rejects.toThrow('Unknown teammate "reviewer". Available: (none)');
+  });
+
+  it("TeamCreate and SendMessage reject worker-session invocations", async () => {
+    const workerContext = {
+      workspaceRoot: "E:\\claudecodejingiang\\vscode-extension",
+      invokerKind: "worker" as const,
+      spawnSubAgent: vi.fn(async () => ({ text: "unused" })),
+    } satisfies ToolContext;
+
+    await expect(
+      executeTool(
+        "TeamCreate",
+        { name: "reviewer", subagent_type: "Explore" },
+        workerContext,
+      ),
+    ).rejects.toThrow("TeamCreate is only available to the main session.");
+
+    await expect(
+      executeTool(
+        "SendMessage",
+        { to: "reviewer", message: "inspect compact files" },
+        workerContext,
+      ),
+    ).rejects.toThrow("SendMessage is only available to the main session.");
+  });
 });
 
 describe("toolRuntime installed skill model execution", () => {

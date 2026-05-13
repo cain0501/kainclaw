@@ -47,6 +47,7 @@ const DEFAULT_POWERSHELL_TIMEOUT_MS = 120_000;
 const MAX_POWERSHELL_TIMEOUT_MS = 600_000;
 
 const sessionMemoryStore = new Map<string, string>();
+const teamRegistry = new Map<string, { subagentType: string }>();
 
 const CONFIG_SUPPORTED_SETTINGS = {
   effortLevel: {
@@ -240,6 +241,10 @@ async function detectPowerShellExe(): Promise<string> {
 
 export function clearSessionMemoryStore(): void {
   sessionMemoryStore.clear();
+}
+
+export function clearTeamRegistry(): void {
+  teamRegistry.clear();
 }
 
 export type ToolDefinition = {
@@ -3263,6 +3268,85 @@ const handlers: Record<string, ToolHandler> = {
     };
   },
 
+  async TeamCreate(input, context) {
+    if (context.invokerKind === "worker") {
+      throw new Error("TeamCreate is only available to the main session.");
+    }
+
+    const name = typeof input.name === "string" ? input.name.trim() : "";
+    if (!name) {
+      throw new Error("name is required");
+    }
+
+    const subagentType =
+      typeof input.subagent_type === "string" && input.subagent_type.trim()
+        ? input.subagent_type.trim()
+        : "general-purpose";
+
+    if (teamRegistry.has(name)) {
+      throw new Error(
+        `Teammate "${name}" already exists. Use TeamDelete first.`,
+      );
+    }
+
+    teamRegistry.set(name, { subagentType });
+    return {
+      summary: `TeamCreate: registered "${name}" (${subagentType})`,
+      content: JSON.stringify({ name, subagent_type: subagentType }),
+    };
+  },
+
+  async SendMessage(input, context) {
+    if (context.invokerKind === "worker") {
+      throw new Error("SendMessage is only available to the main session.");
+    }
+    if (typeof context.spawnSubAgent !== "function") {
+      throw new Error("Agent spawning is unavailable in the current session.");
+    }
+
+    const to = typeof input.to === "string" ? input.to.trim() : "";
+    const message =
+      typeof input.message === "string" ? input.message.trim() : "";
+
+    if (!to) {
+      throw new Error("to is required");
+    }
+    if (!message) {
+      throw new Error("message is required");
+    }
+
+    const entry = teamRegistry.get(to);
+    if (!entry) {
+      const available = [...teamRegistry.keys()].join(", ") || "(none)";
+      throw new Error(`Unknown teammate "${to}". Available: ${available}`);
+    }
+
+    const result = await context.spawnSubAgent({
+      agentType: entry.subagentType,
+      prompt: message,
+    });
+
+    return {
+      summary: `SendMessage -> ${to}: done`,
+      content: result.text,
+    };
+  },
+
+  async TeamDelete(input) {
+    const name = typeof input.name === "string" ? input.name.trim() : "";
+    if (!name) {
+      throw new Error("name is required");
+    }
+
+    const existed = teamRegistry.delete(name);
+    return {
+      summary: `TeamDelete: ${existed ? "deleted" : "not found"} "${name}"`,
+      content: existed
+        ? `Teammate "${name}" deleted.`
+        : `Teammate "${name}" not found.`,
+    };
+  },
+
   async AskUserQuestion(input, context) {
     if (!context.requestUserQuestion) {
       throw new Error("AskUserQuestion is not available in the current host runtime.");
@@ -5499,6 +5583,72 @@ Do NOT use for cross-session tasks - use the beads task tracker for that.
     },
     annotations: {
       title: "Config",
+    },
+  },
+  {
+    name: "TeamCreate",
+    description: `Register a named teammate agent for reuse across multiple SendMessage calls.
+
+Use this when you need to repeatedly consult the same type of agent (for example, a "reviewer" or "researcher") without re-specifying the agent type each time.
+
+After creating a teammate, use SendMessage to send it tasks. Use TeamDelete when done.`,
+    input_schema: {
+      type: "object",
+      properties: {
+        name: {
+          type: "string",
+          description: "Unique name for this teammate (for example, reviewer or researcher).",
+        },
+        subagent_type: {
+          type: "string",
+          description: "Agent type. Defaults to general-purpose. Options: general-purpose, Explore, verification.",
+        },
+      },
+      required: ["name"],
+    },
+    annotations: {
+      title: "Create teammate",
+    },
+  },
+  {
+    name: "SendMessage",
+    description: `Send a message to a named teammate and get their response.
+
+The teammate must have been created with TeamCreate first. Each message is an independent task - the teammate does not retain memory between calls.`,
+    input_schema: {
+      type: "object",
+      properties: {
+        to: {
+          type: "string",
+          description: "Teammate name (as registered with TeamCreate).",
+        },
+        message: {
+          type: "string",
+          description: "The task or question to send to the teammate.",
+        },
+      },
+      required: ["to", "message"],
+    },
+    annotations: {
+      title: "Message teammate",
+    },
+  },
+  {
+    name: "TeamDelete",
+    description:
+      "Remove a named teammate. Call this when you no longer need the teammate.",
+    input_schema: {
+      type: "object",
+      properties: {
+        name: {
+          type: "string",
+          description: "Teammate name to delete.",
+        },
+      },
+      required: ["name"],
+    },
+    annotations: {
+      title: "Delete teammate",
     },
   },
   {

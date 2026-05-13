@@ -4510,12 +4510,14 @@ function chooseDesignEntryPath(path) {
 function dispatchDesignChatPrompt(prompt) {
   const normalizedPrompt = String(prompt || '').trim();
   if (!normalizedPrompt) return;
+  const inferredType = inferOutputTypeFromPrompt(normalizedPrompt);
+  if (inferredType) designBridgeState.outputType = inferredType;
   designChatPendingUserPrompt = normalizedPrompt;
   designChatPendingFormId = null;
   designChatStreamingId = `pending-${Date.now()}`;
   designChatStreamingText = '';
   renderMidtaiDesignChat();
-  send({ type: 'design:chat:send', prompt: normalizedPrompt });
+  send({ type: 'design:chat:send', prompt: normalizedPrompt, outputType: designBridgeState.outputType || 'prototype' });
 }
 
 function toggleDqfShowcase() {
@@ -9561,7 +9563,7 @@ function submitDesignChatQuestionForm(formId) {
   designChatStreamingId = `pending-form-${Date.now()}`;
   designChatStreamingText = '';
   designChatPendingUserPrompt = prompt;
-  send({ type: 'design:chat:send', prompt });
+  send({ type: 'design:chat:send', prompt, outputType: designBridgeState.outputType || 'prototype' });
   renderMidtaiDesignChat();
 }
 

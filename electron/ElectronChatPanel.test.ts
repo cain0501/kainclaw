@@ -101,6 +101,7 @@ vi.mock("../src/toolRuntime", () => ({
   },
   getBuiltInToolDefinitions: () => mockedBuiltinToolDefinitions,
   toolDefinitions: mockedBuiltinToolDefinitions,
+  clearTeamRegistry: vi.fn(),
   clearSessionMemoryStore: vi.fn(),
 }));
 
@@ -264,6 +265,27 @@ describe("ElectronChatPanel session lifecycle", () => {
   const tempDirs: string[] = [];
 
   beforeEach(() => {
+    vi.mocked(runAgent).mockImplementation(async (history, options) => {
+      const step = await options.provider.runStep(
+        history,
+        options.tools as unknown[],
+        options.onToken ?? (() => {}),
+        options.abortSignal,
+      );
+      return {
+        text: step.text,
+        ...(step.reasoningContent ? { reasoningContent: step.reasoningContent } : {}),
+        messages: [
+          ...history,
+          {
+            role: "assistant" as const,
+            content: step.text,
+            ...(step.reasoningContent ? { reasoningContent: step.reasoningContent } : {}),
+            ...(step.toolCalls.length > 0 ? { toolCalls: step.toolCalls } : {}),
+          },
+        ],
+      };
+    });
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue({
       ok: true,
       arrayBuffer: async () => Uint8Array.from([1, 2, 3, 4]).buffer,
@@ -3008,6 +3030,63 @@ Freeze skill body.
     );
   });
 
+  it("limits design chat tools to read_file and glob_files", async () => {
+    const harness = await createHarness();
+    tempDirs.push(harness.storagePath);
+
+    mockedBuiltinToolDefinitions.push(
+      {
+        name: "read_file",
+        description: "Read a file",
+        input_schema: { type: "object", properties: {} },
+      },
+      {
+        name: "glob_files",
+        description: "Glob files",
+        input_schema: { type: "object", properties: {} },
+      },
+      {
+        name: "write_file",
+        description: "Write a file",
+        input_schema: { type: "object", properties: {} },
+      },
+    );
+
+    await harness.settings.setOnboardingDone(true);
+    await harness.panel.handleMessage({ type: "ready" });
+    await harness.panel.handleMessage({ type: "sessions:new-design" });
+
+    vi.mocked(resolveProviderConfig).mockResolvedValue({
+      config: {
+        type: "anthropic",
+        apiKey: "test-key",
+        model: "claude-sonnet-4-6",
+      },
+      envMap: {},
+    });
+    const providerRunStep = vi.fn().mockResolvedValue({
+      text: [
+        "先确认几个关键问题。",
+        '<question-form id="discovery" title="Quick brief">',
+        '{"questions":[{"id":"audience","label":"Audience","type":"text","placeholder":"Who is it for?"}]}',
+        "</question-form>",
+      ].join("\n"),
+      toolCalls: [],
+      done: true,
+    });
+    vi.mocked(buildProviderAdapter).mockReturnValue({
+      runStep: providerRunStep,
+    } as never);
+
+    await harness.panel.handleMessage({
+      type: "design:chat:send",
+      prompt: "做一个极简作品集主页",
+    });
+
+    const runAgentOptions = vi.mocked(runAgent).mock.calls.at(-1)?.[1];
+    expect(runAgentOptions?.tools.map(tool => tool.name)).toEqual(["read_file", "glob_files"]);
+  });
+
   it("uses the resolved repo root for /review without rewriting the selected workspace", async () => {
     const harness = await createHarness();
     tempDirs.push(harness.storagePath);
@@ -5608,6 +5687,112 @@ Freeze skill body.
 
     const runtimeState = await harness.sessions.loadRuntimeState(harness.settings.getActiveSessionId()!);
     expect(runtimeState.designFlowState?.conversationHistory?.at(-1)?.content).toContain("<question-form");
+  });
+
+  it("passes the design chat skill file path through both discovery and form-answer turns", async () => {
+    const harness = await createHarness();
+    tempDirs.push(harness.storagePath);
+
+    await harness.settings.setOnboardingDone(true);
+    await harness.panel.handleMessage({ type: "ready" });
+    await harness.panel.handleMessage({ type: "sessions:new-design" });
+
+    vi.mocked(resolveProviderConfig).mockResolvedValue({
+      config: {
+        type: "anthropic",
+        apiKey: "test-key",
+        model: "claude-sonnet-4-6",
+      },
+      envMap: {},
+    });
+    const providerRunStep = vi.fn()
+      .mockResolvedValueOnce({
+        text: [
+          "Got it — I need a few design choices first.",
+          '<question-form id="discovery" title="Quick brief">',
+          '{"questions":[{"id":"tone","label":"Tone","type":"radio","options":["Editorial","Minimal"]}]}',
+          "</question-form>",
+        ].join("\n"),
+        toolCalls: [],
+        done: true,
+      })
+      .mockResolvedValueOnce({
+        text: [
+          '<artifact identifier="robotics-landing" type="text/html" title="Robotics Landing">',
+          "<!DOCTYPE html>",
+          "<html><head><title>Robotics Landing</title></head><body><main>Robotics Landing</main></body></html>",
+          "</artifact>",
+        ].join("\n"),
+        toolCalls: [],
+        done: true,
+      });
+    vi.mocked(buildProviderAdapter).mockReturnValue({
+      runStep: providerRunStep,
+    } as never);
+
+    await harness.panel.handleMessage({
+      type: "sendPrompt",
+      prompt: "Design a premium robotics landing page",
+      outputType: "landing-page",
+    });
+
+    const firstHistory = vi.mocked(runAgent).mock.calls.at(-1)?.[0] as Array<{ role: string; content: string }>;
+    expect(firstHistory.at(-1)?.content).toContain("Path: skills/landing-page.md");
+
+    await harness.panel.handleMessage({
+      type: "sendPrompt",
+      prompt: "[form answers - discovery]\n- Tone: Editorial",
+      outputType: "landing-page",
+      designFlowId: (await harness.sessions.loadRuntimeState(harness.settings.getActiveSessionId()!)).designFlowState?.flowId,
+    });
+
+    const secondHistory = vi.mocked(runAgent).mock.calls.at(-1)?.[0] as Array<{ role: string; content: string }>;
+    expect(secondHistory.at(-1)?.content).toContain("[form answers - discovery]");
+    expect(secondHistory.at(-1)?.content).toContain("Path: skills/landing-page.md");
+  });
+
+  it("uses a tool workspace root that can resolve local design chat skill files", async () => {
+    const harness = await createHarness();
+    tempDirs.push(harness.storagePath);
+
+    await harness.settings.setOnboardingDone(true);
+    await harness.panel.handleMessage({ type: "ready" });
+    await harness.panel.handleMessage({ type: "sessions:new-design" });
+    await harness.panel.handleMessage({
+      type: "workspace:set",
+      root: "E:\\external-design-workspace",
+    });
+
+    vi.mocked(resolveProviderConfig).mockResolvedValue({
+      config: {
+        type: "anthropic",
+        apiKey: "test-key",
+        model: "claude-sonnet-4-6",
+      },
+      envMap: {},
+    });
+    const providerRunStep = vi.fn().mockResolvedValue({
+      text: [
+        "Got it — I need a few design choices first.",
+        '<question-form id="discovery" title="Quick brief">',
+        '{"questions":[{"id":"tone","label":"Tone","type":"radio","options":["Editorial","Minimal"]}]}',
+        "</question-form>",
+      ].join("\n"),
+      toolCalls: [],
+      done: true,
+    });
+    vi.mocked(buildProviderAdapter).mockReturnValue({
+      runStep: providerRunStep,
+    } as never);
+
+    await harness.panel.handleMessage({
+      type: "sendPrompt",
+      prompt: "Design a premium robotics landing page",
+      outputType: "landing-page",
+    });
+
+    const runAgentOptions = vi.mocked(runAgent).mock.calls.at(-1)?.[1];
+    expect(runAgentOptions?.toolContext.workspaceRoot).toBe(process.cwd());
   });
 
   it("generates a design artifact on the second design-lane turn when form answers are provided", async () => {

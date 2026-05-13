@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { promises as fs } from "node:fs";
+import { existsSync, promises as fs } from "node:fs";
 import path from "node:path";
 import { BrowserRuntime } from "../src/browserRuntime";
 import { ElectronHostAdapter } from "../src/platform/electronHostAdapter";
@@ -162,6 +162,7 @@ import {
   buildDesignChatUserPrompt,
   buildKainClawDesignSystemPrompt,
   DESIGN_CRITIQUE_SYSTEM_PROMPT,
+  getDesignChatSkillRelativePath,
   normalizeDesignOutputType,
   type DesignOutputType,
 } from "../src/design/designPrompt";
@@ -227,6 +228,14 @@ const SUPPORTED_ELECTRON_TOOL_NAMES = new Set([
   "browser_close",
   "glob_files",
 ]);
+
+const DESIGN_CHAT_ALLOWED_TOOLS = new Set(["read_file", "glob_files"]);
+
+function getDesignChatTools(): ToolDefinition[] {
+  return getBuiltInToolDefinitions({ askUserQuestionAvailable: false }).filter(tool =>
+    DESIGN_CHAT_ALLOWED_TOOLS.has(tool.name),
+  );
+}
 
 const ELECTRON_SHELL_PROMPT_NOTE = `
 
@@ -507,6 +516,22 @@ export class ElectronChatPanel {
 
   private getSelectedWorkspaceRoot(): string {
     return this.currentSessionWorkspaceRoot;
+  }
+
+  private resolveDesignChatToolWorkspaceRoot(outputType: DesignOutputType): string {
+    const selectedWorkspaceRoot = this.getSelectedWorkspaceRoot().trim();
+    const skillRelativePath = getDesignChatSkillRelativePath(outputType);
+
+    if (selectedWorkspaceRoot && existsSync(path.join(selectedWorkspaceRoot, skillRelativePath))) {
+      return selectedWorkspaceRoot;
+    }
+
+    const appWorkspaceRoot = process.cwd();
+    if (existsSync(path.join(appWorkspaceRoot, skillRelativePath))) {
+      return appWorkspaceRoot;
+    }
+
+    return selectedWorkspaceRoot || appWorkspaceRoot;
   }
 
   private async loadSessionRuntimeState(sessionId: string): Promise<SessionRuntimeState> {
@@ -2548,16 +2573,19 @@ export class ElectronChatPanel {
     }
 
     const attrs = match[1] ?? "";
-    const body = (match[2] ?? "").trim();
+    const rawBody = (match[2] ?? "").trim();
     const typeMatch = attrs.match(/\btype="([^"]+)"/i);
     const titleMatch = attrs.match(/\btitle="([^"]+)"/i);
     const type = typeMatch?.[1]?.trim().toLowerCase();
     if (type !== "text/html") {
       throw new Error("Design chat artifact must use type=\"text/html\".");
     }
-    if (!body.startsWith("<!DOCTYPE html>")) {
-      throw new Error("Design chat artifact HTML must start with <!DOCTYPE html>.");
+    // Tolerate preamble text the AI may write before the doctype (planning notes, critique).
+    const doctypeIdx = rawBody.search(/<!doctype\s+html>/i);
+    if (doctypeIdx === -1) {
+      throw new Error("Design chat artifact HTML must contain <!DOCTYPE html>.");
     }
+    const body = rawBody.slice(doctypeIdx);
 
     return {
       html: body,
@@ -2575,10 +2603,13 @@ export class ElectronChatPanel {
     target?: "default" | "design-chat";
   }): Promise<DesignChatRunResult> {
     const workspaceRoot = this.getSelectedWorkspaceRoot();
+    const designChatToolWorkspaceRoot =
+      this.resolveDesignChatToolWorkspaceRoot(options.outputType);
     const { config, envMap } = await resolveProviderConfig(
       this.settings,
       workspaceRoot,
     );
+    const runtimeOptions = this.buildProviderRuntimeOptions();
     const provider = this.createProviderForSystemPrompt(
       config,
       workspaceRoot,
@@ -2593,29 +2624,28 @@ export class ElectronChatPanel {
     const streamingId = `${options.sessionId}:design-stream:${Date.now()}`;
 
     const isFormAnswerTurn = /^\[form answers\s*-\s*discovery\]/i.test(options.prompt);
-    const userPrompt = isFormAnswerTurn
-      ? [
-          options.prompt,
-          "",
-          `Output type: ${options.outputType}`,
-          ...(options.brandContext?.trim()
-            ? [
-                "",
-                "Brand context:",
-                options.brandContext.trim(),
-              ]
-            : []),
-        ].join("\n")
-      : buildDesignChatUserPrompt({
-          prompt: options.prompt,
-          outputType: options.outputType,
-          ...(options.brandContext?.trim()
-            ? { brandContext: options.brandContext.trim() }
-            : {}),
-        });
+    const userPrompt = buildDesignChatUserPrompt({
+      prompt: options.prompt,
+      outputType: options.outputType,
+      ...(options.brandContext?.trim()
+        ? { brandContext: options.brandContext.trim() }
+        : {}),
+      ...(isFormAnswerTurn ? { isFormAnswerTurn: true } : {}),
+    });
     const conversationHistory = Array.isArray(options.flow.conversationHistory)
       ? options.flow.conversationHistory
       : [];
+    const designChatTools = getDesignChatTools();
+    const promptRuntime = this.createPromptRuntime(
+      designChatToolWorkspaceRoot,
+      config,
+      envMap,
+      runtimeOptions,
+      designChatTools,
+      this.mcpRuntime,
+      options.signal,
+    );
+    const toolContext = promptRuntime.getToolContext("main");
     const history: NormalizedMessage[] = [
       ...conversationHistory.map(message => ({
         role: message.role,
@@ -2627,11 +2657,26 @@ export class ElectronChatPanel {
       },
     ];
 
+    // Design-chat trace — logs tool calls and execution evidence to .design-chat-traces/
+    const traceStart = Date.now();
+    const traceLines: string[] = [
+      `design-chat-trace  ${new Date().toISOString()}`,
+      `session=${options.sessionId}  outputType=${options.outputType}  isFormAnswerTurn=${isFormAnswerTurn}`,
+      `---`,
+    ];
+    const traceLine = (msg: string) => {
+      const rel = ((Date.now() - traceStart) / 1000).toFixed(3);
+      const line = `+${rel}s  ${msg}`;
+      traceLines.push(line);
+      console.log(`[design-trace] ${line}`);
+    };
+
     let streamedText = "";
-    const step = await provider.runStep(
-      history,
-      [],
-      token => {
+    const result = await runAgent(history, {
+      provider,
+      tools: designChatTools,
+      toolContext,
+      onToken: token => {
         streamedText += token;
         this.appendStreamingToken(options.sessionId, token);
         if (target === "design-chat") {
@@ -2642,14 +2687,46 @@ export class ElectronChatPanel {
           });
         }
       },
-      options.signal,
-    );
-    const rawOutput = (step.text || streamedText).trim();
+      onToolStart: (toolName, input) => {
+        traceLine(`TOOL_START  ${toolName}  ${JSON.stringify(input).slice(0, 300)}`);
+      },
+      onToolEnd: (execId, summary, isError) => {
+        const status = isError ? "ERROR" : "OK";
+        traceLine(`TOOL_END    ${status}  ${summary.slice(0, 200)}`);
+      },
+      abortSignal: options.signal,
+      maxTurns: 10,
+    });
+
+    // Summarise evidence — did the AI actually follow RULE 3?
+    const lower = streamedText.toLowerCase();
+    const evidence = {
+      read_file_calls: traceLines.filter(l => l.includes("TOOL_START  read_file")).length,
+      tool_errors:     traceLines.filter(l => l.includes("TOOL_END    ERROR")).length,
+      template_read:   traceLines.some(l => l.includes("read_file") && l.includes("template.html")),
+      layouts_read:    traceLines.some(l => l.includes("read_file") && l.includes("layouts.md")),
+      checklist_read:  traceLines.some(l => l.includes("read_file") && l.includes("checklist.md")),
+      five_dim_exec:   lower.includes("philosophy") && lower.includes("execution") && lower.includes("restraint"),
+      checklist_exec:  lower.includes("p0") || lower.includes("checklist"),
+      output_chars:    streamedText.length,
+    };
+    traceLine(`EVIDENCE  ${JSON.stringify(evidence)}`);
+
+    // Write trace file
+    try {
+      const traceDir = path.join(workspaceRoot || process.cwd(), ".design-chat-traces");
+      await fs.mkdir(traceDir, { recursive: true });
+      const traceFile = path.join(
+        traceDir,
+        `trace-${options.outputType}-${options.sessionId.slice(-6)}-${traceStart}.txt`,
+      );
+      await fs.writeFile(traceFile, traceLines.join("\n") + "\n");
+    } catch {
+      // trace write failure must never break generation
+    }
+    const rawOutput = (result.text || streamedText).trim();
     if (!rawOutput) {
       throw new Error("Design chat returned an empty response.");
-    }
-    if (step.toolCalls.length > 0) {
-      throw new Error("Design chat lane does not support tool calls.");
     }
 
     const nextHistory: DesignChatHistoryMessage[] = [
