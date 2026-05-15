@@ -37,6 +37,7 @@ npm run build:electron   # only when Electron behavior changed
 
 | Beads ID | Title |
 |----------|-------|
+| vscode-extension-3yn | v3: sez regression — transient draft anchor clears on project switch |
 | vscode-extension-3ka | v3: image ownership writeback — light provenance on use |
 | vscode-extension-sez | v3: project lifecycle cleanup — transient draft display + ghost row prune + formal promote trigger |
 | vscode-extension-ut1 | v3: recoverable error contract — DESIGN_PROJECT_BINDING_MISSING |
