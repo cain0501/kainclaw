@@ -238,6 +238,38 @@ describe("SessionRepository appendMessages", () => {
     });
   });
 
+  it("does not persist designFlowState conversationHistory in runtime state files", async () => {
+    const storageRoot = await fs.mkdtemp(path.join(os.tmpdir(), "cain-session-repo-"));
+    tempDirs.push(storageRoot);
+    const repository = createRepository(storageRoot);
+
+    await repository.saveRuntimeState("session-design-flow", {
+      sessionType: "design",
+      designFlowState: {
+        flowId: "flow-1",
+        projectId: "project-1",
+        conversationId: "session-design-flow",
+        createdAt: 1700000000000,
+        conversationHistory: [
+          { role: "user", content: "legacy user" },
+          { role: "assistant", content: "legacy assistant" },
+        ],
+      },
+    });
+
+    await expect(
+      repository.loadRuntimeState("session-design-flow"),
+    ).resolves.toEqual({
+      sessionType: "design",
+      designFlowState: {
+        flowId: "flow-1",
+        projectId: "project-1",
+        conversationId: "session-design-flow",
+        createdAt: 1700000000000,
+      },
+    });
+  });
+
   it("round-trips compact boundary metadata through runtime state files", async () => {
     const storageRoot = await fs.mkdtemp(path.join(os.tmpdir(), "cain-session-repo-"));
     tempDirs.push(storageRoot);

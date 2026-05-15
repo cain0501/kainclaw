@@ -3766,7 +3766,10 @@ Freeze skill body.
       messages: Array<{ role: string; content: string }>;
     }>(harness.rendererPayloads, "design:chat:history");
 
-    expect(runtimeState.designFlowState?.conversationHistory).toEqual([
+    // D2: conversationHistory is no longer persisted to the state file.
+    expect(runtimeState.designFlowState?.conversationHistory).toBeUndefined();
+    // Project history is still the active in-memory projection.
+    expect((harness.panel as any).currentDesignFlowState?.conversationHistory).toEqual([
       { role: "user", content: "project 历史 A" },
       { role: "assistant", content: "project 回复 A" },
     ]);
@@ -3780,20 +3783,26 @@ Freeze skill body.
       activeVersionId: "pending-version",
     });
     const sessionB = await harness.sessions.createSession("session-legacy-history", "electron", "旧历史会话");
-    await harness.sessions.saveRuntimeState(sessionB.id, {
-      workspaceRoot: "",
-      sessionType: "design",
-      designFlowState: {
-        flowId: "flow-legacy-history",
-        projectId: projectB.projectId,
-        conversationId: sessionB.id,
-        createdAt: 1002,
-        conversationHistory: [
-          { role: "user", content: "legacy 历史 B" },
-          { role: "assistant", content: "legacy 回复 B" },
-        ],
-      },
-    });
+    // Write old-format state directly to simulate a legacy .state.json that pre-dates
+    // the D2 migration (saveRuntimeState no longer persists conversationHistory).
+    await writeFile(
+      path.join(harness.storagePath, "sessions", `${sessionB.id}.state.json`),
+      JSON.stringify({
+        workspaceRoot: "",
+        sessionType: "design",
+        designFlowState: {
+          flowId: "flow-legacy-history",
+          projectId: projectB.projectId,
+          conversationId: sessionB.id,
+          createdAt: 1002,
+          conversationHistory: [
+            { role: "user", content: "legacy 历史 B" },
+            { role: "assistant", content: "legacy 回复 B" },
+          ],
+        },
+      }),
+      "utf8",
+    );
     await harness.sessions.appendMessages(sessionB.id, [
       { role: "user", content: "session transcript B", timestamp: 1002 },
     ]);
@@ -3809,11 +3818,15 @@ Freeze skill body.
       messages: Array<{ role: string; content: string }>;
     }>(harness.rendererPayloads, "design:chat:history");
 
+    // Legacy history is backfilled into the project store on first switch.
     await expect((harness.panel as any).designProjectStore.loadConversationHistory(projectB.projectId)).resolves.toEqual([
       { role: "user", content: "legacy 历史 B" },
       { role: "assistant", content: "legacy 回复 B" },
     ]);
-    expect(runtimeState.designFlowState?.conversationHistory).toEqual([
+    // D2: state file no longer persists conversationHistory.
+    expect(runtimeState.designFlowState?.conversationHistory).toBeUndefined();
+    // Legacy history still available as in-memory projection.
+    expect((harness.panel as any).currentDesignFlowState?.conversationHistory).toEqual([
       { role: "user", content: "legacy 历史 B" },
       { role: "assistant", content: "legacy 回复 B" },
     ]);

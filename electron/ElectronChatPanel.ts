@@ -162,6 +162,8 @@ import {
   buildDesignChatUserPrompt,
   buildKainClawDesignSystemPrompt,
   DESIGN_CRITIQUE_SYSTEM_PROMPT,
+  getDesignChatSkillBundleDirRelativePath,
+  getDesignChatSkillEntryRelativePath,
   getDesignChatSkillRelativePath,
   normalizeDesignOutputType,
   type DesignOutputType,
@@ -229,11 +231,22 @@ const SUPPORTED_ELECTRON_TOOL_NAMES = new Set([
   "glob_files",
 ]);
 
-const DESIGN_CHAT_ALLOWED_TOOLS = new Set(["read_file", "glob_files", "TodoWrite"]);
+const DESIGN_CHAT_ALLOWED_TOOLS_DISCOVERY = new Set(["read_file", "glob_files"]);
+const DESIGN_CHAT_ALLOWED_TOOLS_BUILD = new Set([
+  "read_file",
+  "glob_files",
+  "list_files",
+  "write_file",
+  "replace_in_file",
+]);
 
-function getDesignChatTools(): ToolDefinition[] {
+function getDesignChatTools(turn: "discovery" | "build"): ToolDefinition[] {
+  const allowed =
+    turn === "build"
+      ? DESIGN_CHAT_ALLOWED_TOOLS_BUILD
+      : DESIGN_CHAT_ALLOWED_TOOLS_DISCOVERY;
   return getBuiltInToolDefinitions({ askUserQuestionAvailable: false }).filter(tool =>
-    DESIGN_CHAT_ALLOWED_TOOLS.has(tool.name),
+    allowed.has(tool.name),
   );
 }
 
@@ -334,6 +347,12 @@ type DesignChatRunResult =
       sliders: DesignSlider[];
       history: DesignChatHistoryMessage[];
     };
+
+type DesignChatRunWorkspace = {
+  tempRunRoot: string;
+  skillSourceRoot: string;
+  usedBundleDir: boolean;
+};
 
 type DesignChatRendererMessage = {
   messageId: string;
@@ -520,14 +539,26 @@ export class ElectronChatPanel {
 
   private resolveDesignChatToolWorkspaceRoot(outputType: DesignOutputType): string {
     const selectedWorkspaceRoot = this.getSelectedWorkspaceRoot().trim();
-    const skillRelativePath = getDesignChatSkillRelativePath(outputType);
+    const candidatePaths = [
+      getDesignChatSkillEntryRelativePath(outputType),
+      getDesignChatSkillRelativePath(outputType),
+    ];
 
-    if (selectedWorkspaceRoot && existsSync(path.join(selectedWorkspaceRoot, skillRelativePath))) {
+    if (
+      selectedWorkspaceRoot &&
+      candidatePaths.some(skillRelativePath =>
+        existsSync(path.join(selectedWorkspaceRoot, skillRelativePath)),
+      )
+    ) {
       return selectedWorkspaceRoot;
     }
 
     const appWorkspaceRoot = process.cwd();
-    if (existsSync(path.join(appWorkspaceRoot, skillRelativePath))) {
+    if (
+      candidatePaths.some(skillRelativePath =>
+        existsSync(path.join(appWorkspaceRoot, skillRelativePath)),
+      )
+    ) {
       return appWorkspaceRoot;
     }
 
@@ -627,6 +658,40 @@ export class ElectronChatPanel {
     this.currentDesignFlowState = runtimeState.designFlowState;
   }
 
+  private buildDesignChatHistoryProjection(
+    messages: ChatMessage[],
+  ): DesignChatHistoryMessage[] {
+    return this.buildConversationHistory(messages)
+      .filter(
+        (
+          message,
+        ): message is Extract<NormalizedMessage, { role: "user" | "assistant" }> =>
+          message.role === "user" || message.role === "assistant",
+      )
+      .map(message => ({
+        role: message.role,
+        content: message.content,
+      }));
+  }
+
+  private async resolveDesignFlowHistoryProjection(
+    flowState: DesignFlowState | undefined,
+    sessionId: string,
+  ): Promise<DesignChatHistoryMessage[]> {
+    const projectId = typeof flowState?.projectId === "string"
+      ? flowState.projectId.trim()
+      : "";
+    if (projectId) {
+      const projectHistory = await this.designProjectStore.loadConversationHistory(projectId);
+      if (projectHistory.length > 0) {
+        return projectHistory;
+      }
+    }
+
+    const transcript = await this.sessions.loadMessages(sessionId);
+    return this.buildDesignChatHistoryProjection(transcript);
+  }
+
   private async restoreCurrentSessionRuntimeState(
     sessionId: string,
   ): Promise<void> {
@@ -634,6 +699,15 @@ export class ElectronChatPanel {
     this.restoreArtifactRegistryFromSessionMessages(sessionId, runtimeState);
     this.restoreModelConversationFromRuntime(runtimeState);
     this.restoreDesignFlowStateFromRuntime(runtimeState);
+    if (this.currentDesignFlowState) {
+      this.currentDesignFlowState = {
+        ...this.currentDesignFlowState,
+        conversationHistory: await this.resolveDesignFlowHistoryProjection(
+          this.currentDesignFlowState,
+          sessionId,
+        ),
+      };
+    }
   }
 
   private async saveCurrentSessionRuntimeState(sessionId: string): Promise<void> {
@@ -656,7 +730,8 @@ export class ElectronChatPanel {
     }
 
     if (this.currentDesignFlowState) {
-      nextRuntimeState.designFlowState = this.currentDesignFlowState;
+      const { conversationHistory: _conversationHistory, ...persistedFlowState } = this.currentDesignFlowState;
+      nextRuntimeState.designFlowState = persistedFlowState;
     } else {
       delete nextRuntimeState.designFlowState;
     }
@@ -1106,10 +1181,6 @@ export class ElectronChatPanel {
     }
     if (type === "design:createProject") {
       await this.createDesignProject(message);
-      return;
-    }
-    if (type === "design:openProject") {
-      await this.openDesignProjectMessage(message);
       return;
     }
     if (type === "design:switch-project") {
@@ -2528,12 +2599,15 @@ export class ElectronChatPanel {
         const project = await this.designProjectStore.getProject(activeFlow.projectId);
         if (project) {
           await this.setCurrentDesignProject(project);
+          const projectHistory = await this.designProjectStore.loadConversationHistory(project.projectId);
           return {
             flow: {
               ...activeFlow,
-              conversationHistory: Array.isArray(activeFlow.conversationHistory)
-                ? activeFlow.conversationHistory
-                : [],
+              conversationHistory: projectHistory.length > 0
+                ? projectHistory
+                : Array.isArray(activeFlow.conversationHistory)
+                  ? activeFlow.conversationHistory
+                  : [],
             },
             prompt,
             requestedFlowId,
@@ -2624,7 +2698,20 @@ export class ElectronChatPanel {
     const streamingId = `${options.sessionId}:design-stream:${Date.now()}`;
 
     const isFormAnswerTurn = /^\[form answers\s*-\s*discovery\]/i.test(options.prompt);
-    const userPrompt = buildDesignChatUserPrompt({
+    let designChatRunWorkspace: DesignChatRunWorkspace | undefined;
+    if (isFormAnswerTurn) {
+      designChatRunWorkspace = await this.initDesignChatRunWorkspace({
+        sessionId: options.sessionId,
+        outputType: options.outputType,
+        prompt: options.prompt,
+        ...(options.brandContext?.trim()
+          ? { brandContext: options.brandContext.trim() }
+          : {}),
+        skillSourceRoot: designChatToolWorkspaceRoot,
+      });
+    }
+    const buildTurn = isFormAnswerTurn && !!designChatRunWorkspace;
+    const userPromptBase = buildDesignChatUserPrompt({
       prompt: options.prompt,
       outputType: options.outputType,
       ...(options.brandContext?.trim()
@@ -2632,18 +2719,31 @@ export class ElectronChatPanel {
         : {}),
       ...(isFormAnswerTurn ? { isFormAnswerTurn: true } : {}),
     });
+    const userPrompt =
+      buildTurn && designChatRunWorkspace
+        ? [
+            `[workspace root: ${path.relative(process.cwd(), designChatRunWorkspace.tempRunRoot).replace(/\\/g, "/")}/]`,
+            `Skill entry point: skills/${options.outputType}/SKILL.md`,
+            "Final output target: output/index.html",
+            "",
+            userPromptBase,
+          ].join("\n")
+        : userPromptBase;
     const conversationHistory = Array.isArray(options.flow.conversationHistory)
       ? options.flow.conversationHistory
       : [];
-    const designChatTools = getDesignChatTools();
+    const designChatTools = getDesignChatTools(buildTurn ? "build" : "discovery");
+    const effectiveWorkspaceRoot =
+      designChatRunWorkspace?.tempRunRoot ?? designChatToolWorkspaceRoot;
     const promptRuntime = this.createPromptRuntime(
-      designChatToolWorkspaceRoot,
+      effectiveWorkspaceRoot,
       config,
       envMap,
       runtimeOptions,
       designChatTools,
       this.mcpRuntime,
       options.signal,
+      designChatRunWorkspace?.tempRunRoot,
     );
     const toolContext = promptRuntime.getToolContext("main");
     const history: NormalizedMessage[] = [
@@ -2662,6 +2762,13 @@ export class ElectronChatPanel {
     const traceLines: string[] = [
       `design-chat-trace  ${new Date().toISOString()}`,
       `session=${options.sessionId}  outputType=${options.outputType}  isFormAnswerTurn=${isFormAnswerTurn}`,
+      ...(designChatRunWorkspace
+        ? [
+            `runRoot=${designChatRunWorkspace.tempRunRoot}`,
+            `skillSourceRoot=${designChatRunWorkspace.skillSourceRoot}`,
+            `usedBundleDir=${designChatRunWorkspace.usedBundleDir}`,
+          ]
+        : []),
       `---`,
     ];
     const traceLine = (msg: string) => {
@@ -2670,6 +2777,10 @@ export class ElectronChatPanel {
       traceLines.push(line);
       console.log(`[design-trace] ${line}`);
     };
+
+    if (buildTurn && target === "design-chat") {
+      this.sendToRenderer({ type: "design:chat:build-start" });
+    }
 
     let streamedText = "";
     const result = await runAgent(history, {
@@ -2689,10 +2800,16 @@ export class ElectronChatPanel {
       },
       onToolStart: (toolName, input) => {
         traceLine(`TOOL_START  ${toolName}  ${JSON.stringify(input).slice(0, 300)}`);
+        if (buildTurn && target === "design-chat") {
+          this.sendToRenderer({ type: "design:chat:build-tool-start", toolName });
+        }
       },
       onToolEnd: (execId, summary, isError) => {
         const status = isError ? "ERROR" : "OK";
         traceLine(`TOOL_END    ${status}  ${summary.slice(0, 200)}`);
+        if (buildTurn && target === "design-chat") {
+          this.sendToRenderer({ type: "design:chat:build-tool-end" });
+        }
       },
       abortSignal: options.signal,
       maxTurns: 10,
@@ -2706,6 +2823,10 @@ export class ElectronChatPanel {
       template_read:   traceLines.some(l => l.includes("read_file") && l.includes("template.html")),
       layouts_read:    traceLines.some(l => l.includes("read_file") && l.includes("layouts.md")),
       checklist_read:  traceLines.some(l => l.includes("read_file") && l.includes("checklist.md")),
+      skill_md_read:   traceLines.some(l => l.includes("TOOL_START  read_file") && l.includes("SKILL.md")),
+      output_file_written: buildTurn && designChatRunWorkspace
+        ? existsSync(path.join(designChatRunWorkspace.tempRunRoot, "output", "index.html"))
+        : false,
       five_dim_exec:   lower.includes("philosophy") && lower.includes("execution") && lower.includes("restraint"),
       checklist_exec:  lower.includes("p0") || lower.includes("checklist"),
       output_chars:    streamedText.length,
@@ -2729,12 +2850,88 @@ export class ElectronChatPanel {
       throw new Error("Design chat returned an empty response.");
     }
 
+    if (buildTurn && designChatRunWorkspace) {
+      const outputFilePath = path.join(designChatRunWorkspace.tempRunRoot, "output", "index.html");
+      let outputHtml: string;
+      try {
+        const stat = await fs.stat(outputFilePath);
+        if (stat.size === 0) {
+          throw new Error("output/index.html is empty.");
+        }
+        outputHtml = await fs.readFile(outputFilePath, "utf8");
+      } catch (error) {
+        throw new Error(
+          `Design build failed: output/index.html not found or unreadable. ${error instanceof Error ? error.message : String(error)}`,
+        );
+      }
+
+      if (!outputHtml.trimStart().toLowerCase().startsWith("<!doctype html")) {
+        throw new Error("Design build failed: output/index.html does not start with <!DOCTYPE html>.");
+      }
+
+      const seedAssetsRead = evidence.template_read && evidence.layouts_read && evidence.checklist_read;
+      if (designChatRunWorkspace.usedBundleDir && !seedAssetsRead) {
+        throw new Error(
+          `Design build failed: outputType "${options.outputType}" has a full bundle but agent did not read all seed assets ` +
+            `(template_read=${evidence.template_read}, layouts_read=${evidence.layouts_read}, checklist_read=${evidence.checklist_read}).`,
+        );
+      }
+
+      if (!designChatRunWorkspace.usedBundleDir && !seedAssetsRead) {
+        console.warn(
+          `[design-chat] Seed assets not fully read for flat-only outputType "${options.outputType}". Proceeding.`,
+        );
+      }
+
+      const titleMatch = outputHtml.match(/<title>([\s\S]*?)<\/title>/i);
+      const artifactTitle = titleMatch?.[1]?.trim() || "KainClaw Design";
+      const artifactSlug = artifactTitle
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, "-")
+        .replace(/^-+|-+$/g, "") || "design-output";
+      const wrappedOutput = [
+        `<artifact identifier="${artifactSlug}" type="text/html" title="${artifactTitle.replace(/"/g, "&quot;")}">`,
+        outputHtml,
+        "</artifact>",
+      ].join("\n");
+
+      const shouldAppendUserTurn =
+        conversationHistory.at(-1)?.role !== "user" ||
+        conversationHistory.at(-1)?.content !== options.prompt;
+      const nextHistory: DesignChatHistoryMessage[] = [
+        ...conversationHistory,
+        ...(shouldAppendUserTurn
+          ? [{
+              role: "user" as const,
+              content: options.prompt,
+            }]
+          : []),
+        {
+          role: "assistant",
+          content: wrappedOutput,
+        },
+      ];
+
+      return {
+        kind: "artifact",
+        rawOutput: wrappedOutput,
+        html: outputHtml,
+        sliders: [],
+        history: nextHistory,
+      };
+    }
+
+    const shouldAppendUserTurn =
+      conversationHistory.at(-1)?.role !== "user" ||
+      conversationHistory.at(-1)?.content !== options.prompt;
     const nextHistory: DesignChatHistoryMessage[] = [
       ...conversationHistory,
-      {
-        role: "user",
-        content: options.prompt,
-      },
+      ...(shouldAppendUserTurn
+        ? [{
+            role: "user" as const,
+            content: options.prompt,
+          }]
+        : []),
       {
         role: "assistant",
         content: rawOutput,
@@ -2757,6 +2954,89 @@ export class ElectronChatPanel {
       html: artifact.html,
       sliders: [],
       history: nextHistory,
+    };
+  }
+
+  private async initDesignChatRunWorkspace(options: {
+    sessionId: string;
+    outputType: DesignOutputType;
+    prompt: string;
+    brandContext?: string;
+    skillSourceRoot: string;
+  }): Promise<DesignChatRunWorkspace> {
+    const runId = Date.now().toString(36);
+    const tempRunRoot = path.join(
+      process.cwd(),
+      ".design-chat-runs",
+      options.sessionId.slice(-8),
+      runId,
+    );
+    const bundleDirRelativePath = getDesignChatSkillBundleDirRelativePath(options.outputType);
+    const skillBundleDir = path.join(options.skillSourceRoot, bundleDirRelativePath);
+    const skillFlatFile = path.join(
+      options.skillSourceRoot,
+      getDesignChatSkillRelativePath(options.outputType),
+    );
+    const stagedSkillDir = path.join(tempRunRoot, "skills", options.outputType);
+
+    await fs.mkdir(path.join(tempRunRoot, "output"), { recursive: true });
+    await fs.mkdir(stagedSkillDir, { recursive: true });
+
+    const filesToStage: Array<{ src: string; dst: string }> = [];
+    const bundleSkillEntryPath = path.join(skillBundleDir, "SKILL.md");
+    const usedBundleDir = existsSync(bundleSkillEntryPath);
+
+    if (usedBundleDir) {
+      filesToStage.push({
+        src: bundleSkillEntryPath,
+        dst: path.join(stagedSkillDir, "SKILL.md"),
+      });
+    } else if (existsSync(skillFlatFile)) {
+      filesToStage.push({
+        src: skillFlatFile,
+        dst: path.join(stagedSkillDir, "SKILL.md"),
+      });
+    } else {
+      throw new Error(
+        `Design build failed: no skill entry found for outputType "${options.outputType}".`,
+      );
+    }
+
+    for (const assetFile of ["template.html", "layouts.md", "checklist.md"]) {
+      const assetPath = path.join(skillBundleDir, assetFile);
+      if (existsSync(assetPath)) {
+        filesToStage.push({
+          src: assetPath,
+          dst: path.join(stagedSkillDir, assetFile),
+        });
+      }
+    }
+
+    await Promise.all(
+      filesToStage.map(async ({ src, dst }) => {
+        await fs.mkdir(path.dirname(dst), { recursive: true });
+        await fs.copyFile(src, dst);
+      }),
+    );
+
+    await fs.writeFile(
+      path.join(tempRunRoot, "brief.md"),
+      `# Design Brief\n\n${options.prompt}\n`,
+      "utf8",
+    );
+
+    if (options.brandContext?.trim()) {
+      await fs.writeFile(
+        path.join(tempRunRoot, "brand.md"),
+        `# Brand Context\n\n${options.brandContext.trim()}\n`,
+        "utf8",
+      );
+    }
+
+    return {
+      tempRunRoot,
+      skillSourceRoot: options.skillSourceRoot,
+      usedBundleDir,
     };
   }
 
@@ -3144,6 +3424,9 @@ export class ElectronChatPanel {
     if (!project) {
       return undefined;
     }
+    const projectHistory = await this.designProjectStore.loadConversationHistory(
+      normalizedProjectId,
+    );
 
     const workspaceRoot = this.getSelectedWorkspaceRoot();
     const session = await this.sessions.createSession(
@@ -3158,13 +3441,23 @@ export class ElectronChatPanel {
       projectId: normalizedProjectId,
       conversationId: session.id,
       createdAt: Date.now(),
-      conversationHistory: [],
+      conversationHistory: projectHistory,
     };
     await this.sessions.saveRuntimeState(session.id, {
       workspaceRoot,
       sessionType: "design",
       designFlowState: nextFlowState,
     });
+    if (projectHistory.length > 0) {
+      await this.sessions.appendMessages(
+        session.id,
+        projectHistory.map((message, index) => ({
+          role: message.role,
+          content: message.content,
+          timestamp: Date.now() + index,
+        })),
+      );
+    }
     return session.id;
   }
 
@@ -4256,19 +4549,9 @@ export class ElectronChatPanel {
 
   private async listDesignProjects(): Promise<void> {
     const projects = await this.designProjectStore.listProjects();
-    const previews: Record<string, string> = {};
-    await Promise.all(
-      projects
-        .filter(p => p.activeVersionId && p.activeVersionId !== "pending-version")
-        .map(async p => {
-          const html = await this.designVersionStore.getVersionHtml(p.activeVersionId);
-          if (html) previews[p.projectId] = html;
-        })
-    );
     this.sendToRenderer({
       type: "design:projects",
       projects,
-      previews,
     });
     await this.postMidtaiLibrary();
   }
@@ -4286,26 +4569,6 @@ export class ElectronChatPanel {
         activeVersionId: null,
       },
       activeVersion: null,
-    });
-  }
-
-  private async openDesignProjectMessage(message: Record<string, unknown>): Promise<void> {
-    const projectId = typeof message.projectId === "string" ? message.projectId.trim() : "";
-    if (!projectId) {
-      return;
-    }
-    const project = await this.openDesignProject(projectId);
-    if (!project) {
-      return;
-    }
-    await this.handleSwitchDesignProject(project.projectId);
-    const activeVersion = project.activeVersionId && project.activeVersionId !== "pending-version"
-      ? await this.designVersionStore.getVersion(project.activeVersionId)
-      : null;
-    this.sendToRenderer({
-      type: "design:projectOpened",
-      project,
-      activeVersion,
     });
   }
 
@@ -4700,6 +4963,10 @@ ${html.slice(0, 8000)}
   ): Promise<void> {
     const prompt = String(message.prompt ?? "").trim();
     const currentHtml = String(message.html ?? "").trim();
+    const requestedProjectId =
+      typeof message.projectId === "string" && message.projectId.trim()
+        ? message.projectId.trim()
+        : undefined;
     if (!prompt) {
       this.sendToRenderer({
         type: "design:error",
@@ -4768,6 +5035,7 @@ ${html.slice(0, 8000)}
         html: result.html,
         sliders: result.sliders,
         source: "editCurrent",
+        ...(requestedProjectId ? { projectId: requestedProjectId } : {}),
       });
 
       this.sendToRenderer({
@@ -4807,6 +5075,10 @@ ${html.slice(0, 8000)}
   private async patchDesignWorkbench(
     message: Record<string, unknown>,
   ): Promise<void> {
+    const requestedProjectId =
+      typeof message.projectId === "string" && message.projectId.trim()
+        ? message.projectId.trim()
+        : undefined;
     const html = String(message.html ?? "").trim();
     const selector = String(message.selector ?? "").trim();
     const comment = String(message.comment ?? "").trim();
@@ -4850,6 +5122,7 @@ ${html.slice(0, 8000)}
           html: nextHtml,
           sliders: Array.isArray(message.sliders) ? message.sliders : [],
           source: "patch",
+          ...(requestedProjectId ? { projectId: requestedProjectId } : {}),
         });
 
         this.sendToRenderer({
@@ -4892,6 +5165,7 @@ ${html.slice(0, 8000)}
         html: result.html,
         sliders: Array.isArray(message.sliders) ? message.sliders : [],
         source: "patch",
+        ...(requestedProjectId ? { projectId: requestedProjectId } : {}),
       });
 
       this.sendToRenderer({
@@ -4959,6 +5233,7 @@ ${html.slice(0, 8000)}
         html,
         sliders: version.sliders,
         source: "patch",
+        projectId,
         baseVersionId: version.id,
       });
 
@@ -5005,6 +5280,11 @@ ${html.slice(0, 8000)}
       ? await this.designProjectStore.getProject(options.projectId)
       : await this.getCurrentDesignProject();
     if (!project) {
+      if (options.source === "patch" || options.source === "editCurrent") {
+        throw new Error(
+          "Current design project binding is missing. Re-open the target work from Recent Works before editing this version.",
+        );
+      }
       project = await this.designProjectStore.createProject({
         name: (options.prompt?.trim() || "KainClaw Design").slice(0, 80),
         source: options.sourceArtifactId ? "artifact" : "blank",
@@ -5349,6 +5629,7 @@ ${html.slice(0, 8000)}
     tools: ToolDefinition[],
     mcpRuntime: McpRuntime = this.mcpRuntime,
     abortSignal?: AbortSignal,
+    designChatRunRoot?: string,
   ): ElectronPromptRuntime {
     const dangerousCommandApprovals = new Map<
       string,
@@ -5358,6 +5639,7 @@ ${html.slice(0, 8000)}
       mode: ToolContext["invokerKind"] = "main",
     ): ToolContext => ({
       workspaceRoot,
+      ...(designChatRunRoot ? { designChatRunRoot } : {}),
       invokerKind: mode,
       ...(abortSignal ? { abortSignal } : {}),
       extractWebContent: request =>

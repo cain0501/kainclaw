@@ -86,6 +86,10 @@ export type DesignFlowState = {
   projectId?: string;
   conversationId?: string;
   createdAt: number;
+  /**
+   * Runtime-only projection retained for in-memory hydration.
+   * Canonical persisted design history lives in DesignProjectStore.
+   */
   conversationHistory?: Array<{
     role: "user" | "assistant";
     content: string;
@@ -621,23 +625,6 @@ export class SessionRepository {
                 : {}),
               ...(typeof state.designFlowState.conversationId === "string"
                 ? { conversationId: state.designFlowState.conversationId }
-                : {}),
-              ...(Array.isArray(state.designFlowState.conversationHistory)
-                ? {
-                    conversationHistory: state.designFlowState.conversationHistory
-                      .filter(
-                        (
-                          message,
-                        ): message is { role: "user" | "assistant"; content: string } =>
-                          !!message &&
-                          (message.role === "user" || message.role === "assistant") &&
-                          typeof message.content === "string",
-                      )
-                      .map(message => ({
-                        role: message.role,
-                        content: message.content,
-                      })),
-                  }
                 : {}),
             },
           }
