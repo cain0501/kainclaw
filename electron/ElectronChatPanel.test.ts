@@ -261,6 +261,23 @@ function getLastRendererPayloadOfType<T extends { type?: string }>(
     .find(payload => (payload as { type?: string }).type === type) as T | undefined;
 }
 
+async function bindActiveDesignProject(
+  harness: Awaited<ReturnType<typeof createHarness>>,
+  name: string,
+): Promise<{ projectId: string; name: string }> {
+  const project = await (harness.panel as any).designProjectStore.createProject({
+    name,
+    source: "blank",
+    activeVersionId: "pending-version",
+  });
+  await harness.panel.handleMessage({
+    type: "design:switch-project",
+    projectId: project.projectId,
+  });
+  expect((harness.panel as any).currentDesignProjectId).toBe(project.projectId);
+  return project;
+}
+
 describe("ElectronChatPanel session lifecycle", () => {
   const tempDirs: string[] = [];
 
@@ -5113,6 +5130,7 @@ Freeze skill body.
 
     await harness.settings.setOnboardingDone(true);
     await harness.panel.handleMessage({ type: "ready" });
+    await bindActiveDesignProject(harness, "Editorial Refresh");
 
     vi.mocked(resolveProviderConfig).mockResolvedValue({
       config: {
@@ -5162,12 +5180,46 @@ Freeze skill body.
     });
   });
 
+  it("returns a recoverable binding-missing contract for design:editCurrent when no active project is bound", async () => {
+    const harness = await createHarness();
+    tempDirs.push(harness.storagePath);
+
+    await harness.settings.setOnboardingDone(true);
+    await harness.panel.handleMessage({ type: "ready" });
+
+    await harness.panel.handleMessage({
+      type: "design:editCurrent",
+      prompt: "Keep this layout but turn it into an editorial white product page",
+      outputType: "prototype",
+      style: "editorial white",
+      html: "<!DOCTYPE html><html><body><main>Current page</main></body></html>",
+    });
+
+    const errorPayload = getLastRendererPayloadOfType<{
+      type: "design:error";
+      success: false;
+      code: string;
+      recoverable: boolean;
+      message: string;
+    }>(harness.rendererPayloads, "design:error");
+
+    expect(errorPayload).toMatchObject({
+      type: "design:error",
+      success: false,
+      code: "DESIGN_PROJECT_BINDING_MISSING",
+      recoverable: true,
+      message: "Current design project binding is missing. Re-open the target work from Recent Works before editing.",
+    });
+    expect(generateKainClawDesign).not.toHaveBeenCalled();
+  });
+
   it("handles design:patch by returning updated HTML without requiring a full page rewrite", async () => {
     const harness = await createHarness();
     tempDirs.push(harness.storagePath);
 
     await harness.settings.setOnboardingDone(true);
     await harness.panel.handleMessage({ type: "ready" });
+    await bindActiveDesignProject(harness, "Warm Hero");
 
     vi.mocked(resolveProviderConfig).mockResolvedValue({
       config: {
@@ -5230,6 +5282,7 @@ Freeze skill body.
 
     await harness.settings.setOnboardingDone(true);
     await harness.panel.handleMessage({ type: "ready" });
+    await bindActiveDesignProject(harness, "Stats Refresh");
 
     vi.mocked(resolveProviderConfig).mockResolvedValue({
       config: {
@@ -5266,6 +5319,7 @@ Freeze skill body.
 
     await harness.settings.setOnboardingDone(true);
     await harness.panel.handleMessage({ type: "ready" });
+    await bindActiveDesignProject(harness, "Patch No-op");
 
     vi.mocked(resolveProviderConfig).mockResolvedValue({
       config: {

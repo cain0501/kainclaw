@@ -211,6 +211,21 @@ function extractJsonFromText(text: string): Record<string, unknown> | null {
   }
 }
 
+const DESIGN_PROJECT_BINDING_MISSING_CODE = "DESIGN_PROJECT_BINDING_MISSING";
+const DESIGN_PROJECT_BINDING_MISSING_MESSAGE =
+  "Current design project binding is missing. Re-open the target work from Recent Works before editing.";
+
+class DesignProjectBindingMissingError extends Error {
+  readonly code = DESIGN_PROJECT_BINDING_MISSING_CODE;
+
+  readonly recoverable = true;
+
+  constructor(message = DESIGN_PROJECT_BINDING_MISSING_MESSAGE) {
+    super(message);
+    this.name = "DesignProjectBindingMissingError";
+  }
+}
+
 const SUPPORTED_ELECTRON_TOOL_NAMES = new Set([
   "AskUserQuestion",
   "list_files",
@@ -4527,6 +4542,76 @@ export class ElectronChatPanel {
     return this.designProjectStore.getProject(this.currentDesignProjectId);
   }
 
+  private buildDesignProjectBindingMissingPayload(): {
+    success: false;
+    code: typeof DESIGN_PROJECT_BINDING_MISSING_CODE;
+    recoverable: true;
+    message: typeof DESIGN_PROJECT_BINDING_MISSING_MESSAGE;
+  } {
+    return {
+      success: false,
+      code: DESIGN_PROJECT_BINDING_MISSING_CODE,
+      recoverable: true,
+      message: DESIGN_PROJECT_BINDING_MISSING_MESSAGE,
+    };
+  }
+
+  private isDesignProjectBindingMissingError(error: unknown): error is DesignProjectBindingMissingError {
+    return (
+      error instanceof DesignProjectBindingMissingError ||
+      (
+        error instanceof Error &&
+        error.message === DESIGN_PROJECT_BINDING_MISSING_MESSAGE
+      )
+    );
+  }
+
+  private sendDesignError(error: unknown): void {
+    if (this.isDesignProjectBindingMissingError(error)) {
+      this.sendToRenderer({
+        type: "design:error",
+        ...this.buildDesignProjectBindingMissingPayload(),
+      });
+      return;
+    }
+    this.sendToRenderer({
+      type: "design:error",
+      message: error instanceof Error ? error.message : String(error),
+    });
+  }
+
+  private sendPatchImageNodeError(error: unknown): void {
+    if (this.isDesignProjectBindingMissingError(error)) {
+      this.sendToRenderer({
+        type: "design:patchImageNode:result",
+        payload: this.buildDesignProjectBindingMissingPayload(),
+      });
+      return;
+    }
+    this.sendToRenderer({
+      type: "design:patchImageNode:result",
+      payload: {
+        success: false,
+        error: error instanceof Error ? error.message : String(error),
+      },
+    });
+  }
+
+  private async requireActiveDesignProjectBinding(
+    requestedProjectId?: string,
+  ): Promise<DesignProjectRecord> {
+    const normalizedProjectId = typeof requestedProjectId === "string"
+      ? requestedProjectId.trim()
+      : "";
+    const project = normalizedProjectId
+      ? await this.designProjectStore.getProject(normalizedProjectId)
+      : await this.getCurrentDesignProject();
+    if (!project) {
+      throw new DesignProjectBindingMissingError();
+    }
+    return project;
+  }
+
   private async setCurrentDesignProject(project: DesignProjectRecord | null): Promise<void> {
     this.currentDesignProjectId = project?.projectId;
     if (project?.projectId) {
@@ -4991,6 +5076,12 @@ ${html.slice(0, 8000)}
         message.referenceImageMimeType.trim()
         ? message.referenceImageMimeType.trim()
         : undefined;
+    try {
+      await this.requireActiveDesignProjectBinding(requestedProjectId);
+    } catch (error) {
+      this.sendDesignError(error);
+      return;
+    }
 
     const workspaceRoot = this.getSelectedWorkspaceRoot();
     const { config, envMap } = await resolveProviderConfig(
@@ -5048,10 +5139,7 @@ ${html.slice(0, 8000)}
         versionId: version.id,
       });
     } catch (error) {
-      this.sendToRenderer({
-        type: "design:error",
-        message: error instanceof Error ? error.message : String(error),
-      });
+      this.sendDesignError(error);
     }
   }
 
@@ -5089,6 +5177,12 @@ ${html.slice(0, 8000)}
         type: "design:error",
         message: "设计局部改写缺少必要信息。",
       });
+      return;
+    }
+    try {
+      await this.requireActiveDesignProjectBinding(requestedProjectId);
+    } catch (error) {
+      this.sendDesignError(error);
       return;
     }
 
@@ -5182,10 +5276,7 @@ ${html.slice(0, 8000)}
         targetOuterHtmlPreview: targetOuterHtml.slice(0, 240),
         error: error instanceof Error ? error.message : String(error),
       });
-      this.sendToRenderer({
-        type: "design:error",
-        message: error instanceof Error ? error.message : String(error),
-      });
+      this.sendDesignError(error);
     }
   }
 
@@ -5197,19 +5288,23 @@ ${html.slice(0, 8000)}
     const imageUrl = String(message.imageUrl ?? "").trim();
     const targetOuterHtml = String(message.targetOuterHtml ?? "").trim();
 
-    if (!projectId || !selector || !imageUrl || !targetOuterHtml) {
+    if (!projectId) {
+      this.sendPatchImageNodeError(new DesignProjectBindingMissingError());
+      return;
+    }
+    if (!selector || !imageUrl || !targetOuterHtml) {
       this.sendToRenderer({
         type: "design:patchImageNode:result",
         payload: {
           success: false,
-          error: "Missing projectId, selector, imageUrl, or targetOuterHtml.",
+          error: "Missing selector, imageUrl, or targetOuterHtml.",
         },
       });
       return;
     }
 
     try {
-      const project = await this.designProjectStore.getProject(projectId);
+      const project = await this.requireActiveDesignProjectBinding(projectId);
       if (!project?.activeVersionId || project.activeVersionId === "pending-version") {
         throw new Error("No active design version is available for image replacement.");
       }
@@ -5254,13 +5349,7 @@ ${html.slice(0, 8000)}
         },
       });
     } catch (error) {
-      this.sendToRenderer({
-        type: "design:patchImageNode:result",
-        payload: {
-          success: false,
-          error: error instanceof Error ? error.message : String(error),
-        },
-      });
+      this.sendPatchImageNodeError(error);
     }
   }
 
@@ -5280,10 +5369,12 @@ ${html.slice(0, 8000)}
       ? await this.designProjectStore.getProject(options.projectId)
       : await this.getCurrentDesignProject();
     if (!project) {
-      if (options.source === "patch" || options.source === "editCurrent") {
-        throw new Error(
-          "Current design project binding is missing. Re-open the target work from Recent Works before editing this version.",
-        );
+      if (
+        options.source === "patch" ||
+        options.source === "editCurrent" ||
+        options.source === "restore"
+      ) {
+        throw new DesignProjectBindingMissingError();
       }
       project = await this.designProjectStore.createProject({
         name: (options.prompt?.trim() || "KainClaw Design").slice(0, 80),

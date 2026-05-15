@@ -3603,7 +3603,15 @@ function handleMessage(msg) {
       { const floatEl = document.getElementById('design-canvas-critique-float'); if (floatEl) floatEl.style.display = 'none'; }
       break;
     case 'design:error':
-      console.log('[KC-R] design:error received', { message: String(msg.message || '') });
+      console.log('[KC-R] design:error received', { code: String(msg.code || ''), message: String(msg.message || '') });
+      if (isDesignProjectBindingMissingPayload(msg)) {
+        showRecoverableDesignProjectBindingError(msg.message);
+        if (document.getElementById('page-midtai')?.classList.contains('active')) {
+          setMidtaiShellTab('library');
+          setMidtaiLibrarySubtab('design');
+        }
+        break;
+      }
       designBridgeState.loading = false;
       designBridgeState.patchLoading = false;
       clearDesignPatchStatus();
@@ -3744,6 +3752,16 @@ function handleMessage(msg) {
         switchMidtaiType('design');
         openCanvas(projectLabel);
         showArtifactToast(isEnglishUi() ? 'Image replaced in the current design.' : '已将图片回写到当前设计。');
+      } else if (isDesignProjectBindingMissingPayload(msg.payload)) {
+        showRecoverableDesignProjectBindingError(msg.payload?.message);
+        setImageLabStatus(
+          isEnglishUi()
+            ? 'Re-open the target work from Recent Works before writing back the image.'
+            : '请先从最近作品重新打开目标作品，再回写图片。',
+          true,
+        );
+        setMidtaiShellTab('library');
+        setMidtaiLibrarySubtab('design');
       } else if (msg.payload?.error) {
         setImageLabStatus(String(msg.payload.error), true);
       }
@@ -6699,6 +6717,35 @@ function hydrateDesignProjectIntoBridge(project, activeVersion) {
   } else {
     showDesignPage();
   }
+}
+
+function getActiveDesignProjectId() {
+  return String(midtaiState.currentDesignProjectId || '').trim() || null;
+}
+
+function isDesignProjectBindingMissingPayload(payload) {
+  return String(payload?.code || '').trim() === 'DESIGN_PROJECT_BINDING_MISSING';
+}
+
+function getRecoverableDesignProjectBindingMessage(message) {
+  const fallback = isEnglishUi()
+    ? 'Current design project binding is missing. Re-open the target work from Recent Works before editing.'
+    : '当前设计作品绑定已丢失。请先从最近作品重新打开目标作品，再继续编辑。';
+  return String(message || '').trim() || fallback;
+}
+
+function showRecoverableDesignProjectBindingError(message) {
+  const recoverableMessage = getRecoverableDesignProjectBindingMessage(message);
+  designBridgeState.loading = false;
+  designBridgeState.patchLoading = false;
+  clearDesignPatchStatus();
+  syncMidtaiPatchStatus();
+  designBridgeState.error = recoverableMessage;
+  { const mnpBtnE = document.getElementById('mnp-patch-apply-btn'); if (mnpBtnE) { mnpBtnE.disabled = false; mnpBtnE.textContent = '应用改写'; } }
+  { const dpvC = document.getElementById('dpv-loading-counter'); if (dpvC) dpvC.textContent = isEnglishUi() ? 'Usually takes 10~30 seconds' : '通常需要 10~30 秒'; }
+  syncMidtaiDesignWorkspaceHeader();
+  renderDesignBridgePage();
+  showArtifactToast(isEnglishUi() ? 'Re-open the target work from Recent Works before editing.' : '请先从最近作品重新打开目标作品，再继续编辑。');
 }
 
 function syncMidtaiDesignPayload(payload) {
