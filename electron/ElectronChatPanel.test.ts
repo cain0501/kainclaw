@@ -601,6 +601,7 @@ describe("ElectronChatPanel session lifecycle", () => {
       type: "sendPrompt",
       prompt: "给我一个落地页原型",
     });
+    await (harness.panel as any).postState();
 
     await harness.panel.handleMessage({ type: "artifact:openKainClawDesign" });
 
@@ -3375,6 +3376,72 @@ Freeze skill body.
     expect(projects).toHaveLength(0);
   });
 
+  it("surfaces the active transient draft in design:listProjects with a draft marker", async () => {
+    const harness = await createHarness();
+    tempDirs.push(harness.storagePath);
+
+    await harness.settings.setOnboardingDone(true);
+    await harness.panel.handleMessage({ type: "ready" });
+    await harness.panel.handleMessage({ type: "design:new-transient-work" });
+    await harness.panel.handleMessage({ type: "design:listProjects" });
+
+    const projectsPayload = getLastRendererPayloadOfType<{
+      type: "design:projects";
+      projects: Array<{
+        projectId: string;
+        isDraft?: boolean;
+        isTransientDraft?: boolean;
+        activeVersionId?: string;
+      }>;
+    }>(harness.rendererPayloads, "design:projects");
+
+    expect(projectsPayload?.projects[0]).toMatchObject({
+      isDraft: true,
+      isTransientDraft: true,
+      activeVersionId: "pending-version",
+    });
+    expect(String(projectsPayload?.projects[0]?.projectId || "")).toContain("transient:");
+  });
+
+  it("prunes truly empty pending ghost rows on ready but keeps pending projects with history or artifact linkage", async () => {
+    const harness = await createHarness();
+    tempDirs.push(harness.storagePath);
+
+    await harness.settings.setOnboardingDone(true);
+
+    const ghost = await (harness.panel as any).designProjectStore.createProject({
+      name: "Ghost Row",
+      source: "blank",
+      activeVersionId: "pending-version",
+    });
+    const withHistory = await (harness.panel as any).designProjectStore.createProject({
+      name: "Keep History",
+      source: "blank",
+      activeVersionId: "pending-version",
+    });
+    await (harness.panel as any).designProjectStore.saveConversationHistory(withHistory.projectId, [
+      { role: "user", content: "keep me" },
+    ]);
+    const withArtifact = await (harness.panel as any).designProjectStore.createProject({
+      name: "Keep Artifact",
+      source: "artifact",
+      sourceArtifactId: "artifact-1",
+      activeVersionId: "pending-version",
+    });
+
+    await harness.panel.handleMessage({ type: "ready" });
+
+    await expect((harness.panel as any).designProjectStore.getProject(ghost.projectId)).resolves.toBeNull();
+    await expect((harness.panel as any).designProjectStore.getProject(withHistory.projectId)).resolves.toMatchObject({
+      projectId: withHistory.projectId,
+      isDraft: true,
+    });
+    await expect((harness.panel as any).designProjectStore.getProject(withArtifact.projectId)).resolves.toMatchObject({
+      projectId: withArtifact.projectId,
+      isDraft: true,
+    });
+  });
+
   it("switches design chat history and flow context by project instead of keeping the previous project session", async () => {
     const harness = await createHarness();
     tempDirs.push(harness.storagePath);
@@ -3606,6 +3673,46 @@ Freeze skill body.
       projectName: "Fresh Project",
       hasVersion: false,
     });
+  });
+
+  it("promotes a transient draft into a formal project only after the first durable generate save succeeds", async () => {
+    const harness = await createHarness();
+    tempDirs.push(harness.storagePath);
+
+    await harness.settings.setOnboardingDone(true);
+    await harness.panel.handleMessage({ type: "ready" });
+    await harness.panel.handleMessage({ type: "design:new-transient-work" });
+
+    expect(await (harness.panel as any).designProjectStore.listProjects()).toHaveLength(0);
+
+    vi.mocked(resolveProviderConfig).mockResolvedValue({
+      config: {
+        type: "anthropic",
+        apiKey: "test-key",
+        model: "claude-sonnet-4-6",
+      },
+      envMap: {},
+    });
+    vi.mocked(buildProviderAdapter).mockReturnValue({} as never);
+    vi.mocked(generateKainClawDesign).mockResolvedValue({
+      html: "<!DOCTYPE html><html><body><main>First durable version</main></body></html>",
+      sliders: [],
+      rawOutput: "raw",
+      systemPrompt: "system",
+      userPrompt: "user",
+    });
+
+    await harness.panel.handleMessage({
+      type: "design:generate",
+      prompt: "Make a first durable version",
+      outputType: "prototype",
+    });
+
+    const projects = await (harness.panel as any).designProjectStore.listProjects();
+    expect(projects).toHaveLength(1);
+    expect(projects[0]?.name).toBe("Make a first durable version");
+    expect(projects[0]?.isDraft).not.toBe(true);
+    expect(projects[0]?.activeVersionId).not.toBe("pending-version");
   });
 
   it("writes design conversationHistory to the current project after each design chat turn", async () => {
@@ -6034,14 +6141,18 @@ Freeze skill body.
       outputType: "landing-page",
       designFlowId: (await harness.sessions.loadRuntimeState(harness.settings.getActiveSessionId()!)).designFlowState?.flowId,
     });
+    await (harness.panel as any).postState();
 
-    const artifactState = getLastRendererPayloadOfType<{
-      type: "state";
-      artifactState?: {
-        activeArtifactId?: string | null;
-      };
-    }>(harness.rendererPayloads, "state");
-    const artifactId = artifactState?.artifactState?.activeArtifactId;
+    const sessionMessages = await harness.sessions.loadMessages(harness.settings.getActiveSessionId()!);
+    const artifactAssistantMessage = sessionMessages
+      .find(message => message.role === "assistant" && String(message.content || "").includes("<artifact"));
+    const artifactId = artifactAssistantMessage
+      ? ((harness.panel as any).detectArtifactFromSessionMessage(
+          harness.settings.getActiveSessionId()!,
+          artifactAssistantMessage,
+          sessionMessages.indexOf(artifactAssistantMessage),
+        )?.id ?? null)
+      : null;
     expect(artifactId).toBeTruthy();
 
     await harness.panel.handleMessage({

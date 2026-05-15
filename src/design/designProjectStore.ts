@@ -17,6 +17,7 @@ export type DesignProjectRecord = {
   updatedAt: number;
   lastOpenedAt: number;
   versionCount?: number;
+  isDraft?: boolean;
 };
 
 type StoredDesignProjects = {
@@ -32,32 +33,40 @@ type LegacyVersionProjectSeed = {
 type SqliteModule = typeof import("node:sqlite");
 
 function normalizeProjectRecord(record: DesignProjectRecord): DesignProjectRecord {
+  const normalizedHistory = Array.isArray(record.conversationHistory)
+    ? record.conversationHistory
+        .filter(
+          (
+            message,
+          ): message is DesignChatHistoryMessage =>
+            !!message &&
+            (message.role === "user" || message.role === "assistant") &&
+            typeof message.content === "string",
+        )
+        .map(message => ({
+          role: message.role,
+          content: message.content,
+        }))
+    : [];
+  const normalizedActiveVersionId = typeof record.activeVersionId === "string" && record.activeVersionId.trim()
+    ? record.activeVersionId.trim()
+    : "pending-version";
+  const hasDurableVersion =
+    normalizedActiveVersionId !== "pending-version" &&
+    normalizedActiveVersionId.length > 0;
   return {
     projectId: record.projectId,
     name: record.name?.trim() || "Untitled Design",
     source: record.source === "artifact" ? "artifact" : "blank",
     ...(record.sourceArtifactId?.trim() ? { sourceArtifactId: record.sourceArtifactId.trim() } : {}),
-    activeVersionId: record.activeVersionId,
-    ...(Array.isArray(record.conversationHistory)
-      ? {
-          conversationHistory: record.conversationHistory
-            .filter(
-              (
-                message,
-              ): message is DesignChatHistoryMessage =>
-                !!message &&
-                (message.role === "user" || message.role === "assistant") &&
-                typeof message.content === "string",
-            )
-            .map(message => ({
-              role: message.role,
-              content: message.content,
-            })),
-        }
-      : {}),
+    activeVersionId: normalizedActiveVersionId,
+    conversationHistory: normalizedHistory,
     createdAt: Number(record.createdAt) || Date.now(),
     updatedAt: Number(record.updatedAt) || Date.now(),
     lastOpenedAt: Number(record.lastOpenedAt) || Date.now(),
+    ...(hasDurableVersion
+      ? {}
+      : { isDraft: true }),
   };
 }
 
@@ -467,6 +476,67 @@ export class DesignProjectStore {
 
     const store = await this.readLegacyStore();
     return [...store.projects].sort((left, right) => right.updatedAt - left.updatedAt);
+  }
+
+  async pruneEmptyPendingProjects(): Promise<string[]> {
+    const removedProjectIds = await this.withDatabase(database => {
+      const rows = database.prepare(`
+        SELECT project_id, source_artifact_id, active_version_id, conversation_history
+        FROM design_projects
+      `).all() as Array<{
+        project_id: string;
+        source_artifact_id: string | null;
+        active_version_id: string | null;
+        conversation_history: string | null;
+      }>;
+
+      const removableProjectIds = rows
+        .filter(row => {
+          const activeVersionId = typeof row.active_version_id === "string" ? row.active_version_id.trim() : "";
+          const hasDurableVersion = activeVersionId.length > 0 && activeVersionId !== "pending-version";
+          if (hasDurableVersion) {
+            return false;
+          }
+          const hasSourceArtifact = typeof row.source_artifact_id === "string" && row.source_artifact_id.trim().length > 0;
+          if (hasSourceArtifact) {
+            return false;
+          }
+          const conversationHistory = (() => {
+            if (!row.conversation_history) {
+              return [];
+            }
+            try {
+              return JSON.parse(row.conversation_history) as DesignChatHistoryMessage[];
+            } catch {
+              return [];
+            }
+          })();
+          return !Array.isArray(conversationHistory) || conversationHistory.length === 0;
+        })
+        .map(row => row.project_id);
+
+      if (removableProjectIds.length === 0) {
+        return [];
+      }
+
+      const deleteProject = database.prepare(`
+        DELETE FROM design_projects
+        WHERE project_id = ?
+      `);
+      const deleteMeta = database.prepare(`
+        DELETE FROM design_meta
+        WHERE key = 'lastOpenedProjectId' AND value = ?
+      `);
+
+      for (const projectId of removableProjectIds) {
+        deleteProject.run(projectId);
+        deleteMeta.run(projectId);
+      }
+
+      return removableProjectIds;
+    });
+
+    return removedProjectIds ?? [];
   }
 
   async getProject(projectId: string): Promise<DesignProjectRecord | null> {

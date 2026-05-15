@@ -452,7 +452,7 @@ export class ElectronChatPanel {
         await this.ensureImageResultsHydrated();
         return this.imageResults;
       },
-      () => this.designProjectStore.listProjects(),
+      () => this.buildDesignProjectListItems(),
       async project => this.designProjectStore.getThumbnail(project.projectId),
     );
     this.taskRuntimeStore = new PersistentTaskRuntimeStore(this.host.getStorageUri());
@@ -1293,6 +1293,7 @@ export class ElectronChatPanel {
       return;
     }
     await this.ensureSession();
+    await this.designProjectStore.pruneEmptyPendingProjects();
     await this.getResolvedWorkspaceContext(true);
     await this.postState();
   }
@@ -4542,6 +4543,47 @@ export class ElectronChatPanel {
     return this.designProjectStore.getProject(this.currentDesignProjectId);
   }
 
+  private async buildTransientDraftProjectListItem(): Promise<DesignProjectListItem | null> {
+    if (!this.currentSessionId || this.currentDesignProjectId) {
+      return null;
+    }
+    const runtimeState = await this.sessions.loadRuntimeState(this.currentSessionId);
+    if (runtimeState.sessionType !== "design") {
+      return null;
+    }
+    const history = Array.isArray(this.currentDesignFlowState?.conversationHistory)
+      ? this.currentDesignFlowState.conversationHistory
+      : [];
+    const updatedAt = history.length > 0
+      ? Date.now()
+      : (
+          this.currentDesignFlowState?.createdAt ??
+          Date.now()
+        );
+    return {
+      projectId: `transient:${this.currentSessionId}`,
+      name: history.length > 0 ? "新作品 · 草稿" : "新作品 · 未命名",
+      source: "blank",
+      activeVersionId: "pending-version",
+      conversationHistory: history,
+      createdAt: this.currentDesignFlowState?.createdAt ?? updatedAt,
+      updatedAt,
+      lastOpenedAt: updatedAt,
+      versionCount: 0,
+      isDraft: true,
+      isTransientDraft: true,
+    };
+  }
+
+  private async buildDesignProjectListItems(): Promise<DesignProjectListItem[]> {
+    await this.designProjectStore.pruneEmptyPendingProjects();
+    const projects = await this.designProjectStore.listProjects();
+    const transientDraft = await this.buildTransientDraftProjectListItem();
+    return transientDraft
+      ? [transientDraft, ...projects]
+      : projects;
+  }
+
   private buildDesignProjectBindingMissingPayload(): {
     success: false;
     code: typeof DESIGN_PROJECT_BINDING_MISSING_CODE;
@@ -4633,7 +4675,7 @@ export class ElectronChatPanel {
   }
 
   private async listDesignProjects(): Promise<void> {
-    const projects = await this.designProjectStore.listProjects();
+    const projects = await this.buildDesignProjectListItems();
     this.sendToRenderer({
       type: "design:projects",
       projects,
@@ -4769,40 +4811,33 @@ export class ElectronChatPanel {
       }
     }
 
-    let project = existingProject ?? await this.designProjectStore.createProject({
-      name: activeArtifact.title || "Untitled Design",
-      source: "artifact",
-      sourceArtifactId: activeArtifact.id,
-      activeVersionId: "pending-version",
-    });
-    await this.setCurrentDesignProject(project);
-
-    // Save the artifact HTML as v1 so it appears in version history
-    if (!project.activeVersionId || project.activeVersionId === "pending-version") {
-      const initialVersion = await this.designVersionStore.saveVersion({
-        projectId: project.projectId,
-        prompt: activeArtifact.title || "",
-        title: "生成",
-        outputType: "prototype",
-        style: "",
-        html: activeArtifact.content,
-        sliders: [],
-        sliderValues: {},
-        source: "generate",
+    const binding =
+      this.findArtifactInCurrentSession(activeArtifact.id) ??
+      this.findArtifactMessageInSession(
+        this.currentSessionId,
+        activeArtifact.sourceMessageId ?? activeArtifact.id,
+      );
+    if (!binding) {
+      this.sendToRenderer({
+        type: "kainclawDesign:error",
+        message: "当前无法定位该 HTML Artifact 对应的会话消息。",
       });
-      const updated = await this.designProjectStore.updateProject(project.projectId, {
-        activeVersionId: initialVersion.id,
-        updatedAt: initialVersion.createdAt,
-        lastOpenedAt: Date.now(),
-      });
-      project = updated ?? project;
-      await this.setCurrentDesignProject(project);
+      return;
     }
+
+    const saved = await this.saveDesignArtifactToProject({
+      sessionId: this.currentSessionId,
+      messageIndex: binding.messageIndex,
+      artifactId: activeArtifact.id,
+      html: activeArtifact.content,
+      title: activeArtifact.title || "设计作品",
+      outputType: "prototype",
+    });
 
     await this.openMidtai({
       contentType: "design",
       view: "preview",
-      projectId: project.projectId,
+      projectId: saved.projectId,
       artifactId: activeArtifact.id,
     });
   }
@@ -6561,4 +6596,8 @@ type WebviewAttachment = {
   dataUrl: string;
   mimeType: string;
   name: string;
+};
+
+type DesignProjectListItem = DesignProjectRecord & {
+  isTransientDraft?: boolean;
 };

@@ -186,4 +186,44 @@ describe("DesignProjectStore", () => {
     await expect(store.getProject(project.projectId)).resolves.toBeNull();
     await expect(versionStore.getVersion(version.id)).resolves.toBeNull();
   });
+
+  it("marks pending projects as drafts and prunes only truly empty ghost rows", async () => {
+    const storageRoot = await fs.mkdtemp(path.join(os.tmpdir(), "kc-design-projects-"));
+    tempDirs.push(storageRoot);
+    const store = new DesignProjectStore(storageRoot);
+
+    const ghost = await store.createProject({
+      name: "Ghost Row",
+      source: "blank",
+      activeVersionId: "pending-version",
+    });
+    const withHistory = await store.createProject({
+      name: "Draft With History",
+      source: "blank",
+      activeVersionId: "pending-version",
+    });
+    await store.saveConversationHistory(withHistory.projectId, [
+      { role: "user", content: "继续做这个草稿" },
+    ]);
+    const withArtifact = await store.createProject({
+      name: "Artifact Draft",
+      source: "artifact",
+      sourceArtifactId: "artifact-keep",
+      activeVersionId: "pending-version",
+    });
+
+    const removedProjectIds = await store.pruneEmptyPendingProjects();
+    expect(removedProjectIds).toEqual([ghost.projectId]);
+
+    const projects = await store.listProjects();
+    expect(projects.find(project => project.projectId === ghost.projectId)).toBeUndefined();
+    expect(projects.find(project => project.projectId === withHistory.projectId)).toMatchObject({
+      isDraft: true,
+      conversationHistory: [{ role: "user", content: "继续做这个草稿" }],
+    });
+    expect(projects.find(project => project.projectId === withArtifact.projectId)).toMatchObject({
+      isDraft: true,
+      sourceArtifactId: "artifact-keep",
+    });
+  });
 });
