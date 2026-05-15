@@ -424,6 +424,7 @@ export class ElectronChatPanel {
   private readonly artifactRegistries = new Map<string, InMemoryArtifactRegistry>();
   private currentDesignProjectId: string | undefined;
   private currentDesignFlowState: DesignFlowState | undefined;
+  private transientDesignDraftSessionId: string | undefined;
   private pendingDiversionPrompt: string | undefined;
   private pendingQuestion: PendingQuestionState | undefined;
   private sessionMessageWriteQueue: Promise<void> = Promise.resolve();
@@ -3276,6 +3277,7 @@ export class ElectronChatPanel {
     this.currentSessionWorkspaceRoot = "";
     this.currentDesignFlowState = undefined;
     this.currentDesignProjectId = undefined;
+    this.transientDesignDraftSessionId = undefined;
     this.pendingDiversionPrompt = undefined;
     this.pendingQuestion = undefined;
     this.streamingText = "";
@@ -3344,6 +3346,7 @@ export class ElectronChatPanel {
   private async handleNewTransientWork(): Promise<void> {
     await this.createNewDesignSessionSilent();
     this.currentDesignFlowState = undefined;
+    this.transientDesignDraftSessionId = this.currentSessionId;
     if (this.currentSessionId) {
       await this.saveCurrentSessionRuntimeState(this.currentSessionId);
     }
@@ -4544,29 +4547,36 @@ export class ElectronChatPanel {
   }
 
   private async buildTransientDraftProjectListItem(): Promise<DesignProjectListItem | null> {
-    if (!this.currentSessionId || this.currentDesignProjectId) {
+    if (!this.transientDesignDraftSessionId) {
       return null;
     }
-    const runtimeState = await this.sessions.loadRuntimeState(this.currentSessionId);
+    const runtimeState = await this.sessions.loadRuntimeState(this.transientDesignDraftSessionId);
     if (runtimeState.sessionType !== "design") {
       return null;
     }
-    const history = Array.isArray(this.currentDesignFlowState?.conversationHistory)
+    if (runtimeState.designFlowState?.projectId) {
+      return null;
+    }
+    const history = this.currentSessionId === this.transientDesignDraftSessionId &&
+      Array.isArray(this.currentDesignFlowState?.conversationHistory)
       ? this.currentDesignFlowState.conversationHistory
-      : [];
+      : await this.resolveDesignFlowHistoryProjection(
+          runtimeState.designFlowState,
+          this.transientDesignDraftSessionId,
+        );
     const updatedAt = history.length > 0
       ? Date.now()
       : (
-          this.currentDesignFlowState?.createdAt ??
+          runtimeState.designFlowState?.createdAt ??
           Date.now()
         );
     return {
-      projectId: `transient:${this.currentSessionId}`,
+      projectId: `transient:${this.transientDesignDraftSessionId}`,
       name: history.length > 0 ? "新作品 · 草稿" : "新作品 · 未命名",
       source: "blank",
       activeVersionId: "pending-version",
       conversationHistory: history,
-      createdAt: this.currentDesignFlowState?.createdAt ?? updatedAt,
+      createdAt: runtimeState.designFlowState?.createdAt ?? updatedAt,
       updatedAt,
       lastOpenedAt: updatedAt,
       versionCount: 0,
@@ -5462,6 +5472,14 @@ ${html.slice(0, 8000)}
     });
     const captureProject = updatedProject ?? project;
     await this.setCurrentDesignProject(captureProject);
+    if (
+      !options.projectId &&
+      options.source === "generate" &&
+      this.currentSessionId &&
+      this.transientDesignDraftSessionId === this.currentSessionId
+    ) {
+      this.transientDesignDraftSessionId = undefined;
+    }
     if (this.currentDesignFlowState && this.currentDesignFlowState.projectId === captureProject.projectId) {
       this.currentDesignFlowState = {
         ...this.currentDesignFlowState,

@@ -3403,6 +3403,71 @@ Freeze skill body.
     expect(String(projectsPayload?.projects[0]?.projectId || "")).toContain("transient:");
   });
 
+  it("keeps the transient draft visible after the quick-start path activates a question-form and the user switches projects", async () => {
+    const harness = await createHarness();
+    tempDirs.push(harness.storagePath);
+
+    await harness.settings.setOnboardingDone(true);
+    await harness.panel.handleMessage({ type: "ready" });
+    await harness.panel.handleMessage({ type: "design:new-transient-work" });
+
+    vi.mocked(resolveProviderConfig).mockResolvedValue({
+      config: {
+        type: "anthropic",
+        apiKey: "test-key",
+        model: "claude-sonnet-4-6",
+      },
+      envMap: {},
+    });
+    const providerRunStep = vi.fn().mockResolvedValue({
+      text: [
+        "先确认几个关键问题。",
+        '<question-form id="quick-start" title="Quick brief">',
+        '{"questions":[{"id":"tone","label":"Tone","type":"radio","options":["Editorial","Minimal"]}]}',
+        "</question-form>",
+      ].join("\n"),
+      toolCalls: [],
+      done: true,
+    });
+    vi.mocked(buildProviderAdapter).mockReturnValue({
+      runStep: providerRunStep,
+    } as never);
+
+    await harness.panel.handleMessage({
+      type: "design:chat:send",
+      prompt: "做一个极简作品集主页",
+    });
+
+    const draftSessionId = (harness.panel as any).transientDesignDraftSessionId;
+    expect(draftSessionId).toBeTruthy();
+    const draftRuntimeState = await harness.sessions.loadRuntimeState(draftSessionId);
+    expect(draftRuntimeState.sessionType).toBe("design");
+
+    const formalProject = await (harness.panel as any).designProjectStore.createProject({
+      name: "Existing Work",
+      source: "blank",
+      activeVersionId: "pending-version",
+    });
+    await harness.panel.handleMessage({
+      type: "design:switch-project",
+      projectId: formalProject.projectId,
+    });
+    await harness.panel.handleMessage({ type: "design:listProjects" });
+
+    const projectsPayload = getLastRendererPayloadOfType<{
+      type: "design:projects";
+      projects: Array<{
+        projectId: string;
+        isDraft?: boolean;
+        isTransientDraft?: boolean;
+      }>;
+    }>(harness.rendererPayloads, "design:projects");
+
+    expect(projectsPayload?.projects.some(project =>
+      project.isDraft === true && project.isTransientDraft === true,
+    )).toBe(true);
+  });
+
   it("prunes truly empty pending ghost rows on ready but keeps pending projects with history or artifact linkage", async () => {
     const harness = await createHarness();
     tempDirs.push(harness.storagePath);
