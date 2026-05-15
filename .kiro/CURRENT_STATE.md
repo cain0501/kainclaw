@@ -28,7 +28,6 @@ npm run build:electron   # only when Electron behavior changed
 
 | Beads ID | Title | Status | Primer |
 |----------|-------|--------|--------|
-| vscode-extension-sez | v3: project lifecycle cleanup — transient draft display + ghost row prune + formal promote trigger | OPEN P2 | `.kiro/primers/vscode-extension-sez.md` |
 | vscode-extension-3ka | v3: image ownership writeback — light provenance on use | OPEN P2 | `.kiro/primers/vscode-extension-3ka.md` |
 | vscode-extension-26q | Kanban 视图：我的作品看板模式 | OPEN P3 | — |
 | vscode-extension-0z5 | 画布草图标注工具：iframe 上层 canvas overlay | OPEN P3 | — |
@@ -39,6 +38,7 @@ npm run build:electron   # only when Electron behavior changed
 
 | Beads ID | Title |
 |----------|-------|
+| vscode-extension-sez | v3: project lifecycle cleanup — transient draft display + ghost row prune + formal promote trigger |
 | vscode-extension-ut1 | v3: recoverable error contract — DESIGN_PROJECT_BINDING_MISSING |
 | vscode-extension-gqr | v3: canonical history authority — DesignProjectStore as single source of truth |
 | vscode-extension-yth | [v3-pre-spec] Resolve the five open Midtai/Design migration decisions |
@@ -165,9 +165,10 @@ npm run build:electron   # only when Electron behavior changed
 ## Current Focus
 
 - Design Home stripping + i18n follow-up (yth/z69/gqr) 全部收口
-- v3 lifecycle implementation 后续聚焦两条 issue（sez / 3ka），依赖 `.kiro/specs/v3-design-project-lifecycle-pre-spec.md`（Section 6 五条产品决策已全部拍板）
+- v3 lifecycle implementation 后续聚焦 `vscode-extension-3ka`，依赖 `.kiro/specs/v3-design-project-lifecycle-pre-spec.md`（Section 6 五条产品决策已全部拍板）
 - **gqr（canonical history authority）已落地**：`DesignProjectStore.conversationHistory` 是唯一持久真相源；`SessionRuntimeState.designFlowState.conversationHistory` 不再写入 .state.json，只在内存中投影
 - **ut1（recoverable error contract）已落地**：patch/edit/writeback 缺 binding 时统一返回 `DESIGN_PROJECT_BINDING_MISSING`，renderer 按 `code` 提示用户从 Recent Works 重新打开目标作品
+- **sez（project lifecycle cleanup）已落地**：Recent Works 现在显示 draft 条目，启动/列表刷新会 prune 三无 ghost row，formal project 只在 durable save 或 artifact/design promote 时创建
 
 ## Not Yet Started
 
