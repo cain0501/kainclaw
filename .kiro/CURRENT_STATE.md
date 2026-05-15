@@ -28,16 +28,22 @@ npm run build:electron   # only when Electron behavior changed
 
 | Beads ID | Title | Status | Primer |
 |----------|-------|--------|--------|
+| vscode-extension-sez | v3: project lifecycle cleanup — transient draft display + ghost row prune + formal promote trigger | OPEN P2 | `.kiro/primers/vscode-extension-sez.md` |
+| vscode-extension-3ka | v3: image ownership writeback — light provenance on use | OPEN P2 | `.kiro/primers/vscode-extension-3ka.md` |
 | vscode-extension-26q | Kanban 视图：我的作品看板模式 | OPEN P3 | — |
 | vscode-extension-0z5 | 画布草图标注工具：iframe 上层 canvas overlay | OPEN P3 | — |
 | vscode-extension-f4v | extension.ts 宿主总控继续下沉 | DEFERRED | `.kiro/primers/vscode-extension-f4v.md` |
-| vscode-extension-0wm | TeamCreate/TeamDelete/SendMessage: 命名团队管理工具 | OPEN P3 — ready | `.kiro/primers/vscode-extension-0wm.md` |
 
 <details>
 <summary>已关闭任务（展开查看完整历史）</summary>
 
 | Beads ID | Title |
 |----------|-------|
+| vscode-extension-ut1 | v3: recoverable error contract — DESIGN_PROJECT_BINDING_MISSING |
+| vscode-extension-gqr | v3: canonical history authority — DesignProjectStore as single source of truth |
+| vscode-extension-yth | [v3-pre-spec] Resolve the five open Midtai/Design migration decisions |
+| vscode-extension-z69 | [UX][i18n] 设计 question form 的 Direction / Accent override 对中文用户不可用 |
+| vscode-extension-0wm | TeamCreate/TeamDelete/SendMessage: 命名团队管理工具 |
 | vscode-extension-kqy | ConfigTool: 设置读写工具 |
 | vscode-extension-zje | SessionMemory: 会话内笔记服务 |
 | vscode-extension-yck | PowerShellTool: Windows PowerShell 专用工具 |
@@ -110,6 +116,7 @@ npm run build:electron   # only when Electron behavior changed
 - Plan Mode V2 (Phase 1: Explore → Phase 2: Design → Phase 3: Present, `src/planMode/planModePrompt.ts`)
 - Micro-compact (lightweight tool result clearing before auto-compact, `src/compact/microCompact.ts`)
 - ToolRuntime utility set: Sleep / PowerShell / SessionMemory / Config (effortLevel, fastMode, showThinkingSummaries, verbose, uiLanguage, read-only model)
+- Team registry utilities: TeamCreate / SendMessage / TeamDelete with compact-time registry reset
 - Auto-Memory
 - LSP phase 1 + partial phase 2
 - Worktree phase 1
@@ -117,6 +124,10 @@ npm run build:electron   # only when Electron behavior changed
 - Custom Agents registry / Skills registry
 - codebase-memory-mcp integration (global install, project indexed as `E-claudecodejingiang-vscode-extension`, `auto_index=true`, repo `AGENTS.md` index-first guidance)
 - User modeling
+- Design chat path B Build Runtime: temp workspace `.design-chat-runs/<session>/<run>/`; Discovery Turn = read-only tools; Build Turn opens `write_file`/`replace_in_file`/`list_files` scoped to temp workspace (two-layer sandbox: workspaceRoot + `assertDesignChatRunWritePath`); writes within `designChatRunRoot` skip approval dialog; host validates `output/index.html` (exists + non-empty + DOCTYPE) before converting to artifact
+- Design chat skill bundle: `skills/<type>/SKILL.md` is now the primary entry point for landing-page, dashboard, mobile-app, slide, pricing-page, social-carousel; flat `.md` files kept as fallback (frozen); seed asset validation hard for bundle types, soft warning for flat-only
+- Design chat path B skill workflows now live in disk-backed `skills/*.md` files with prompt-level `read_file` instructions and fallback in `src/design/designPrompt.ts`
+- Design chat path B system prompt now carries OpenDesign-style discovery philosophy, TodoWrite planning, and seed-asset guidance; OpenDesign seed assets are present under `skills/mobile-app/`, `skills/slide/`, `skills/dashboard/`, and `skills/landing-page/`
 - KainClaw Design (generate / iframe / sliders 右侧抽屉 / canvas toolbar / patch popover 贴近元素 + selector 定位 / 左侧面板 A/B / version history / export HTML+PDF+PPTX / lastOpenedProjectId 跨 session)
 - Electron artifact panel persistence (collapse / restore strip / per-session collapsed state / version navigation)
 - Image Lab chain (generate / edit / Prompt Library / reference image search)
@@ -125,6 +136,7 @@ npm run build:electron   # only when Electron behavior changed
 - Midtai Canvas Selection (fo7 bridge: 选择模式 crosshair → node panel → Replace 图片 / 去 Image Lab / 从我的作品选择)
 - Midtai Canvas Controls (3q7/wnz bridge: 调节 sliders → `__kc_apply_slider_values` iframe bridge / 调节浮层可拖拽 / 导出 HTML+PDF+PPTX 菜单 / 版本历史按当前项目过滤并可恢复)
 - KainClaw Design Prompt 质量升级 (Anti-Slop 9 条规则 + DesignDirectionSpec OKLch 调色板 + posture 注入，4 套方向含完整 spec)
+- Design chat path B visual direction picker (Turn 1 追加“视觉风格方向”可选题；Turn 2 解析 form answers 中的方向值并注入 `renderDirectionSpec()` CSS binding block；skip 时保持自由判断)
 - Midtai 设计表单 (输出类型 select + 视觉方向卡片选择器，按输出类型动态渲染，选中值传入 generateDesignWorkbench)
 - Midtai Design Skill 扩展 (12 个输出类型，含 8 个新 skill prompt 约束 + renderer 双入口 select + directions fallback)
 - Midtai Guide Form + Showcase (静态引导问题表单、模板卡片库、skill/prompt 一键回填、`userContext` 透传链路)
@@ -132,6 +144,8 @@ npm run build:electron   # only when Electron behavior changed
 - Midtai ZIP Export (导出 ZIP，包含 `index.html` 与从 HTML 内抽出的本地 data URL 资源文件)
 - Midtai 图像整合 (左侧图像表单 + 比例/数量控件 + 生成预览 shimmer/结果卡片 + 静态提示词库 + 插入到对话)
 - Midtai Unified Workbench (p1-p4: 统一工作台 UI / design:switch-project / conversationHistory project 层 / design session 侧栏下沉)
+- Design Home stripping complete (Phase 1-5): Midtai open, recent works, new design question form generation, canvas patch/return, version restore, image material writeback, and cross-work switching all passed final manual smoke; duplicate renderer project tracking and Design Home-only host glue are removed
+- v3 canonical history authority (gqr / cddd9b8): `DesignProjectStore.conversationHistory` is the only durable source; `designFlowState.conversationHistory` is stripped from `.state.json` on every save, kept only as in-memory projection; legacy backfill (session state → project store) fires on first `design:switch-project` when project history is empty
 - Local Bridge / Word Add-in (read + write-back + Track Changes + comments)
 - Electron i18n (shellStrings covering all surfaces)
 
@@ -139,13 +153,21 @@ npm run build:electron   # only when Electron behavior changed
 
 - Deleting the last provider may show "Provider not found" in chat area
 - `supabase` MCP may occasionally show `Connection closed`
-- Full `npm test` is currently blocked by unrelated existing failures in `electron/rendererMarkdown.test.ts`, `electron/rendererThinkingSummary.test.ts`, `src/design/versionStore.test.ts`, and `electron/ElectronChatPanel.test.ts` (`__trigger_discovery__` session lifecycle case in the current dirty worktree)
+- Full `npm test` is currently blocked by unrelated existing failures in `electron/rendererMarkdown.test.ts`, `electron/rendererThinkingSummary.test.ts`, `src/design/versionStore.test.ts`
+- `electron/ElectronChatPanel.test.ts` dirty baseline: **6 remaining failures** after `vscode-extension-ut1`. Known failures: `__trigger_discovery__`（1 条）；design-chat build-turn / `output/index.html not found`（5 条：skill file path、artifact build turn、enter-design reuse、tombstone、question-form first turn）。ut1 已消除 patch/binding missing 的 3 条失败（editCurrent、patch、text-only patch）。
 
 ## Key Risks (still active)
 
 - `src/extension.ts` — still large; **f4v 减债已降级**，等功能速度放缓后再做（频繁加功能期间减债 ROI 低）
 - `electron/renderer/index.html` — single-file renderer; prone to inline script regressions
 - `src/webviewHtml.ts` — large template string; fragile escaping
+
+## Current Focus
+
+- Design Home stripping + i18n follow-up (yth/z69/gqr) 全部收口
+- v3 lifecycle implementation 后续聚焦两条 issue（sez / 3ka），依赖 `.kiro/specs/v3-design-project-lifecycle-pre-spec.md`（Section 6 五条产品决策已全部拍板）
+- **gqr（canonical history authority）已落地**：`DesignProjectStore.conversationHistory` 是唯一持久真相源；`SessionRuntimeState.designFlowState.conversationHistory` 不再写入 .state.json，只在内存中投影
+- **ut1（recoverable error contract）已落地**：patch/edit/writeback 缺 binding 时统一返回 `DESIGN_PROJECT_BINDING_MISSING`，renderer 按 `code` 提示用户从 Recent Works 重新打开目标作品
 
 ## Not Yet Started
 
