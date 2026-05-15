@@ -5319,6 +5319,7 @@ ${html.slice(0, 8000)}
     message: Record<string, unknown>,
   ): Promise<void> {
     const projectId = String(message.projectId ?? "").trim();
+    const imageId = String(message.imageId ?? "").trim();
     const selector = String(message.elementSelector ?? "").trim();
     const imageUrl = String(message.imageUrl ?? "").trim();
     const targetOuterHtml = String(message.targetOuterHtml ?? "").trim();
@@ -5366,6 +5367,18 @@ ${html.slice(0, 8000)}
         projectId,
         baseVersionId: version.id,
       });
+
+      if (imageId) {
+        const results = await this.imageGalleryStore.loadResults();
+        const resultIndex = results.findIndex(result => result.id === imageId);
+        if (resultIndex >= 0) {
+          results[resultIndex] = {
+            ...results[resultIndex]!,
+            lastUsedByProjectId: project.projectId,
+          };
+          await this.imageGalleryStore.saveResults(results);
+        }
+      }
 
       this.sendToRenderer({
         type: "design:patchResult",

@@ -5461,6 +5461,69 @@ Freeze skill body.
     expect(errorPayload?.message).toContain("original node unchanged");
   });
 
+  it("writes lastUsedByProjectId only after an image is patched into the active design project", async () => {
+    const harness = await createHarness();
+    tempDirs.push(harness.storagePath);
+
+    await harness.settings.setOnboardingDone(true);
+    await harness.panel.handleMessage({ type: "ready" });
+
+    const project = await bindActiveDesignProject(harness, "Image Provenance");
+    const version = await (harness.panel as any).designVersionStore.saveVersion({
+      projectId: project.projectId,
+      prompt: "image provenance test",
+      title: "generated",
+      outputType: "prototype",
+      style: "",
+      html: "<!DOCTYPE html><html><body><img src=\"https://example.com/original.png\" /></body></html>",
+      sliders: [],
+      sliderValues: {},
+      source: "generate",
+    });
+    await (harness.panel as any).designProjectStore.updateProject(project.projectId, {
+      activeVersionId: version.id,
+      updatedAt: version.createdAt,
+      lastOpenedAt: Date.now(),
+    });
+
+    const galleryResults = [
+      {
+        id: "img-1",
+        batchId: "batch-1",
+        src: "data:image/png;base64,aGVsbG8=",
+        prompt: "draw a cat",
+        createdAt: Date.now(),
+        source: "generate",
+      },
+    ];
+    await (harness.panel as any).imageGalleryStore.saveResults(galleryResults);
+
+    await harness.panel.handleMessage({
+      type: "design:patchImageNode",
+      projectId: project.projectId,
+      imageId: "img-1",
+      elementSelector: "body > img:nth-of-type(1)",
+      targetOuterHtml: "<img src=\"https://example.com/original.png\" />",
+      imageUrl: "data:image/png;base64,aGVsbG8=",
+    });
+
+    const patchImagePayload = getLastRendererPayloadOfType<{
+      type: "design:patchImageNode:result";
+      payload?: { success?: boolean; projectId?: string };
+    }>(harness.rendererPayloads, "design:patchImageNode:result");
+    expect(patchImagePayload?.payload).toMatchObject({
+      success: true,
+      projectId: project.projectId,
+    });
+
+    await expect((harness.panel as any).imageGalleryStore.loadResults()).resolves.toEqual([
+      expect.objectContaining({
+        id: "img-1",
+        lastUsedByProjectId: project.projectId,
+      }),
+    ]);
+  });
+
   it("lists and restores saved design versions for the current session", async () => {
     const harness = await createHarness();
     tempDirs.push(harness.storagePath);

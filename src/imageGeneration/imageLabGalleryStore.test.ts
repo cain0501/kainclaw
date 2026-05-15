@@ -77,4 +77,27 @@ describe("ImageLabGalleryStore", () => {
       }),
     ]);
   });
+
+  it("persists lastUsedByProjectId when present", async () => {
+    const storagePath = await mkdtemp(path.join(os.tmpdir(), "image-lab-gallery-"));
+    tempDirs.push(storagePath);
+
+    const store = new ImageLabGalleryStore(storagePath);
+    await store.saveResults([
+      createResult({
+        id: "result-1",
+        batchId: "batch-1",
+        lastUsedByProjectId: "project-123",
+      }),
+    ]);
+
+    const reloadedStore = new ImageLabGalleryStore(storagePath);
+    await expect(reloadedStore.loadResults()).resolves.toEqual([
+      createResult({
+        id: "result-1",
+        batchId: "batch-1",
+        lastUsedByProjectId: "project-123",
+      }),
+    ]);
+  });
 });

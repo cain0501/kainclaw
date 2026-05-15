@@ -40,6 +40,7 @@ export type ImageLabResultItem = {
   createdAt: number;
   source: "generate" | "edit" | "variant";
   thumbnail?: string;
+  lastUsedByProjectId?: string;
 };
 
 function parseDataUrlAttachment(referenceImage: ImageLabReferenceImage): {

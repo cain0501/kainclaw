@@ -114,6 +114,9 @@ export class ImageLabGalleryStore {
       createdAt: result.createdAt,
       source,
       ...(typeof result.thumbnail === "string" && result.thumbnail ? { thumbnail: result.thumbnail } : {}),
+      ...(typeof result.lastUsedByProjectId === "string" && result.lastUsedByProjectId.trim()
+        ? { lastUsedByProjectId: result.lastUsedByProjectId.trim() }
+        : {}),
     };
   }
 
