@@ -6,6 +6,12 @@ KainClaw is an early-stage AI coding and design assistant that runs as an Electr
 
 The project is still in active development. Core workflows are usable, but some integrations and desktop surfaces are incomplete.
 
+## Personal Note
+
+KainClaw started as a personal vibe-coding project. I am not a professional programmer, product manager, or internet-industry practitioner; I only began seriously exploring Claude, ChatGPT, and AI-assisted development in January 2026. This project grew from that learning process and from a simple goal: make Claude-style coding and design workflows easier for more people to use.
+
+The project is open source so others can inspect it, learn from it, improve it, and help shape a more accessible AI coding and design tool.
+
 ## Features
 
 **AI agent runtime**
