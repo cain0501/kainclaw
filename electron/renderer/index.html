@@ -719,7 +719,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-seri
         </div>
         <div onclick="openDesignHub()" style="display:flex;flex-direction:column;align-items:center;gap:3px;padding:7px 4px;border-radius:7px;cursor:pointer;font-size:11px;color:#52525b" onmouseover="this.style.background='#e4e4e7'" onmouseout="this.style.background='transparent'">
           <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 20h16"/><path d="M6 16l6-12 6 12"/><path d="M8.5 11h7"/></svg>
-          设计
+          <span data-i18n="sidebar-design">设计</span>
         </div>
       </div>
     </div>
@@ -2793,6 +2793,9 @@ function localizeChatSurface() {
 
   const settingsLink = document.querySelector('#page-chat div[onclick="openSettings()"]');
   if (settingsLink && settingsLink.lastChild) settingsLink.lastChild.textContent = shellText('settingsLabel');
+
+  const sidebarDesignLink = document.querySelector('#page-chat [data-i18n="sidebar-design"]');
+  if (sidebarDesignLink) sidebarDesignLink.textContent = translateSurfaceText('设计');
 
   const exportCurrentBtn = document.querySelector('#page-chat button[onclick="exportCurrentSession()"]');
   if (exportCurrentBtn) exportCurrentBtn.title = shellText('exportSessionTitle');
