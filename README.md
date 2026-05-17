@@ -12,6 +12,12 @@ KainClaw started as a personal vibe-coding project. I am not a professional prog
 
 The project is open source so others can inspect it, learn from it, improve it, and help shape a more accessible AI coding and design tool.
 
+## Screenshots
+
+**Gallery and image material library**
+
+![KainClaw gallery and image material library](assets/screenshots/gallery-image-library.png)
+
 ## Features
 
 **AI agent runtime**

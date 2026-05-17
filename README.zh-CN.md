@@ -12,6 +12,12 @@ KainClaw 最初是一个个人 vibe coding 项目。我不是职业程序员，�
 
 我把项目开源，是希望大家可以检查、学习、改进它，也一起把 AI 编程和 AI 设计工具做得更容易使用。
 
+## 截图
+
+**作品库与图片素材库**
+
+![KainClaw 作品库与图片素材库](assets/screenshots/zh-gallery-image-library.png)
+
 ## 功能
 
 **AI Agent 运行时**
