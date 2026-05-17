@@ -2,9 +2,9 @@
 
 [English](README.md) | 简体中文
 
-KainClaw 是一个早期阶段的 AI 编程与设计助手。当前主要以 Electron 桌面应用运行，同时保留 VS Code 扩展形态用于本地开发和验证。
+KainClaw 是一个早期阶段的 AI 编程与设计助手。当前主要以 Electron 桌面应用运行，同时保留 VS Code 扩展模式用于本地开发和验证。
 
-项目仍在快速开发中。核心流程已经可用，但部分集成能力和桌面端界面仍不完整。
+项目仍在活跃开发中。核心流程已经可用，但部分集成能力和桌面端界面仍不完整。
 
 ## 功能
 
@@ -41,6 +41,14 @@ KainClaw 是由贡献者开发的独立开源项目。
 
 KainClaw 不包含任何 Provider 的专有源代码、模型权重或私有服务资产。Provider 集成通过公开 API、本地 CLI 或用户自行配置的兼容端点实现。
 
+## 设计工作流来源与致谢
+
+KainClaw 的设计系统工作流参考并部分改编自 [nexu-io/open-design](https://github.com/nexu-io/open-design)。
+
+两者共享的是工作流层面的思路，不代表项目从属或产品关联：设计任务会先经过可组合 skills、种子模板、布局参考、检查清单、视觉方向预设和设计系统规则，再生成最终 HTML artifact。KainClaw 将这些思路适配到了自己的 Electron 桌面体验、Provider 运行时、项目存储、聊天流程和本地设计工作台中。
+
+部分设计方向逻辑和设计 prompt 结构改编自 Open Design 的 Apache-2.0 许可实现。详见 `THIRD_PARTY_NOTICES.md`。
+
 ## 当前状态
 
 KainClaw 还不是完整的正式客户端。当前推荐使用 Electron 应用进行测试；VS Code 扩展形态主要用于本地开发。
@@ -69,7 +77,7 @@ KainClaw 还不是完整的正式客户端。当前推荐使用 Electron 应用�
 npm install
 ```
 
-## 校验
+## 验证
 
 ```bash
 npm test
@@ -177,6 +185,10 @@ npm run build
 npm run build:electron
 ```
 
+更多说明见 `CONTRIBUTING.md`。
+
 ## 许可证
 
 MIT。详见 `LICENSE`。
+
+本仓库也包含从 Open Design 改编的 Apache-2.0 许可设计工作流材料。详见 `THIRD_PARTY_NOTICES.md`。

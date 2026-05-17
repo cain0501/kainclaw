@@ -41,6 +41,14 @@ This project is not affiliated with, endorsed by, or maintained by Anthropic, Op
 
 KainClaw does not include proprietary provider source code, model weights, or private service assets. Provider integrations are implemented through public APIs, local CLIs, or user-configured compatible endpoints.
 
+## Design Workflow Attribution
+
+KainClaw's design-system workflow is inspired by and partially adapted from [nexu-io/open-design](https://github.com/nexu-io/open-design).
+
+The shared ideas are workflow-level rather than a product affiliation: design tasks are guided by composable skills, seed templates, layout references, checklists, visual direction presets, and design-system rules before final HTML artifacts are generated. KainClaw adapts those ideas into its own Electron desktop experience, provider runtime, project storage, chat flow, and local design workbench.
+
+Some design direction logic and design prompt structure were adapted from Open Design's Apache-2.0-licensed implementation. See `THIRD_PARTY_NOTICES.md` for details.
+
 ## Status
 
 KainClaw is not a polished production client yet. The Electron app is the recommended runtime for testing; the VS Code extension shape remains useful for local development.
@@ -179,4 +187,6 @@ npm run build:electron
 
 ## License
 
-MIT. See `LICENSE` once the repository license file is added.
+MIT. See `LICENSE`.
+
+This repository also includes Apache-2.0-licensed design workflow material adapted from Open Design. See `THIRD_PARTY_NOTICES.md`.
