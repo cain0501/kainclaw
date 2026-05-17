@@ -18,6 +18,10 @@ KainClaw 最初是一个个人 vibe coding 项目。我不是职业程序员，�
 
 ![KainClaw 作品库与图片素材库](assets/screenshots/zh-gallery-image-library.png)
 
+**设计工作台**
+
+![KainClaw 设计工作台](assets/screenshots/zh-design-workbench.png)
+
 ## 功能
 
 **AI Agent 运行时**

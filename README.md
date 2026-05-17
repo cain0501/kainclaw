@@ -18,6 +18,10 @@ The project is open source so others can inspect it, learn from it, improve it, 
 
 ![KainClaw gallery and image material library](assets/screenshots/gallery-image-library.png)
 
+**Design version history**
+
+![KainClaw design version history](assets/screenshots/design-version-history.png)
+
 ## Features
 
 **AI agent runtime**
