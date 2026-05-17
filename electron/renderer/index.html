@@ -2639,6 +2639,10 @@ function applyUiLanguageState(language, dialogStrings, shellStrings) {
   localizeMcpSurface();
   localizeChatSurface();
   localizeSecondarySurfaces();
+  if (document.getElementById('page-midtai')) {
+    renderMidtaiRecentWorks();
+    showMidtaiTab(midtaiState.shellTab);
+  }
   renderDesignBridgePage();
 }
 
