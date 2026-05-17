@@ -105,7 +105,7 @@ Areas still under active development include:
 
 ## Requirements
 
-- Node.js 18+
+- Node.js 24+
 - npm
 - Windows for the packaged Electron desktop build
 - VS Code if you want to run the extension development host

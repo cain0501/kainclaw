@@ -105,7 +105,7 @@ KainClaw 还不是完整的正式客户端。当前推荐使用 Electron 应用�
 
 ## 环境要求
 
-- Node.js 18+
+- Node.js 24+
 - npm
 - Windows，用于打包 Electron 桌面端
 - VS Code，用于运行扩展开发宿主
