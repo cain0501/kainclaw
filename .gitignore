@@ -31,8 +31,6 @@ dist-win/
 dev-host.code-workspace
 
 # Local planning and agent handoff files
-.kiro/
-.beads/
 *HANDOFF*.md
 *handoff*.md
 *CLAUDE*.md
