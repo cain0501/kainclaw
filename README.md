@@ -1,5 +1,7 @@
 # KainClaw
 
+English | [简体中文](README.zh-CN.md)
+
 KainClaw is an early-stage AI coding and design assistant that runs as an Electron desktop app, with a VS Code extension mode kept for local development and validation.
 
 The project is still in active development. Core workflows are usable, but some integrations and desktop surfaces are incomplete.

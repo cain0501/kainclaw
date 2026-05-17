@@ -1,5 +1,7 @@
 # KainClaw
 
+[English](README.md) | 简体中文
+
 KainClaw 是一个早期阶段的 AI 编程与设计助手。当前主要以 Electron 桌面应用运行，同时保留 VS Code 扩展形态用于本地开发和验证。
 
 项目仍在快速开发中。核心流程已经可用，但部分集成能力和桌面端界面仍不完整。
