@@ -2173,6 +2173,7 @@ let designChatActiveFormMessageId = null;
 let designChatPendingUserPrompt = '';
 let designChatPendingFormKey = null;
 let designResumeLookupAttempted = false;
+let designEntryCreationArmed = false;
 const designEntryPendingProjectIds = new Set();
 const designEntrySelectionsByProjectId = new Map();
 let designEntryDialogActive = false;
@@ -3199,6 +3200,10 @@ function handleMessage(msg) {
       designChatStreamingText = '';
       designChatPendingUserPrompt = '';
       designChatPendingFormKey = null;
+      const currentProjectIdForHistory = String(midtaiState.currentDesignProjectId || '').trim();
+      if (hasDesignChatHistory() && currentProjectIdForHistory) {
+        designEntryPendingProjectIds.delete(currentProjectIdForHistory);
+      }
       if (hasDesignChatHistory() && midtaiState.type === 'design' && !shouldKeepDesignEntryDialog()) {
         hideDesignEntryDialog();
         hideDesignQuickForm();
@@ -3316,11 +3321,14 @@ function handleMessage(msg) {
       if (msg.project?.activeVersionId) {
         midtaiState.currentProjectHasVersion = msg.project.activeVersionId !== 'pending-version';
       }
-      if (msg.project?.projectId && !hasDesignEntrySelection()) {
+      if (msg.project?.projectId && designEntryCreationArmed && !hasDesignEntrySelection()) {
         const openedProjectId = String(msg.project.projectId || '').trim();
         if (openedProjectId) {
           designEntryPendingProjectIds.add(openedProjectId);
         }
+      }
+      if (msg.project?.activeVersionId && msg.project.activeVersionId !== 'pending-version' && msg.project?.projectId) {
+        designEntryPendingProjectIds.delete(String(msg.project.projectId || '').trim());
       }
       renderShellContext();
       showMidtaiTab(midtaiState.shellTab);
@@ -3342,13 +3350,17 @@ function handleMessage(msg) {
       break;
     case 'design:project-created': {
       midtaiState.currentDesignProjectId = String(msg.projectId || '').trim() || null;
-      if (midtaiState.currentDesignProjectId && !hasDesignEntrySelection()) {
+      if (midtaiState.currentDesignProjectId && designEntryCreationArmed && !hasDesignEntrySelection()) {
         designEntryPendingProjectIds.add(midtaiState.currentDesignProjectId);
+        designEntryCreationArmed = false;
       }
       if (typeof msg.name === 'string' && msg.name.trim()) {
         midtaiState.currentProject = msg.name.trim();
       }
       midtaiState.currentProjectHasVersion = Math.max(1, Number(msg.versionCount || 1)) > 0;
+      if (midtaiState.currentProjectHasVersion && midtaiState.currentDesignProjectId) {
+        designEntryPendingProjectIds.delete(midtaiState.currentDesignProjectId);
+      }
       const newEntry = {
         id: String(msg.projectId || '').trim(),
         projectId: String(msg.projectId || '').trim(),
@@ -5789,6 +5801,7 @@ function renderMidtaiLibraryView() {
 
 function startNewTransientWork() {
   designResumeLookupAttempted = false;
+  designEntryCreationArmed = true;
   designProjectOpenTargetView = null;
   designChatMessages = [];
   designChatStreamingId = null;
@@ -6892,6 +6905,7 @@ function openDesignHub() {
 function openMidtaiDesignProject(projectId) {
   if (!projectId) return;
   designResumeLookupAttempted = true;
+  designEntryCreationArmed = false;
   designProjectOpenTargetView = 'design-chat';
   pendingProjectSwitch = true;
   midtaiState.canvasOpen = false;
