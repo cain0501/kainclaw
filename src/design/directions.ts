@@ -6,6 +6,8 @@
 export interface DesignDirection {
   id: string;
   label: string;
+  zhLabel?: string;
+  zhSummary?: string;
   mood: string;
   references: string[];
   displayFont: string;
@@ -26,6 +28,8 @@ export const DESIGN_DIRECTIONS: DesignDirection[] = [
   {
     id: "editorial-monocle",
     label: "Editorial — Monocle / FT magazine",
+    zhLabel: "Editorial — Monocle / FT",
+    zhSummary: "杂志感 · 精致排版 · 高级感",
     mood: "Print-magazine feel for explicitly editorial or publishing briefs. Generous whitespace, large serif headlines, restrained palette of neutral paper + ink + a single brand-justified accent. Do not use this as the default for commerce, SaaS, dashboards, or product utilities.",
     references: ["Monocle", "The Financial Times Weekend", "NYT Magazine", "It's Nice That"],
     displayFont: "'Iowan Old Style', 'Charter', Georgia, serif",
@@ -48,6 +52,8 @@ export const DESIGN_DIRECTIONS: DesignDirection[] = [
   {
     id: "modern-minimal",
     label: "Modern minimal — Linear / Vercel",
+    zhLabel: "Modern minimal — Linear / Vercel",
+    zhSummary: "极简 · 科技感 · 大量留白",
     mood: "Software-product minimal. Clean neutral foundation, cobalt accent, geometric display. Great for SaaS, dev tools, B2B apps, and dashboards where clarity is the product.",
     references: ["Linear", "Vercel", "Loom", "Raycast"],
     displayFont: "-apple-system, BlinkMacSystemFont, 'SF Pro Display', system-ui, sans-serif",
@@ -71,6 +77,8 @@ export const DESIGN_DIRECTIONS: DesignDirection[] = [
   {
     id: "human-approachable",
     label: "Human / approachable — Airbnb / Duolingo systems",
+    zhLabel: "Human / approachable — Airbnb / Duolingo",
+    zhSummary: "温暖亲切 · 易用感 · 友好",
     mood: "Friendly and tactile without the generic cozy canvas. Uses a clean neutral background, product-led color system, generous radii, and clear hierarchy. Good for consumer tools, marketplaces, wellness, education, and indie SaaS.",
     references: ["Airbnb", "Duolingo product surfaces", "Miro", "Mercury"],
     displayFont: "'Söhne', 'Avenir Next', -apple-system, BlinkMacSystemFont, system-ui, sans-serif",
@@ -94,6 +102,8 @@ export const DESIGN_DIRECTIONS: DesignDirection[] = [
   {
     id: "tech-utility",
     label: "Tech / utility — Datadog / GitHub",
+    zhLabel: "Tech / utility — Datadog / GitHub",
+    zhSummary: "功能优先 · 信息密度高 · 开发者风格",
     mood: "Data-dense, monospace-friendly, dark or light + grid. Made for engineers and operators who want information per square inch, not vibes.",
     references: ["Datadog", "GitHub", "Cloudflare dashboard", "Sentry"],
     displayFont: "-apple-system, BlinkMacSystemFont, 'Inter', 'Segoe UI', system-ui, sans-serif",
@@ -118,6 +128,8 @@ export const DESIGN_DIRECTIONS: DesignDirection[] = [
   {
     id: "brutalist-experimental",
     label: "Brutalist / experimental — Are.na / Yale",
+    zhLabel: "Brutalist / experimental — Are.na / Yale",
+    zhSummary: "大胆实验 · 艺术感 · 非常规",
     mood: "Loud type. Visible grid. System sans + a single oversized serif. Deliberate ugliness as confidence. Great for art, indie, agency, manifesto pages.",
     references: ["Are.na", "Yale Center for British Art", "mschf", "Read.cv"],
     displayFont: "'Times New Roman', 'Iowan Old Style', Georgia, serif",
@@ -145,6 +157,8 @@ export function renderDirectionFormBody(): string {
   const cards = DESIGN_DIRECTIONS.map((d) => ({
     id: d.id,
     label: d.label,
+    zhLabel: d.zhLabel ?? d.label,
+    zhSummary: d.zhSummary ?? "",
     mood: d.mood,
     references: d.references,
     palette: [d.palette.bg, d.palette.surface, d.palette.border, d.palette.muted, d.palette.fg, d.palette.accent],
@@ -154,10 +168,12 @@ export function renderDirectionFormBody(): string {
 
   const form = {
     description: "No brand to match — pick a visual direction. Each one ships with a real palette, font stack, and layout posture. You can override the accent below.",
+    zhDescription: "没有品牌要对齐时，请先选一个设计风格方向。每个方向都自带真实配色、字体和版式姿态；你也可以在下方覆盖强调色。",
     questions: [
       {
         id: "direction",
         label: "Direction",
+        zhLabel: "设计风格方向",
         type: "direction-cards",
         required: true,
         options: DESIGN_DIRECTIONS.map((d) => d.id),
@@ -166,8 +182,10 @@ export function renderDirectionFormBody(): string {
       {
         id: "accent_override",
         label: "Accent override (optional)",
+        zhLabel: "强调色覆盖（可选）",
         type: "text",
         placeholder: 'e.g. "use moss green instead of cobalt", "no orange — too brand-y for us"',
+        zhPlaceholder: "例如：用橙色替换默认蓝色，不要太品牌化的颜色",
       },
     ],
   };

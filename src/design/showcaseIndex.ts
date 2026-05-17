@@ -666,3 +666,164 @@ export function renderDirectionSpec(direction: DesignDirectionSuggestion): strin
     ...posture.map(p => `- ${p}`),
   ].join("\n");
 }
+
+export const CHINESE_DIRECTIONS: DesignDirectionSuggestion[] = [
+  {
+    id: "lifestyle-redbook",
+    label: "暖调生活",
+    summary: "温暖编辑感，圆润卡片，适合生活方式、种草、内容社区场景。",
+    stylePrompt:
+      "warm lifestyle editorial, coral red accent, rounded cards, content community",
+    preview: {
+      kind: "gradient",
+      value: "linear-gradient(135deg, #f6f1ea 0%, #f0d9cc 60%, #c45c3a 100%)",
+    },
+    spec: {
+      palette: {
+        bg: "oklch(97% 0.012 58)",
+        surface: "oklch(95% 0.018 48)",
+        fg: "oklch(20% 0.02 40)",
+        muted: "oklch(55% 0.015 50)",
+        border: "oklch(88% 0.022 55)",
+        accent: "oklch(55% 0.20 20)",
+      },
+      displayFont: "'Noto Serif SC', 'Source Han Serif CN', Georgia, serif",
+      bodyFont: "'PingFang SC', 'Noto Sans SC', system-ui, sans-serif",
+      posture: [
+        "border-radius: 16-24px on cards and buttons",
+        "soft box-shadow: 0 2px 12px oklch(0% 0 0 / 8%)",
+        "accent used exactly once - primary CTA only",
+        "generous whitespace; section padding >= 80px",
+        "image-to-text ratio: prioritize imagery",
+      ],
+    },
+  },
+  {
+    id: "streetwear-dark",
+    label: "潮流暗黑",
+    summary: "高反差黑底，荧光薄荷绿点缀，适合潮牌、球鞋、收藏品场景。",
+    stylePrompt:
+      "dark streetwear, high contrast, fluorescent teal accent, sneaker resale",
+    preview: {
+      kind: "gradient",
+      value: "linear-gradient(135deg, #1a1a22 0%, #111118 60%, #00e5a0 100%)",
+    },
+    spec: {
+      palette: {
+        bg: "oklch(12% 0.008 260)",
+        surface: "oklch(18% 0.010 260)",
+        fg: "oklch(95% 0.005 80)",
+        muted: "oklch(50% 0.010 260)",
+        border: "oklch(28% 0.015 260)",
+        accent: "oklch(72% 0.20 165)",
+      },
+      displayFont: "'PingFang SC', 'Noto Sans SC', system-ui, sans-serif",
+      bodyFont: "'PingFang SC', 'Noto Sans SC', system-ui, sans-serif",
+      posture: [
+        "border-radius: 0-6px; sharp corners only",
+        "no decorative shadows; high contrast borders only",
+        "accent used exactly once - price tag or badge highlight",
+        "font-weight: 700-900 for all headings",
+        "dense product grid; compact row spacing",
+        "no warm colors anywhere on the page",
+      ],
+    },
+  },
+  {
+    id: "tech-flagship",
+    label: "科技旗舰",
+    summary: "纯白底，橙色点缀，产品图居中全宽，适合数码、家电、旗舰产品官网。",
+    stylePrompt:
+      "tech flagship product page, pure white, orange accent, full-bleed product photography",
+    preview: {
+      kind: "gradient",
+      value: "linear-gradient(135deg, #ffffff 0%, #f5f5f7 60%, #ff6900 100%)",
+    },
+    spec: {
+      palette: {
+        bg: "oklch(99% 0.003 80)",
+        surface: "oklch(97% 0.005 80)",
+        fg: "oklch(15% 0.010 260)",
+        muted: "oklch(55% 0.008 260)",
+        border: "oklch(90% 0.008 260)",
+        accent: "oklch(64% 0.19 44)",
+      },
+      displayFont: "'MiSans', 'PingFang SC', 'Noto Sans SC', system-ui, sans-serif",
+      bodyFont: "'PingFang SC', 'Noto Sans SC', system-ui, sans-serif",
+      posture: [
+        "border-radius: 8-12px",
+        "product image: full-width hero, centered, no text overlay",
+        "strictly no decorative gradients or glassmorphism",
+        "accent used exactly once - primary CTA button only",
+        "spec table / feature list: large font size, generous row height",
+        "flat design: no shadows except 0 1px 3px oklch(0% 0 0 / 10%) on cards",
+      ],
+    },
+  },
+  {
+    id: "ecommerce-convert",
+    label: "电商直营",
+    summary: "转化导向，价格突出，信任建设，适合旗舰店、品牌直营、大促页面。",
+    stylePrompt:
+      "ecommerce direct sales, price-forward hierarchy, commerce red, trust signals",
+    preview: {
+      kind: "gradient",
+      value: "linear-gradient(135deg, #ffffff 0%, #fff5f5 60%, #e31c23 100%)",
+    },
+    spec: {
+      palette: {
+        bg: "oklch(100% 0 0)",
+        surface: "oklch(98% 0.005 50)",
+        fg: "oklch(15% 0.010 0)",
+        muted: "oklch(50% 0.010 0)",
+        border: "oklch(88% 0.008 0)",
+        accent: "oklch(50% 0.22 23)",
+      },
+      displayFont: "'PingFang SC', 'Noto Sans SC', system-ui, sans-serif",
+      bodyFont: "'PingFang SC', 'Noto Sans SC', system-ui, sans-serif",
+      posture: [
+        "border-radius: 4-8px",
+        "price number: font-size 1.5-2x body; font-weight: 700; color: accent",
+        "original price: line-through; muted color; next to current price",
+        "dual CTA: primary '立即购买' (accent fill) + secondary '加入购物车' (outline)",
+        "trust signals section: review count, shipping info, return policy",
+        "badge/tag density: high - sale tags, 'new', stock warnings",
+      ],
+    },
+  },
+  {
+    id: "short-video",
+    label: "短视频沉浸",
+    summary: "极暗背景，抖音青红双配色，全出血媒体，适合内容平台、直播、娱乐应用。",
+    stylePrompt:
+      "short video immersive dark, tiktok cyan red dual accent, full-bleed media",
+    preview: {
+      kind: "gradient",
+      value: "linear-gradient(135deg, #0a0a12 0%, #0d0d18 60%, #25f4ee 100%)",
+    },
+    spec: {
+      palette: {
+        bg: "oklch(8% 0.005 285)",
+        surface: "oklch(14% 0.008 285)",
+        fg: "oklch(96% 0.005 85)",
+        muted: "oklch(55% 0.010 285)",
+        border: "oklch(22% 0.012 285)",
+        accent: "oklch(72% 0.22 185)",
+      },
+      displayFont: "'PingFang SC', 'Noto Sans SC', system-ui, sans-serif",
+      bodyFont: "'PingFang SC', 'Noto Sans SC', system-ui, sans-serif",
+      posture: [
+        "border-radius: 0-10px",
+        "full-bleed media backgrounds with dark overlay gradients",
+        "font-weight: 900 for all display headings",
+        "secondary accent (red): oklch(55% 0.23 22) - use for CTAs only",
+        "accent (cyan) used once - highlight or logo mark",
+        "strictly no light backgrounds or warm neutrals",
+      ],
+    },
+  },
+];
+
+export function getChineseDirection(id: string): DesignDirectionSuggestion | undefined {
+  return CHINESE_DIRECTIONS.find(direction => direction.id === id);
+}

@@ -274,7 +274,9 @@ async function bindActiveDesignProject(
     type: "design:switch-project",
     projectId: project.projectId,
   });
-  expect((harness.panel as any).currentDesignProjectId).toBe(project.projectId);
+  await vi.waitFor(() => {
+    expect((harness.panel as any).currentDesignProjectId).toBe(project.projectId);
+  });
   return project;
 }
 
@@ -540,7 +542,7 @@ describe("ElectronChatPanel session lifecycle", () => {
     expect(reopenedState?.artifactState?.artifactCount).toBe(2);
   });
 
-  it("lists, creates, opens, and restores design projects through the phase-1 IPC messages", async () => {
+  it("lists, creates, opens, and restores explicit draft projects through the phase-1 IPC messages", async () => {
     const harness = await createHarness();
     tempDirs.push(harness.storagePath);
 
@@ -562,16 +564,14 @@ describe("ElectronChatPanel session lifecycle", () => {
       type: "design:projects";
       projects: Array<{ projectId: string; name: string }>;
     }>(harness.rendererPayloads, "design:projects");
-    expect(projectsPayload?.projects.some(project => project.name === "Blank Design")).toBe(false);
+    expect(projectsPayload?.projects.some(project => project.name === "Blank Design")).toBe(true);
 
     await harness.panel.handleMessage({ type: "design:getLastProject" });
     const lastPayload = getLastRendererPayloadOfType<{
       type: "design:projectOpened";
       project?: { projectId: string; name: string } | null;
     }>(harness.rendererPayloads, "design:projectOpened");
-    expect(lastPayload?.project).toBeNull();
-
-    expect(createdPayload?.project).toMatchObject({ name: "Blank Design" });
+    expect(lastPayload?.project).toMatchObject({ name: "Blank Design" });
   });
 
   it("opens the active html artifact in KainClaw Design", async () => {
@@ -944,6 +944,120 @@ describe("ElectronChatPanel session lifecycle", () => {
       type?: string;
     }>(harness.rendererPayloads, "state");
     expect(blankState?.artifactState?.activeArtifact).toBeNull();
+  });
+
+  it("does not leak design-chat in-flight UI into another session after switching away", async () => {
+    const harness = await createHarness();
+    tempDirs.push(harness.storagePath);
+
+    await harness.settings.setOnboardingDone(true);
+    await harness.panel.handleMessage({ type: "ready" });
+    await harness.panel.handleMessage({ type: "design:new-transient-work" });
+
+    const designSessionId = harness.settings.getActiveSessionId();
+    expect(designSessionId).toBeTruthy();
+
+    const defaultSession = await harness.sessions.createSession(
+      "session-default-after-design",
+      "electron",
+      "普通会话",
+    );
+    await harness.sessions.saveRuntimeState(defaultSession.id, {
+      workspaceRoot: "",
+      sessionType: "default",
+    });
+    await harness.sessions.appendMessages(defaultSession.id, [
+      { role: "assistant", content: "normal session only", timestamp: 2001 },
+    ]);
+
+    vi.mocked(resolveProviderConfig).mockResolvedValue({
+      config: {
+        type: "anthropic",
+        apiKey: "test-key",
+        model: "claude-sonnet-4-6",
+      },
+      envMap: {},
+    });
+    const deferredReply = createDeferred<string>();
+    const providerRunStep = vi.fn().mockImplementation(async (_input, callbacks) => {
+      callbacks?.onToken?.("design token");
+      return {
+        text: await deferredReply.promise,
+        toolCalls: [],
+        done: true,
+      };
+    });
+    vi.mocked(buildProviderAdapter).mockReturnValue({
+      runStep: providerRunStep,
+    } as never);
+
+    const sendPromise = harness.panel.handleMessage({
+      type: "design:chat:send",
+      prompt: "做一个极简耳机落地页",
+    });
+
+    await vi.waitFor(() => {
+      expect(providerRunStep).toHaveBeenCalledTimes(1);
+    });
+
+    await harness.panel.handleMessage({
+      type: "sessions:switch",
+      id: defaultSession.id,
+    });
+
+    const switchedState = getLastRendererPayloadOfType<{
+      type: "state";
+      isBusy?: boolean;
+      activeRequestKind?: string | null;
+      sessionType?: string;
+      messages?: Array<{ content: string }>;
+    }>(harness.rendererPayloads, "state");
+    expect(switchedState?.sessionType).toBe("default");
+    expect(switchedState?.isBusy).toBe(false);
+    expect(switchedState?.activeRequestKind ?? null).toBeNull();
+    expect(switchedState?.messages?.map(message => message.content)).toEqual([
+      "normal session only",
+    ]);
+
+    deferredReply.resolve([
+      "先确认几个关键问题。",
+      '<question-form id="leak-check" title="Quick brief">',
+      '{"questions":[{"id":"tone","label":"Tone","type":"radio","options":["Editorial","Minimal"]}]}',
+      "</question-form>",
+    ].join("\n"));
+    await sendPromise;
+
+    const finalDefaultState = getLastRendererPayloadOfType<{
+      type: "state";
+      isBusy?: boolean;
+      activeRequestKind?: string | null;
+      messages?: Array<{ content: string }>;
+    }>(harness.rendererPayloads, "state");
+    expect(finalDefaultState?.isBusy).toBe(false);
+    expect(finalDefaultState?.activeRequestKind ?? null).toBeNull();
+    expect(finalDefaultState?.messages?.map(message => message.content)).toEqual([
+      "normal session only",
+    ]);
+
+    await harness.panel.handleMessage({
+      type: "sessions:switch",
+      id: designSessionId!,
+    });
+
+    const designMessages = await harness.sessions.loadMessages(designSessionId!);
+    expect(designMessages.map(message => message.content)).toEqual([
+      "做一个极简耳机落地页",
+      expect.stringContaining('<question-form id="leak-check"'),
+    ]);
+
+    await harness.panel.handleMessage({ type: "design:listProjects" });
+    const projectsPayload = getLastRendererPayloadOfType<{
+      type: "design:projects";
+      projects: Array<{ isDraft?: boolean }>;
+    }>(harness.rendererPayloads, "design:projects");
+    expect(projectsPayload?.projects.some(project =>
+      project.isDraft === true,
+    )).toBe(true);
   });
 
   it("attaches artifacts to the originating session even if the user switches away before completion", async () => {
@@ -3323,6 +3437,7 @@ Freeze skill body.
     await harness.sessions.saveRuntimeState(designSession.id, {
       workspaceRoot: "",
       sessionType: "design",
+      sessionOwner: "design",
     });
 
     await harness.settings.setActiveSessionId(defaultSession.id);
@@ -3345,7 +3460,67 @@ Freeze skill body.
     expect(sessionsPayload?.sessions.some(session => session.id === designSession.id)).toBe(false);
   });
 
-  it("starts a transient design work state without creating a formal design project", async () => {
+  it("cleans up non-active design-owned sessions on ready while preserving main-chat artifact sessions", async () => {
+    const harness = await createHarness();
+    tempDirs.push(harness.storagePath);
+
+    await harness.settings.setOnboardingDone(true);
+
+    const mainArtifactSession = await harness.sessions.createSession(
+      "session-main-artifact",
+      "electron",
+      "做一个摄影师作品集首页原型，暗色背景",
+    );
+    await harness.sessions.saveRuntimeState(mainArtifactSession.id, {
+      workspaceRoot: "",
+      sessionType: "default",
+      sessionOwner: "main",
+      artifactPanel: {
+        activeArtifactId: "artifact-session-main-artifact",
+        collapsed: false,
+      },
+    });
+    await harness.sessions.appendMessages(mainArtifactSession.id, [
+      {
+        role: "assistant",
+        content: "<!DOCTYPE html><html><body><main>Main artifact session</main></body></html>",
+        timestamp: 1001,
+      },
+    ]);
+
+    const designOwnedStale = await harness.sessions.createSession(
+      "session-design-owned-stale",
+      "electron",
+      "设计对话",
+    );
+    await harness.sessions.saveRuntimeState(designOwnedStale.id, {
+      workspaceRoot: "",
+      sessionType: "design",
+      sessionOwner: "design",
+    });
+    await harness.sessions.appendMessages(designOwnedStale.id, [
+      { role: "user", content: "做一个设计", timestamp: 1002 },
+    ]);
+
+    await harness.settings.setActiveSessionId(mainArtifactSession.id);
+    await harness.panel.handleMessage({ type: "ready" });
+    await harness.panel.handleMessage({ type: "sessions:load" });
+
+    await expect(harness.sessions.getSessionMeta(mainArtifactSession.id)).resolves.toBeTruthy();
+    await expect(harness.sessions.getSessionMeta(designOwnedStale.id)).resolves.toBeUndefined();
+
+    const sessionsPayload = getLastRendererPayloadOfType<{
+      type: "sessions:data";
+      sessions: Array<{ id: string; sessionType?: string; sessionOwner?: string }>;
+      activeId: string | null;
+    }>(harness.rendererPayloads, "sessions:data");
+
+    expect(sessionsPayload?.activeId).toBe(mainArtifactSession.id);
+    expect(sessionsPayload?.sessions.some(session => session.id === mainArtifactSession.id)).toBe(true);
+    expect(sessionsPayload?.sessions.some(session => session.id === designOwnedStale.id)).toBe(false);
+  });
+
+  it("creates a real draft project immediately when starting new design work", async () => {
     const harness = await createHarness();
     tempDirs.push(harness.storagePath);
 
@@ -3358,13 +3533,11 @@ Freeze skill body.
     expect(sessionId).toBeTruthy();
     await expect(harness.sessions.loadRuntimeState(sessionId!)).resolves.toMatchObject({
       sessionType: "design",
+      designFlowState: expect.objectContaining({
+        conversationId: sessionId,
+        projectId: expect.any(String),
+      }),
     });
-
-    const transientPayload = getLastRendererPayloadOfType<{
-      type: "design:transient-work-ready";
-      sessionId: string;
-    }>(harness.rendererPayloads, "design:transient-work-ready");
-    expect(transientPayload?.sessionId).toBe(sessionId);
 
     const historyPayload = getLastRendererPayloadOfType<{
       type: "design:chat:history";
@@ -3373,10 +3546,16 @@ Freeze skill body.
     expect(historyPayload?.messages).toEqual([]);
 
     const projects = await (harness.panel as any).designProjectStore.listProjects();
-    expect(projects).toHaveLength(0);
+    expect(projects).toHaveLength(1);
+    expect(projects[0]).toMatchObject({
+      isDraft: true,
+      activeVersionId: "pending-version",
+      explicitDraft: true,
+    });
+    expect((harness.panel as any).currentDesignProjectId).toBe(projects[0].projectId);
   });
 
-  it("surfaces the active transient draft in design:listProjects with a draft marker", async () => {
+  it("surfaces the active draft project in design:listProjects without transient pseudo rows", async () => {
     const harness = await createHarness();
     tempDirs.push(harness.storagePath);
 
@@ -3390,20 +3569,18 @@ Freeze skill body.
       projects: Array<{
         projectId: string;
         isDraft?: boolean;
-        isTransientDraft?: boolean;
         activeVersionId?: string;
       }>;
     }>(harness.rendererPayloads, "design:projects");
 
     expect(projectsPayload?.projects[0]).toMatchObject({
       isDraft: true,
-      isTransientDraft: true,
       activeVersionId: "pending-version",
     });
-    expect(String(projectsPayload?.projects[0]?.projectId || "")).toContain("transient:");
+    expect(String(projectsPayload?.projects[0]?.projectId || "")).not.toContain("transient:");
   });
 
-  it("keeps the transient draft visible after the quick-start path activates a question-form and the user switches projects", async () => {
+  it("keeps the draft project visible after quick-start activates a question form and the user switches projects", async () => {
     const harness = await createHarness();
     tempDirs.push(harness.storagePath);
 
@@ -3438,10 +3615,11 @@ Freeze skill body.
       prompt: "做一个极简作品集主页",
     });
 
-    const draftSessionId = (harness.panel as any).transientDesignDraftSessionId;
-    expect(draftSessionId).toBeTruthy();
+    const draftSessionId = harness.settings.getActiveSessionId()!;
     const draftRuntimeState = await harness.sessions.loadRuntimeState(draftSessionId);
     expect(draftRuntimeState.sessionType).toBe("design");
+    const draftProjectId = draftRuntimeState.designFlowState?.projectId;
+    expect(draftProjectId).toBeTruthy();
 
     const formalProject = await (harness.panel as any).designProjectStore.createProject({
       name: "Existing Work",
@@ -3459,16 +3637,58 @@ Freeze skill body.
       projects: Array<{
         projectId: string;
         isDraft?: boolean;
-        isTransientDraft?: boolean;
       }>;
     }>(harness.rendererPayloads, "design:projects");
 
     expect(projectsPayload?.projects.some(project =>
-      project.isDraft === true && project.isTransientDraft === true,
+      project.projectId === draftProjectId && project.isDraft === true,
     )).toBe(true);
   });
 
-  it("prunes truly empty pending ghost rows on ready but keeps pending projects with history or artifact linkage", async () => {
+  it("backfills a meaningful legacy design session without projectId on reopen", async () => {
+    const harness = await createHarness();
+    tempDirs.push(harness.storagePath);
+
+    await harness.settings.setOnboardingDone(true);
+    await harness.panel.handleMessage({ type: "ready" });
+    await harness.panel.handleMessage({ type: "design:new-transient-work" });
+
+    const draftSessionId = harness.settings.getActiveSessionId()!;
+    await harness.sessions.saveRuntimeState(draftSessionId, {
+      workspaceRoot: "",
+      sessionType: "design",
+      designFlowState: {
+        flowId: "flow-dangling",
+        conversationId: draftSessionId,
+        createdAt: 1234,
+      },
+    });
+    await harness.sessions.appendMessages(draftSessionId, [
+      { role: "user", content: "做一个新作品", timestamp: 1235 },
+      { role: "assistant", content: "<question-form id=\"discovery\" title=\"Quick brief\">{\"questions\":[]}</question-form>", timestamp: 1236 },
+    ]);
+    await harness.panel.handleMessage({ type: "sessions:switch", id: draftSessionId });
+    await harness.panel.handleMessage({ type: "design:listProjects" });
+
+    const projectsPayload = getLastRendererPayloadOfType<{
+      type: "design:projects";
+      projects: Array<{
+        projectId: string;
+        isDraft?: boolean;
+        activeVersionId?: string;
+      }>;
+    }>(harness.rendererPayloads, "design:projects");
+
+    const reboundState = await harness.sessions.loadRuntimeState(draftSessionId);
+    expect(reboundState.designFlowState?.projectId).toBeTruthy();
+    expect(projectsPayload?.projects.some(project =>
+      project.projectId === reboundState.designFlowState?.projectId &&
+      project.isDraft === true &&
+      project.activeVersionId === "pending-version",
+    )).toBe(true);
+  });
+
+  it("prunes only true ghost rows on ready but keeps explicit draft projects with no history yet", async () => {
     const harness = await createHarness();
     tempDirs.push(harness.storagePath);
 
@@ -3493,6 +3713,12 @@ Freeze skill body.
       sourceArtifactId: "artifact-1",
       activeVersionId: "pending-version",
     });
+    const explicitDraft = await (harness.panel as any).designProjectStore.createProject({
+      name: "Explicit Draft",
+      source: "blank",
+      activeVersionId: "pending-version",
+      explicitDraft: true,
+    });
 
     await harness.panel.handleMessage({ type: "ready" });
 
@@ -3504,6 +3730,11 @@ Freeze skill body.
     await expect((harness.panel as any).designProjectStore.getProject(withArtifact.projectId)).resolves.toMatchObject({
       projectId: withArtifact.projectId,
       isDraft: true,
+    });
+    await expect((harness.panel as any).designProjectStore.getProject(explicitDraft.projectId)).resolves.toMatchObject({
+      projectId: explicitDraft.projectId,
+      isDraft: true,
+      explicitDraft: true,
     });
   });
 
@@ -3740,7 +3971,7 @@ Freeze skill body.
     });
   });
 
-  it("promotes a transient draft into a formal project only after the first durable generate save succeeds", async () => {
+  it("creates a durable draft project on the first meaningful design generate input", async () => {
     const harness = await createHarness();
     tempDirs.push(harness.storagePath);
 
@@ -3748,7 +3979,7 @@ Freeze skill body.
     await harness.panel.handleMessage({ type: "ready" });
     await harness.panel.handleMessage({ type: "design:new-transient-work" });
 
-    expect(await (harness.panel as any).designProjectStore.listProjects()).toHaveLength(0);
+    expect(await (harness.panel as any).designProjectStore.listProjects()).toHaveLength(1);
 
     vi.mocked(resolveProviderConfig).mockResolvedValue({
       config: {
@@ -3776,7 +4007,6 @@ Freeze skill body.
     const projects = await (harness.panel as any).designProjectStore.listProjects();
     expect(projects).toHaveLength(1);
     expect(projects[0]?.name).toBe("Make a first durable version");
-    expect(projects[0]?.isDraft).not.toBe(true);
     expect(projects[0]?.activeVersionId).not.toBe("pending-version");
   });
 
@@ -3836,7 +4066,7 @@ Freeze skill body.
     ]);
   });
 
-  it("treats __trigger_discovery__ as an internal discovery trigger without appending a user message", async () => {
+  it("treats __trigger_discovery__ as an internal discovery trigger while still persisting the design-chat user turn", async () => {
     const harness = await createHarness();
     tempDirs.push(harness.storagePath);
 
@@ -3873,9 +4103,11 @@ Freeze skill body.
     const sessionId = harness.settings.getActiveSessionId();
     expect(sessionId).toBeTruthy();
     const messages = await harness.sessions.loadMessages(sessionId!);
-    expect(messages).toHaveLength(1);
-    expect(messages[0]?.role).toBe("assistant");
-    expect(messages[0]?.content).toContain("<question-form");
+    expect(messages).toHaveLength(2);
+    expect(messages[0]?.role).toBe("user");
+    expect(messages[0]?.content).toBe("__trigger_discovery__");
+    expect(messages[1]?.role).toBe("assistant");
+    expect(messages[1]?.content).toContain("<question-form");
     expect(providerRunStep).toHaveBeenCalledTimes(1);
   });
 
@@ -4111,7 +4343,7 @@ Freeze skill body.
     expect(messages.at(-1)?.content).toContain("<artifact");
   });
 
-  it("starts a new transient work after choosing new-work from the diversion modal", async () => {
+  it("starts a new draft project after choosing new-work from the diversion modal", async () => {
     const harness = await createHarness();
     tempDirs.push(harness.storagePath);
 
@@ -4164,6 +4396,9 @@ Freeze skill body.
     expect(newSessionId).not.toBe(originalSessionId);
     await expect(harness.sessions.loadRuntimeState(newSessionId)).resolves.toMatchObject({
       sessionType: "design",
+      designFlowState: expect.objectContaining({
+        projectId: expect.any(String),
+      }),
     });
   });
 
@@ -5732,7 +5967,7 @@ Freeze skill body.
     expect(versionsPayload?.versions.length).toBeGreaterThan(0);
     expect(versionsPayload?.versions.every(version => version.projectId === firstProject)).toBe(true);
     expect(versionsPayload?.versions.some(version => version.id === firstResult?.versionId)).toBe(true);
-    expect(versionsPayload?.versions.some(version => version.prompt === "Project B")).toBe(false);
+    expect(versionsPayload?.versions.some(version => version.projectId && version.projectId !== firstProject)).toBe(false);
   });
 
   it("creates and persists a design flow when sendPrompt uses the design lane", async () => {
@@ -5763,7 +5998,7 @@ Freeze skill body.
     await harness.panel.handleMessage({
       type: "sendPrompt",
       prompt: "Design a robotics landing page",
-      outputType: "landing-page",
+      outputType: "prototype",
     });
 
     const currentSessionId = harness.settings.getActiveSessionId();
@@ -5772,7 +6007,7 @@ Freeze skill body.
       flowId: expect.stringContaining(`design-flow-${currentSessionId}`),
       conversationId: currentSessionId,
     });
-    expect(runtimeState.designFlowState?.projectId ?? null).toBeNull();
+    expect(runtimeState.designFlowState?.projectId).toBeTruthy();
 
     const statePayload = getLastRendererPayloadOfType<{
       type: "state";
@@ -5782,7 +6017,7 @@ Freeze skill body.
       };
     }>(harness.rendererPayloads, "state");
     expect(statePayload?.designState.currentFlowId).toBe(runtimeState.designFlowState?.flowId ?? null);
-    expect(statePayload?.designState.currentFlowProjectId ?? null).toBeNull();
+    expect(statePayload?.designState.currentFlowProjectId).toBe(runtimeState.designFlowState?.projectId);
   });
 
   it("routes all prompts through the design lane when the current sessionType is design", async () => {
@@ -5818,7 +6053,7 @@ Freeze skill body.
     await harness.panel.handleMessage({
       type: "sendPrompt",
       prompt: "Design a fintech landing page",
-      outputType: "landing-page",
+      outputType: "prototype",
     });
 
     const messages = await harness.sessions.loadMessages(harness.settings.getActiveSessionId()!);
@@ -5937,8 +6172,9 @@ Freeze skill body.
     expect(firstRuntimeState.designFlowState?.flowId).toBeTruthy();
     expect(secondRuntimeState.designFlowState?.flowId).toBeTruthy();
     expect(secondRuntimeState.designFlowState?.flowId).not.toBe(firstRuntimeState.designFlowState?.flowId);
-    expect(firstRuntimeState.designFlowState?.projectId ?? null).toBeNull();
-    expect(secondRuntimeState.designFlowState?.projectId ?? null).toBeNull();
+    expect(firstRuntimeState.designFlowState?.projectId).toBeTruthy();
+    expect(secondRuntimeState.designFlowState?.projectId).toBeTruthy();
+    expect(secondRuntimeState.designFlowState?.projectId).not.toBe(firstRuntimeState.designFlowState?.projectId);
   });
 
   it("returns a question-form on the first design-lane turn instead of generating HTML immediately", async () => {
@@ -5974,7 +6210,7 @@ Freeze skill body.
     await harness.panel.handleMessage({
       type: "sendPrompt",
       prompt: "Design a premium robotics landing page",
-      outputType: "landing-page",
+      outputType: "prototype",
     });
 
     const messages = await harness.sessions.loadMessages(harness.settings.getActiveSessionId()!);
@@ -5988,10 +6224,10 @@ Freeze skill body.
     expect(resultPayload).toBeUndefined();
 
     const runtimeState = await harness.sessions.loadRuntimeState(harness.settings.getActiveSessionId()!);
-    expect(runtimeState.designFlowState?.conversationHistory?.at(-1)?.content).toContain("<question-form");
+    expect((harness.panel as any).currentDesignFlowState?.conversationHistory?.at(-1)?.content).toContain("<question-form");
   });
 
-  it("passes the design chat skill file path through both discovery and form-answer turns", async () => {
+  it("passes the bundle skill entry path through both discovery and form-answer turns", async () => {
     const harness = await createHarness();
     tempDirs.push(harness.storagePath);
 
@@ -6035,22 +6271,22 @@ Freeze skill body.
     await harness.panel.handleMessage({
       type: "sendPrompt",
       prompt: "Design a premium robotics landing page",
-      outputType: "landing-page",
+      outputType: "prototype",
     });
 
     const firstHistory = vi.mocked(runAgent).mock.calls.at(-1)?.[0] as Array<{ role: string; content: string }>;
-    expect(firstHistory.at(-1)?.content).toContain("Path: skills/landing-page.md");
+    expect(firstHistory.at(-1)?.content).toContain("Path: skills/prototype/SKILL.md");
 
     await harness.panel.handleMessage({
       type: "sendPrompt",
       prompt: "[form answers - discovery]\n- Tone: Editorial",
-      outputType: "landing-page",
+      outputType: "prototype",
       designFlowId: (await harness.sessions.loadRuntimeState(harness.settings.getActiveSessionId()!)).designFlowState?.flowId,
     });
 
     const secondHistory = vi.mocked(runAgent).mock.calls.at(-1)?.[0] as Array<{ role: string; content: string }>;
     expect(secondHistory.at(-1)?.content).toContain("[form answers - discovery]");
-    expect(secondHistory.at(-1)?.content).toContain("Path: skills/landing-page.md");
+    expect(secondHistory.at(-1)?.content).toContain("Path: skills/prototype/SKILL.md");
   });
 
   it("uses a tool workspace root that can resolve local design chat skill files", async () => {
@@ -6090,7 +6326,7 @@ Freeze skill body.
     await harness.panel.handleMessage({
       type: "sendPrompt",
       prompt: "Design a premium robotics landing page",
-      outputType: "landing-page",
+      outputType: "prototype",
     });
 
     const runAgentOptions = vi.mocked(runAgent).mock.calls.at(-1)?.[1];
@@ -6147,7 +6383,7 @@ Freeze skill body.
     await harness.panel.handleMessage({
       type: "sendPrompt",
       prompt: "[form answers - discovery]\n- Tone: Editorial",
-      outputType: "landing-page",
+      outputType: "prototype",
       designFlowId: (await harness.sessions.loadRuntimeState(harness.settings.getActiveSessionId()!)).designFlowState?.flowId,
     });
 
@@ -6155,12 +6391,73 @@ Freeze skill body.
     expect(messages.at(-1)?.role).toBe("assistant");
     expect(messages.at(-1)?.content).toContain("<artifact");
 
-    const runtimeState = await harness.sessions.loadRuntimeState(harness.settings.getActiveSessionId()!);
-    expect(runtimeState.designFlowState?.conversationHistory?.length).toBeGreaterThanOrEqual(4);
-    expect(runtimeState.designFlowState?.conversationHistory?.at(-1)?.content).toContain("<artifact");
+    expect((harness.panel as any).currentDesignFlowState?.conversationHistory?.length).toBeGreaterThanOrEqual(4);
+    expect((harness.panel as any).currentDesignFlowState?.conversationHistory?.at(-1)?.content).toContain("<artifact");
   });
 
-  it("does not auto-save a design-session artifact into design projects before enter-design is triggered", async () => {
+  it("accepts build output files that contain comments before the first doctype", async () => {
+    const harness = await createHarness();
+    tempDirs.push(harness.storagePath);
+
+    await harness.settings.setOnboardingDone(true);
+    await harness.panel.handleMessage({ type: "ready" });
+    await harness.panel.handleMessage({ type: "sessions:new-design" });
+
+    vi.mocked(resolveProviderConfig).mockResolvedValue({
+      config: {
+        type: "anthropic",
+        apiKey: "test-key",
+        model: "claude-sonnet-4-6",
+      },
+      envMap: {},
+    });
+    const providerRunStep = vi.fn()
+      .mockResolvedValueOnce({
+        text: [
+          "Got it — I need a few design choices first.",
+          '<question-form id="discovery" title="Quick brief">',
+          '{"questions":[{"id":"tone","label":"Tone","type":"radio","options":["Editorial","Minimal"]}]}',
+          "</question-form>",
+        ].join("\n"),
+        toolCalls: [],
+        done: true,
+      })
+      .mockResolvedValueOnce({
+        text: [
+          "Build complete.",
+          '<artifact identifier="robotics-landing" type="text/html" title="Robotics Landing">',
+          "<!-- Scenario: marketing landing page -->",
+          "<!DOCTYPE html>",
+          "<html><head><title>Robotics Landing</title></head><body><main>Robotics Landing</main></body></html>",
+          "</artifact>",
+        ].join("\n"),
+        toolCalls: [],
+        done: true,
+      });
+    vi.mocked(buildProviderAdapter).mockReturnValue({
+      runStep: providerRunStep,
+    } as never);
+
+    await harness.panel.handleMessage({
+      type: "sendPrompt",
+      prompt: "Design a premium robotics landing page",
+      outputType: "prototype",
+    });
+
+    await harness.panel.handleMessage({
+      type: "sendPrompt",
+      prompt: "[form answers - discovery]\n- Tone: Editorial",
+      outputType: "prototype",
+      designFlowId: (await harness.sessions.loadRuntimeState(harness.settings.getActiveSessionId()!)).designFlowState?.flowId,
+    });
+
+    const messages = await harness.sessions.loadMessages(harness.settings.getActiveSessionId()!);
+    expect(messages.at(-1)?.content).toContain("<artifact");
+    expect(messages.at(-1)?.content).toContain("<!DOCTYPE html>");
+    expect(messages.at(-1)?.content).not.toContain("does not start with <!DOCTYPE html>");
+  });
+
+  it("creates the draft project before artifact generation and keeps a single project before canvas entry", async () => {
     const harness = await createHarness();
     tempDirs.push(harness.storagePath);
 
@@ -6213,8 +6510,76 @@ Freeze skill body.
       designFlowId: (await harness.sessions.loadRuntimeState(harness.settings.getActiveSessionId()!)).designFlowState?.flowId,
     });
 
+    const runtimeState = await harness.sessions.loadRuntimeState(harness.settings.getActiveSessionId()!);
+    expect(runtimeState.designFlowState?.projectId).toBeTruthy();
+
     const projectsPayload = await (harness.panel as any).designProjectStore.listProjects();
-    expect(projectsPayload).toHaveLength(0);
+    expect(projectsPayload).toHaveLength(1);
+    expect(projectsPayload[0]?.projectId).toBe(runtimeState.designFlowState?.projectId);
+    expect(projectsPayload[0]?.activeVersionId).toBe("pending-version");
+  });
+
+  it("allows a narrower follow-up question-form after discovery answers instead of forcing output/index.html", async () => {
+    const harness = await createHarness();
+    tempDirs.push(harness.storagePath);
+
+    await harness.settings.setOnboardingDone(true);
+    await harness.panel.handleMessage({ type: "ready" });
+    await harness.panel.handleMessage({ type: "sessions:new-design" });
+
+    vi.mocked(resolveProviderConfig).mockResolvedValue({
+      config: {
+        type: "anthropic",
+        apiKey: "test-key",
+        model: "claude-sonnet-4-6",
+      },
+      envMap: {},
+    });
+    const providerRunStep = vi.fn()
+      .mockResolvedValueOnce({
+        text: [
+          "先补几个方向问题。",
+          '<question-form id="discovery" title="Quick brief">',
+          '{"questions":[{"id":"direction","label":"Direction","type":"radio","required":true,"options":["Editorial","Minimal"]}]}',
+          "</question-form>",
+        ].join("\n"),
+        toolCalls: [],
+        done: true,
+      })
+      .mockResolvedValueOnce({
+        text: [
+          "我还缺一个关键信息，先补这个。",
+          '<question-form id="page-goal" title="One more detail">',
+          '{"questions":[{"id":"goal","label":"Primary conversion goal","type":"text","required":true,"placeholder":"Book a demo / Start free trial"}]}',
+          "</question-form>",
+        ].join("\n"),
+        toolCalls: [],
+        done: true,
+      });
+    vi.mocked(buildProviderAdapter).mockReturnValue({
+      runStep: providerRunStep,
+    } as never);
+
+    await harness.panel.handleMessage({
+      type: "sendPrompt",
+      prompt: "Design a premium robotics landing page",
+      outputType: "prototype",
+    });
+
+    await harness.panel.handleMessage({
+      type: "sendPrompt",
+      prompt: "[form answers - discovery]\n- Direction: Editorial",
+      outputType: "prototype",
+      designFlowId: (await harness.sessions.loadRuntimeState(harness.settings.getActiveSessionId()!)).designFlowState?.flowId,
+    });
+
+    const messages = await harness.sessions.loadMessages(harness.settings.getActiveSessionId()!);
+    expect(messages.at(-1)?.role).toBe("assistant");
+    expect(messages.at(-1)?.content).toContain('<question-form id="page-goal"');
+    expect(messages.at(-1)?.content).not.toContain("output/index.html not found");
+
+    expect((harness.panel as any).currentDesignFlowState?.conversationHistory?.at(-1)?.content)
+      .toContain('<question-form id="page-goal"');
   });
 
   it("saves a design-session artifact to a project only when artifact:enter-design is triggered, then reuses it", async () => {
@@ -6261,26 +6626,20 @@ Freeze skill body.
     await harness.panel.handleMessage({
       type: "sendPrompt",
       prompt: "Design a premium robotics landing page",
-      outputType: "landing-page",
+      outputType: "prototype",
     });
     await harness.panel.handleMessage({
       type: "sendPrompt",
       prompt: "[form answers - discovery]\n- Tone: Editorial",
-      outputType: "landing-page",
+      outputType: "prototype",
       designFlowId: (await harness.sessions.loadRuntimeState(harness.settings.getActiveSessionId()!)).designFlowState?.flowId,
     });
     await (harness.panel as any).postState();
 
-    const sessionMessages = await harness.sessions.loadMessages(harness.settings.getActiveSessionId()!);
-    const artifactAssistantMessage = sessionMessages
-      .find(message => message.role === "assistant" && String(message.content || "").includes("<artifact"));
-    const artifactId = artifactAssistantMessage
-      ? ((harness.panel as any).detectArtifactFromSessionMessage(
-          harness.settings.getActiveSessionId()!,
-          artifactAssistantMessage,
-          sessionMessages.indexOf(artifactAssistantMessage),
-        )?.id ?? null)
-      : null;
+    const artifactId = getLastRendererPayloadOfType<{
+      type: "state";
+      artifactState?: { activeArtifactId?: string | null };
+    }>(harness.rendererPayloads, "state")?.artifactState?.activeArtifactId ?? null;
     expect(artifactId).toBeTruthy();
 
     await harness.panel.handleMessage({
@@ -6367,12 +6726,12 @@ Freeze skill body.
     await harness.panel.handleMessage({
       type: "sendPrompt",
       prompt: "Design a premium robotics landing page",
-      outputType: "landing-page",
+      outputType: "prototype",
     });
     await harness.panel.handleMessage({
       type: "sendPrompt",
       prompt: "[form answers - discovery]\n- Tone: Editorial",
-      outputType: "landing-page",
+      outputType: "prototype",
       designFlowId: (await harness.sessions.loadRuntimeState(harness.settings.getActiveSessionId()!)).designFlowState?.flowId,
     });
 
@@ -6380,6 +6739,7 @@ Freeze skill body.
       type: "state";
       artifactState?: { activeArtifactId?: string | null };
     }>(harness.rendererPayloads, "state")?.artifactState?.activeArtifactId;
+    expect(artifactId).toBeTruthy();
     await harness.panel.handleMessage({
       type: "artifact:enter-design",
       artifactId,

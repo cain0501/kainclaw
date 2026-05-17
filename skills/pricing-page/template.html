@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>[REPLACE: Page Title]</title>
+  <style>
+    :root {
+      --bg: oklch(98% 0.005 260);
+      --surface: oklch(100% 0 0);
+      --fg: oklch(15% 0.01 260);
+      --muted: oklch(55% 0.01 260);
+      --border: oklch(88% 0.005 260);
+      --accent: oklch(55% 0.18 260);
+      --accent-fg: oklch(100% 0 0);
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: system-ui, sans-serif; background: var(--bg); color: var(--fg); }
+
+    .pricing-hero { text-align: center; padding: 80px 24px 48px; }
+    .pricing-hero h1 { font-size: clamp(2rem, 5vw, 3.5rem); font-weight: 700; margin-bottom: 16px; }
+    .pricing-hero p { color: var(--muted); font-size: 1.125rem; max-width: 560px; margin: 0 auto; }
+
+    .pricing-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 24px; max-width: 1100px; margin: 0 auto; padding: 0 24px 80px; }
+    .tier-card { background: var(--surface); border: 1px solid var(--border); border-radius: 16px; padding: 32px 28px; display: flex; flex-direction: column; gap: 20px; }
+    .tier-card.recommended { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent); position: relative; }
+    .recommended-badge { position: absolute; top: -14px; left: 50%; transform: translateX(-50%); background: var(--accent); color: var(--accent-fg); font-size: 0.75rem; font-weight: 600; padding: 4px 14px; border-radius: 999px; white-space: nowrap; }
+    .tier-name { font-size: 1rem; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: 0.05em; }
+    .tier-price { font-size: 3rem; font-weight: 700; line-height: 1; }
+    .tier-price span { font-size: 1rem; font-weight: 400; color: var(--muted); }
+    .tier-features { list-style: none; display: flex; flex-direction: column; gap: 10px; flex: 1; }
+    .tier-features li { display: flex; align-items: center; gap: 10px; font-size: 0.9375rem; }
+    .tier-features li::before { content: "✓"; color: var(--accent); font-weight: 700; flex-shrink: 0; }
+    .tier-features li.missing::before { content: "✕"; color: var(--muted); }
+    .tier-cta { display: block; text-align: center; padding: 14px; border-radius: 10px; font-weight: 600; text-decoration: none; border: 2px solid var(--border); color: var(--fg); transition: all 0.15s; }
+    .tier-cta:hover { border-color: var(--accent); color: var(--accent); }
+    .tier-card.recommended .tier-cta { background: var(--accent); border-color: var(--accent); color: var(--accent-fg); }
+
+    .faq { max-width: 720px; margin: 0 auto 80px; padding: 0 24px; }
+    .faq h2 { font-size: 1.75rem; font-weight: 700; margin-bottom: 32px; text-align: center; }
+    .faq-item { border-bottom: 1px solid var(--border); padding: 20px 0; }
+    .faq-item dt { font-weight: 600; margin-bottom: 8px; }
+    .faq-item dd { color: var(--muted); line-height: 1.6; }
+  </style>
+</head>
+<body>
+
+  <section class="pricing-hero">
+    <h1>[REPLACE: Main headline]</h1>
+    <p>[REPLACE: Supporting line]</p>
+  </section>
+
+  <div class="pricing-grid">
+    <div class="tier-card">
+      <div class="tier-name">[REPLACE: Tier name]</div>
+      <div class="tier-price">$0 <span>/ mo</span></div>
+      <ul class="tier-features">
+        <li>[REPLACE: Feature 1]</li>
+        <li>[REPLACE: Feature 2]</li>
+        <li class="missing">[REPLACE: Missing feature]</li>
+      </ul>
+      <a href="#" class="tier-cta">[REPLACE: CTA text]</a>
+    </div>
+
+    <div class="tier-card recommended">
+      <div class="recommended-badge">Most popular</div>
+      <div class="tier-name">[REPLACE: Tier name]</div>
+      <div class="tier-price">$[REPLACE] <span>/ mo</span></div>
+      <ul class="tier-features">
+        <li>[REPLACE: Feature 1]</li>
+        <li>[REPLACE: Feature 2]</li>
+        <li>[REPLACE: Feature 3]</li>
+      </ul>
+      <a href="#" class="tier-cta">[REPLACE: CTA text]</a>
+    </div>
+
+    <div class="tier-card">
+      <div class="tier-name">[REPLACE: Tier name]</div>
+      <div class="tier-price">Custom</div>
+      <ul class="tier-features">
+        <li>[REPLACE: Feature 1]</li>
+        <li>[REPLACE: Feature 2]</li>
+        <li>[REPLACE: Feature 3]</li>
+      </ul>
+      <a href="#" class="tier-cta">[REPLACE: CTA text]</a>
+    </div>
+  </div>
+
+  <div class="faq">
+    <h2>Frequently asked questions</h2>
+    <dl>
+      <div class="faq-item">
+        <dt>[REPLACE: Question about billing]</dt>
+        <dd>[REPLACE: Answer]</dd>
+      </div>
+      <div class="faq-item">
+        <dt>[REPLACE: Question about cancellation]</dt>
+        <dd>[REPLACE: Answer]</dd>
+      </div>
+      <div class="faq-item">
+        <dt>[REPLACE: Question about limits/usage]</dt>
+        <dd>[REPLACE: Answer]</dd>
+      </div>
+    </dl>
+  </div>
+
+</body>
+</html>

@@ -18,6 +18,7 @@ export type DesignProjectRecord = {
   lastOpenedAt: number;
   versionCount?: number;
   isDraft?: boolean;
+  explicitDraft?: boolean;
 };
 
 type StoredDesignProjects = {
@@ -33,6 +34,20 @@ type LegacyVersionProjectSeed = {
 type SqliteModule = typeof import("node:sqlite");
 
 function normalizeProjectRecord(record: DesignProjectRecord): DesignProjectRecord {
+  const normalizedName = (() => {
+    const raw = record.name?.trim() || "";
+    if (!raw) {
+      return "Untitled Design";
+    }
+    const mojibakeDraftNames = new Set([
+      "鏂颁綔鍝?路 鑽夌",
+      "閺傞缍旈崫?璺?閼藉顭?",
+    ]);
+    if (mojibakeDraftNames.has(raw)) {
+      return "新作品 · 草稿";
+    }
+    return raw;
+  })();
   const normalizedHistory = Array.isArray(record.conversationHistory)
     ? record.conversationHistory
         .filter(
@@ -56,7 +71,7 @@ function normalizeProjectRecord(record: DesignProjectRecord): DesignProjectRecor
     normalizedActiveVersionId.length > 0;
   return {
     projectId: record.projectId,
-    name: record.name?.trim() || "Untitled Design",
+    name: normalizedName,
     source: record.source === "artifact" ? "artifact" : "blank",
     ...(record.sourceArtifactId?.trim() ? { sourceArtifactId: record.sourceArtifactId.trim() } : {}),
     activeVersionId: normalizedActiveVersionId,
@@ -64,6 +79,7 @@ function normalizeProjectRecord(record: DesignProjectRecord): DesignProjectRecor
     createdAt: Number(record.createdAt) || Date.now(),
     updatedAt: Number(record.updatedAt) || Date.now(),
     lastOpenedAt: Number(record.lastOpenedAt) || Date.now(),
+    ...(record.explicitDraft ? { explicitDraft: true } : {}),
     ...(hasDurableVersion
       ? {}
       : { isDraft: true }),
@@ -172,6 +188,7 @@ export class DesignProjectStore {
         source TEXT NOT NULL CHECK(source IN ('artifact','blank')),
         source_artifact_id TEXT,
         active_version_id TEXT NOT NULL,
+        explicit_draft INTEGER NOT NULL DEFAULT 0,
         conversation_history TEXT NOT NULL DEFAULT '[]',
         created_at INTEGER NOT NULL,
         updated_at INTEGER NOT NULL,
@@ -206,6 +223,7 @@ export class DesignProjectStore {
       { version: 2, up: "ALTER TABLE design_versions ADD COLUMN title TEXT NOT NULL DEFAULT ''" },
       { version: 3, up: "ALTER TABLE design_versions ADD COLUMN deleted_at INTEGER" },
       { version: 4, up: "ALTER TABLE design_projects ADD COLUMN conversation_history TEXT NOT NULL DEFAULT '[]'" },
+      { version: 5, up: "ALTER TABLE design_projects ADD COLUMN explicit_draft INTEGER NOT NULL DEFAULT 0" },
     ];
 
     for (const migration of migrations) {
@@ -275,8 +293,8 @@ export class DesignProjectStore {
 
     const insert = database.prepare(`
       INSERT OR REPLACE INTO design_projects (
-        project_id, name, source, source_artifact_id, active_version_id, conversation_history, created_at, updated_at, last_opened_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        project_id, name, source, source_artifact_id, active_version_id, explicit_draft, conversation_history, created_at, updated_at, last_opened_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `);
 
     const legacyStore = await this.readLegacyStore();
@@ -287,6 +305,7 @@ export class DesignProjectStore {
         project.source,
         project.sourceArtifactId ?? null,
         project.activeVersionId,
+        project.explicitDraft ? 1 : 0,
         JSON.stringify(project.conversationHistory ?? []),
         project.createdAt,
         project.updatedAt,
@@ -339,6 +358,7 @@ export class DesignProjectStore {
         "blank",
         null,
         "pending-version",
+        0,
         "[]",
         createdAt,
         createdAt,
@@ -354,6 +374,7 @@ export class DesignProjectStore {
     source: DesignProjectSource;
     source_artifact_id: string | null;
     active_version_id: string;
+    explicit_draft?: number | null;
     conversation_history: string | null;
     created_at: number;
     updated_at: number;
@@ -375,6 +396,7 @@ export class DesignProjectStore {
       source: row.source,
       ...(row.source_artifact_id ? { sourceArtifactId: row.source_artifact_id } : {}),
       activeVersionId: row.active_version_id,
+      ...(row.explicit_draft ? { explicitDraft: true } : {}),
       conversationHistory: parsedConversationHistory,
       createdAt: row.created_at,
       updatedAt: row.updated_at,
@@ -387,6 +409,7 @@ export class DesignProjectStore {
     source: DesignProjectSource;
     sourceArtifactId?: string;
     activeVersionId: string;
+    explicitDraft?: boolean;
   }): Promise<DesignProjectRecord> {
     const now = Date.now();
     const project = normalizeProjectRecord({
@@ -395,6 +418,7 @@ export class DesignProjectStore {
       source: options.source,
       ...(options.sourceArtifactId?.trim() ? { sourceArtifactId: options.sourceArtifactId.trim() } : {}),
       activeVersionId: options.activeVersionId,
+      ...(options.explicitDraft ? { explicitDraft: true } : {}),
       createdAt: now,
       updatedAt: now,
       lastOpenedAt: now,
@@ -403,14 +427,15 @@ export class DesignProjectStore {
     const saved = await this.withDatabase(database => {
       database.prepare(`
         INSERT INTO design_projects (
-          project_id, name, source, source_artifact_id, active_version_id, conversation_history, created_at, updated_at, last_opened_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+          project_id, name, source, source_artifact_id, active_version_id, explicit_draft, conversation_history, created_at, updated_at, last_opened_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `).run(
         project.projectId,
         project.name,
         project.source,
         project.sourceArtifactId ?? null,
         project.activeVersionId,
+        project.explicitDraft ? 1 : 0,
         JSON.stringify(project.conversationHistory ?? []),
         project.createdAt,
         project.updatedAt,
@@ -449,7 +474,7 @@ export class DesignProjectStore {
       }
 
       const rows = database.prepare(`
-        SELECT project_id, name, source, source_artifact_id, active_version_id, conversation_history, created_at, updated_at, last_opened_at
+        SELECT project_id, name, source, source_artifact_id, active_version_id, explicit_draft, conversation_history, created_at, updated_at, last_opened_at
         FROM design_projects
         ORDER BY updated_at DESC
       `).all() as Array<{
@@ -458,6 +483,7 @@ export class DesignProjectStore {
         source: DesignProjectSource;
         source_artifact_id: string | null;
         active_version_id: string;
+        explicit_draft?: number | null;
         conversation_history: string | null;
         created_at: number;
         updated_at: number;
@@ -478,20 +504,31 @@ export class DesignProjectStore {
     return [...store.projects].sort((left, right) => right.updatedAt - left.updatedAt);
   }
 
-  async pruneEmptyPendingProjects(): Promise<string[]> {
+  async pruneEmptyPendingProjects(
+    protectedProjectIds: string[] = [],
+  ): Promise<string[]> {
+    const protectedProjectIdSet = new Set(
+      protectedProjectIds
+        .map(projectId => projectId.trim())
+        .filter(Boolean),
+    );
     const removedProjectIds = await this.withDatabase(database => {
       const rows = database.prepare(`
-        SELECT project_id, source_artifact_id, active_version_id, conversation_history
+        SELECT project_id, source_artifact_id, active_version_id, explicit_draft, conversation_history
         FROM design_projects
       `).all() as Array<{
         project_id: string;
         source_artifact_id: string | null;
         active_version_id: string | null;
+        explicit_draft?: number | null;
         conversation_history: string | null;
       }>;
 
       const removableProjectIds = rows
         .filter(row => {
+          if (protectedProjectIdSet.has(row.project_id)) {
+            return false;
+          }
           const activeVersionId = typeof row.active_version_id === "string" ? row.active_version_id.trim() : "";
           const hasDurableVersion = activeVersionId.length > 0 && activeVersionId !== "pending-version";
           if (hasDurableVersion) {
@@ -499,6 +536,9 @@ export class DesignProjectStore {
           }
           const hasSourceArtifact = typeof row.source_artifact_id === "string" && row.source_artifact_id.trim().length > 0;
           if (hasSourceArtifact) {
+            return false;
+          }
+          if (row.explicit_draft) {
             return false;
           }
           const conversationHistory = (() => {
@@ -542,7 +582,7 @@ export class DesignProjectStore {
   async getProject(projectId: string): Promise<DesignProjectRecord | null> {
     const project = await this.withDatabase(database => {
       const row = database.prepare(`
-        SELECT project_id, name, source, source_artifact_id, active_version_id, conversation_history, created_at, updated_at, last_opened_at
+        SELECT project_id, name, source, source_artifact_id, active_version_id, explicit_draft, conversation_history, created_at, updated_at, last_opened_at
         FROM design_projects
         WHERE project_id = ?
       `).get(projectId) as {
@@ -551,6 +591,7 @@ export class DesignProjectStore {
         source: DesignProjectSource;
         source_artifact_id: string | null;
         active_version_id: string;
+        explicit_draft?: number | null;
         conversation_history: string | null;
         created_at: number;
         updated_at: number;
@@ -576,7 +617,7 @@ export class DesignProjectStore {
 
     const project = await this.withDatabase(database => {
       const row = database.prepare(`
-        SELECT project_id, name, source, source_artifact_id, active_version_id, conversation_history, created_at, updated_at, last_opened_at
+        SELECT project_id, name, source, source_artifact_id, active_version_id, explicit_draft, conversation_history, created_at, updated_at, last_opened_at
         FROM design_projects
         WHERE source_artifact_id = ?
       `).get(trimmed) as {
@@ -585,6 +626,7 @@ export class DesignProjectStore {
         source: DesignProjectSource;
         source_artifact_id: string | null;
         active_version_id: string;
+        explicit_draft?: number | null;
         conversation_history: string | null;
         created_at: number;
         updated_at: number;
@@ -604,7 +646,7 @@ export class DesignProjectStore {
 
   async updateProject(
     projectId: string,
-    patch: Partial<Pick<DesignProjectRecord, "name" | "activeVersionId" | "conversationHistory" | "updatedAt" | "lastOpenedAt">>,
+    patch: Partial<Pick<DesignProjectRecord, "name" | "activeVersionId" | "conversationHistory" | "updatedAt" | "lastOpenedAt" | "sourceArtifactId" | "explicitDraft">>,
   ): Promise<DesignProjectRecord | null> {
     const current = await this.getProject(projectId);
     if (!current) {
@@ -621,11 +663,13 @@ export class DesignProjectStore {
     const saved = await this.withDatabase(database => {
       database.prepare(`
         UPDATE design_projects
-        SET name = ?, active_version_id = ?, conversation_history = ?, updated_at = ?, last_opened_at = ?
+        SET name = ?, source_artifact_id = ?, active_version_id = ?, explicit_draft = ?, conversation_history = ?, updated_at = ?, last_opened_at = ?
         WHERE project_id = ?
       `).run(
         next.name,
+        next.sourceArtifactId ?? null,
         next.activeVersionId,
+        next.explicitDraft ? 1 : 0,
         JSON.stringify(next.conversationHistory ?? []),
         next.updatedAt,
         next.lastOpenedAt,

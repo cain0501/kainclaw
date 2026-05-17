@@ -2427,6 +2427,162 @@ describe("toolRuntime background task semantics", () => {
     expect(result.summary).toContain("Saved browser screenshot");
   });
 
+  it("write_file allows writes inside an active design chat run root", async () => {
+    const { context, root } = await createWorkspaceContext();
+    const designChatRunRoot = path.join(root, ".design-chat-runs", "session", "run");
+    await fs.mkdir(designChatRunRoot, { recursive: true });
+
+    const result = await executeTool(
+      "write_file",
+      {
+        path: "output/index.html",
+        content: "<!DOCTYPE html><html><body><main>ok</main></body></html>",
+      },
+      {
+        ...context,
+        workspaceRoot: designChatRunRoot,
+        designChatRunRoot,
+      },
+    );
+
+    expect(result.summary).toBe("Wrote output/index.html");
+    await expect(
+      fs.readFile(path.join(designChatRunRoot, "output", "index.html"), "utf8"),
+    ).resolves.toContain("<!DOCTYPE html>");
+  });
+
+  it("write_file skips approval inside design chat run roots and still requests approval otherwise", async () => {
+    const { context, root } = await createWorkspaceContext();
+    const requestFileApproval = vi.fn(async () => true);
+    const designChatRunRoot = path.join(root, ".design-chat-runs", "session", "run");
+    await fs.mkdir(designChatRunRoot, { recursive: true });
+
+    await executeTool(
+      "write_file",
+      {
+        path: "output/index.html",
+        content: "<!DOCTYPE html><html><body>design chat</body></html>",
+      },
+      {
+        ...context,
+        workspaceRoot: designChatRunRoot,
+        designChatRunRoot,
+        requestFileApproval,
+      },
+    );
+
+    expect(requestFileApproval).not.toHaveBeenCalled();
+
+    await executeTool(
+      "write_file",
+      {
+        path: "notes.txt",
+        content: "normal write",
+      },
+      {
+        ...context,
+        requestFileApproval,
+      },
+    );
+
+    expect(requestFileApproval).toHaveBeenCalledTimes(1);
+    expect(requestFileApproval).toHaveBeenCalledWith(
+      expect.objectContaining({
+        kind: "write_file",
+        path: "notes.txt",
+      }),
+    );
+  });
+
+  it("write_file and replace_in_file block writes outside the explicit design chat run root prefix", async () => {
+    const { context, root } = await createWorkspaceContext();
+    const designChatRunRoot = path.join(root, ".design-chat-runs", "session", "run");
+    await fs.mkdir(path.join(root, "other"), { recursive: true });
+    await fs.writeFile(path.join(root, "other", "note.txt"), "before", "utf8");
+
+    await expect(
+      executeTool(
+        "write_file",
+        {
+          path: "other/blocked.txt",
+          content: "blocked",
+        },
+        {
+          ...context,
+          workspaceRoot: root,
+          designChatRunRoot,
+        },
+      ),
+    ).rejects.toThrow(/outside the design chat workspace/);
+
+    await expect(
+      executeTool(
+        "replace_in_file",
+        {
+          path: "other/note.txt",
+          search: "before",
+          replace: "after",
+        },
+        {
+          ...context,
+          workspaceRoot: root,
+          designChatRunRoot,
+        },
+      ),
+    ).rejects.toThrow(/outside the design chat workspace/);
+  });
+
+  it("replace_in_file skips approval inside design chat run roots and still requests approval otherwise", async () => {
+    const { context, root } = await createWorkspaceContext();
+    const requestFileApproval = vi.fn(async () => true);
+    const designChatRunRoot = path.join(root, ".design-chat-runs", "session", "run");
+    await fs.mkdir(path.join(designChatRunRoot, "output"), { recursive: true });
+    await fs.writeFile(
+      path.join(designChatRunRoot, "output", "index.html"),
+      "<!DOCTYPE html><html><body>before</body></html>",
+      "utf8",
+    );
+    await fs.writeFile(path.join(root, "notes.txt"), "before", "utf8");
+
+    await executeTool(
+      "replace_in_file",
+      {
+        path: "output/index.html",
+        search: "before",
+        replace: "after",
+      },
+      {
+        ...context,
+        workspaceRoot: designChatRunRoot,
+        designChatRunRoot,
+        requestFileApproval,
+      },
+    );
+
+    expect(requestFileApproval).not.toHaveBeenCalled();
+
+    await executeTool(
+      "replace_in_file",
+      {
+        path: "notes.txt",
+        search: "before",
+        replace: "after",
+      },
+      {
+        ...context,
+        requestFileApproval,
+      },
+    );
+
+    expect(requestFileApproval).toHaveBeenCalledTimes(1);
+    expect(requestFileApproval).toHaveBeenCalledWith(
+      expect.objectContaining({
+        kind: "replace_in_file",
+        path: "notes.txt",
+      }),
+    );
+  });
+
   it("browser_type forwards textTarget, value, and submit options to the browser adapter", async () => {
     const calls: Array<{
       ref?: string;

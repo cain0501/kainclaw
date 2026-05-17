@@ -85,9 +85,9 @@ describe("worktree runtime helpers", () => {
   });
 
   it("rejects invalid worktree slugs", () => {
-    expect(() => validateWorktreeSlug("..")).toThrow(/must not contain "." or ".." path segments/);
-    expect(() => validateWorktreeSlug("bad name")).toThrow(/contain only letters, digits, dots, underscores, and dashes/);
-    expect(() => validateWorktreeSlug("a".repeat(65))).toThrow(/characters or fewer/);
+    expect(() => validateWorktreeSlug("..")).toThrow(/reserved path segment/);
+    expect(() => validateWorktreeSlug("bad name")).toThrow(/invalid segment/);
+    expect(() => validateWorktreeSlug("a".repeat(64))).toThrow(/too long/);
   });
 
   it("builds worktree branch names from slugs", () => {

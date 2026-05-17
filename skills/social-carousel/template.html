@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>[REPLACE: Carousel Title]</title>
+  <style>
+    :root {
+      --bg: oklch(12% 0.01 260);
+      --surface: oklch(18% 0.015 260);
+      --fg: oklch(96% 0.005 260);
+      --muted: oklch(65% 0.01 260);
+      --border: oklch(28% 0.01 260);
+      --accent: oklch(72% 0.18 45);
+      --accent-fg: oklch(100% 0 0);
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: system-ui, sans-serif; background: var(--surface); display: flex; flex-direction: column; align-items: center; padding: 24px; gap: 16px; min-height: 100vh; }
+
+    .carousel { display: flex; gap: 16px; overflow-x: auto; scroll-snap-type: x mandatory; padding-bottom: 8px; max-width: 100vw; }
+    .carousel::-webkit-scrollbar { height: 4px; }
+    .carousel::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+
+    .slide { flex: 0 0 min(540px, 90vw); aspect-ratio: 1; background: var(--bg); border-radius: 16px; overflow: hidden; scroll-snap-align: center; position: relative; display: flex; flex-direction: column; padding: 48px; }
+    .slide-number { position: absolute; top: 20px; right: 24px; font-size: 0.75rem; color: var(--muted); letter-spacing: 0.1em; }
+
+    .slide.cover { background: var(--accent); justify-content: flex-end; }
+    .slide.cover .slide-headline { font-size: clamp(2rem, 6vw, 3rem); font-weight: 800; color: var(--accent-fg); line-height: 1.1; }
+    .slide.cover .slide-brand { position: absolute; top: 40px; left: 48px; font-weight: 700; font-size: 1rem; color: var(--accent-fg); opacity: 0.7; letter-spacing: 0.08em; text-transform: uppercase; }
+
+    .slide-label { font-size: 0.75rem; font-weight: 600; color: var(--accent); text-transform: uppercase; letter-spacing: 0.1em; margin-bottom: 16px; }
+    .slide-headline { font-size: clamp(1.5rem, 4vw, 2.25rem); font-weight: 700; color: var(--fg); line-height: 1.2; margin-bottom: 20px; }
+    .slide-body { font-size: 1rem; color: var(--muted); line-height: 1.6; flex: 1; }
+    .slide-visual { flex: 1; background: var(--surface); border-radius: 12px; display: flex; align-items: center; justify-content: center; color: var(--muted); font-size: 0.875rem; margin-top: 20px; }
+
+    .slide.cta { background: var(--surface); justify-content: center; align-items: center; text-align: center; gap: 20px; }
+    .cta-button { background: var(--accent); color: var(--accent-fg); padding: 14px 32px; border-radius: 999px; font-weight: 600; font-size: 1rem; text-decoration: none; display: inline-block; }
+
+    .dots { display: flex; gap: 6px; }
+    .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--border); }
+    .dot.active { background: var(--accent); width: 20px; border-radius: 3px; }
+  </style>
+</head>
+<body>
+
+  <div class="carousel">
+
+    <div class="slide cover">
+      <div class="slide-brand">[REPLACE: Brand / Account Name]</div>
+      <div class="slide-headline">[REPLACE: Main headline - punchy, 5-10 words]</div>
+      <div class="slide-number">01 / [REPLACE: total]</div>
+    </div>
+
+    <div class="slide">
+      <div class="slide-label">[REPLACE: Topic label]</div>
+      <div class="slide-headline">[REPLACE: Slide headline]</div>
+      <div class="slide-body">[REPLACE: 2-3 sentence body copy]</div>
+      <div class="slide-number">02 / [REPLACE: total]</div>
+    </div>
+
+    <div class="slide">
+      <div class="slide-label">[REPLACE: Topic label]</div>
+      <div class="slide-headline">[REPLACE: Slide headline]</div>
+      <div class="slide-visual">[Visual placeholder]</div>
+      <div class="slide-number">03 / [REPLACE: total]</div>
+    </div>
+
+    <div class="slide">
+      <div class="slide-label">[REPLACE: Topic label]</div>
+      <div class="slide-headline">[REPLACE: Slide headline]</div>
+      <div class="slide-body">[REPLACE: 2-3 sentence body copy]</div>
+      <div class="slide-number">04 / [REPLACE: total]</div>
+    </div>
+
+    <div class="slide cta">
+      <div class="slide-headline">[REPLACE: CTA headline]</div>
+      <a href="#" class="cta-button">[REPLACE: CTA button text]</a>
+      <div class="slide-number">05 / [REPLACE: total]</div>
+    </div>
+
+  </div>
+
+  <div class="dots">
+    <div class="dot active"></div>
+    <div class="dot"></div>
+    <div class="dot"></div>
+    <div class="dot"></div>
+    <div class="dot"></div>
+  </div>
+
+</body>
+</html>

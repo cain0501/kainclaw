@@ -30,7 +30,7 @@ describe("renderer question form module", () => {
     const segments = module.splitOnQuestionForms([
       "Got it — tell me a bit more first.",
       '<question-form id="discovery" title="Quick brief">',
-      '{"questions":[{"id":"tone","label":"Tone","type":"radio","required":true,"options":["Editorial","Minimal"]}]}',
+      '{"zhDescription":"补充几个问题后我继续生成。","questions":[{"id":"tone","label":"Tone","zhLabel":"语气","type":"radio","required":true,"options":["Editorial","Minimal"]},{"id":"direction","label":"Direction","zhLabel":"设计风格方向","type":"direction-cards","required":true,"options":["modern-minimal"],"cards":[{"id":"modern-minimal","label":"Modern minimal — Linear / Vercel","zhLabel":"Modern minimal — Linear / Vercel","zhSummary":"极简 · 科技感 · 大量留白","palette":["#fff"],"references":["Linear","Vercel"]}]}]}',
       "</question-form>",
     ].join("\n"));
 
@@ -43,7 +43,15 @@ describe("renderer question form module", () => {
       form: {
         id: "discovery",
         title: "Quick brief",
+        zhDescription: "补充几个问题后我继续生成。",
       },
+    });
+    expect(segments[1]?.form?.questions?.[0]).toMatchObject({
+      label: "Tone",
+      zhLabel: "语气",
+    });
+    expect(segments[1]?.form?.questions?.[1]?.cards?.[0]).toMatchObject({
+      zhSummary: "极简 · 科技感 · 大量留白",
     });
   });
 
@@ -67,6 +75,32 @@ describe("renderer question form module", () => {
       "[form answers - discovery]",
       "- Tone: Editorial",
       "- Audience: Investors",
+    ].join("\n"));
+  });
+
+  it("formats form answers with Chinese labels when the current language is zh", async () => {
+    const module = await loadQuestionFormModule();
+    const payload = module.formatFormAnswers(
+      {
+        id: "discovery",
+        questions: [
+          { id: "direction", label: "Direction", zhLabel: "设计风格方向" },
+          { id: "accent_override", label: "Accent override (optional)", zhLabel: "强调色覆盖（可选）" },
+        ],
+      },
+      {
+        direction: "modern-minimal",
+        accent_override: "用橙色替换默认蓝色",
+      },
+      {
+        language: "zh-CN",
+      },
+    );
+
+    expect(payload).toBe([
+      "[form answers - discovery]",
+      "- 设计风格方向: modern-minimal",
+      "- 强调色覆盖（可选）: 用橙色替换默认蓝色",
     ].join("\n"));
   });
 

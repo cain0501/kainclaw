@@ -28,7 +28,7 @@
         ? question.question.trim()
         : "";
     const type = typeof question.type === "string" ? question.type.trim() : "";
-    const supportedTypes = new Set(["radio", "checkbox", "text", "textarea", "select"]);
+    const supportedTypes = new Set(["radio", "checkbox", "text", "textarea", "select", "direction-cards"]);
 
     if (!id || !label || !supportedTypes.has(type)) {
       return null;
@@ -44,9 +44,55 @@
     if (typeof question.placeholder === "string" && question.placeholder.trim()) {
       normalized.placeholder = question.placeholder.trim();
     }
+    if (typeof question.zhLabel === "string" && question.zhLabel.trim()) {
+      normalized.zhLabel = question.zhLabel.trim();
+    }
+    if (typeof question.zhPlaceholder === "string" && question.zhPlaceholder.trim()) {
+      normalized.zhPlaceholder = question.zhPlaceholder.trim();
+    }
 
     if (type === "checkbox" && Number.isFinite(question.maxSelections)) {
       normalized.maxSelections = Math.max(1, Number(question.maxSelections));
+    }
+
+    if (type === "direction-cards" && Array.isArray(question.cards)) {
+      const cards = question.cards
+        .map(card => {
+          if (!card || typeof card !== "object") {
+            return null;
+          }
+          const id = typeof card.id === "string" ? card.id.trim() : "";
+          const labelText = typeof card.label === "string" ? card.label.trim() : "";
+          const palette = Array.isArray(card.palette)
+            ? card.palette
+                .map(color => (typeof color === "string" ? color.trim() : ""))
+                .filter(Boolean)
+            : [];
+          const references = Array.isArray(card.references)
+            ? card.references
+                .map(reference => (typeof reference === "string" ? reference.trim() : ""))
+                .filter(Boolean)
+            : [];
+          return id && labelText
+            ? {
+                id,
+                label: labelText,
+                ...(typeof card.zhLabel === "string" && card.zhLabel.trim()
+                  ? { zhLabel: card.zhLabel.trim() }
+                  : {}),
+                ...(typeof card.zhSummary === "string" && card.zhSummary.trim()
+                  ? { zhSummary: card.zhSummary.trim() }
+                  : {}),
+                ...(palette.length > 0 ? { palette } : {}),
+                ...(references.length > 0 ? { references } : {}),
+              }
+            : null;
+        })
+        .filter(Boolean);
+
+      if (cards.length > 0) {
+        normalized.cards = cards;
+      }
     }
 
     if (Array.isArray(question.options)) {
@@ -97,6 +143,18 @@
     return {
       id: sanitizeIdentifier(attrs.id, "discovery"),
       title: typeof attrs.title === "string" && attrs.title.trim() ? attrs.title.trim() : "Quick brief",
+      zhTitle:
+        typeof parsed?.zhTitle === "string" && parsed.zhTitle.trim()
+          ? parsed.zhTitle.trim()
+          : undefined,
+      description:
+        typeof parsed?.description === "string" && parsed.description.trim()
+          ? parsed.description.trim()
+          : undefined,
+      zhDescription:
+        typeof parsed?.zhDescription === "string" && parsed.zhDescription.trim()
+          ? parsed.zhDescription.trim()
+          : undefined,
       questions,
     };
   }
@@ -141,7 +199,8 @@
     return typeof value === "string" ? value.trim() : "";
   }
 
-  function formatFormAnswers(form, answers) {
+  function formatFormAnswers(form, answers, options) {
+    const useChineseLabels = String(options?.language || "").toLowerCase().startsWith("zh");
     const lines = [`[form answers - ${form.id}]`];
     for (const question of form.questions) {
       const rawValue = answers?.[question.id];
@@ -149,7 +208,10 @@
       if (!formatted) {
         continue;
       }
-      lines.push(`- ${question.label}: ${formatted}`);
+      const label = useChineseLabels && typeof question?.zhLabel === "string" && question.zhLabel.trim()
+        ? question.zhLabel.trim()
+        : question.label;
+      lines.push(`- ${label}: ${formatted}`);
     }
     return lines.join("\n");
   }

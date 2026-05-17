@@ -159,21 +159,99 @@ export function extractTextFromContent(content: unknown): string {
     .join("");
 }
 
+export function normalizeOpenAIProviderErrorMessage(
+  rawMessage: string,
+  statusCode?: number,
+): string {
+  const normalized = String(rawMessage || "").trim();
+  const lower = normalized.toLowerCase();
+
+  if (
+    lower.includes("unterminated string in json")
+    || lower.includes("unexpected end of json")
+    || lower.includes("malformed streamed tool call")
+  ) {
+    return "当前上游 provider 返回了损坏的工具参数，已中断本轮请求。请重试一次；如果反复出现，请切换 provider 或检查上游网关稳定性。";
+  }
+
+  if (
+    statusCode === 401
+    || statusCode === 403
+    || lower.includes("invalid_api_key")
+    || lower.includes("incorrect api key")
+    || lower.includes("unauthorized")
+    || lower.includes("authentication")
+    || lower.includes("forbidden")
+  ) {
+    return "当前 provider 鉴权失败。请检查 API Key、模型权限，或确认所选网关允许当前账号访问该模型。";
+  }
+
+  if (
+    statusCode === 429
+    || lower.includes("insufficient_quota")
+    || lower.includes("quota")
+    || lower.includes("billing")
+    || lower.includes("credit")
+    || lower.includes("balance")
+    || lower.includes("payment")
+    || lower.includes("exceeded your current quota")
+    || lower.includes("rate limit")
+    || lower.includes("too many requests")
+  ) {
+    return "当前 provider 的额度、余额或频率限制已触发。请检查账户余额/套餐，或稍后重试。";
+  }
+
+  if (statusCode && statusCode >= 500) {
+    return `当前 provider 服务暂时不可用（HTTP ${statusCode}）。请稍后重试，或切换到其他 provider。`;
+  }
+
+  return normalized || `OpenAI-compatible request failed${statusCode ? `: ${statusCode}` : ""}`;
+}
+
 export function finalizeOpenAIStep(
   fullText: string,
   toolCallAccum: Record<number, { id: string; name: string; arguments: string }>,
   fullReasoningText?: string,
 ): NormalizedStep {
+  const droppedToolCallMessages: string[] = [];
   const toolCalls = Object.values(toolCallAccum)
     .filter(tc => tc.id && tc.name)
-    .map(tc => ({
-      id: tc.id,
-      name: tc.name,
-      input: tc.arguments ? JSON.parse(tc.arguments) as Record<string, unknown> : {},
-    }));
+    .flatMap(tc => {
+      if (!tc.arguments) {
+        return [{
+          id: tc.id,
+          name: tc.name,
+          input: {},
+        }];
+      }
+
+      try {
+        return [{
+          id: tc.id,
+          name: tc.name,
+          input: JSON.parse(tc.arguments) as Record<string, unknown>,
+        }];
+      } catch (error) {
+        const readableError = normalizeOpenAIProviderErrorMessage(
+          `Malformed streamed tool call arguments: ${error instanceof Error ? error.message : String(error)}`,
+        );
+        droppedToolCallMessages.push(readableError);
+        console.warn(
+          "[OpenAIAdapter] Dropping malformed streamed tool call arguments",
+          JSON.stringify({
+            toolCallId: tc.id,
+            toolName: tc.name,
+            preview: tc.arguments.slice(0, 240),
+            error: error instanceof Error ? error.message : String(error),
+            readableError,
+          }),
+        );
+        return [];
+      }
+    });
 
   return {
-    text: fullText.trim(),
+    text: [fullText.trim(), ...droppedToolCallMessages].filter(Boolean).join("\n\n").trim(),
     toolCalls,
     done: toolCalls.length === 0,
     ...(fullReasoningText ? { reasoningContent: fullReasoningText } : {}),
@@ -325,9 +403,13 @@ export class OpenAIAdapter implements IProviderAdapter {
             res.on("data", chunk => chunks.push(Buffer.from(chunk)));
             res.on("end", () => {
               const errorText = Buffer.concat(chunks).toString("utf8").trim();
+              const statusCode = res.statusCode ?? 500;
               reject(
                 new Error(
-                  errorText || `OpenAI-compatible request failed: ${res.statusCode ?? 500}`,
+                  normalizeOpenAIProviderErrorMessage(
+                    errorText || `OpenAI-compatible request failed: ${statusCode}`,
+                    statusCode,
+                  ),
                 ),
               );
             });

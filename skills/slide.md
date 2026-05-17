@@ -93,3 +93,10 @@ Background: commit to one overall palette. Dark decks feel confident and bold. L
 ## Output contract
 
 Output a single `<artifact type="text/html">`. One sentence before it, nothing after.
+
+## Seed Template & Reference Assets
+
+Before writing any HTML, use `read_file` to read these files in order:
+1. `skills/slide/template.html` - copy this as your starting point, replace `[REPLACE]` markers with real content. Do NOT rewrite the CSS framework.
+2. `skills/slide/layouts.md` - paste-ready section/screen/slide skeletons
+3. `skills/slide/checklist.md` - run every P0 item before emitting the artifact

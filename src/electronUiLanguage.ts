@@ -459,6 +459,7 @@ const ELECTRON_SHELL_SURFACE_TEXT_PAIRS = [
   ["临时工作态", "Temporary state"],
   ["不会写入作品库；生成第一版后才升级为正式作品。", "This is not written to the library. Generate the first version to convert it into a formal work."],
   ["还没有正式设计作品。生成第一版后，它会出现在这里。", "No formal design works yet. They will appear here after the first version is generated."],
+  ["还没有设计作品。点击“新建作品”后，草稿项目会立即出现在这里。", "No design works yet. Click \"New work\" and a draft project will appear here immediately."],
   ["新作品 · 草稿", "New work - Draft"],
   ["新作品 · 未命名", "New work - Untitled"],
   ["设计对话", "Design chat"],

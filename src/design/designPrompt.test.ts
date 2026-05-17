@@ -9,10 +9,12 @@ import {
   buildKainClawDesignSystemPrompt,
   buildKainClawDesignUserPrompt,
   DESIGN_OUTPUT_TYPES,
+  getDesignChatSkillEntryRelativePath,
   getDesignChatSkillRelativePath,
   getSkillWorkflow,
   normalizeDesignOutputType,
 } from "./designPrompt";
+import { renderDirectionFormBody } from "./directions";
 
 describe("designPrompt", () => {
   it("normalizes unknown output types back to prototype", () => {
@@ -64,7 +66,7 @@ describe("designPrompt", () => {
 
     expect(prompt).toContain("## Skill Workflow File");
     expect(prompt).toContain("read the workflow file with the read_file tool");
-    expect(prompt).toContain("Path: skills/social-carousel.md");
+    expect(prompt).toContain(`Path: ${getDesignChatSkillEntryRelativePath("social-carousel")}`);
     expect(prompt).not.toContain("Produce a 3-panel social carousel as one coherent series.");
   });
 
@@ -76,8 +78,8 @@ describe("designPrompt", () => {
     });
 
     expect(prompt).toContain("[form answers - discovery]");
-    expect(prompt).toContain("Path: skills/landing-page.md");
-    expect(prompt).toContain("glob_files with pattern \"skills/landing-page.md\" or \"skills/*.md\"");
+    expect(prompt).toContain(`Path: ${getDesignChatSkillEntryRelativePath("landing-page")}`);
+    expect(prompt).toContain("skills/landing-page/*");
   });
 
   describe("buildDesignChatUserPrompt direction picker", () => {
@@ -138,11 +140,25 @@ describe("designPrompt", () => {
   it("buildDesignChatSystemPrompt includes discovery customization guidance", () => {
     const prompt = buildDesignChatSystemPrompt();
 
+    expect(prompt).toContain("Always respond in the same language as the user's latest input.");
     expect(prompt).toContain("Tailor the questions to the actual brief");
-    expect(prompt).toContain("read_file");
-    expect(prompt).toContain("TodoWrite");
+    expect(prompt).toContain("If a critical gap still blocks a good result, ask one narrower follow-up question-form");
+    expect(prompt).toContain("Read the skill entry file");
+    expect(prompt).toContain("strict order");
+    expect(prompt).toContain("Step 10. Output the finished HTML.");
+    expect(prompt).toContain("output/index.html");
     expect(prompt).toContain("checklist");
     expect(prompt).toContain("Embody the specialist");
+  });
+
+  it("includes localized direction form fields for renderer fallback", () => {
+    const body = renderDirectionFormBody();
+
+    expect(body).toContain('"zhDescription"');
+    expect(body).toContain('"zhLabel": "设计风格方向"');
+    expect(body).toContain('"zhLabel": "强调色覆盖（可选）"');
+    expect(body).toContain('"zhPlaceholder": "例如：用橙色替换默认蓝色，不要太品牌化的颜色"');
+    expect(body).toContain('"zhSummary": "杂志感 · 精致排版 · 高级感"');
   });
 
   it("includes structured user context when provided", () => {

@@ -7,7 +7,7 @@ async function renderThinkingSummaryMessage() {
   const rendererPath = path.join(__dirname, "renderer", "index.html");
   const html = await readFile(rendererPath, "utf8");
   const start = html.indexOf("function getThinkingSummaryToggleId(messageIndex) {");
-  const end = html.indexOf("function renderMessageContent(text, isUser = false) {", start);
+  const end = html.indexOf("function renderMessageContent(text, isUser = false", start);
 
   expect(start).toBeGreaterThanOrEqual(0);
   expect(end).toBeGreaterThan(start);

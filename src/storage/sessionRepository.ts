@@ -96,14 +96,22 @@ export type DesignFlowState = {
   }>;
 };
 
+export type DesignChatFormDraftState = {
+  formId: string;
+  messageId: string;
+  answers: Record<string, string | string[]>;
+};
+
 export type SessionRuntimeState = {
   pendingPlanVerification?: PendingPlanVerificationSessionState;
   modelConversation?: PersistedConversationMessage[];
   compactBoundary?: CompactBoundarySessionState;
   artifactPanel?: ArtifactPanelSessionState;
   designFlowState?: DesignFlowState;
+  designChatFormDraft?: DesignChatFormDraftState;
   workspaceRoot?: string;
   sessionType?: "design" | "default";
+  sessionOwner?: "main" | "design";
 };
 
 export type SessionMeta = {
@@ -542,6 +550,9 @@ export class SessionRepository {
         ...(parsed.sessionType === "design" || parsed.sessionType === "default"
           ? { sessionType: parsed.sessionType }
           : {}),
+        ...(parsed.sessionOwner === "main" || parsed.sessionOwner === "design"
+          ? { sessionOwner: parsed.sessionOwner }
+          : {}),
         ...(parsed.designFlowState &&
         typeof parsed.designFlowState.flowId === "string" &&
         typeof parsed.designFlowState.createdAt === "number"
@@ -572,6 +583,32 @@ export class SessionRepository {
                         })),
                     }
                   : {}),
+              },
+            }
+          : {}),
+        ...(parsed.designChatFormDraft &&
+        typeof parsed.designChatFormDraft.formId === "string" &&
+        typeof parsed.designChatFormDraft.messageId === "string" &&
+        parsed.designChatFormDraft.answers &&
+        typeof parsed.designChatFormDraft.answers === "object"
+          ? {
+              designChatFormDraft: {
+                formId: parsed.designChatFormDraft.formId,
+                messageId: parsed.designChatFormDraft.messageId,
+                answers: Object.fromEntries(
+                  Object.entries(parsed.designChatFormDraft.answers as Record<string, unknown>)
+                    .filter(([key, value]) =>
+                      typeof key === "string" &&
+                      key.trim() &&
+                      (
+                        typeof value === "string" ||
+                        (
+                          Array.isArray(value) &&
+                          value.every(item => typeof item === "string")
+                        )
+                      ))
+                    .map(([key, value]) => [key, Array.isArray(value) ? [...value] : value]),
+                ) as Record<string, string | string[]>,
               },
             }
           : {}),
@@ -613,6 +650,9 @@ export class SessionRepository {
       ...(state.sessionType === "design" || state.sessionType === "default"
         ? { sessionType: state.sessionType }
         : {}),
+      ...(state.sessionOwner === "main" || state.sessionOwner === "design"
+        ? { sessionOwner: state.sessionOwner }
+        : {}),
       ...(state.designFlowState &&
       typeof state.designFlowState.flowId === "string" &&
       typeof state.designFlowState.createdAt === "number"
@@ -626,6 +666,32 @@ export class SessionRepository {
               ...(typeof state.designFlowState.conversationId === "string"
                 ? { conversationId: state.designFlowState.conversationId }
                 : {}),
+            },
+          }
+        : {}),
+      ...(state.designChatFormDraft &&
+      typeof state.designChatFormDraft.formId === "string" &&
+      typeof state.designChatFormDraft.messageId === "string" &&
+      state.designChatFormDraft.answers &&
+      typeof state.designChatFormDraft.answers === "object"
+        ? {
+            designChatFormDraft: {
+              formId: state.designChatFormDraft.formId,
+              messageId: state.designChatFormDraft.messageId,
+              answers: Object.fromEntries(
+                Object.entries(state.designChatFormDraft.answers)
+                  .filter(([key, value]) =>
+                    typeof key === "string" &&
+                    key.trim() &&
+                    (
+                      typeof value === "string" ||
+                      (
+                        Array.isArray(value) &&
+                        value.every(item => typeof item === "string")
+                      )
+                    ))
+                  .map(([key, value]) => [key, Array.isArray(value) ? [...value] : value]),
+              ) as Record<string, string | string[]>,
             },
           }
         : {}),
@@ -697,6 +763,7 @@ export class SessionRepository {
       !normalizedState.compactBoundary &&
       !normalizedState.artifactPanel &&
       !normalizedState.designFlowState &&
+      !normalizedState.designChatFormDraft &&
       !normalizedState.sessionType &&
       typeof normalizedState.workspaceRoot !== "string"
     ) {

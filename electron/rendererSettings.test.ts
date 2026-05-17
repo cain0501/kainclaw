@@ -100,6 +100,8 @@ describe("Electron renderer settings", () => {
     expect(html).toContain("function exportDesignWorkbench(format)");
     expect(html).toContain("function chooseDesignDirection(directionId)");
     expect(html).toContain("function skipDesignDirectionSuggestions()");
+    expect(html).toContain("function inferDesignChatLanguage()");
+    expect(html).toContain("function localizeQuestionLabel(question)");
     expect(html).toContain('id="midtai-showcase-panel"');
     expect(html).toContain("const SHOWCASE_TEMPLATES = [");
     expect(html).toContain("function toggleShowcase(");
@@ -154,6 +156,9 @@ describe("Electron renderer settings", () => {
     expect(html).toContain("case 'design:versions':");
     expect(html).toContain("case 'design:directions':");
     expect(html).toContain("case 'design:exportDone':");
+    expect(html).toContain("question.zhLabel");
+    expect(html).toContain("card.zhSummary");
+    expect(html).toContain("form.zhDescription");
     expect(html).toContain("artifact:openKainClawDesign");
     expect(html).toContain("kainclawDesign:open");
     expect(html).toContain("__edit_mode_available");
@@ -224,5 +229,43 @@ describe("Electron renderer settings", () => {
     expect(patchResultSlice).toContain("switchMidtaiType('design');");
     expect(patchResultSlice).toContain("openCanvas(projectLabel);");
     expect(patchResultSlice).not.toContain("showDesignPage();");
+  });
+
+  it("prefers design chat over canvas or new-entry when a switched project already has history", async () => {
+    const rendererPath = path.join(__dirname, "renderer", "index.html");
+    const html = await readFile(rendererPath, "utf8");
+    const historyStart = html.indexOf("case 'design:chat:history':");
+    const historyEnd = html.indexOf("case 'design:chat:append':", historyStart);
+    const historyBlock = historyStart >= 0 && historyEnd > historyStart ? html.slice(historyStart, historyEnd) : "";
+    const tabStart = html.indexOf("function handleMidtaiDesignTabOpen() {");
+    const tabEnd = html.indexOf("function chooseDesignEntryPath(path)", tabStart);
+    const tabBlock = tabStart >= 0 && tabEnd > tabStart ? html.slice(tabStart, tabEnd) : "";
+
+    expect(html).toContain("function hasDesignChatHistory()");
+    expect(html).toContain("function shouldKeepDesignEntryDialog()");
+    expect(html).toContain("const designEntryPendingProjectIds = new Set();");
+    expect(html).toContain("const designEntrySelectionsByProjectId = new Map();");
+    expect(historyBlock).toContain("if (hasDesignChatHistory() && midtaiState.type === 'design' && !shouldKeepDesignEntryDialog()) {");
+    expect(historyBlock).toContain("showDesignView('design-chat');");
+    expect(tabBlock).toContain("const hasHistory = hasDesignChatHistory();");
+    expect(html).toContain("&& designEntryPendingProjectIds.has(currentProjectId)");
+    expect(tabBlock).toContain("showDesignView(hasHistory ? 'design-chat' : (designBridgeState.html ? 'canvas' : 'design-chat'));");
+    expect(tabBlock).toContain("if (shouldKeepDesignEntryDialog()) {");
+  });
+
+  it("isolates repeated design-chat question forms by message instance instead of reusing one discovery state bucket", async () => {
+    const rendererPath = path.join(__dirname, "renderer", "index.html");
+    const html = await readFile(rendererPath, "utf8");
+
+    expect(html).toContain("let designChatActiveFormMessageId = null;");
+    expect(html).toContain("let designChatPendingFormKey = null;");
+    expect(html).toContain("function getDesignChatLatestFormRuntime(formId, preferredMessageId)");
+    expect(html).toContain("return `design-chat:${normalizedMessageId || 'active'}:${normalizedFormId}`;");
+    expect(html).toContain("return renderQuestionFormMessage(text, -1, messageId);");
+    expect(html).toContain("body = formatDesignChatText(message.content || '', String(message?.messageId || ''));");
+    expect(html).toContain("designChatActiveFormMessageId = latestFormRuntime.messageId || null;");
+    expect(html).toContain("const formRuntime = getDesignChatLatestFormRuntime(formId, designChatActiveFormMessageId);");
+    expect(html).toContain("designChatPendingFormKey = getDesignChatFormStateKey(formId, formRuntime.messageId || designChatActiveFormMessageId || '');");
+    expect(html).not.toContain("designChatPendingFormId = formId;");
   });
 });

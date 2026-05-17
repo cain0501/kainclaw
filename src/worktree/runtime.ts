@@ -14,8 +14,10 @@ import type {
 
 const execFileAsync = promisify(execFile);
 
-const VALID_WORKTREE_SLUG_SEGMENT = /^[a-zA-Z0-9._-]+$/;
-const MAX_WORKTREE_SLUG_LENGTH = 64;
+// Worktree names map to git branch names and filesystem paths,
+// so they must be safe for both: alphanumerics, dots, underscores, dashes only.
+const SLUG_SEGMENT_PATTERN = /^[a-zA-Z0-9][a-zA-Z0-9._-]*$/;
+const SLUG_MAX_CHARS = 63;
 
 type PersistedConversationWorktreeState = {
   version: 1;
@@ -427,22 +429,23 @@ function buildRemoveMessage(
 }
 
 export function validateWorktreeSlug(slug: string): void {
-  if (slug.length > MAX_WORKTREE_SLUG_LENGTH) {
+  if (slug.length > SLUG_MAX_CHARS) {
     throw new Error(
-      `Invalid worktree name: must be ${MAX_WORKTREE_SLUG_LENGTH} characters or fewer (got ${slug.length})`,
+      `Worktree name too long: "${slug}" has ${slug.length} characters (limit is ${SLUG_MAX_CHARS})`,
     );
   }
 
-  for (const segment of slug.split("/")) {
+  const segments = slug.split("/");
+  for (const segment of segments) {
     if (segment === "." || segment === "..") {
       throw new Error(
-        `Invalid worktree name "${slug}": must not contain "." or ".." path segments`,
+        `Worktree name "${slug}" contains a reserved path segment ("." or "..")`,
       );
     }
 
-    if (!VALID_WORKTREE_SLUG_SEGMENT.test(segment)) {
+    if (segment.length === 0 || !SLUG_SEGMENT_PATTERN.test(segment)) {
       throw new Error(
-        `Invalid worktree name "${slug}": each "/"-separated segment must be non-empty and contain only letters, digits, dots, underscores, and dashes`,
+        `Worktree name "${slug}" has an invalid segment "${segment}" — segments must start with a letter or digit and contain only [a-zA-Z0-9._-]`,
       );
     }
   }

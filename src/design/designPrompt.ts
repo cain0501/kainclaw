@@ -58,6 +58,14 @@ const DESIGN_CHAT_SKILL_FILENAMES: Record<DesignOutputType, string> = {
   "landing-page": "landing-page.md",
 };
 
+export function getDesignChatSkillBundleDirRelativePath(outputType: DesignOutputType): string {
+  return `skills/${outputType}`;
+}
+
+export function getDesignChatSkillEntryRelativePath(outputType: DesignOutputType): string {
+  return `${getDesignChatSkillBundleDirRelativePath(outputType)}/SKILL.md`;
+}
+
 const DESIGN_CHAT_SKILL_WORKFLOW_FALLBACKS: Record<DesignOutputType, string> = {
   "social-carousel": `## Skill Workflow: Social Carousel
 
@@ -428,13 +436,18 @@ function getSkillPatch(outputType: DesignOutputType): string {
 }
 
 function getDesignChatSkillWorkflowCandidatePaths(outputType: DesignOutputType): string[] {
-  const relativePath = getDesignChatSkillRelativePath(outputType);
+  const relativePaths = [
+    getDesignChatSkillEntryRelativePath(outputType),
+    getDesignChatSkillRelativePath(outputType),
+  ];
   return [
-    path.resolve(__dirname, "..", "..", relativePath),
-    path.resolve(__dirname, "..", "..", "..", relativePath),
-    path.join(process.cwd(), relativePath),
-    path.join(process.cwd(), "dist", relativePath),
-    path.join(process.cwd(), "dist-electron", relativePath),
+    ...relativePaths.flatMap(relativePath => [
+      path.resolve(__dirname, "..", "..", relativePath),
+      path.resolve(__dirname, "..", "..", "..", relativePath),
+      path.join(process.cwd(), relativePath),
+      path.join(process.cwd(), "dist", relativePath),
+      path.join(process.cwd(), "dist-electron", relativePath),
+    ]),
   ];
 }
 
@@ -467,12 +480,14 @@ export function buildDesignChatSkillPromptBlock(outputType: DesignOutputType): s
     return getSkillWorkflow(outputType);
   }
 
-  const relativePath = getDesignChatSkillRelativePath(outputType);
+  const entryPath = getDesignChatSkillEntryRelativePath(outputType);
+  const fallbackPath = getDesignChatSkillRelativePath(outputType);
+  const bundleDir = getDesignChatSkillBundleDirRelativePath(outputType);
   return [
     "## Skill Workflow File",
     "Before generating, read the workflow file with the read_file tool and follow it as the primary workflow for this output type.",
-    `Path: ${relativePath}`,
-    `If the exact path fails, use glob_files with pattern "${relativePath}" or "skills/*.md", then retry read_file.`,
+    `Path: ${entryPath}`,
+    `If the exact path fails, first try read_file on \`${fallbackPath}\`. You may also use glob_files with pattern "${bundleDir}/*" or "skills/*.md", then retry read_file.`,
     "Do not ask the user to open the file for you.",
   ].join("\n");
 }
@@ -482,6 +497,7 @@ function buildDirectionPickerInstruction(): string {
     "## Visual Direction Picker",
     "",
     "Append this direction-picker question as the last question in your discovery form. Include the JSON body below verbatim inside your <question-form>:",
+    "You may localize visible copy such as description, labels, card summaries, and placeholders to match the user's language, but keep question ids, direction ids, and overall schema shape unchanged.",
     "",
     renderDirectionFormBody(),
   ].join("\n");
@@ -541,6 +557,7 @@ function buildDiscoveryAndPhilosophy(): string {
     "### RULE 2 - Turn 2 branches on the discovery context",
     "",
     "When the user message starts with `[form answers - discovery]`, do not ask another generic discovery round.",
+    "Use the submitted answers to decide whether the brief is now build-ready. If critical information is still missing, ask one smaller follow-up question-form focused only on the missing gap instead of forcing generation too early.",
     "",
     "- **Branch A — Direction chosen**: If the answers include a `direction` field set to one of the five direction IDs, bind that direction's palette and posture from the Direction Library below, then proceed to RULE 3.",
     "- **Branch B — Brand supplied**: The user provided a brand URL, colors, or reference. Extract the dominant accent color, type posture (serif vs sans), and composition cues. Describe the extracted brand token set as a short spec block, then build directly.",
@@ -548,21 +565,23 @@ function buildDiscoveryAndPhilosophy(): string {
     "",
     "### RULE 3 - Read seed assets first, then build",
     "",
-    "Once direction or brand posture is clear, execute these steps in order using TodoWrite to track progress:",
+    "Once direction or brand posture is clear, execute these steps in strict order. Do not skip any step.",
     "",
-    "1. TodoWrite: create a checklist with these exact steps so you can track completion.",
-    "2. Read skill assets using read_file: the skill workflow file will specify the exact paths for template.html, layouts.md, and checklist.md. Read all three before writing any HTML.",
-    "3. Bind direction palette to :root — copy the direction's CSS block verbatim, do not change any other CSS.",
-    "4. Plan section/screen/slide list with rhythm.",
-    "5. Copy the seed template verbatim and replace [REPLACE] markers with real content. Do not rewrite the CSS framework.",
-    "6. Self-check: run every P0 item from checklist.md. Fix failures before continuing.",
-    "7. 5-dim critique — score each dimension 1–5 and rewrite any section scoring below 3:",
+    "Step 1. Read the skill entry file for your outputType: first try `skills/<outputType>/SKILL.md`, fall back to `skills/<outputType>.md` if the directory file is not found.",
+    "Step 2. If `skills/<outputType>/template.html` exists, read it — this is your only allowed structural starting point. If it does not exist, derive the base structure from the SKILL.md or flat skill file guidance.",
+    "Step 3. If `skills/<outputType>/layouts.md` exists, read it for paste-ready section blocks.",
+    "Step 4. If `skills/<outputType>/checklist.md` exists, read it — you will run it at the end. If it does not exist, apply the five quality dimensions in Step 9 as your only self-check.",
+    "Step 5. Bind direction palette to :root — copy the direction's CSS block verbatim. Do not rewrite other CSS.",
+    "Step 6. Plan your section/screen/slide list with rhythm before writing any HTML.",
+    "Step 7. Start from the seed template (or derived base) and replace [REPLACE] markers with real content. Do not rewrite the CSS framework.",
+    "Step 8. If checklist.md was read: run every P0 item. Fix any failure before continuing.",
+    "Step 9. Score each of the five quality dimensions. Rewrite any section scoring below 3:",
     "   - Philosophy: does the design reflect the specialist's point of view?",
     "   - Hierarchy: is the most important element the most visually dominant?",
     "   - Execution: are buttons, cards, and interactive elements properly styled — not bare rectangles?",
     "   - Specificity: does the content feel real and tailored to this brief, not generic?",
     "   - Restraint: is every element earning its place, or is there visual noise to cut?",
-    '8. Emit <artifact identifier="slug" type="text/html" title="Design Title">.',
+    'Step 10. Output the finished HTML. If write_file is available in your tool set, write the complete HTML to `output/index.html` using write_file. If write_file is not available, emit the artifact inline: <artifact identifier="slug" type="text/html" title="Design Title">.',
     "",
     "Do not write CSS from scratch when the skill ships a seed template. Start from the template, then fill content and adapt the bound tokens.",
     "",
@@ -610,11 +629,14 @@ export function buildDesignChatSystemPrompt(options?: {
   return [
     "You are KainClaw Design Chat, a design-focused assistant working in a two-turn workflow.",
     "You are not a generic programmer in this lane. Stay inside design discovery, direction, and artifact generation.",
+    "Always respond in the same language as the user's latest input. If the user writes in Chinese, all replies, explanations, question-form copy, and generated content descriptions must be in Chinese. If the user writes in English, keep the full response in English.",
     "",
     "## Design Chat Protocol",
     "Turn 1: when the user sends a fresh design brief, reply with one short line plus a <question-form id=\"discovery\"> block, then stop.",
     "Skip the form only when the user explicitly says to skip questions / just build / direct generate, or when the user message starts with [form answers - discovery].",
-    "Turn 2: when the user message starts with [form answers - discovery], use the supplied answers, direction, and brand cues to generate the design immediately. Do not restart generic discovery.",
+    "Turn 2: when the user message starts with [form answers - discovery], use the supplied answers, direction, and brand cues to decide the next step.",
+    "If the brief is sufficiently specified, generate the design immediately.",
+    "If a critical gap still blocks a good result, ask one narrower follow-up question-form about that missing detail only. Do not restart the full generic discovery form.",
     "",
     "The question-form body MUST be valid JSON with a 'questions' array. Use exactly this format:",
     "<question-form id=\"discovery\" title=\"Tell us about your design\">",
@@ -625,15 +647,12 @@ export function buildDesignChatSystemPrompt(options?: {
     "",
     buildDiscoveryAndPhilosophy(),
     "",
-    "When generating the final artifact, output exactly one artifact in this format:",
-    "<artifact identifier=\"slug\" type=\"text/html\" title=\"Design Title\">",
-    "<!DOCTYPE html>",
-    "<html>...</html>",
-    "</artifact>",
-    "",
-    "Do not wrap the artifact in markdown fences.",
-    "Do not output extra explanation after the artifact.",
-    "The HTML must be a single-file document previewable in a browser.",
+    "When generating the final artifact, produce one complete single-file HTML document that starts with <!DOCTYPE html>.",
+    "If write_file is available in your tool set, your final delivery is the file `output/index.html`.",
+    "If write_file is not available, emit exactly one inline artifact instead.",
+    "Do not wrap HTML in markdown fences.",
+    "Do not output extra explanation after the final HTML or artifact.",
+    "The HTML must be previewable in a browser.",
     "",
     "Visual quality rules:",
     "- Use deliberate whitespace, strong typography contrast, and a distinct visual mood.",

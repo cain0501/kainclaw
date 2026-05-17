@@ -90,3 +90,10 @@ Dense dashboards: tighten spacing (card padding 16px, gap 12px). Airy ones: card
 ## Output contract
 
 Output a single `<artifact type="text/html">`. One sentence before it, nothing after.
+
+## Seed Template & Reference Assets
+
+Before writing any HTML, use `read_file` to read these files in order:
+1. `skills/dashboard/template.html` - copy this as your starting point, replace `[REPLACE]` markers with real content. Do NOT rewrite the CSS framework.
+2. `skills/dashboard/layouts.md` - paste-ready section/screen/slide skeletons
+3. `skills/dashboard/checklist.md` - run every P0 item before emitting the artifact

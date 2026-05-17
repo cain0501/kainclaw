@@ -381,6 +381,7 @@ export type PlanVerificationToolAdapter = {
 
 export type ToolContext = {
   workspaceRoot: string;
+  designChatRunRoot?: string;
   invokerKind?: "main" | "worker";
   abortSignal?: AbortSignal;
   readConfig?: (key: string) => unknown;
@@ -1692,6 +1693,24 @@ async function requestWriteApproval(
 
   if (!approved) {
     throw new Error(`File change rejected by user: ${request.path}`);
+  }
+}
+
+function assertDesignChatRunWritePath(context: ToolContext, resolvedPath: string): void {
+  const runRoot = context.designChatRunRoot;
+  if (!runRoot) {
+    return;
+  }
+
+  const normalizedResolved = path.resolve(resolvedPath);
+  const normalizedRoot = path.resolve(runRoot);
+  if (
+    normalizedResolved !== normalizedRoot &&
+    !normalizedResolved.startsWith(`${normalizedRoot}${path.sep}`)
+  ) {
+    throw new Error(
+      `Write blocked: "${resolvedPath}" is outside the design chat workspace.`,
+    );
   }
 }
 
@@ -3561,6 +3580,7 @@ const handlers: Record<string, ToolHandler> = {
     assertPlanModeWriteAccess(context, rawPath);
 
     const absolutePath = resolveWorkspacePath(context.workspaceRoot, rawPath);
+    assertDesignChatRunWritePath(context, absolutePath);
     let originalContent = "";
 
     try {
@@ -3569,7 +3589,8 @@ const handlers: Record<string, ToolHandler> = {
       originalContent = "";
     }
 
-    if (!isPlanModeWritePath(context, rawPath)) {
+    const isDesignChatWrite = !!context.designChatRunRoot;
+    if (!isPlanModeWritePath(context, rawPath) && !isDesignChatWrite) {
       await requestWriteApproval(context, {
         kind: "write_file",
         path: rawPath,
@@ -3608,6 +3629,7 @@ const handlers: Record<string, ToolHandler> = {
     assertPlanModeWriteAccess(context, rawPath);
 
     const absolutePath = resolveWorkspacePath(context.workspaceRoot, rawPath);
+    assertDesignChatRunWritePath(context, absolutePath);
     const originalContent = await fs.readFile(absolutePath, "utf8");
 
     if (!originalContent.includes(search)) {
@@ -3618,7 +3640,8 @@ const handlers: Record<string, ToolHandler> = {
       ? originalContent.split(search).join(replace)
       : originalContent.replace(search, replace);
 
-    if (!isPlanModeWritePath(context, rawPath)) {
+    const isDesignChatWrite = !!context.designChatRunRoot;
+    if (!isPlanModeWritePath(context, rawPath) && !isDesignChatWrite) {
       await requestWriteApproval(context, {
         kind: "replace_in_file",
         path: rawPath,

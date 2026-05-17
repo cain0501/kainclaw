@@ -118,10 +118,13 @@ export class MidtaiLibraryHost {
   ) {}
 
   async getLibraryItems(filter?: MidtaiLibraryFilter | null): Promise<MidtaiLibraryItem[]> {
-    const [imageResults, designProjects] = await Promise.all([
-      this.loadImageResults(),
-      this.loadDesignProjects(),
-    ]);
+    const normalized = normalizeFilter(filter);
+    const imageResults = normalized === "design"
+      ? []
+      : await this.loadImageResults();
+    const designProjects = normalized === "image"
+      ? []
+      : await this.loadDesignProjects();
 
     const imageItems = imageResults.map(result => mapImageResultToMidtaiItem(result));
     const designItems = await Promise.all(
@@ -135,6 +138,6 @@ export class MidtaiLibraryHost {
     const merged = [...imageItems, ...designItems].sort(
       (left, right) => right.updatedAt - left.updatedAt,
     );
-    return filterMidtaiLibraryItems(merged, filter);
+    return filterMidtaiLibraryItems(merged, normalized);
   }
 }

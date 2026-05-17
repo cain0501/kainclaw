@@ -4,6 +4,7 @@ import {
   buildUrl,
   extractTextFromContent,
   finalizeOpenAIStep,
+  normalizeOpenAIProviderErrorMessage,
   supportsImageUrlInputs,
   toOpenAIMessages,
 } from "./openAIAdapter";
@@ -192,6 +193,44 @@ describe("OpenAI adapter helpers", () => {
       toolCalls: [],
       done: true,
     });
+  });
+
+  it("drops malformed streamed tool-call JSON instead of throwing", () => {
+    expect(() =>
+      finalizeOpenAIStep("partial", {
+        0: {
+          id: "tool-1",
+          name: "ask_user",
+          arguments: '{"question":"unterminated',
+        },
+      }),
+    ).not.toThrow();
+
+    expect(
+      finalizeOpenAIStep("partial", {
+        0: {
+          id: "tool-1",
+          name: "ask_user",
+          arguments: '{"question":"unterminated',
+        },
+      }),
+    ).toEqual({
+      text: "partial\n\n当前上游 provider 返回了损坏的工具参数，已中断本轮请求。请重试一次；如果反复出现，请切换 provider 或检查上游网关稳定性。",
+      toolCalls: [],
+      done: true,
+    });
+  });
+
+  it("normalizes auth, quota, and malformed JSON provider errors into readable user-facing messages", () => {
+    expect(
+      normalizeOpenAIProviderErrorMessage("invalid_api_key", 401),
+    ).toContain("鉴权失败");
+    expect(
+      normalizeOpenAIProviderErrorMessage("insufficient_quota", 429),
+    ).toContain("额度、余额或频率限制");
+    expect(
+      normalizeOpenAIProviderErrorMessage("Unterminated string in JSON at position 25"),
+    ).toContain("损坏的工具参数");
   });
 
   it("extracts text from string and array-style content blocks", () => {

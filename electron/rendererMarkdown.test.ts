@@ -7,7 +7,7 @@ async function renderRendererContent(input: string, isUser = false): Promise<str
   const { marked } = await import("marked");
   const rendererPath = path.join(__dirname, "renderer", "index.html");
   const html = await readFile(rendererPath, "utf8");
-  const start = html.indexOf("function renderMessageContent(text, isUser = false) {");
+  const start = html.indexOf("function renderMessageContent(text, isUser = false");
   const end = html.indexOf("function renderSessions(sessions, activeId) {", start);
 
   expect(start).toBeGreaterThanOrEqual(0);
@@ -28,7 +28,7 @@ async function renderToolResultMessageHtml(message: {
   const rendererPath = path.join(__dirname, "renderer", "index.html");
   const html = await readFile(rendererPath, "utf8");
   const renderToolStart = html.indexOf("function renderToolResultMessage(message) {");
-  const inlineStart = html.indexOf("function renderInlineMarkdown(text) {");
+  const inlineStart = html.indexOf("function renderMarkdown(text) {", renderToolStart);
   const escapeStart = html.indexOf("function escapeHtml(s) {", renderToolStart);
   const end = html.indexOf("function renderSessions(sessions, activeId) {", renderToolStart);
 
