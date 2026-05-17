@@ -33,6 +33,14 @@ The project is still in active development. Core workflows are usable, but some 
 - Word Add-in prototype for document context and write-back flows
 - Platform boundaries for future desktop automation, browser bridge, scheduler, and local connector work
 
+## Independent Project Notice
+
+KainClaw is an independent open-source project developed by its contributors.
+
+This project is not affiliated with, endorsed by, or maintained by Anthropic, OpenAI, Microsoft, or any other provider mentioned in this repository. Product names and trademarks belong to their respective owners.
+
+KainClaw does not include proprietary provider source code, model weights, or private service assets. Provider integrations are implemented through public APIs, local CLIs, or user-configured compatible endpoints.
+
 ## Status
 
 KainClaw is not a polished production client yet. The Electron app is the recommended runtime for testing; the VS Code extension shape remains useful for local development.
