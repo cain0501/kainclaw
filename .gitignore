@@ -30,16 +30,18 @@ dist-win/
 .vscode/
 dev-host.code-workspace
 
-# Recovery / scratch docs
-.kiro/recovery-draft-*.md
-.kiro/audits/
-
-# Internal agent/project handoff docs
-AGENTS.md
-CLAUDE.md
-CLAUDE_HANDOFF.md
-RENAME_CAIN_TO_KIANCLAW.md
-SKILLS_GUIDE.md
+# Local planning and agent handoff files
+.kiro/
+.beads/
+*HANDOFF*.md
+*handoff*.md
+*CLAUDE*.md
+*claude*.md
+*AGENT*.md
+*agent*.md
+*SKILL*.md
+*skill*.md
+RENAME_*.md
 
 # OS / logs
 *.log
