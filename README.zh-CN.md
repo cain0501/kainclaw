@@ -16,28 +16,61 @@ KainClaw 最初是一个个人 vibe coding 项目。我不是职业程序员，�
 
 **AI Agent 运行时**
 
-- 支持 Anthropic、OpenAI、OpenAI 兼容接口和 Claude CLI Provider
-- 会话持久化、导出和恢复
-- MCP 服务集成
-- 文件、Shell、浏览器和后台任务工具
-- 内置 Review 和 Verification agent
-- Thinking、Effort、Fast mode、Compact 和 Auto-compact 控制
-- Hooks、自定义 agents、skills 和 auto-memory
-- 早期 LSP 与 worktree 支持
+- 支持 Anthropic、OpenAI、OpenAI 兼容端点和 Claude CLI 的多 Provider 对话运行时。
+- 流式会话、会话持久化、导出/恢复、transcript 处理和附件标准化。
+- 内置 verification、code review、codebase exploration 和 general-purpose task agent。
+- 支持工作区文件、Shell 命令、浏览器辅助流程、后台任务和 MCP tools。
+- 支持审批流、活动追踪、thinking/effort 控制、fast mode、compact、micro-compact 和 auto-compact。
+- 支持 hooks、自定义 agents、skills、auto-memory 提取、用户画像蒸馏，以及 swarm 协调；每个并行 worker 都可以绑定不同的已配置 Provider alias。
+- 早期 LSP 与 worktree 运行时，用于诊断、代码导航和隔离任务工作区。
 
-**设计与图像工作流**
+**Agent 工具、计划模式与自动化**
 
-- 通过对话生成 HTML artifact
-- 支持 prototype、slide、dashboard、report、pricing page、landing page、mobile app mockup、social carousel 等多种输出类型
-- 设计方向预设、字体规范、配色规则、布局约束和 anti-slop prompt 规则
-- 图像生成、图像编辑、Prompt Library、参考图搜索、变体生成和本地结果持久化
+- 可从 `.mcp.json`、`.cain-mcp.json` 等工作区文件发现 MCP 配置，支持本地 command server 和远端 HTTP server。
+- 工作区工具支持列文件、读文件、搜索、写入、局部替换，以及带审批保护的 PowerShell 执行和白名单只读命令。
+- LSP 工具支持定义跳转、实现、引用、hover、symbols、diagnostics 和 call hierarchy。
+- Plan mode 会在工作区生成计划文件，计划获批前保持只读，之后可验证执行结果。
+- 结构化任务工具支持创建、列出、更新、停止和查看前台/后台任务。
+- 后台 review / verification worker，可执行较长时间的检查，不阻塞主聊天循环。
+- 通过 `spawn_agent`、`send_message` 和 `wait_for_agents` 实现多 Provider 并行执行，主会话最多可协调 5 个 worker agents。
+- Cron 风格定时任务，支持仅当前会话生效或持久化到工作区。
 
-**桌面端与集成能力**
+**上下文、记忆与扩展能力**
 
-- Electron 桌面壳承载主要聊天体验
-- Local Bridge 运行时基础能力
-- Word Add-in 原型，用于文档上下文读取和写回流程
-- 为后续桌面自动化、浏览器桥接、调度器和本地连接器预留平台边界
+- 支持 session memory、auto-memory 提取、用户画像存储、context mentions、工作区状态和会话级运行状态。
+- 支持从用户目录和项目目录加载 installed skills，包括参数、allowed tools 映射、模型/effort 覆盖、forked execution 和 skill hooks。
+- 支持自定义 agents、自定义 skills、teammate agents、prompt commands、inspection sessions 和 companion responses。
+- Hooks 可围绕工具调用、worktree 生命周期和 installed skill 流程触发。
+- 会话、设置、任务、artifact、项目和版本存储模块，为 Electron 桌面端和开发宿主共用。
+- Local Bridge 与 Office Bridge 基础能力，为后续本地连接器、文档和桌面集成预留边界。
+
+**Artifacts 与代码智能**
+
+- 支持识别 HTML、SVG、Mermaid 和代码块 artifact，包括 `<artifact>` 包裹内容和 markdown fence。
+- Artifact registry 与 prompt augmentation 支撑聊天和设计界面的可预览输出。
+- Review / verification runner 可用于代码审查、计划验证和后台 detached checks。
+- Browser runtime 与 fetch/search tools 支持网页辅助调查和浏览器交互流程。
+
+**设计工作台**
+
+- 以对话为入口的设计流程，支持 discovery form、视觉方向选择、品牌上下文处理和 HTML artifact 生成。
+- 设计 skill bundles 覆盖 prototype、slide、dashboard、report、pricing page、landing page、mobile screen、social carousel、email、infographic、poster 和 motion concept。
+- 每个 skill bundle 可包含 `SKILL.md`、`template.html`、`layouts.md` 和 `checklist.md`，让生成从具体设计系统出发，而不是只靠一句 prompt。
+- 内置字体、OKLch 配色 token、布局节奏、anti-slop 约束和不同输出类型的设计姿态规则。
+- 支持项目绑定的设计草稿、版本历史、局部 patch、slider 提取、本地预览、缩略图，以及 HTML、ZIP、PPTX 方向的导出流程。
+
+**图像实验室**
+
+- 支持图像生成和图像编辑工作流，包括 prompt 推断、参考图处理、素材搜索关键词和工作流编排。
+- 支持 Prompt Library、本地 prompt 预设、批量辅助、尺寸推断、结果图库和本地图库持久化。
+- 支持 OpenAI image client，并根据 Provider 能力判断是否可从参考图推断 prompt。
+
+**桌面端与集成界面**
+
+- Electron 桌面壳承载聊天、设计工作台、图像流程、Provider 设置、项目导航和本地持久化。
+- VS Code 扩展模式仍保留，用于开发宿主验证和兼容性测试。
+- Word Add-in 原型用于文档上下文读取和写回实验。
+- 已为桌面自动化、浏览器桥接、scheduler/cron、本地连接器和未来 Windows 客户端打包预留平台边界。
 
 ## 独立项目声明
 

@@ -16,28 +16,61 @@ The project is open source so others can inspect it, learn from it, improve it, 
 
 **AI agent runtime**
 
-- Anthropic, OpenAI, OpenAI-compatible, and Claude CLI provider support
-- Persistent chat sessions with export and restore
-- MCP server integration
-- File, shell, browser, and background task tools
-- Built-in review and verification agents
-- Thinking, effort, fast mode, compact, and auto-compact controls
-- Hooks, custom agents, skills, and auto-memory
-- Early LSP and worktree support
+- Multi-provider chat runtime with Anthropic, OpenAI, OpenAI-compatible endpoints, and Claude CLI support.
+- Streaming conversations with persistent sessions, export/restore paths, transcript handling, and attachment normalization.
+- Built-in agent roles for verification, code review, codebase exploration, and general-purpose task execution.
+- Tool execution for workspace files, shell commands, browser-assisted flows, background tasks, and MCP tools.
+- Approval, activity tracking, thinking/effort controls, fast mode, compact, micro-compact, and auto-compact support.
+- Hooks, custom agents, skills, auto-memory extraction, user profile distillation, and swarm coordination where each parallel worker can run on a different configured provider alias.
+- Early LSP and worktree runtime support for diagnostics, code navigation, and isolated task workspaces.
 
-**Design and image workflows**
+**Agent tools, planning, and automation**
 
-- Chat-driven HTML artifact generation
-- Multiple design output types, including prototypes, slides, dashboards, reports, pricing pages, landing pages, mobile app mockups, and social carousels
-- Design direction presets, typography guidance, color rules, layout constraints, and anti-slop prompt rules
-- Image generation, editing, prompt library, reference image search, variants, and local result persistence
+- MCP configuration discovery from workspace files such as `.mcp.json` and `.cain-mcp.json`, including local command servers and remote HTTP servers.
+- Workspace tools for listing, reading, searching, writing, and patching files, plus guarded PowerShell execution and allowlisted read-only commands.
+- LSP tool operations for definitions, implementations, references, hover, symbols, diagnostics, and call hierarchy.
+- Plan mode that creates a workspace plan file, keeps implementation read-only until the plan is approved, and verifies plan execution afterward.
+- Structured task tools for creating, listing, updating, stopping, and inspecting foreground or background tasks.
+- Background review and verification workers for longer-running checks without blocking the main chat loop.
+- Multi-provider parallel execution through `spawn_agent`, `send_message`, and `wait_for_agents`, with up to 5 worker agents coordinated by the main conversation.
+- Cron-style scheduled tasks with session-only or durable workspace-backed schedules.
 
-**Desktop and integration work**
+**Context, memory, and extensibility**
 
-- Electron desktop shell for the main chat experience
-- Local Bridge runtime foundation
-- Word Add-in prototype for document context and write-back flows
-- Platform boundaries for future desktop automation, browser bridge, scheduler, and local connector work
+- Session memory, auto-memory extraction, user profile storage, context mentions, workspace status, and conversation-scoped runtime state.
+- Installed skills from user and project roots, including arguments, allowed tool mapping, model and effort overrides, forked execution, and skill-provided hooks.
+- Custom agents, custom skills, teammate agents, prompt commands, inspection sessions, and companion responses.
+- Hooks can run around tool usage, worktree lifecycle events, and installed skill flows.
+- Session, settings, task, artifact, project, and version storage modules used by the Electron desktop app and development host.
+- Local Bridge and Office Bridge foundations for future local connector, document, and desktop integration work.
+
+**Artifacts and code intelligence**
+
+- Artifact detection for HTML, SVG, Mermaid, and code blocks, including wrapped `<artifact>` payloads and markdown fence handling.
+- Artifact registry and prompt augmentation for previewable outputs in the chat and design surfaces.
+- Review and verification runners for code review, plan validation, and detached background checks.
+- Browser runtime and fetch/search tools for web-assisted investigation and browser interaction flows.
+
+**Design workbench**
+
+- Chat-first design flow with a discovery form, visual direction picker, brand context handling, and HTML artifact generation.
+- Design skill bundles for prototypes, slides, dashboards, reports, pricing pages, landing pages, mobile screens, social carousels, email layouts, infographics, posters, and motion concepts.
+- Skill bundles can include `SKILL.md`, `template.html`, `layouts.md`, and `checklist.md`, so generation starts from a concrete design system instead of a blank prompt.
+- Built-in craft rules for typography, OKLch color tokens, layout rhythm, anti-slop constraints, and output-type-specific design posture.
+- Project-bound design drafts, version history, patching, slider extraction, local previews, thumbnails, and exports to HTML, ZIP, and PPTX-oriented workflows.
+
+**Image lab**
+
+- Image generation and edit workflows with prompt inference, reference image handling, material search keywords, and workflow orchestration.
+- Prompt library storage, built-in prompt presets, batching helpers, sizing logic, result gallery, and local gallery persistence.
+- OpenAI image client support plus provider-aware routing for models that can infer prompts from reference images.
+
+**Desktop and integration surfaces**
+
+- Electron desktop shell for chat, design workbench, image workflows, provider settings, project navigation, and local persistence.
+- VS Code extension mode remains available for development-host validation and compatibility testing.
+- Word Add-in prototype for document context and write-back experiments.
+- Platform boundaries are reserved for desktop automation, browser bridge, scheduler/cron, local connectors, and future Windows client packaging.
 
 ## Independent Project Notice
 
