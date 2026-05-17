@@ -1,5 +1,5 @@
 import { execFile } from "node:child_process";
-import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, realpath, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { promisify } from "node:util";
@@ -6858,15 +6858,19 @@ Freeze skill body.
 
     expect(statePayload?.workspaceInfo).toMatchObject({
       selectedRoot: repoRoot,
-      effectiveRoot: worktreeRoot,
       kind: "active_worktree_session",
       activeWorktree: {
-        worktreePath: worktreeRoot,
         worktreeName: "feature/demo",
         worktreeBranch: "worktree-feature+demo",
         originalWorkspaceRoot: repoRoot,
       },
     });
+    expect(path.normalize(await realpath(statePayload?.workspaceInfo.effectiveRoot ?? ""))).toBe(
+      path.normalize(await realpath(worktreeRoot)),
+    );
+    expect(path.normalize(await realpath(statePayload?.workspaceInfo.activeWorktree?.worktreePath ?? ""))).toBe(
+      path.normalize(await realpath(worktreeRoot)),
+    );
     expect(path.normalize(statePayload?.workspaceInfo.gitRoot ?? "")).toBe(path.normalize(repoRoot));
     expect(statePayload?.workspaceInfo.detail).toContain("feature/demo");
   });

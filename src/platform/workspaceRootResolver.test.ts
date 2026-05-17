@@ -23,6 +23,11 @@ async function initGitRepo(repoRoot: string): Promise<void> {
   });
 }
 
+async function expectSamePath(actual: string | null | undefined, expected: string): Promise<void> {
+  expect(actual).toBeTruthy();
+  expect(path.normalize(await fs.realpath(actual!))).toBe(path.normalize(await fs.realpath(expected)));
+}
+
 afterEach(async () => {
   await Promise.all(
     tempDirs.splice(0).map(dir => fs.rm(dir, { recursive: true, force: true })),
@@ -43,9 +48,9 @@ describe("resolveWorkspaceRoot", () => {
     expect(resolution).toMatchObject({
       selectedRoot: nestedFolder,
       effectiveRoot: nestedFolder,
-      gitRoot: repoRoot,
       kind: "inside_git_repo",
     });
+    await expectSamePath(resolution.gitRoot, repoRoot);
   });
 
   it("auto-descends into a unique nested git repo when the selected folder is a parent workspace", async () => {
