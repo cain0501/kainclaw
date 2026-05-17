@@ -2941,6 +2941,7 @@ function localizeSecondarySurfaces() {
   [
     document.getElementById('page-onboarding'),
     document.getElementById('page-settings'),
+    document.getElementById('page-midtai'),
     document.getElementById('page-design'),
     document.getElementById('product-drawer-overlay'),
     document.getElementById('chat-image-editor-overlay'),
@@ -2967,6 +2968,7 @@ function ensureSecondarySurfaceLocalizationObserver() {
   [
     document.getElementById('page-onboarding'),
     document.getElementById('page-settings'),
+    document.getElementById('page-midtai'),
     document.getElementById('page-design'),
     document.getElementById('product-drawer-overlay'),
     document.getElementById('chat-image-editor-overlay'),
@@ -5382,12 +5384,21 @@ function renderMidtaiDesignWorks() {
 
 function formatMidtaiRelativeTime(ts) {
   const value = Number(ts || 0);
-  if (!Number.isFinite(value) || value <= 0) return '最近';
+  if (!Number.isFinite(value) || value <= 0) return isEnglishUi() ? 'Recently' : '最近';
   const diff = Date.now() - value;
-  if (diff < 60_000) return '刚刚';
-  if (diff < 3_600_000) return `${Math.max(1, Math.floor(diff / 60_000))} 分钟前`;
-  if (diff < 86_400_000) return `${Math.max(1, Math.floor(diff / 3_600_000))} 小时前`;
-  if (diff < 7 * 86_400_000) return `${Math.max(1, Math.floor(diff / 86_400_000))} 天前`;
+  if (diff < 60_000) return isEnglishUi() ? 'Just now' : '刚刚';
+  if (diff < 3_600_000) {
+    const minutes = Math.max(1, Math.floor(diff / 60_000));
+    return isEnglishUi() ? `${minutes} min ago` : `${minutes} 分钟前`;
+  }
+  if (diff < 86_400_000) {
+    const hours = Math.max(1, Math.floor(diff / 3_600_000));
+    return isEnglishUi() ? `${hours} hr ago` : `${hours} 小时前`;
+  }
+  if (diff < 7 * 86_400_000) {
+    const days = Math.max(1, Math.floor(diff / 86_400_000));
+    return isEnglishUi() ? `${days} day${days === 1 ? '' : 's'} ago` : `${days} 天前`;
+  }
   const date = new Date(value);
   return `${date.getMonth() + 1}/${date.getDate()}`;
 }
@@ -5410,35 +5421,37 @@ function renderMidtaiRecentWorks() {
   const entries = [];
   if (midtaiState.transientWork) {
     const isActive = !midtaiState.currentDesignProjectId;
+    const transientLabel = String(midtaiState.transientWork.label || '').trim() || (isEnglishUi() ? 'New work - Untitled' : '新作品·未命名');
     entries.push(`
       <button class="midtai-work-item transient${isActive ? ' active' : ''}" type="button" data-transient-work="true">
-        <div class="midtai-work-item-title">${escapeHtml(midtaiState.transientWork.label)}</div>
+        <div class="midtai-work-item-title">${escapeHtml(translateSurfaceText(transientLabel))}</div>
         <div class="midtai-work-item-meta">
-          <span class="midtai-work-pill">未生成</span>
-          <span>临时工作态</span>
+          <span class="midtai-work-pill">${isEnglishUi() ? 'Not generated' : '未生成'}</span>
+          <span>${isEnglishUi() ? 'Temporary state' : '临时工作态'}</span>
         </div>
-        <div class="midtai-work-state">不会写入作品库；生成第一版后才升级为正式作品。</div>
+        <div class="midtai-work-state">${isEnglishUi() ? 'This is not written to the library. Generate the first version to convert it into a formal work.' : '不会写入作品库；生成第一版后才升级为正式作品。'}</div>
       </button>
     `);
   }
 
   if (!items.length && entries.length === 0) {
-    list.innerHTML = `<div class="midtai-work-empty">还没有正式设计作品。生成第一版后，它会出现在这里。</div>`;
+    list.innerHTML = `<div class="midtai-work-empty">${isEnglishUi() ? 'No formal design works yet. They will appear here after the first version is generated.' : '还没有正式设计作品。生成第一版后，它会出现在这里。'}</div>`;
+    scheduleSecondarySurfaceLocalization();
     return;
   }
 
   entries.push(...items.map(item => {
     const projectId = String(item.projectId || item.id || '').trim();
-    const title = escapeHtml(String(item.name || item.title || '未命名作品'));
+    const title = escapeHtml(String(item.name || item.title || (isEnglishUi() ? 'Untitled work' : '未命名作品')));
     const active = midtaiState.currentDesignProjectId && projectId === midtaiState.currentDesignProjectId;
-    const versionLabel = item.version ? escapeHtml(String(item.version)) : '作品';
+    const versionLabel = item.version ? escapeHtml(String(item.version)) : (isEnglishUi() ? 'Work' : '作品');
     const stateLabel = item.isDraft ? (isEnglishUi() ? 'Draft work' : '草稿') : versionLabel;
     const timeLabel = formatMidtaiRelativeTime(item.updatedAt || item.createdAt);
     return `
       <button class="midtai-work-item${active ? ' active' : ''}" type="button" data-project-id="${escapeHtml(projectId)}">
         <div class="midtai-work-item-title">${title}</div>
         <div class="midtai-work-item-meta">
-          <span class="midtai-work-pill">${active ? '当前作品' : stateLabel}</span>
+          <span class="midtai-work-pill">${active ? (isEnglishUi() ? 'Current work' : '当前作品') : stateLabel}</span>
           <span>${escapeHtml(timeLabel)}</span>
         </div>
         ${item.isDraft ? `<div class="midtai-work-state">${isEnglishUi() ? 'No durable version yet. Generate the first version to formalize it.' : '还没有正式版本。生成第一版后会升级为正式作品。'}</div>` : ''}
@@ -5463,6 +5476,7 @@ function renderMidtaiRecentWorks() {
       showDesignView('design-chat');
     });
   });
+  scheduleSecondarySurfaceLocalization();
 }
 
 function setMidtaiLibrarySubtab(subtab) {
@@ -5477,34 +5491,35 @@ function renderShellContext() {
   const container = document.getElementById('midtai-shell-context');
   if (!container) return;
   const boardLabel = midtaiState.shellTab === 'library'
-    ? '作品库'
+    ? (isEnglishUi() ? 'Library' : '作品库')
     : midtaiState.type === 'design'
-      ? '设计'
-      : '图像';
-  const currentProject = String(midtaiState.currentProject || '').trim() || '（无作品）';
+      ? (isEnglishUi() ? 'Design' : '设计')
+      : (isEnglishUi() ? 'Images' : '图像');
+  const currentProject = String(midtaiState.currentProject || '').trim() || (isEnglishUi() ? '(No work)' : '（无作品）');
   const currentGoal = midtaiState.replaceCtx
-    ? `${midtaiState.replaceCtx.project || '当前设计'} · ${midtaiState.replaceCtx.element || '当前元素'}`
-    : (midtaiState.currentDesignProjectId ? currentProject : (midtaiState.type === 'img' ? '图片素材' : '未选择作品'));
+    ? `${midtaiState.replaceCtx.project || (isEnglishUi() ? 'Current design' : '当前设计')} · ${midtaiState.replaceCtx.element || (isEnglishUi() ? 'Current element' : '当前元素')}`
+    : (midtaiState.currentDesignProjectId ? currentProject : (midtaiState.type === 'img' ? (isEnglishUi() ? 'Image assets' : '图片素材') : (isEnglishUi() ? 'No work selected' : '未选择作品')));
   container.innerHTML = [
-    `<div class="midtai-shell-option">当前作品：${escapeHtml(currentProject)}</div>`,
-    `<div class="midtai-shell-option">当前目标：${escapeHtml(String(currentGoal))}</div>`,
+    `<div class="midtai-shell-option">${escapeHtml(isEnglishUi() ? 'Current work' : '当前作品')}：${escapeHtml(currentProject)}</div>`,
+    `<div class="midtai-shell-option">${escapeHtml(isEnglishUi() ? 'Current target' : '当前目标')}：${escapeHtml(String(currentGoal))}</div>`,
   ].join('');
+  scheduleSecondarySurfaceLocalization();
 }
 
 const BOARD_META = {
   img: {
-    headline: '图像生成与素材管理',
-    goal: () => '主对象：图片素材',
+    headline: () => isEnglishUi() ? 'Image generation and asset management' : '图像生成与素材管理',
+    goal: () => isEnglishUi() ? 'Primary object: image assets' : '主对象：图片素材',
   },
   design: {
-    headline: '设计作品工作台',
+    headline: () => isEnglishUi() ? 'Design workbench' : '设计作品工作台',
     goal: () => String(midtaiState.currentProject || '').trim()
-      ? `当前作品：${midtaiState.currentProject}`
-      : '未选择作品',
+      ? `${isEnglishUi() ? 'Current work' : '当前作品'}：${midtaiState.currentProject}`
+      : (isEnglishUi() ? 'No work selected' : '未选择作品'),
   },
   library: {
-    headline: '作品库 / 素材库',
-    goal: () => '全量浏览与搜索',
+    headline: () => isEnglishUi() ? 'Works / asset library' : '作品库 / 素材库',
+    goal: () => isEnglishUi() ? 'Browse and search everything' : '全量浏览与搜索',
   },
 };
 
@@ -5534,12 +5549,13 @@ function showMidtaiTab(boardName) {
   const headlineEl = document.getElementById('midtai-topbar-headline');
   const goalEl = document.getElementById('midtai-goal-text');
   if (headlineEl) {
-    headlineEl.textContent = meta?.headline || key;
+    headlineEl.textContent = typeof meta?.headline === 'function' ? meta.headline() : (meta?.headline || key);
   }
   if (goalEl) {
     goalEl.textContent = typeof meta?.goal === 'function' ? meta.goal() : '';
   }
   renderShellContext();
+  scheduleSecondarySurfaceLocalization();
 }
 
 function renderMidtaiLibraryDesignPanel() {
