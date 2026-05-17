@@ -2636,7 +2636,7 @@ export function getSidebarHtml(webviewNonce: string, duckSpriteUri: string, webv
           '    <div class="welcome-inner">' +
           '      <div class="welcome-kicker">' +
           '        <strong>WELCOME</strong>' +
-          '        <span>像 Claude Code 一样开聊，但权限和配置都在你手里</span>' +
+          '        <span>Start coding with an agent while keeping permissions and configuration under your control</span>' +
           "      </div>" +
           '      <div class="welcome-title">Welcome to <span>KainClaw</span></div>' +
           '      <div class="welcome-note">这里已经支持读写工作区、差异确认、浏览器会话、网页抓取和 MCP 工具接入。</div>' +
