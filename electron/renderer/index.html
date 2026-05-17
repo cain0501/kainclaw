@@ -6799,7 +6799,7 @@ function showOnboardingPage(providerId = 'anthropic') {
 
 // Provider presets
 const PROVIDER_PRESETS = {
-  anthropic:   { type: 'anthropic',        alias: 'Anthropic Claude',    model: 'claude-sonnet-4-6',             baseUrl: '',                                                          needsKey: true,  needsUrl: false, showUrl: true, urlPlaceholder: 'https://api.anthropic.com 或 https://www.openclaudecode.cn' },
+  anthropic:   { type: 'anthropic',        alias: 'Anthropic Claude',    model: 'claude-sonnet-4-6',             baseUrl: '',                                                          needsKey: true,  needsUrl: false, showUrl: true, urlPlaceholder: 'https://api.anthropic.com 或第三方中转站地址' },
   openai:      { type: 'openai',           alias: 'OpenAI',              model: 'gpt-4o',                        baseUrl: '',                                                          needsKey: true,  needsUrl: false },
   deepseek:    { type: 'openai-compatible',alias: 'DeepSeek',            model: 'deepseek-chat',                 baseUrl: 'https://api.deepseek.com/v1',                               needsKey: true,  needsUrl: true  },
   grok:        { type: 'openai-compatible',alias: 'Grok / xAI',         model: 'grok-3',                        baseUrl: 'https://api.x.ai/v1',                                       needsKey: true,  needsUrl: true  },
@@ -12736,7 +12736,7 @@ function renderSettings(data) {
         <div style="display:flex;flex-direction:column;gap:10px;max-width:560px">
           <div>
             <div style="font-size:12px;color:#71717a;margin-bottom:5px">接口地址</div>
-            <input id="settings-image-baseurl" value="${escapeHtml(imageFormSource?.baseUrl || '')}" placeholder="https://www.openclaudecode.cn/v1" style="width:100%;border:1px solid #eadfd2;border-radius:10px;padding:9px 12px;font-size:12px;background:#fff;color:#18181b">
+            <input id="settings-image-baseurl" value="${escapeHtml(imageFormSource?.baseUrl || '')}" placeholder="第三方中转站地址，例如 https://proxy.example.com/v1" style="width:100%;border:1px solid #eadfd2;border-radius:10px;padding:9px 12px;font-size:12px;background:#fff;color:#18181b">
           </div>
           <div>
             <div style="font-size:12px;color:#71717a;margin-bottom:5px">图像模型</div>
