@@ -15,10 +15,16 @@ dist-win/
 
 # Local agent/runtime state
 .claude/
+.beads/
+.kiro/
 .omx/
 .tmp/
 .cain-artifacts/
 .codex-parallel/
+.design-chat-runs/
+.design-chat-traces/
+.playwright-mcp/
+.obsidian/
 
 # Editor-local files
 .vscode/
@@ -26,6 +32,14 @@ dev-host.code-workspace
 
 # Recovery / scratch docs
 .kiro/recovery-draft-*.md
+.kiro/audits/
+
+# Internal agent/project handoff docs
+AGENTS.md
+CLAUDE.md
+CLAUDE_HANDOFF.md
+RENAME_CAIN_TO_KIANCLAW.md
+SKILLS_GUIDE.md
 
 # OS / logs
 *.log
@@ -36,3 +50,4 @@ Thumbs.db
 .dolt/
 *.db
 .beads-credential-key
+.gstack/
