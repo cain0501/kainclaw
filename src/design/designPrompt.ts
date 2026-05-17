@@ -246,39 +246,39 @@ const DEFAULT_CRAFT_RULES = {
 
 Always apply. No exceptions.
 
-- No blue/purple gradient backgrounds 鈥?they are the universal AI mediocrity signal.
-- No decorative emoji in headings, labels, or body text (鉁?鉂?馃殌 馃挕 and similar).
-- No left-border accent cards as the primary layout pattern 鈥?use whitespace or full borders.
-- No fabricated statistics or fake numerical data 鈥?use '鈥? or grey placeholder blocks instead.
+- No blue/purple gradient backgrounds - they are the universal AI mediocrity signal.
+- No decorative emoji in headings, labels, or body text.
+- No left-border accent cards as the primary layout pattern - use whitespace or full borders.
+- No fabricated statistics or fake numerical data - use em dashes or grey placeholder blocks instead.
 - Do not use Inter or generic sans-serif as a display/headline font when a more characterful choice is available.
 - No excessive glassmorphism blur backgrounds.
 - No AI-illustrated human faces or generic stock-photo descriptions.
 - Every design decision must have a reason. If it can't be justified, remove it.
-- Chinese product copy: headings 鈮?16 characters, no buzzword stacking (鏅鸿兘/璧嬭兘/鐢熸€?.
-- No blue鈫抍yan two-stop trust gradients (linear-gradient with blue and cyan stops).
+- Chinese product copy: headings <= 16 characters, no buzzword stacking.
+- No blue/cyan two-stop trust gradients (linear-gradient with blue and cyan stops).
 - No purple/indigo solid fills as primary button or badge color.`,
   "typography.md": `# Typography Rules
 
 ## Type scale
-Use a multiplicative scale (1.2 or 1.25). Cap at 6鈥? sizes per artifact.
+Use a multiplicative scale (1.2 or 1.25). Cap at 6-8 sizes per artifact.
 
 | Role | Range |
 |---|---|
-| Display | 48鈥?2px |
-| H1 | 32鈥?8px |
-| H2 | 24鈥?2px |
-| Body | 15鈥?8px |
-| Small | 13鈥?4px |
-| Caption | 11鈥?2px |
+| Display | 48-72px |
+| H1 | 32-48px |
+| H2 | 24-32px |
+| Body | 15-18px |
+| Small | 13-14px |
+| Caption | 11-12px |
 
 ## Line height
-- Display/H1 (鈮?2px): 1.0鈥?.2 (tight)
-- Body (15鈥?8px): 1.5鈥?.6
-- Small (鈮?4px): 1.5
+- Display/H1 (32px+): 1.0-1.2 (tight)
+- Body (15-18px): 1.5-1.6
+- Small (11-14px): 1.5
 
 ## Letter-spacing
-- Body text (14鈥?8px): 0 (default)
-- Small text (11鈥?3px): 0.01em to 0.02em
+- Body text (14-18px): 0 (default)
+- Small text (11-13px): 0.01em to 0.02em
 - Display/H1 ALL CAPS: 0.04em to 0.08em
 - Never negative letter-spacing on body text.
 
@@ -290,9 +290,9 @@ Use a multiplicative scale (1.2 or 1.25). Cap at 6鈥? sizes per artifact.
   "color.md": `# Color Rules
 
 ## OKLch usage
-- Always define palette in OKLch in :root 鈥?never raw hex in component styles.
+- Always define palette in OKLch in :root - never raw hex in component styles.
 - Minimum 6 tokens: bg, surface, fg, muted, border, accent.
-- Contrast: fg on bg 鈮?7:1 (WCAG AA+). muted on bg 鈮?4.5:1.
+- Contrast: fg on bg >= 7:1 (WCAG AA+). muted on bg >= 4.5:1.
 
 ## Accent discipline
 - One accent color per design. Used for primary CTA and key data only.
@@ -308,7 +308,7 @@ Use a multiplicative scale (1.2 or 1.25). Cap at 6鈥? sizes per artifact.
 ## Spacing
 - Use 8px base unit. All spacing values must be multiples of 4px (4, 8, 12, 16, 24, 32, 48, 64).
 - Section padding: minimum 48px vertical, 24px horizontal.
-- Card internal padding: 16鈥?4px.
+- Card internal padding: 16-24px.
 
 ## Grid
 - Content max-width: 1200px for desktop, 760px for editorial/reading.
