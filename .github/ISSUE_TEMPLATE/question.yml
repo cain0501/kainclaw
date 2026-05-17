@@ -1,0 +1,47 @@
+name: Question / 问题咨询
+description: Ask a usage, setup, or project direction question. / 询问使用、安装或项目方向问题。
+title: "[Question]: "
+labels: ["question", "needs-triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Use this template for questions that are not bugs, feature requests, or security vulnerabilities.
+
+        如果不是 bug、功能请求或安全漏洞，可以使用这个模板。
+  - type: checkboxes
+    id: checklist
+    attributes:
+      label: Pre-check / 提交前检查
+      options:
+        - label: I searched existing issues and documentation first. / 我已先搜索现有 issue 和文档。
+          required: true
+        - label: I am not posting secrets, tokens, API keys, or private account information. / 我没有发布 secret、token、API key 或私人账号信息。
+          required: true
+  - type: textarea
+    id: question
+    attributes:
+      label: Question / 问题
+      description: What do you want to know? / 你想了解什么？
+    validations:
+      required: true
+  - type: dropdown
+    id: topic
+    attributes:
+      label: Topic / 主题
+      options:
+        - Installation or setup / 安装或配置
+        - Provider configuration / Provider 配置
+        - MCP configuration / MCP 配置
+        - Desktop app usage / 桌面应用使用
+        - Design or image workflow / 设计或图像工作流
+        - Development or contribution / 开发或贡献
+        - Project roadmap / 项目路线
+        - Other / 其他
+    validations:
+      required: true
+  - type: textarea
+    id: context
+    attributes:
+      label: Context / 背景
+      description: Include relevant environment details if needed. / 如有必要，请提供相关环境信息。

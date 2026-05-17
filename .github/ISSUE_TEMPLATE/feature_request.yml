@@ -1,0 +1,58 @@
+name: Feature request / 功能请求
+description: Suggest an improvement or new capability. / 建议改进或新增能力。
+title: "[Feature]: "
+labels: ["enhancement", "needs-triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Please describe the user problem first. Implementation ideas are welcome, but the problem matters most.
+
+        请优先描述用户问题。欢迎提供实现想法，但最重要的是说明要解决什么问题。
+  - type: checkboxes
+    id: checklist
+    attributes:
+      label: Pre-check / 提交前检查
+      options:
+        - label: I searched existing issues and did not find a duplicate. / 我已搜索现有 issue，没有发现重复请求。
+          required: true
+        - label: This is not a security vulnerability. / 这不是安全漏洞。
+          required: true
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem / 问题
+      description: What user problem should this solve? / 这个功能要解决什么用户问题？
+      placeholder: As a user, I want to ... because ...
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed solution / 建议方案
+      description: What should KainClaw do? / 你希望 KainClaw 怎么做？
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered / 考虑过的替代方案
+      description: Are there existing workarounds or simpler options? / 是否有现有绕过方式或更简单方案？
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area / 影响范围
+      options:
+        - Agent runtime / Agent 运行时
+        - Design or image workflow / 设计或图像工作流
+        - Electron desktop app / Electron 桌面应用
+        - VS Code extension mode / VS Code 扩展模式
+        - MCP or provider integration / MCP 或 Provider 集成
+        - Documentation / 文档
+        - Other / 其他
+    validations:
+      required: true
+  - type: textarea
+    id: context
+    attributes:
+      label: Additional context / 其他信息

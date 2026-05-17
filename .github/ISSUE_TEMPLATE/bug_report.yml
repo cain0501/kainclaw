@@ -1,0 +1,84 @@
+name: Bug report / 缺陷报告
+description: Report something that is broken. / 报告无法正常工作的行为。
+title: "[Bug]: "
+labels: ["bug", "needs-triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting a bug. Please include enough detail for maintainers to reproduce it.
+
+        感谢你报告问题。请尽量提供足够信息，方便维护者复现。
+  - type: checkboxes
+    id: checklist
+    attributes:
+      label: Pre-check / 提交前检查
+      options:
+        - label: I searched existing issues and did not find a duplicate. / 我已搜索现有 issue，没有发现重复问题。
+          required: true
+        - label: I removed secrets, tokens, API keys, and private local paths from logs/screenshots. / 我已从日志或截图中移除 secret、token、API key 和私有本地路径。
+          required: true
+  - type: textarea
+    id: summary
+    attributes:
+      label: Summary / 问题概述
+      description: What happened? / 发生了什么？
+      placeholder: Describe the bug clearly. / 清楚描述这个问题。
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce / 复现步骤
+      description: List the exact steps. / 写出明确的复现步骤。
+      placeholder: |
+        1. Open ...
+        2. Click ...
+        3. See ...
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior / 预期行为
+      description: What did you expect to happen? / 你预期应该发生什么？
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behavior / 实际行为
+      description: What actually happened? / 实际发生了什么？
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Version or commit / 版本或提交
+      placeholder: v0.0.1, commit hash, or branch name
+  - type: dropdown
+    id: runtime
+    attributes:
+      label: Runtime / 运行方式
+      options:
+        - Electron desktop app / Electron 桌面应用
+        - VS Code extension development host / VS Code 扩展开发宿主
+        - Tests or build only / 仅测试或构建
+        - Other / 其他
+    validations:
+      required: true
+  - type: input
+    id: os
+    attributes:
+      label: Operating system / 操作系统
+      placeholder: Windows 11, Windows 10, macOS, Linux
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs or screenshots / 日志或截图
+      description: Paste relevant logs after removing secrets. / 粘贴相关日志前请先移除敏感信息。
+      render: text
+  - type: textarea
+    id: extra
+    attributes:
+      label: Additional context / 其他信息
