@@ -1,176 +1,172 @@
 # KainClaw
 
-KainClaw 当前已经落地了 `Electron` 内测壳，同时保留 `VS Code` 形态作为本地验证环境。
+KainClaw is an early-stage AI coding and design assistant that runs as an Electron desktop app, with a VS Code extension mode kept for local development and validation.
 
-需要明确的项目定位是：
+The project is still in active development. Core workflows are usable, but some integrations and desktop surfaces are incomplete.
 
-- 当前可打包、可运行的是 `Electron` 内测壳
-- `vscode-extension/` 仍然承担核心 runtime / service / adapter 的本地验证职责
-- 最终目标仍然是更完整的 Windows 客户端，而不是只停留在 VS Code 扩展形态
+## Features
 
-当前已经稳定存在的核心能力包括：
+**AI agent runtime**
 
-- Provider 主链：Anthropic、OpenAI、OpenAI-compatible、Claude CLI
-- 会话持久化 / 导出 / 恢复
-- MCP runtime
-- 文件工具 / 命令工具 / 浏览器工具
-- Tasks / background command
-- built-in Review / Verification
-- Thinking / Effort / Fast mode
-- Compact / Auto-compact
-- Auto-Memory
-- LSP phase 1 + 部分 phase 2
-- Worktree phase 1
-- Hooks 执行链
-- Custom Agents registry
-- Skills registry + Auto skill generation
-- User modeling
+- Anthropic, OpenAI, OpenAI-compatible, and Claude CLI provider support
+- Persistent chat sessions with export and restore
+- MCP server integration
+- File, shell, browser, and background task tools
+- Built-in review and verification agents
+- Thinking, effort, fast mode, compact, and auto-compact controls
+- Hooks, custom agents, skills, and auto-memory
+- Early LSP and worktree support
 
-当前已落地的扩展能力包括：
+**Design and image workflows**
 
-- Electron 聊天主链
-- 图像生成 / 图像编辑聊天工作流
-- Prompt Library 抽屉
-- 参考图搜索抽屉
-- Local Bridge 最小可运行实现
-- Word Add-in 只读 MVP 主链
+- Chat-driven HTML artifact generation
+- Multiple design output types, including prototypes, slides, dashboards, reports, pricing pages, landing pages, mobile app mockups, and social carousels
+- Design direction presets, typography guidance, color rules, layout constraints, and anti-slop prompt rules
+- Image generation, editing, prompt library, reference image search, variants, and local result persistence
 
-## 启动
+**Desktop and integration work**
 
-### 1. 安装依赖
+- Electron desktop shell for the main chat experience
+- Local Bridge runtime foundation
+- Word Add-in prototype for document context and write-back flows
+- Platform boundaries for future desktop automation, browser bridge, scheduler, and local connector work
 
-```powershell
+## Status
+
+KainClaw is not a polished production client yet. The Electron app is the recommended runtime for testing; the VS Code extension shape remains useful for local development.
+
+Areas still under active development include:
+
+- Tool runtime completeness
+- Review and verification lifecycle
+- Compact, transcript, and token lifecycle
+- LSP and worktree depth
+- Browser bridge and desktop automation wiring
+- Office integration beyond the current Word prototype
+- Desktop UI for skills, agents, hooks, and settings
+- Test coverage and release packaging
+
+## Requirements
+
+- Node.js 18+
+- npm
+- Windows for the packaged Electron desktop build
+- VS Code if you want to run the extension development host
+
+## Install
+
+```bash
 npm install
 ```
 
-### 2. 运行基础校验
+## Validate
 
-```powershell
+```bash
 npm test
 npm run check
 npm run build
+```
+
+Run the Electron build when desktop behavior changes:
+
+```bash
 npm run build:electron
 ```
 
-### 3. 启动 Electron 内测壳
+## Run
 
-```powershell
+Start the Electron desktop app:
+
+```bash
 npm run start:electron
 ```
 
-### 4. 打包 Windows 内测安装包
+Build a Windows installer:
 
-```powershell
+```bash
 npm run dist:win
 ```
 
-### 5. 启动 VS Code 本地验证环境
+Run the VS Code extension development host:
 
-1. 用 VS Code 打开 `vscode-extension` 目录
-2. 按 `F5` 启动 Extension Development Host
+1. Open this repository in VS Code.
+2. Press `F5`.
 
-## Provider 配置
+## Provider Configuration
 
-当前推荐优先通过应用内设置页配置 Provider。为了兼容旧工作区，仍保留 `.env` fallback。
+The app supports provider configuration through the settings UI. Environment variables are also supported for local development and compatibility with existing workspaces.
 
-常见环境变量：
+Common variables:
 
-- OpenAI / OpenAI-compatible
-  - `OPENAI_API_KEY`
-  - `OPENAI_MODEL`
-  - `OPENAI_BASE_URL`
-- Anthropic
-  - `ANTHROPIC_AUTH_TOKEN` 或 `ANTHROPIC_API_KEY`
-  - `ANTHROPIC_MODEL`
-  - `ANTHROPIC_BASE_URL` 或 `CLAUDE_BASE_URL`
-- 通用兜底
-  - `LLM_PROVIDER`
-  - `LLM_API_KEY`
-  - `LLM_MODEL`
-  - `LLM_BASE_URL`
+| Provider | Variables |
+| --- | --- |
+| Anthropic | `ANTHROPIC_API_KEY`, `ANTHROPIC_AUTH_TOKEN`, `ANTHROPIC_MODEL`, `ANTHROPIC_BASE_URL` |
+| OpenAI / compatible | `OPENAI_API_KEY`, `OPENAI_MODEL`, `OPENAI_BASE_URL` |
+| Generic fallback | `LLM_PROVIDER`, `LLM_API_KEY`, `LLM_MODEL`, `LLM_BASE_URL` |
 
-不要把真实账号、API Key、token 或本地私有配置提交到 Git 仓库。
+Do not commit real account credentials, API keys, tokens, or private local configuration.
 
-## MCP 配置
+## MCP Configuration
 
-项目会向上查找：
+KainClaw looks for MCP configuration in workspace files such as:
 
 - `.mcp.json`
 - `.cain-mcp.json`
 
-支持两种顶层写法：
+Both `mcpServers` and `servers` top-level shapes are supported.
 
-- `mcpServers`
-- `servers`
+Example:
 
-支持两种传输方式：
+```json
+{
+  "mcpServers": {
+    "my-server": {
+      "command": "npx",
+      "args": ["-y", "my-mcp-package"]
+    }
+  }
+}
+```
 
-- 本地 stdio：`command + args`
-- 远端 HTTP：`url + headers`
+Remote HTTP servers can be configured with `url` and `headers`.
 
-最简单的接入方式：
+## Development Notes
 
-1. 复制示例配置为 `.mcp.json`
-2. 补齐 token / headers / project ref
-3. 重开侧边栏或重新发送一条消息
+The desktop shell should stay thin. New product logic should usually live in reusable modules under `src/`, with Electron wiring used for desktop UI, IPC, permissions, and host integration.
 
-## 当前桌面壳说明
+High-risk areas to edit carefully:
 
-Electron 当前已经是可运行的内测壳，但它还不是完整正式客户端。当前真实可见面主要是：
-
-- 聊天页
-- 会话列表
-- 设置页
-- Prompt Library 抽屉
-- 参考图搜索抽屉
-- 图片编辑弹层
-
-当前桌面壳已经可以作为内部验证与内测分发载体，但后续新能力仍然应该先落到 `src/`，而不是继续堆进：
-
+- `src/extension.ts`
+- `src/webviewHtml.ts`
 - `electron/ElectronChatPanel.ts`
 - `electron/renderer/index.html`
+- `src/license/licenseManager.ts`
 
-## 图像链路说明
+Run the relevant build and tests after changing these paths.
 
-当前图像能力已经迁到聊天主链，不再把旧 `Image Lab` 页面当作产品主入口。
+## Contributing
 
-当前已支持：
+Contributions are welcome while the project is stabilizing.
 
-- 图像模型多配置 + 当前使用
-- Prompt Library
-- 批量生成结果批次展示
-- 变体追加为新批次
-- 结果本地持久化恢复
-- 单张删除
-- 参考图搜索
-- 双语可见的图片反推提示词
+Before opening a pull request:
 
-## Verification / Markdown 渲染说明
+1. Keep the change focused.
+2. Reuse existing runtime and host boundaries where possible.
+3. Avoid adding new dependencies unless the need is clear.
+4. Run:
 
-当前 Electron 聊天渲染已经按 Claude Code 源码逻辑收口到块级 Markdown 解析路径：
+```bash
+npm test
+npm run check
+npm run build
+```
 
-- 普通消息 Markdown 使用 `marked.lexer()` 先解析为 block token，再由 Electron renderer 做安全 HTML 输出。
-- Electron 构建会把 `node_modules/marked/lib/marked.umd.js` 复制到 `dist-electron/electron/renderer/vendor/marked.umd.js`。
-- Electron renderer 仍保持 `sandbox: true`、`nodeIntegration: false`，不通过放开 Node 权限加载 Markdown 依赖。
-- `/verify` 报告使用结构化专用渲染：`Command run` 和 `Output observed` 一律作为纯文本代码块展示，不再交给 Markdown 二次解析。
-- 因此 README、测试输出或命令输出中包含三反引号代码块时，不应再破坏 `/verify` 报告结构。
+For Electron renderer changes, also run:
 
-对应 Claude 源码参考：
+```bash
+npm run build:electron
+```
 
-- `E:\claudecodejingiang\src\components\Markdown.tsx`
-- `E:\claudecodejingiang\src\utils\markdown.ts`
+## License
 
-## 当前仍在推进的方向
-
-- `tasks / toolRuntime` 更深 parity
-- Verification / Review 更完整生命周期
-- Compact / transcript / token 管理更深收口
-- LSP / Worktree 更深 parity
-- `src/extension.ts` 宿主减债继续下沉
-- Browser Bridge / Computer Use / Scheduler runtime 真正接线
-- 完整 Office 业务链
-- 完整 desktop Skills / Agents / Hooks UI
-
-## 仓库边界
-
-这个仓库当前只同步 `E:\claudecodejingiang\vscode-extension` 目录，不同步根目录的参考源码、构建产物、本地运行状态和账号配置。
+MIT. See `LICENSE` once the repository license file is added.

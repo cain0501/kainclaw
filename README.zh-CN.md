@@ -1,0 +1,172 @@
+# KainClaw
+
+KainClaw 是一个早期阶段的 AI 编程与设计助手。当前主要以 Electron 桌面应用运行，同时保留 VS Code 扩展形态用于本地开发和验证。
+
+项目仍在快速开发中。核心流程已经可用，但部分集成能力和桌面端界面仍不完整。
+
+## 功能
+
+**AI Agent 运行时**
+
+- 支持 Anthropic、OpenAI、OpenAI 兼容接口和 Claude CLI Provider
+- 会话持久化、导出和恢复
+- MCP 服务集成
+- 文件、Shell、浏览器和后台任务工具
+- 内置 Review 和 Verification agent
+- Thinking、Effort、Fast mode、Compact 和 Auto-compact 控制
+- Hooks、自定义 agents、skills 和 auto-memory
+- 早期 LSP 与 worktree 支持
+
+**设计与图像工作流**
+
+- 通过对话生成 HTML artifact
+- 支持 prototype、slide、dashboard、report、pricing page、landing page、mobile app mockup、social carousel 等多种输出类型
+- 设计方向预设、字体规范、配色规则、布局约束和 anti-slop prompt 规则
+- 图像生成、图像编辑、Prompt Library、参考图搜索、变体生成和本地结果持久化
+
+**桌面端与集成能力**
+
+- Electron 桌面壳承载主要聊天体验
+- Local Bridge 运行时基础能力
+- Word Add-in 原型，用于文档上下文读取和写回流程
+- 为后续桌面自动化、浏览器桥接、调度器和本地连接器预留平台边界
+
+## 当前状态
+
+KainClaw 还不是完整的正式客户端。当前推荐使用 Electron 应用进行测试；VS Code 扩展形态主要用于本地开发。
+
+仍在推进的方向包括：
+
+- 工具运行时完整性
+- Review 和 Verification 生命周期
+- Compact、transcript 和 token 生命周期
+- LSP 与 worktree 深度能力
+- 浏览器桥接和桌面自动化接线
+- Word 原型之外的 Office 集成
+- Skills、agents、hooks 和设置的桌面端 UI
+- 测试覆盖和发布打包
+
+## 环境要求
+
+- Node.js 18+
+- npm
+- Windows，用于打包 Electron 桌面端
+- VS Code，用于运行扩展开发宿主
+
+## 安装
+
+```bash
+npm install
+```
+
+## 校验
+
+```bash
+npm test
+npm run check
+npm run build
+```
+
+修改桌面端行为时，也应运行：
+
+```bash
+npm run build:electron
+```
+
+## 运行
+
+启动 Electron 桌面应用：
+
+```bash
+npm run start:electron
+```
+
+打包 Windows 安装包：
+
+```bash
+npm run dist:win
+```
+
+运行 VS Code 扩展开发宿主：
+
+1. 用 VS Code 打开本仓库。
+2. 按 `F5`。
+
+## Provider 配置
+
+应用支持通过设置界面配置 Provider。为了方便本地开发和兼容已有工作区，也支持环境变量。
+
+常见变量：
+
+| Provider | 变量 |
+| --- | --- |
+| Anthropic | `ANTHROPIC_API_KEY`, `ANTHROPIC_AUTH_TOKEN`, `ANTHROPIC_MODEL`, `ANTHROPIC_BASE_URL` |
+| OpenAI / 兼容接口 | `OPENAI_API_KEY`, `OPENAI_MODEL`, `OPENAI_BASE_URL` |
+| 通用兜底 | `LLM_PROVIDER`, `LLM_API_KEY`, `LLM_MODEL`, `LLM_BASE_URL` |
+
+不要提交真实账号凭据、API key、token 或私有本地配置。
+
+## MCP 配置
+
+KainClaw 会在工作区中查找 MCP 配置文件，例如：
+
+- `.mcp.json`
+- `.cain-mcp.json`
+
+支持 `mcpServers` 和 `servers` 两种顶层结构。
+
+示例：
+
+```json
+{
+  "mcpServers": {
+    "my-server": {
+      "command": "npx",
+      "args": ["-y", "my-mcp-package"]
+    }
+  }
+}
+```
+
+远端 HTTP 服务可以通过 `url` 和 `headers` 配置。
+
+## 开发说明
+
+桌面壳应保持轻量。新的产品逻辑通常应放在 `src/` 下的可复用模块中，Electron 侧主要负责桌面 UI、IPC、权限和宿主集成。
+
+高风险文件：
+
+- `src/extension.ts`
+- `src/webviewHtml.ts`
+- `electron/ElectronChatPanel.ts`
+- `electron/renderer/index.html`
+- `src/license/licenseManager.ts`
+
+修改这些路径后，应运行相关构建和测试。
+
+## 贡献
+
+项目仍在稳定阶段，欢迎贡献。
+
+提交 Pull Request 前：
+
+1. 保持改动聚焦。
+2. 优先复用已有 runtime 和 host 边界。
+3. 除非必要，不要新增依赖。
+4. 运行：
+
+```bash
+npm test
+npm run check
+npm run build
+```
+
+如果修改 Electron renderer，也运行：
+
+```bash
+npm run build:electron
+```
+
+## 许可证
+
+MIT。详见 `LICENSE`。
