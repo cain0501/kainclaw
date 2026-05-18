@@ -1,3 +1,6 @@
+markdown
+[![Hugging Face Space](https://img.shields.io/badge/🤗-Space%20Demo-yellow)](https://huggingface.co/spaces/cain0501/kainclaw)
+
 # KainClaw
 
 English | [简体中文](README.zh-CN.md)
