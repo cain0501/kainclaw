@@ -239,6 +239,10 @@ async function detectPowerShellExe(): Promise<string> {
   return psExeCache;
 }
 
+function isSpawnMissingExecutableError(error: unknown): boolean {
+  return !!error && typeof error === "object" && (error as { code?: unknown }).code === "ENOENT";
+}
+
 export function clearSessionMemoryStore(): void {
   sessionMemoryStore.clear();
 }
@@ -3117,24 +3121,55 @@ const handlers: Record<string, ToolHandler> = {
       inputPreview: command,
     });
 
+    const encodedCommand = buildUtf8PowerShellEncodedCommand(command);
+    let stdout = "";
+    let stderr = "";
     const psExe = await detectPowerShellExe();
-    const { stdout, stderr } = await execFileAsync(
-      psExe,
-      [
-        "-NoLogo",
-        "-NoProfile",
-        "-NonInteractive",
-        "-EncodedCommand",
-        buildUtf8PowerShellEncodedCommand(command),
-      ],
-      {
-        cwd: context.workspaceRoot,
-        timeout: timeoutMs,
-        ...(context.abortSignal ? { signal: context.abortSignal } : {}),
-        windowsHide: true,
-        maxBuffer: 4 * 1024 * 1024,
-      },
-    );
+    try {
+      const result = await execFileAsync(
+        psExe,
+        [
+          "-NoLogo",
+          "-NoProfile",
+          "-NonInteractive",
+          "-EncodedCommand",
+          encodedCommand,
+        ],
+        {
+          cwd: context.workspaceRoot,
+          timeout: timeoutMs,
+          ...(context.abortSignal ? { signal: context.abortSignal } : {}),
+          windowsHide: true,
+          maxBuffer: 4 * 1024 * 1024,
+        },
+      );
+      stdout = result.stdout;
+      stderr = result.stderr;
+    } catch (error) {
+      if (psExe === "powershell.exe" || !isSpawnMissingExecutableError(error)) {
+        throw error;
+      }
+      psExeCache = "powershell.exe";
+      const result = await execFileAsync(
+        "powershell.exe",
+        [
+          "-NoLogo",
+          "-NoProfile",
+          "-NonInteractive",
+          "-EncodedCommand",
+          encodedCommand,
+        ],
+        {
+          cwd: context.workspaceRoot,
+          timeout: timeoutMs,
+          ...(context.abortSignal ? { signal: context.abortSignal } : {}),
+          windowsHide: true,
+          maxBuffer: 4 * 1024 * 1024,
+        },
+      );
+      stdout = result.stdout;
+      stderr = result.stderr;
+    }
 
     const mergedOutput = stripAnsiEscapeCodes(
       [stdout.trim(), stderr.trim()].filter(Boolean).join("\n"),

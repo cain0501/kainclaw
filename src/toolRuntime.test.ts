@@ -1,8 +1,6 @@
-import { execFile } from "node:child_process";
 import { promises as fs } from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { promisify } from "node:util";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   buildUtf8PowerShellEncodedCommand,
@@ -14,7 +12,6 @@ import {
   PersistentTaskRuntimeStore,
 } from "./tasks/taskRuntime";
 
-const execFileAsync = promisify(execFile);
 const tempDirs: string[] = [];
 
 async function createTaskContext(): Promise<ToolContext> {
@@ -131,17 +128,6 @@ describe("toolRuntime built-in utility tools", () => {
         },
       ),
     ).rejects.toThrow("PowerShell is only available to the main session.");
-
-    const shellChecks = await Promise.all([
-      execFileAsync("pwsh.exe", ["--version"], { timeout: 3_000, windowsHide: true }),
-      execFileAsync("powershell.exe", ["-NoLogo", "-NoProfile", "-Command", "$PSVersionTable.PSVersion"], {
-        timeout: 3_000,
-        windowsHide: true,
-      }),
-    ].map(promise => promise.then(() => true).catch(() => false)));
-    if (!shellChecks.some(Boolean)) {
-      return;
-    }
 
     const result = await executeTool(
       "PowerShell",
