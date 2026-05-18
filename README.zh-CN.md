@@ -126,9 +126,13 @@ KainClaw 目前还没有提供已签名的公开安装包。现阶段推荐从�
 
 等桌面端打包流程稳定后，会再提供预构建 release 和更简单的安装方式。
 
-## 从源码运行
+## 运行方式
 
-克隆仓库、安装依赖，然后启动 Electron 桌面应用：
+你可以按自己的需要选择下面任意一种方式。
+
+**方式一：直接从源码运行**
+
+适合开发者和早期试用者，这是最快的方式。
 
 ```bash
 git clone https://github.com/cain0501/kainclaw.git
@@ -137,9 +141,14 @@ npm install
 npm run start:electron
 ```
 
-构建本地 Windows 安装包：
+**方式二：构建本地 Windows 安装包**
+
+如果你希望从源码生成 Windows 桌面安装包，可以使用这个方式。
 
 ```bash
+git clone https://github.com/cain0501/kainclaw.git
+cd kainclaw
+npm install
 npm run dist:win
 ```
 

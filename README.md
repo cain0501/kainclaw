@@ -126,9 +126,13 @@ KainClaw does not provide a signed public installer yet. For now, the recommende
 
 Prebuilt releases and a simpler installer flow are planned after the desktop package is stable.
 
-## Run From Source
+## Run Options
 
-Clone the repository, install dependencies, then start the Electron app:
+Choose one of the following paths.
+
+**Option 1: Run directly from source**
+
+This is the fastest path for developers and early testers.
 
 ```bash
 git clone https://github.com/cain0501/kainclaw.git
@@ -137,9 +141,14 @@ npm install
 npm run start:electron
 ```
 
-Build a local Windows installer:
+**Option 2: Build a local Windows installer**
+
+Use this if you want to generate a Windows desktop package from the source code.
 
 ```bash
+git clone https://github.com/cain0501/kainclaw.git
+cd kainclaw
+npm install
 npm run dist:win
 ```
 
