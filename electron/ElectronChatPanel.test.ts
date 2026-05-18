@@ -1433,21 +1433,31 @@ describe("ElectronChatPanel session lifecycle", () => {
     harness.rendererPayloads.length = 0;
     await harness.panel.handleMessage({ type: "sessions:delete", id: second.id });
 
-    const statePayload = harness.rendererPayloads.find(
-      payload => (payload as { type?: string }).type === "state",
-    ) as { messages: Array<{ content: string }> };
+    let statePayload: { messages: Array<{ content: string }> } | undefined;
+    let lastSessionList:
+      | { activeId: string; sessions: Array<{ id: string }> }
+      | undefined;
 
-    const sessionListPayloads = harness.rendererPayloads.filter(
-      payload => (payload as { type?: string }).type === "sessions:data",
-    ) as Array<{ activeId: string; sessions: Array<{ id: string }> }>;
-    const lastSessionList = sessionListPayloads.findLast(payload =>
-      payload.sessions.length === 1 &&
-      payload.sessions[0]?.id === first.id
-    );
-    expect(lastSessionList).toBeDefined();
+    await vi.waitFor(() => {
+      statePayload = harness.rendererPayloads.find(
+        payload => (payload as { type?: string }).type === "state",
+      ) as { messages: Array<{ content: string }> } | undefined;
+
+      const sessionListPayloads = harness.rendererPayloads.filter(
+        payload => (payload as { type?: string }).type === "sessions:data",
+      ) as Array<{ activeId: string; sessions: Array<{ id: string }> }>;
+      lastSessionList = sessionListPayloads.findLast(payload =>
+        payload.sessions.length === 1 &&
+        payload.sessions[0]?.id === first.id
+      );
+
+      expect(lastSessionList).toBeDefined();
+      expect(statePayload).toBeDefined();
+    });
+
     expect(lastSessionList?.sessions.map(session => session.id)).toEqual([first.id]);
     expect(harness.settings.getActiveSessionId()).toBe(first.id);
-    expect(statePayload.messages.map(message => message.content)).toEqual([
+    expect(statePayload?.messages.map(message => message.content)).toEqual([
       "first session",
     ]);
   }, 15_000);
