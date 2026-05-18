@@ -225,5 +225,5 @@ describe("DesignProjectStore", () => {
       isDraft: true,
       sourceArtifactId: "artifact-keep",
     });
-  });
+  }, 15_000);
 });

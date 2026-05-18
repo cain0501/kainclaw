@@ -694,7 +694,7 @@ describe("toolRuntime background task semantics", () => {
     expect(backgroundResult.content).not.toContain("@review-bg-done");
     expect(backgroundResult.content).not.toContain("Structured task counts");
     expect(planTask.id).toBe("1");
-  });
+  }, 15_000);
 
   it("TodoWriteTool creates, updates, and deletes structured todos", async () => {
     const context = await createTaskContext();

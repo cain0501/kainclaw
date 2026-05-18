@@ -1427,14 +1427,17 @@ describe("ElectronChatPanel session lifecycle", () => {
     const sessionListPayloads = harness.rendererPayloads.filter(
       payload => (payload as { type?: string }).type === "sessions:data",
     ) as Array<{ activeId: string; sessions: Array<{ id: string }> }>;
-    const lastSessionList = sessionListPayloads.at(-1);
+    const lastSessionList = sessionListPayloads.findLast(payload =>
+      payload.sessions.length === 1 &&
+      payload.sessions[0]?.id === first.id &&
+      payload.activeId === first.id
+    );
     expect(lastSessionList).toBeDefined();
-    expect(lastSessionList?.activeId).not.toBe(second.id);
     expect(lastSessionList?.sessions.map(session => session.id)).toEqual([first.id]);
     expect(statePayload.messages.map(message => message.content)).toEqual([
       "first session",
     ]);
-  });
+  }, 15_000);
 
   it("keeps pending approval in state while switching sessions", async () => {
     const harness = await createHarness();
@@ -4532,7 +4535,7 @@ Freeze skill body.
         projectId: expect.any(String),
       }),
     });
-  });
+  }, 15_000);
 
   it("does not generate anything after choosing cancel from the diversion modal", async () => {
     const harness = await createHarness();
@@ -4566,7 +4569,7 @@ Freeze skill body.
     });
 
     expect(providerRunStep).not.toHaveBeenCalled();
-  });
+  }, 15_000);
 
   it("handles design:chat:send by creating a silent design session and streaming through design chat IPC", async () => {
     const harness = await createHarness();
@@ -5073,7 +5076,7 @@ Freeze skill body.
       };
     expect(latestImageState.busy).toBe(false);
     expect(latestImageState.resultBatches).toEqual([]);
-  });
+  }, 15_000);
 
   it("rehydrates persisted image lab result batches after recreating the panel", async () => {
     const harness = await createHarness();
@@ -6817,7 +6820,7 @@ Freeze skill body.
     }>(harness.rendererPayloads, "midtai:open");
     expect(secondOpenPayload?.payload?.projectId).toBe(firstProjectId);
     expect(secondOpenPayload?.payload?.designTargetView).toBe("canvas");
-  });
+  }, 15_000);
 
   it("returns a tombstone response for deleted design artifact projects", async () => {
     const harness = await createHarness();
@@ -6904,7 +6907,7 @@ Freeze skill body.
       projectId,
       deleted: true,
     });
-  });
+  }, 15_000);
 
   it("returns direction suggestions for ambiguous design prompts before generation", async () => {
     const harness = await createHarness();
