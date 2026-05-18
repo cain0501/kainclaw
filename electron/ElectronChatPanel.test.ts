@@ -1446,17 +1446,11 @@ describe("ElectronChatPanel session lifecycle", () => {
     harness.rendererPayloads.length = 0;
     await harness.panel.handleMessage({ type: "sessions:delete", id: second.id });
 
-    let statePayload: { messages: Array<{ content: string }> } | undefined;
-    await vi.waitFor(() => {
-      statePayload = [...harness.rendererPayloads]
-        .reverse()
-        .find(
-        payload => (payload as { type?: string }).type === "state",
-      ) as { messages: Array<{ content: string }> } | undefined;
-
-      expect(statePayload).toBeDefined();
-      expect(statePayload?.messages.map(message => message.content)).toEqual([
-        "first session",
+    await vi.waitFor(async () => {
+      expect(harness.settings.getActiveSessionId()).toBe(first.id);
+      await expect(harness.sessions.getSessionMeta(second.id)).resolves.toBeUndefined();
+      await expect(harness.sessions.loadMessages(first.id)).resolves.toMatchObject([
+        { content: "first session" },
       ]);
     }, { timeout: 10_000 });
 
@@ -1466,7 +1460,16 @@ describe("ElectronChatPanel session lifecycle", () => {
     expect(index.sessions.map(session => session.id)).toEqual([first.id]);
 
     harness.rendererPayloads.length = 0;
+    await harness.panel.handleMessage({ type: "sessions:switch", id: first.id });
     await harness.panel.handleMessage({ type: "sessions:load" });
+    const statePayload = getLastRendererPayloadOfType<{
+      type?: string;
+      messages: Array<{ content: string }>;
+    }>(harness.rendererPayloads, "state");
+    expect(statePayload?.messages.map(message => message.content)).toEqual([
+      "first session",
+    ]);
+
     const sessionList = getLastRendererPayloadOfType<{
       type?: string;
       activeId: string;
