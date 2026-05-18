@@ -463,6 +463,106 @@ describe("ElectronChatPanel session lifecycle", () => {
     expect(messages[messages.length - 1]?.content).toBe("我已经读取到 1 个用户。");
   });
 
+
+  it("exposes Agent to Electron main chat and wires spawnSubAgent with built-in agent constraints", async () => {
+    const harness = await createHarness();
+    tempDirs.push(harness.storagePath);
+
+    await harness.settings.setOnboardingDone(true);
+    await harness.panel.handleMessage({ type: "ready" });
+
+    vi.mocked(resolveProviderConfig).mockResolvedValue({
+      config: {
+        type: "anthropic",
+        apiKey: "test-key",
+        model: "claude-sonnet-4-6",
+      },
+      envMap: {},
+    });
+    vi.mocked(buildProviderAdapter).mockReturnValue({} as never);
+    vi.mocked(handleElectronPromptCommand).mockResolvedValue({ kind: "continue" });
+
+    (mockedBuiltinToolDefinitions as Array<any>).push(
+      { name: "Agent" },
+      { name: "read_file" },
+      { name: "list_files" },
+      { name: "search_files" },
+      { name: "glob_files" },
+      { name: "run_command" },
+      { name: "write_file", annotations: { destructiveHint: true } },
+      { name: "replace_in_file", annotations: { destructiveHint: true } },
+    );
+
+    vi.mocked(runAgent)
+      .mockResolvedValueOnce({ text: "main reply", messages: [] })
+      .mockResolvedValueOnce({ text: "general-purpose reply", messages: [] })
+      .mockResolvedValueOnce({ text: "explore reply", messages: [] })
+      .mockResolvedValueOnce({ text: "verification reply", messages: [] });
+
+    await harness.panel.handleMessage({
+      type: "sendPrompt",
+      prompt: "use the chat pipeline",
+    });
+
+    const mainRunOptions = vi.mocked(runAgent).mock.calls.at(0)?.[1];
+    expect(mainRunOptions?.tools.map(tool => tool.name)).toContain("Agent");
+    expect(typeof mainRunOptions?.toolContext.spawnSubAgent).toBe("function");
+
+    const generalPurposeResult = await mainRunOptions!.toolContext.spawnSubAgent!({
+      agentType: "general-purpose",
+      prompt: "handle a multi-step task",
+    });
+    expect(generalPurposeResult).toEqual({ text: "general-purpose reply" });
+
+    const exploreResult = await mainRunOptions!.toolContext.spawnSubAgent!({
+      agentType: "Explore",
+      prompt: "inspect the codebase",
+    });
+    expect(exploreResult).toEqual({ text: "explore reply" });
+
+    const verificationResult = await mainRunOptions!.toolContext.spawnSubAgent!({
+      agentType: "verification",
+      prompt: "verify the workspace",
+    });
+    expect(verificationResult).toEqual({ text: "verification reply" });
+
+    const generalPurposeOptions = vi.mocked(runAgent).mock.calls.at(1)?.[1];
+    expect(generalPurposeOptions?.toolContext.invokerKind).toBe("worker");
+    expect(generalPurposeOptions?.tools.map(tool => tool.name)).toEqual([
+      "read_file",
+      "list_files",
+      "search_files",
+      "glob_files",
+      "run_command",
+      "write_file",
+      "replace_in_file",
+    ]);
+
+    const exploreOptions = vi.mocked(runAgent).mock.calls.at(2)?.[1];
+    expect(exploreOptions?.toolContext.invokerKind).toBe("worker");
+    expect(exploreOptions?.toolContext.verificationMode).toEqual({ active: true });
+    expect(exploreOptions?.toolContext.requestFileApproval).toBeUndefined();
+    expect(exploreOptions?.toolContext.requestToolApproval).toBeUndefined();
+    expect(exploreOptions?.tools.map(tool => tool.name)).toEqual([
+      "read_file",
+      "list_files",
+      "search_files",
+      "glob_files",
+      "run_command",
+    ]);
+
+    const verificationOptions = vi.mocked(runAgent).mock.calls.at(3)?.[1];
+    expect(verificationOptions?.toolContext.invokerKind).toBe("worker");
+    expect(verificationOptions?.toolContext.verificationMode).toEqual({ active: true });
+    expect(verificationOptions?.tools.map(tool => tool.name)).toEqual([
+      "read_file",
+      "list_files",
+      "search_files",
+      "glob_files",
+      "run_command",
+    ]);
+  });
+
   it("detects html artifacts, allows dismissing the panel, and reopens it on the next artifact", async () => {
     const harness = await createHarness();
     tempDirs.push(harness.storagePath);

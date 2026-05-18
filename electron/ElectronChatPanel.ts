@@ -40,6 +40,7 @@ import type {
 } from "../src/agent/providers/IProviderAdapter";
 import { McpRuntime, type McpServerStatusSummary } from "../src/mcpRuntime";
 import { runAgent, SYSTEM_PROMPT } from "../src/agent/agentRunner";
+import { runBuiltInSubAgent } from "../src/agent/built-in/runBuiltInSubAgent";
 import {
   dedupeToolDefinitionsByName,
   getBuiltInToolDefinitions,
@@ -229,6 +230,7 @@ class DesignProjectBindingMissingError extends Error {
 
 const SUPPORTED_ELECTRON_TOOL_NAMES = new Set([
   "AskUserQuestion",
+  "Agent",
   "list_files",
   "read_file",
   "search_files",
@@ -6215,6 +6217,16 @@ ${html.slice(0, 8000)}
       mcp: mcpRuntime,
       tasks: this.getConversationTaskRuntime(workspaceRoot),
       worktree: this.getConversationWorktreeRuntime(workspaceRoot),
+      spawnSubAgent: request =>
+        this.spawnBuiltInSubAgent(
+          workspaceRoot,
+          config,
+          envMap,
+          runtimeOptions,
+          tools,
+          mcpRuntime,
+          request,
+        ),
       stopBackgroundTask: (taskId =>
         this.backgroundTaskHost.stopTask(taskId, workspaceRoot)) as ToolContext["stopBackgroundTask"],
       runCommandInBackground: request =>
@@ -6349,6 +6361,47 @@ ${html.slice(0, 8000)}
       systemPrompt,
       envMap,
     );
+  }
+
+  private async spawnBuiltInSubAgent(
+    workspaceRoot: string,
+    config: AdapterProviderConfig,
+    envMap: Record<string, string>,
+    runtimeOptions: ProviderRuntimeOptions,
+    tools: ToolDefinition[],
+    mcpRuntime: McpRuntime,
+    request: {
+      agentType: string;
+      prompt: string;
+      description?: string;
+    },
+  ): Promise<{ text: string }> {
+    const runtime = this.createPromptRuntime(
+      workspaceRoot,
+      config,
+      envMap,
+      runtimeOptions,
+      tools,
+      mcpRuntime,
+    );
+    return runBuiltInSubAgent({
+      request,
+      workspaceRoot,
+      config,
+      envMap,
+      runtimeOptions,
+      effortLevel: runtimeOptions.effortLevel,
+      tools,
+      getWorkerToolContext: () => runtime.getToolContext("worker"),
+      buildProviderAdapter: options =>
+        buildProviderAdapter(
+          options.config,
+          options.workspaceRoot,
+          options.systemPrompt,
+          options.envMap,
+          options.runtimeOptions,
+        ),
+    });
   }
 
   private findActiveBuiltInAgentTask = async (

@@ -28,9 +28,7 @@ import type { ConversationWorktreeRuntime } from "./worktree/types";
 import type { VerificationVerdict } from "./verification/prompt";
 import type { ProviderResolution, WorkspaceRuntimeLike } from "./workspaceHost";
 import type { McpOAuthHost } from "./mcpOAuth";
-import { getBuiltInAgent } from "./agent/builtInAgents";
-import { runAgent } from "./agent/agentRunner";
-import { createAgentProviderRuntimeContext } from "./promptTurnHost";
+import { runBuiltInSubAgent } from "./agent/built-in/runBuiltInSubAgent";
 import {
   WorkspaceRuntime,
   type WorkspacePlanModeController,
@@ -38,7 +36,6 @@ import {
 } from "./workspaceRuntimeShell";
 import { runProviderExtractionStep } from "./providerHost";
 import type { HookDefinition } from "./hooksRegistry";
-import { getReadOnlyAgentToolContext, getReadOnlyAgentTools } from "./agent/built-in/agentUtils";
 
 type StoppedBackgroundTask = {
   taskId: string;
@@ -351,74 +348,20 @@ export function createWorkspaceRuntimeHostFactory<
           providerContext.envMap,
         );
         const tools = await runtime.getToolDefinitions();
-        const builtInAgent = getBuiltInAgent(request.agentType);
-        if (!builtInAgent) {
-          throw new Error(
-            `Unknown agent type: ${request.agentType}. Available: general-purpose, Explore, verification`,
-          );
-        }
-
         const runtimeOptions = options.createProviderRuntimeOptions(
           providerContext.config,
         );
-        const buildWorkspaceSystemPrompt = async () =>
-          builtInAgent.getSystemPrompt();
-
-        const provider = options.createProviderAdapter({
-          config: providerContext.config,
+        return runBuiltInSubAgent({
+          request,
           workspaceRoot,
-          systemPrompt: builtInAgent.getSystemPrompt(),
+          config: providerContext.config,
           envMap: providerContext.envMap,
           runtimeOptions,
+          effortLevel: undefined,
+          tools,
+          getWorkerToolContext: () => runtime.getToolContext("worker"),
+          buildProviderAdapter: options.createProviderAdapter,
         });
-
-        const agentTools =
-          builtInAgent.agentType === "Explore"
-            ? getReadOnlyAgentTools(
-                tools.filter(tool =>
-                  [
-                    "list_files",
-                    "read_file",
-                    "search_files",
-                    "glob_files",
-                    "run_command",
-                  ].includes(tool.name),
-                ),
-                ["Agent"],
-              )
-            : builtInAgent.agentType === "verification"
-              ? getReadOnlyAgentTools(
-                  tools.filter(tool => tool.name !== "Agent"),
-                  builtInAgent.disallowedTools,
-                )
-              : tools.filter(tool => tool.name !== "Agent");
-
-        const toolContext =
-          builtInAgent.agentType === "Explore" ||
-          builtInAgent.agentType === "verification"
-            ? getReadOnlyAgentToolContext(runtime.getToolContext("worker"))
-            : runtime.getToolContext("worker");
-
-        const result = await runAgent(
-          [{ role: "user", content: request.prompt }],
-          {
-            provider,
-            tools: agentTools,
-            toolContext,
-            providerRuntimeContext: createAgentProviderRuntimeContext({
-              workspaceRoot,
-              config: providerContext.config,
-              envMap: providerContext.envMap,
-              runtimeOptions,
-              effortLevel: undefined,
-              buildWorkspaceSystemPrompt,
-              buildProviderAdapter: options.createProviderAdapter,
-            }),
-            maxTurns: 30,
-          },
-        );
-
-        return { text: result.text };
       },
       skillStore: options.skillStore,
       getSessionInstalledSkillHooks:
