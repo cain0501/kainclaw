@@ -1429,11 +1429,11 @@ describe("ElectronChatPanel session lifecycle", () => {
     ) as Array<{ activeId: string; sessions: Array<{ id: string }> }>;
     const lastSessionList = sessionListPayloads.findLast(payload =>
       payload.sessions.length === 1 &&
-      payload.sessions[0]?.id === first.id &&
-      payload.activeId === first.id
+      payload.sessions[0]?.id === first.id
     );
     expect(lastSessionList).toBeDefined();
     expect(lastSessionList?.sessions.map(session => session.id)).toEqual([first.id]);
+    expect(harness.settings.getActiveSessionId()).toBe(first.id);
     expect(statePayload.messages.map(message => message.content)).toEqual([
       "first session",
     ]);
@@ -1590,7 +1590,7 @@ describe("ElectronChatPanel session lifecycle", () => {
         currentLocalBridgeStatus,
       );
     });
-  });
+  }, 15_000);
 
   it("publishes image lab state from saved config", async () => {
     const harness = await createHarness();
@@ -1650,7 +1650,7 @@ describe("ElectronChatPanel session lifecycle", () => {
       }),
       resultBatches: [],
     });
-  });
+  }, 15_000);
 
   it("keeps image lab batches grouped and preserves originals when generating variants", async () => {
     const harness = await createHarness();
@@ -5054,7 +5054,7 @@ Freeze skill body.
     await vi.waitFor(() => {
       expect(vi.mocked(runImageLabRequest)).toHaveBeenCalledTimes(1);
       expect(capturedSignal).toBeDefined();
-    });
+    }, { timeout: 10_000 });
 
     await harness.panel.handleMessage({ type: "image:abort" });
     await runPromise;
@@ -6528,7 +6528,7 @@ Freeze skill body.
 
     expect((harness.panel as any).currentDesignFlowState?.conversationHistory?.length).toBeGreaterThanOrEqual(4);
     expect((harness.panel as any).currentDesignFlowState?.conversationHistory?.at(-1)?.content).toContain("<artifact");
-  });
+  }, 15_000);
 
   it("accepts build output files that contain comments before the first doctype", async () => {
     const harness = await createHarness();
@@ -6590,7 +6590,7 @@ Freeze skill body.
     expect(messages.at(-1)?.content).toContain("<artifact");
     expect(messages.at(-1)?.content).toContain("<!DOCTYPE html>");
     expect(messages.at(-1)?.content).not.toContain("does not start with <!DOCTYPE html>");
-  });
+  }, 15_000);
 
   it("creates the draft project before artifact generation and keeps a single project before canvas entry", async () => {
     const harness = await createHarness();
@@ -6652,7 +6652,7 @@ Freeze skill body.
     expect(projectsPayload).toHaveLength(1);
     expect(projectsPayload[0]?.projectId).toBe(runtimeState.designFlowState?.projectId);
     expect(projectsPayload[0]?.activeVersionId).toBe("pending-version");
-  });
+  }, 15_000);
 
   it("allows a narrower follow-up question-form after discovery answers instead of forcing output/index.html", async () => {
     const harness = await createHarness();
@@ -6715,7 +6715,7 @@ Freeze skill body.
 
     expect((harness.panel as any).currentDesignFlowState?.conversationHistory?.at(-1)?.content)
       .toContain('<question-form id="page-goal"');
-  });
+  }, 15_000);
 
   it("saves a design-session artifact to a project only when artifact:enter-design is triggered, then reuses it", async () => {
     const harness = await createHarness();

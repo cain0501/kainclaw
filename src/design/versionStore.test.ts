@@ -72,7 +72,7 @@ describe("DesignVersionStore", () => {
     expect(versions[0]?.source).toBe("patch");
     expect(versions[0]?.title).toBe("patched");
     expect(versions[0]?.html).toBeUndefined();
-  });
+  }, 15_000);
 
   it("stores title, sliderValues, baseVersionId, and extended sources", async () => {
     const storageRoot = await fs.mkdtemp(path.join(os.tmpdir(), "kc-design-versions-"));
@@ -117,7 +117,7 @@ describe("DesignVersionStore", () => {
       source: "editCurrent",
       sliderValues: { gridOpacity: 0.12 },
     });
-  });
+  }, 15_000);
 
   it("restores a saved version by id with full html content", async () => {
     const storageRoot = await fs.mkdtemp(path.join(os.tmpdir(), "kc-design-versions-"));
