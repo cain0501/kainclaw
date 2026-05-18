@@ -117,38 +117,27 @@ KainClaw 还不是完整的正式客户端。当前推荐使用 Electron 应用�
 
 - Node.js 24+
 - npm
-- Windows，用于打包 Electron 桌面端
-- VS Code，用于运行扩展开发宿主
+- 当前 Electron 桌面流程推荐在 Windows 上运行
+- 只有需要运行旧的 VS Code 扩展开发宿主时，才需要 VS Code
 
-## 安装
+## 当前安装状态
+
+KainClaw 目前还没有提供已签名的公开安装包。现阶段推荐从源码启动 Electron 桌面应用进行试用。
+
+等桌面端打包流程稳定后，会再提供预构建 release 和更简单的安装方式。
+
+## 从源码运行
+
+克隆仓库、安装依赖，然后启动 Electron 桌面应用：
 
 ```bash
+git clone https://github.com/cain0501/kainclaw.git
+cd kainclaw
 npm install
-```
-
-## 验证
-
-```bash
-npm test
-npm run check
-npm run build
-```
-
-修改桌面端行为时，也应运行：
-
-```bash
-npm run build:electron
-```
-
-## 运行
-
-启动 Electron 桌面应用：
-
-```bash
 npm run start:electron
 ```
 
-打包 Windows 安装包：
+构建本地 Windows 安装包：
 
 ```bash
 npm run dist:win
@@ -158,6 +147,15 @@ npm run dist:win
 
 1. 用 VS Code 打开本仓库。
 2. 按 `F5`。
+
+## 开发验证
+
+```bash
+npm test
+npm run check
+npm run build
+npm run build:electron
+```
 
 ## Provider 配置
 

@@ -117,38 +117,27 @@ Areas still under active development include:
 
 - Node.js 24+
 - npm
-- Windows for the packaged Electron desktop build
-- VS Code if you want to run the extension development host
+- Windows is recommended for the current Electron desktop workflow
+- VS Code is only needed if you want to run the legacy extension development host
 
-## Install
+## Current Installation Status
+
+KainClaw does not provide a signed public installer yet. For now, the recommended way to try it is to run the Electron desktop app from source.
+
+Prebuilt releases and a simpler installer flow are planned after the desktop package is stable.
+
+## Run From Source
+
+Clone the repository, install dependencies, then start the Electron app:
 
 ```bash
+git clone https://github.com/cain0501/kainclaw.git
+cd kainclaw
 npm install
-```
-
-## Validate
-
-```bash
-npm test
-npm run check
-npm run build
-```
-
-Run the Electron build when desktop behavior changes:
-
-```bash
-npm run build:electron
-```
-
-## Run
-
-Start the Electron desktop app:
-
-```bash
 npm run start:electron
 ```
 
-Build a Windows installer:
+Build a local Windows installer:
 
 ```bash
 npm run dist:win
@@ -158,6 +147,15 @@ Run the VS Code extension development host:
 
 1. Open this repository in VS Code.
 2. Press `F5`.
+
+## Validate For Development
+
+```bash
+npm test
+npm run check
+npm run build
+npm run build:electron
+```
 
 ## Provider Configuration
 
