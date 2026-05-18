@@ -7,6 +7,7 @@ import {
   toAnthropicMessages,
   toAnthropicThinking,
 } from "./anthropicAdapter";
+import { AnthropicAdapter } from "./anthropicAdapter";
 
 describe("Anthropic adapter helpers", () => {
   it("builds Anthropic messages URLs from different base paths", () => {
@@ -116,5 +117,39 @@ describe("Anthropic adapter helpers", () => {
         ],
       },
     ]);
+  });
+
+  it("emits lightweight request metrics before sending the Anthropic request", async () => {
+    const metricsSpy = vi.fn();
+    const adapter = new AnthropicAdapter(
+      {
+        type: "anthropic",
+        apiKey: "secret",
+        model: "claude-sonnet",
+        baseUrl: "https://api.anthropic.com",
+        timeoutMs: 1,
+      },
+      "system prompt",
+      {
+        requestKind: "built-in-agent",
+        onRequestMetrics: metricsSpy,
+      },
+    );
+
+    await expect(
+      adapter.runStep([], [], () => {}),
+    ).rejects.toThrow();
+
+    expect(metricsSpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        provider: "anthropic",
+        requestKind: "built-in-agent",
+        model: "claude-sonnet",
+        toolCount: 0,
+        systemPromptChars: "system prompt".length,
+        usedPromptCache: false,
+        promptCacheStatus: "unsupported",
+      }),
+    );
   });
 });

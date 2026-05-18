@@ -11,6 +11,7 @@ export type MidtaiReplaceContext = {
 export type MidtaiOpenPayload = {
   contentType: MidtaiContentType;
   view?: MidtaiView;
+  designTargetView?: "design-chat" | "canvas";
   projectId?: string;
   artifactId?: string;
   designChat?: boolean;

@@ -49,7 +49,10 @@ export function createPromptTurnSwarm(options: {
       }
 
       const workerRuntimeOptions =
-        options.createProviderRuntimeOptions(workerConfig);
+        {
+          ...options.createProviderRuntimeOptions(workerConfig),
+          requestKind: "swarm-worker" as const,
+        };
       return options.buildProviderAdapter({
         config: workerConfig,
         workspaceRoot: options.getEffectiveWorkspaceRoot(

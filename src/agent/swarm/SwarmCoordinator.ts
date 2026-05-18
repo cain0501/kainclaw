@@ -1,7 +1,6 @@
 import type { IProviderAdapter, NormalizedMessage } from "../providers/IProviderAdapter";
 import type { ToolDefinition, ToolContext } from "../../toolRuntime";
 import { toolDefinitions, executeTool, getOpenAIToolsPayload } from "../../toolRuntime";
-import { SYSTEM_PROMPT } from "../agentRunner";
 import type { WorkerState, SpawnAgentInput, SendMessageInput, WaitForAgentsInput } from "./types";
 import { WORKER_ALLOWED_TOOLS } from "./types";
 import { SwarmBus } from "./SwarmBus";
@@ -11,6 +10,27 @@ const MAX_WORKERS = 5;
 const WORKER_IDLE_TIMEOUT_MS = 120_000;
 const WORKER_HARD_TIMEOUT_MS = 900_000;
 const WAIT_DEFAULT_TIMEOUT_MS = 300_000;
+const WORKER_SYSTEM_PROMPT_BASE = `You are a focused Worker Agent running as part of a coordinated parallel team.
+
+Role:
+- Execute one bounded subtask assigned by the coordinator.
+- Finish the assigned slice completely, then report back.
+- Do not broaden scope or re-plan the whole task.
+
+Communication:
+- To report progress or results, you must call send_message with to="coordinator".
+- Plain assistant text is not visible to the coordinator unless you send it through send_message.
+- Do not spawn more workers.
+
+Constraints:
+- Avoid overlapping edits or simultaneous approval-heavy actions with other workers.
+- Do not use plan/review/verification orchestration flows. Leave those to the coordinator.
+- Use only the tools you are actually given in this worker session.
+
+Work style:
+- Be concise, direct, and execution-focused.
+- Prefer reading existing code before editing.
+- Keep changes narrow and evidence-based.`;
 
 export type WorkerStateUpdate = (patch: Partial<WorkerState> & { id: string }) => void;
 
@@ -335,7 +355,7 @@ export class SwarmCoordinator {
         ` - Communication: send_message\n\n` +
         `IMPORTANT: run_command only supports allowlisted commands. Some allowlisted commands have side effects ` +
         `(git add / git commit -m / git push / npm install) and may require user approval before they execute.\n\n` +
-        SYSTEM_PROMPT;
+        WORKER_SYSTEM_PROMPT_BASE;
 
       const provider = await this.opts.resolveWorkerProvider(input.providerAlias, workerSystemPrompt);
 

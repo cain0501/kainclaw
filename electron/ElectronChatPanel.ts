@@ -40,6 +40,8 @@ import type {
 } from "../src/agent/providers/IProviderAdapter";
 import { McpRuntime, type McpServerStatusSummary } from "../src/mcpRuntime";
 import { runAgent, SYSTEM_PROMPT } from "../src/agent/agentRunner";
+import { createPromptTurnSwarm } from "../src/promptSwarmHost";
+import type { SwarmCoordinator } from "../src/agent/swarm/SwarmCoordinator";
 import { runBuiltInSubAgent } from "../src/agent/built-in/runBuiltInSubAgent";
 import {
   dedupeToolDefinitionsByName,
@@ -231,6 +233,10 @@ class DesignProjectBindingMissingError extends Error {
 const SUPPORTED_ELECTRON_TOOL_NAMES = new Set([
   "AskUserQuestion",
   "Agent",
+  "TaskCreate",
+  "TaskGet",
+  "TaskList",
+  "TaskUpdate",
   "list_files",
   "read_file",
   "search_files",
@@ -422,6 +428,7 @@ export class ElectronChatPanel {
   private readonly worktreeRuntimeStore: PersistentWorktreeRuntimeStore;
   private readonly backgroundTaskHost: BackgroundTaskHost;
   private readonly browserRuntime: BrowserRuntime;
+  private readonly swarms = new Map<string, SwarmCoordinator>();
   private readonly cachedWorkspaceResolutions = new Map<string, ResolvedWorkspaceRoot>();
   private readonly sessionInstalledSkillHooks = new Map<string, HookDefinition[]>();
   private readonly artifactRegistries = new Map<string, InMemoryArtifactRegistry>();
@@ -483,6 +490,10 @@ export class ElectronChatPanel {
   }
 
   dispose(): void {
+    for (const swarm of this.swarms.values()) {
+      swarm.dispose();
+    }
+    this.swarms.clear();
     this.backgroundTaskHost.dispose();
     void this.browserRuntime.dispose();
     this.designProjectStore.dispose();
@@ -821,6 +832,7 @@ export class ElectronChatPanel {
       source: "blank",
       activeVersionId: "pending-version",
       explicitDraft: true,
+      ...(history.length === 0 ? { entryPending: true } : {}),
     });
     if (history.length > 0) {
       await this.designProjectStore.saveConversationHistory(project.projectId, history);
@@ -1126,6 +1138,10 @@ export class ElectronChatPanel {
     if (type === "sessions:new-design") { await this.createNewDesignSession(); return; }
     if (type === "design:new-transient-work") {
       await this.handleNewTransientWork();
+      return;
+    }
+    if (type === "design:entry-choice") {
+      await this.handleDesignEntryChoice(message);
       return;
     }
     if (type === "sessions:switch") {
@@ -1654,6 +1670,7 @@ export class ElectronChatPanel {
       source: "blank",
       activeVersionId: "pending-version",
       explicitDraft: true,
+      entryPending: true,
     });
     const session = await this.sessions.createSession(
       randomUUID(),
@@ -1700,6 +1717,8 @@ export class ElectronChatPanel {
       name: project.name,
       versionCount: 0,
       updatedAt: project.updatedAt,
+      entryPending: !!project.entryPending,
+      entryPath: project.entryPath,
     });
     if (options?.openMidtai !== false) {
       await this.openMidtai({
@@ -3727,6 +3746,22 @@ export class ElectronChatPanel {
     await this.startNewDesignWork();
   }
 
+  private async handleDesignEntryChoice(message: Record<string, unknown>): Promise<void> {
+    const projectId = typeof message.projectId === "string" ? message.projectId.trim() : "";
+    const path = message.path === "detailed" ? "detailed" : message.path === "quick" ? "quick" : "";
+    if (!projectId || !path) {
+      return;
+    }
+    const updated = await this.designProjectStore.updateProject(projectId, {
+      entryPending: false,
+      entryPath: path,
+      updatedAt: Date.now(),
+    });
+    if (updated && this.currentDesignProjectId === projectId) {
+      await this.postDesignFlowContext(projectId, updated);
+    }
+  }
+
   private async postDesignChatHistoryForSession(
     sessionId?: string,
   ): Promise<void> {
@@ -3767,6 +3802,8 @@ export class ElectronChatPanel {
       projectId: normalizedProjectId,
       projectName: resolvedProject?.name ?? "",
       hasVersion,
+      entryPending: !!resolvedProject?.entryPending,
+      entryPath: resolvedProject?.entryPath,
     });
   }
 
@@ -4143,6 +4180,14 @@ export class ElectronChatPanel {
           envMap,
           runtimeOptions,
         );
+        const hookToolContext = promptRuntime.getToolContext("main");
+        const hookSwarm = this.getOrCreateSwarm(
+          workspaceRoot,
+          hookConfig,
+          envMap,
+          runtimeOptions,
+          hookToolContext,
+        );
         await runAgent(
           [
             {
@@ -4153,8 +4198,9 @@ export class ElectronChatPanel {
           {
             provider: hookProvider,
             tools: allTools,
-            toolContext: promptRuntime.getToolContext("main"),
+            toolContext: hookToolContext,
             abortSignal: abortController.signal,
+            swarm: hookSwarm,
           },
         );
       };
@@ -4437,6 +4483,13 @@ export class ElectronChatPanel {
         activeRuntimeOptions,
       );
       const toolContext = activePromptRuntime.getToolContext("main");
+      const swarm = this.getOrCreateSwarm(
+        workspaceRoot,
+        activeConfig,
+        envMap,
+        activeRuntimeOptions,
+        toolContext,
+      );
 
       const { text: finalText, reasoningContent: finalReasoningContent } = await runAgent(history, {
         provider: adapter,
@@ -4517,6 +4570,7 @@ export class ElectronChatPanel {
           this.sendToRenderer({ type: "tool:end", summary, isError });
         },
         abortSignal: abortController.signal,
+        swarm,
       });
 
       const assistantMessage: ChatMessage = {
@@ -4755,6 +4809,8 @@ export class ElectronChatPanel {
 
     await this.designProjectStore.updateProject(project.projectId, {
       activeVersionId: version.id,
+      entryPending: false,
+      entryPath: undefined,
       updatedAt: version.createdAt,
       lastOpenedAt: Date.now(),
     });
@@ -4769,6 +4825,8 @@ export class ElectronChatPanel {
       name: project.name,
       versionCount: 1,
       updatedAt: version.createdAt,
+      entryPending: false,
+      entryPath: undefined,
     });
     return { projectId: project.projectId, versionId: version.id };
   }
@@ -4830,6 +4888,7 @@ export class ElectronChatPanel {
         await this.openMidtai({
           contentType: "design",
           view: "preview",
+          designTargetView: "canvas",
           projectId: boundProject.projectId,
           artifactId,
         });
@@ -4842,6 +4901,7 @@ export class ElectronChatPanel {
       await this.openMidtai({
         contentType: "design",
         view: "preview",
+        designTargetView: "canvas",
         projectId: existingProject.projectId,
         artifactId,
       });
@@ -4861,6 +4921,7 @@ export class ElectronChatPanel {
     await this.openMidtai({
       contentType: "design",
       view: "preview",
+      designTargetView: "canvas",
       projectId: saved.projectId,
       artifactId,
     });
@@ -5098,6 +5159,7 @@ export class ElectronChatPanel {
         ? message.name.trim()
         : "Untitled Design",
     );
+    await this.postDesignFlowContext(project.projectId, project);
     this.sendToRenderer({
       type: "design:projectOpened",
       project,
@@ -5254,6 +5316,9 @@ export class ElectronChatPanel {
       contentType: payload?.contentType === "design" ? "design" : "img",
       ...(payload?.view === "works" || payload?.view === "plib" || payload?.view === "preview"
         ? { view: payload.view }
+        : {}),
+      ...(payload?.designTargetView === "canvas" || payload?.designTargetView === "design-chat"
+        ? { designTargetView: payload.designTargetView }
         : {}),
       ...(typeof payload?.projectId === "string" && payload.projectId.trim()
         ? { projectId: payload.projectId.trim() }
@@ -6456,6 +6521,49 @@ ${html.slice(0, 8000)}
           /cancel/i.test(error.message))) ||
       false
     );
+  }
+
+  private getOrCreateSwarm(
+    workspaceRoot: string,
+    _config: AdapterProviderConfig,
+    _envMap: Record<string, string>,
+    runtimeOptions: ProviderRuntimeOptions,
+    toolContext: ToolContext,
+  ): SwarmCoordinator {
+    const conversationKey = this.getConversationKey();
+    const existing = this.swarms.get(conversationKey);
+    if (existing) {
+      return existing;
+    }
+
+    const swarm = createPromptTurnSwarm({
+      workspaceFolderPath: workspaceRoot,
+      workerToolContext: toolContext,
+      backgroundTasks: this.getConversationTaskRuntime(workspaceRoot),
+      resolveWorkerProviderConfig: async alias =>
+        this.settings.getProviderConfigByAlias(alias),
+      createProviderRuntimeOptions: () => runtimeOptions,
+      getEffectiveWorkspaceRoot: currentWorkspaceRoot => currentWorkspaceRoot,
+      buildProviderAdapter: ({
+        config: workerConfig,
+        workspaceRoot: workerWorkspaceRoot,
+        systemPrompt,
+        envMap: workerEnvMap,
+        runtimeOptions: workerRuntimeOptions,
+      }) =>
+        buildProviderAdapter(
+          workerConfig,
+          workerWorkspaceRoot,
+          systemPrompt,
+          workerEnvMap,
+          workerRuntimeOptions,
+        ),
+      postWorkerUpdate: patch => {
+        this.sendToRenderer({ type: "swarm:update", worker: patch });
+      },
+    });
+    this.swarms.set(conversationKey, swarm);
+    return swarm;
   }
 
   private async handleCompactPromptCommand(

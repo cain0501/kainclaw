@@ -110,7 +110,7 @@ describe("promptSwarmHost", () => {
       workspaceRoot: "E:\\repo",
       systemPrompt: "worker system prompt",
       envMap: {},
-      runtimeOptions: { fastMode: true },
+      runtimeOptions: { fastMode: true, requestKind: "swarm-worker" },
     });
     expect(postWorkerUpdate).toHaveBeenCalledWith({
       id: "worker-1",

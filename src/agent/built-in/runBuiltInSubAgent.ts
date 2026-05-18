@@ -21,6 +21,21 @@ const EXPLORE_TOOL_NAMES = new Set([
   "run_command",
 ]);
 
+const GENERAL_PURPOSE_DISALLOWED_TOOL_NAMES = new Set([
+  "Agent",
+  "spawn_agent",
+  "send_message",
+  "wait_for_agents",
+  "TeamCreate",
+  "SendMessage",
+  "TeamDelete",
+  "EnterPlanMode",
+  "ExitPlanMode",
+  "RunVerification",
+  "VerifyPlanExecution",
+  "RunReview",
+]);
+
 export type BuiltInSubAgentRequest = {
   agentType: string;
   prompt: string;
@@ -62,7 +77,14 @@ export async function runBuiltInSubAgent(options: {
             options.tools.filter(tool => tool.name !== "Agent"),
             builtInAgent.disallowedTools,
           )
-        : options.tools.filter(tool => tool.name !== "Agent");
+        : options.tools.filter(
+            tool => !GENERAL_PURPOSE_DISALLOWED_TOOL_NAMES.has(tool.name),
+          );
+
+  const runtimeOptions: ProviderRuntimeOptions = {
+    ...options.runtimeOptions,
+    requestKind: "built-in-agent",
+  };
 
   const workerToolContext = options.getWorkerToolContext();
   const toolContext =
@@ -77,7 +99,7 @@ export async function runBuiltInSubAgent(options: {
       workspaceRoot: options.workspaceRoot,
       systemPrompt: builtInAgent.getSystemPrompt(),
       envMap: options.envMap,
-      runtimeOptions: options.runtimeOptions,
+      runtimeOptions,
     }),
     tools: agentTools,
     toolContext,
@@ -85,7 +107,7 @@ export async function runBuiltInSubAgent(options: {
       workspaceRoot: options.workspaceRoot,
       config: options.config,
       envMap: options.envMap,
-      runtimeOptions: options.runtimeOptions,
+      runtimeOptions,
       effortLevel: options.effortLevel,
       buildWorkspaceSystemPrompt: async () => builtInAgent.getSystemPrompt(),
       buildProviderAdapter: options.buildProviderAdapter,

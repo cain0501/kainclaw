@@ -463,7 +463,6 @@ describe("ElectronChatPanel session lifecycle", () => {
     expect(messages[messages.length - 1]?.content).toBe("我已经读取到 1 个用户。");
   });
 
-
   it("exposes Agent to Electron main chat and wires spawnSubAgent with built-in agent constraints", async () => {
     const harness = await createHarness();
     tempDirs.push(harness.storagePath);
@@ -3642,6 +3641,18 @@ Freeze skill body.
       messages: unknown[];
     }>(harness.rendererPayloads, "design:chat:history");
     expect(historyPayload?.messages).toEqual([]);
+    const flowContextPayload = getLastRendererPayloadOfType<{
+      type: "design:flow-context";
+      projectId: string;
+      entryPending?: boolean;
+      entryPath?: string;
+    }>(harness.rendererPayloads, "design:flow-context");
+    const createdPayload = getLastRendererPayloadOfType<{
+      type: "design:project-created";
+      projectId: string;
+      entryPending?: boolean;
+      entryPath?: string;
+    }>(harness.rendererPayloads, "design:project-created");
 
     const projects = await (harness.panel as any).designProjectStore.listProjects();
     expect(projects).toHaveLength(1);
@@ -3649,6 +3660,15 @@ Freeze skill body.
       isDraft: true,
       activeVersionId: "pending-version",
       explicitDraft: true,
+      entryPending: true,
+    });
+    expect(flowContextPayload).toMatchObject({
+      projectId: projects[0].projectId,
+      entryPending: true,
+    });
+    expect(createdPayload).toMatchObject({
+      projectId: projects[0].projectId,
+      entryPending: true,
     });
     expect((harness.panel as any).currentDesignProjectId).toBe(projects[0].projectId);
   });
@@ -3778,12 +3798,18 @@ Freeze skill body.
     }>(harness.rendererPayloads, "design:projects");
 
     const reboundState = await harness.sessions.loadRuntimeState(draftSessionId);
+    const reboundProject = await (harness.panel as any).designProjectStore.getProject(reboundState.designFlowState?.projectId);
     expect(reboundState.designFlowState?.projectId).toBeTruthy();
     expect(projectsPayload?.projects.some(project =>
       project.projectId === reboundState.designFlowState?.projectId &&
       project.isDraft === true &&
       project.activeVersionId === "pending-version",
     )).toBe(true);
+    expect(reboundProject).toMatchObject({
+      projectId: reboundState.designFlowState?.projectId,
+      explicitDraft: true,
+    });
+    expect(reboundProject?.entryPending).toBeUndefined();
   });
 
   it("prunes only true ghost rows on ready but keeps explicit draft projects with no history yet", async () => {
@@ -3908,6 +3934,8 @@ Freeze skill body.
       projectId: string;
       projectName: string;
       hasVersion: boolean;
+      entryPending?: boolean;
+      entryPath?: string;
     }>(harness.rendererPayloads, "design:flow-context");
 
     expect(harness.settings.getActiveSessionId()).toBe(sessionA.id);
@@ -3919,6 +3947,7 @@ Freeze skill body.
       projectId: projectA.projectId,
       projectName: "Project A",
       hasVersion: false,
+      entryPending: false,
     });
 
     await harness.panel.handleMessage({
@@ -3935,6 +3964,8 @@ Freeze skill body.
       projectId: string;
       projectName: string;
       hasVersion: boolean;
+      entryPending?: boolean;
+      entryPath?: string;
     }>(harness.rendererPayloads, "design:flow-context");
 
     expect(harness.settings.getActiveSessionId()).toBe(sessionB.id);
@@ -4059,6 +4090,8 @@ Freeze skill body.
       projectId: string;
       projectName: string;
       hasVersion: boolean;
+      entryPending?: boolean;
+      entryPath?: string;
     }>(harness.rendererPayloads, "design:flow-context");
 
     expect(historyPayload?.messages).toEqual([]);
@@ -4066,6 +4099,7 @@ Freeze skill body.
       projectId: project.projectId,
       projectName: "Fresh Project",
       hasVersion: false,
+      entryPending: false,
     });
   });
 
@@ -6747,19 +6781,23 @@ Freeze skill body.
 
     const firstOpenPayload = getLastRendererPayloadOfType<{
       type: "midtai:open";
-      payload?: { projectId?: string };
+      payload?: { projectId?: string; designTargetView?: string };
     }>(harness.rendererPayloads, "midtai:open");
     expect(firstOpenPayload?.payload?.projectId).toBeTruthy();
+    expect(firstOpenPayload?.payload?.designTargetView).toBe("canvas");
 
     const createdPayload = getLastRendererPayloadOfType<{
       type: "design:project-created";
       projectId: string;
       versionCount: number;
+      entryPending?: boolean;
+      entryPath?: string;
     }>(harness.rendererPayloads, "design:project-created");
     expect(createdPayload).toMatchObject({
       type: "design:project-created",
       projectId: firstOpenPayload?.payload?.projectId,
       versionCount: 1,
+      entryPending: false,
     });
 
     const messages = await harness.sessions.loadMessages(harness.settings.getActiveSessionId()!);
@@ -6775,9 +6813,10 @@ Freeze skill body.
 
     const secondOpenPayload = getLastRendererPayloadOfType<{
       type: "midtai:open";
-      payload?: { projectId?: string };
+      payload?: { projectId?: string; designTargetView?: string };
     }>(harness.rendererPayloads, "midtai:open");
     expect(secondOpenPayload?.payload?.projectId).toBe(firstProjectId);
+    expect(secondOpenPayload?.payload?.designTargetView).toBe("canvas");
   });
 
   it("returns a tombstone response for deleted design artifact projects", async () => {

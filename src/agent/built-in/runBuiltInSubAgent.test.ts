@@ -56,6 +56,17 @@ const tools: ToolDefinition[] = [
     annotations: { readOnlyHint: true },
   },
   {
+    name: "RunReview",
+    description: "review",
+    input_schema: { type: "object", properties: {} },
+    annotations: { readOnlyHint: true },
+  },
+  {
+    name: "TaskCreate",
+    description: "task create",
+    input_schema: { type: "object", properties: {} },
+  },
+  {
     name: "write_file",
     description: "write",
     input_schema: { type: "object", properties: {} },
@@ -104,10 +115,18 @@ describe("runBuiltInSubAgent", () => {
       "search_files",
       "glob_files",
       "run_command",
+      "TaskCreate",
       "write_file",
       "replace_in_file",
     ]);
     expect(options?.toolContext.requestFileApproval).toBeDefined();
+    expect(buildProviderAdapter).toHaveBeenCalledWith(
+      expect.objectContaining({
+        runtimeOptions: expect.objectContaining({
+          requestKind: "built-in-agent",
+        }),
+      }),
+    );
     expect(buildProviderAdapter).toHaveBeenCalledTimes(1);
   });
 
@@ -163,6 +182,7 @@ describe("runBuiltInSubAgent", () => {
       "search_files",
       "glob_files",
       "run_command",
+      "TaskCreate",
     ]);
     expect(options?.toolContext.verificationMode).toEqual({ active: true });
   });

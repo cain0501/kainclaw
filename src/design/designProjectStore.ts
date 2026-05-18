@@ -4,6 +4,7 @@ import path from "node:path";
 import type { DesignFlowState } from "../storage/sessionRepository";
 
 export type DesignProjectSource = "artifact" | "blank";
+export type DesignEntryPath = "quick" | "detailed";
 export type DesignChatHistoryMessage = NonNullable<DesignFlowState["conversationHistory"]>[number];
 
 export type DesignProjectRecord = {
@@ -19,6 +20,8 @@ export type DesignProjectRecord = {
   versionCount?: number;
   isDraft?: boolean;
   explicitDraft?: boolean;
+  entryPending?: boolean;
+  entryPath?: DesignEntryPath;
 };
 
 type StoredDesignProjects = {
@@ -80,6 +83,10 @@ function normalizeProjectRecord(record: DesignProjectRecord): DesignProjectRecor
     updatedAt: Number(record.updatedAt) || Date.now(),
     lastOpenedAt: Number(record.lastOpenedAt) || Date.now(),
     ...(record.explicitDraft ? { explicitDraft: true } : {}),
+    ...(record.entryPending ? { entryPending: true } : {}),
+    ...(record.entryPath === "quick" || record.entryPath === "detailed"
+      ? { entryPath: record.entryPath }
+      : {}),
     ...(hasDurableVersion
       ? {}
       : { isDraft: true }),
@@ -189,6 +196,8 @@ export class DesignProjectStore {
         source_artifact_id TEXT,
         active_version_id TEXT NOT NULL,
         explicit_draft INTEGER NOT NULL DEFAULT 0,
+        entry_pending INTEGER NOT NULL DEFAULT 0,
+        entry_path TEXT,
         conversation_history TEXT NOT NULL DEFAULT '[]',
         created_at INTEGER NOT NULL,
         updated_at INTEGER NOT NULL,
@@ -224,6 +233,8 @@ export class DesignProjectStore {
       { version: 3, up: "ALTER TABLE design_versions ADD COLUMN deleted_at INTEGER" },
       { version: 4, up: "ALTER TABLE design_projects ADD COLUMN conversation_history TEXT NOT NULL DEFAULT '[]'" },
       { version: 5, up: "ALTER TABLE design_projects ADD COLUMN explicit_draft INTEGER NOT NULL DEFAULT 0" },
+      { version: 6, up: "ALTER TABLE design_projects ADD COLUMN entry_pending INTEGER NOT NULL DEFAULT 0" },
+      { version: 7, up: "ALTER TABLE design_projects ADD COLUMN entry_path TEXT" },
     ];
 
     for (const migration of migrations) {
@@ -293,8 +304,8 @@ export class DesignProjectStore {
 
     const insert = database.prepare(`
       INSERT OR REPLACE INTO design_projects (
-        project_id, name, source, source_artifact_id, active_version_id, explicit_draft, conversation_history, created_at, updated_at, last_opened_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        project_id, name, source, source_artifact_id, active_version_id, explicit_draft, entry_pending, entry_path, conversation_history, created_at, updated_at, last_opened_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `);
 
     const legacyStore = await this.readLegacyStore();
@@ -306,6 +317,8 @@ export class DesignProjectStore {
         project.sourceArtifactId ?? null,
         project.activeVersionId,
         project.explicitDraft ? 1 : 0,
+        project.entryPending ? 1 : 0,
+        project.entryPath ?? null,
         JSON.stringify(project.conversationHistory ?? []),
         project.createdAt,
         project.updatedAt,
@@ -359,6 +372,8 @@ export class DesignProjectStore {
         null,
         "pending-version",
         0,
+        0,
+        null,
         "[]",
         createdAt,
         createdAt,
@@ -375,6 +390,8 @@ export class DesignProjectStore {
     source_artifact_id: string | null;
     active_version_id: string;
     explicit_draft?: number | null;
+    entry_pending?: number | null;
+    entry_path?: string | null;
     conversation_history: string | null;
     created_at: number;
     updated_at: number;
@@ -397,6 +414,10 @@ export class DesignProjectStore {
       ...(row.source_artifact_id ? { sourceArtifactId: row.source_artifact_id } : {}),
       activeVersionId: row.active_version_id,
       ...(row.explicit_draft ? { explicitDraft: true } : {}),
+      ...(row.entry_pending ? { entryPending: true } : {}),
+      ...(row.entry_path === "quick" || row.entry_path === "detailed"
+        ? { entryPath: row.entry_path }
+        : {}),
       conversationHistory: parsedConversationHistory,
       createdAt: row.created_at,
       updatedAt: row.updated_at,
@@ -410,6 +431,8 @@ export class DesignProjectStore {
     sourceArtifactId?: string;
     activeVersionId: string;
     explicitDraft?: boolean;
+    entryPending?: boolean;
+    entryPath?: DesignEntryPath;
   }): Promise<DesignProjectRecord> {
     const now = Date.now();
     const project = normalizeProjectRecord({
@@ -419,6 +442,10 @@ export class DesignProjectStore {
       ...(options.sourceArtifactId?.trim() ? { sourceArtifactId: options.sourceArtifactId.trim() } : {}),
       activeVersionId: options.activeVersionId,
       ...(options.explicitDraft ? { explicitDraft: true } : {}),
+      ...(options.entryPending ? { entryPending: true } : {}),
+      ...(options.entryPath === "quick" || options.entryPath === "detailed"
+        ? { entryPath: options.entryPath }
+        : {}),
       createdAt: now,
       updatedAt: now,
       lastOpenedAt: now,
@@ -427,8 +454,8 @@ export class DesignProjectStore {
     const saved = await this.withDatabase(database => {
       database.prepare(`
         INSERT INTO design_projects (
-          project_id, name, source, source_artifact_id, active_version_id, explicit_draft, conversation_history, created_at, updated_at, last_opened_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          project_id, name, source, source_artifact_id, active_version_id, explicit_draft, entry_pending, entry_path, conversation_history, created_at, updated_at, last_opened_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `).run(
         project.projectId,
         project.name,
@@ -436,6 +463,8 @@ export class DesignProjectStore {
         project.sourceArtifactId ?? null,
         project.activeVersionId,
         project.explicitDraft ? 1 : 0,
+        project.entryPending ? 1 : 0,
+        project.entryPath ?? null,
         JSON.stringify(project.conversationHistory ?? []),
         project.createdAt,
         project.updatedAt,
@@ -474,7 +503,7 @@ export class DesignProjectStore {
       }
 
       const rows = database.prepare(`
-        SELECT project_id, name, source, source_artifact_id, active_version_id, explicit_draft, conversation_history, created_at, updated_at, last_opened_at
+        SELECT project_id, name, source, source_artifact_id, active_version_id, explicit_draft, entry_pending, entry_path, conversation_history, created_at, updated_at, last_opened_at
         FROM design_projects
         ORDER BY updated_at DESC
       `).all() as Array<{
@@ -484,6 +513,8 @@ export class DesignProjectStore {
         source_artifact_id: string | null;
         active_version_id: string;
         explicit_draft?: number | null;
+        entry_pending?: number | null;
+        entry_path?: string | null;
         conversation_history: string | null;
         created_at: number;
         updated_at: number;
@@ -514,13 +545,15 @@ export class DesignProjectStore {
     );
     const removedProjectIds = await this.withDatabase(database => {
       const rows = database.prepare(`
-        SELECT project_id, source_artifact_id, active_version_id, explicit_draft, conversation_history
+        SELECT project_id, source_artifact_id, active_version_id, explicit_draft, entry_pending, entry_path, conversation_history
         FROM design_projects
       `).all() as Array<{
         project_id: string;
         source_artifact_id: string | null;
         active_version_id: string | null;
         explicit_draft?: number | null;
+        entry_pending?: number | null;
+        entry_path?: string | null;
         conversation_history: string | null;
       }>;
 
@@ -582,7 +615,7 @@ export class DesignProjectStore {
   async getProject(projectId: string): Promise<DesignProjectRecord | null> {
     const project = await this.withDatabase(database => {
       const row = database.prepare(`
-        SELECT project_id, name, source, source_artifact_id, active_version_id, explicit_draft, conversation_history, created_at, updated_at, last_opened_at
+        SELECT project_id, name, source, source_artifact_id, active_version_id, explicit_draft, entry_pending, entry_path, conversation_history, created_at, updated_at, last_opened_at
         FROM design_projects
         WHERE project_id = ?
       `).get(projectId) as {
@@ -592,6 +625,8 @@ export class DesignProjectStore {
         source_artifact_id: string | null;
         active_version_id: string;
         explicit_draft?: number | null;
+        entry_pending?: number | null;
+        entry_path?: string | null;
         conversation_history: string | null;
         created_at: number;
         updated_at: number;
@@ -617,7 +652,7 @@ export class DesignProjectStore {
 
     const project = await this.withDatabase(database => {
       const row = database.prepare(`
-        SELECT project_id, name, source, source_artifact_id, active_version_id, explicit_draft, conversation_history, created_at, updated_at, last_opened_at
+        SELECT project_id, name, source, source_artifact_id, active_version_id, explicit_draft, entry_pending, entry_path, conversation_history, created_at, updated_at, last_opened_at
         FROM design_projects
         WHERE source_artifact_id = ?
       `).get(trimmed) as {
@@ -627,6 +662,8 @@ export class DesignProjectStore {
         source_artifact_id: string | null;
         active_version_id: string;
         explicit_draft?: number | null;
+        entry_pending?: number | null;
+        entry_path?: string | null;
         conversation_history: string | null;
         created_at: number;
         updated_at: number;
@@ -646,7 +683,7 @@ export class DesignProjectStore {
 
   async updateProject(
     projectId: string,
-    patch: Partial<Pick<DesignProjectRecord, "name" | "activeVersionId" | "conversationHistory" | "updatedAt" | "lastOpenedAt" | "sourceArtifactId" | "explicitDraft">>,
+    patch: Partial<Pick<DesignProjectRecord, "name" | "activeVersionId" | "conversationHistory" | "updatedAt" | "lastOpenedAt" | "sourceArtifactId" | "explicitDraft" | "entryPending" | "entryPath">>,
   ): Promise<DesignProjectRecord | null> {
     const current = await this.getProject(projectId);
     if (!current) {
@@ -663,13 +700,15 @@ export class DesignProjectStore {
     const saved = await this.withDatabase(database => {
       database.prepare(`
         UPDATE design_projects
-        SET name = ?, source_artifact_id = ?, active_version_id = ?, explicit_draft = ?, conversation_history = ?, updated_at = ?, last_opened_at = ?
+        SET name = ?, source_artifact_id = ?, active_version_id = ?, explicit_draft = ?, entry_pending = ?, entry_path = ?, conversation_history = ?, updated_at = ?, last_opened_at = ?
         WHERE project_id = ?
       `).run(
         next.name,
         next.sourceArtifactId ?? null,
         next.activeVersionId,
         next.explicitDraft ? 1 : 0,
+        next.entryPending ? 1 : 0,
+        next.entryPath ?? null,
         JSON.stringify(next.conversationHistory ?? []),
         next.updatedAt,
         next.lastOpenedAt,

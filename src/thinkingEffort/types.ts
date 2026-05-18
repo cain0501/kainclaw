@@ -13,9 +13,22 @@ export type FastModeDisabledEvent = {
   persistPreferenceOff: boolean;
 };
 
+export type ProviderRequestMetrics = {
+  provider: "anthropic";
+  requestKind: "main" | "built-in-agent" | "swarm-worker";
+  model: string;
+  toolCount: number;
+  systemPromptChars: number;
+  requestBodyBytes: number;
+  usedPromptCache: false;
+  promptCacheStatus: "unsupported";
+};
+
 export type ProviderRuntimeOptions = {
   effortLevel?: EffortLevel;
   thinkingConfig?: ThinkingConfig;
   fastMode?: boolean;
   onFastModeDisabled?: (event: FastModeDisabledEvent) => void | Promise<void>;
+  requestKind?: "main" | "built-in-agent" | "swarm-worker";
+  onRequestMetrics?: (metrics: ProviderRequestMetrics) => void;
 };

@@ -20,6 +20,7 @@ import {
 } from "../../thinkingEffort/thinking";
 import type {
   FastModeDisabledEvent,
+  ProviderRequestMetrics,
   ProviderRuntimeOptions,
 } from "../../thinkingEffort/types";
 
@@ -42,6 +43,16 @@ type AnthropicTool = { name: string; description?: string; input_schema: unknown
 type AnthropicThinking =
   | { type: "adaptive" }
   | { type: "enabled"; budget_tokens: number };
+
+type AnthropicResponseUsageEvent = {
+  type?: string;
+  usage?: {
+    input_tokens?: number;
+    output_tokens?: number;
+    cache_creation_input_tokens?: number;
+    cache_read_input_tokens?: number;
+  };
+};
 
 const ANTHROPIC_MAX_IMAGE_BYTES = 5 * 1024 * 1024;
 
@@ -217,6 +228,49 @@ export function toAnthropicMessages(messages: NormalizedMessage[]): AnthropicReq
   return result;
 }
 
+function emitAnthropicRequestMetrics(options: {
+  runtimeOptions: ProviderRuntimeOptions;
+  config: Extract<ProviderConfig, { type: "anthropic" }>;
+  tools: unknown[];
+  systemPrompt: string;
+  body: string;
+}): void {
+  const metrics: ProviderRequestMetrics = {
+    provider: "anthropic",
+    requestKind: options.runtimeOptions.requestKind ?? "main",
+    model: options.config.model,
+    toolCount: options.tools.length,
+    systemPromptChars: options.systemPrompt.length,
+    requestBodyBytes: Buffer.byteLength(options.body),
+    usedPromptCache: false,
+    promptCacheStatus: "unsupported",
+  };
+  options.runtimeOptions.onRequestMetrics?.(metrics);
+  if (process.env.KAINCLAW_DEBUG_PROMPT_COST === "1") {
+    console.debug("[anthropic-request-metrics]", JSON.stringify(metrics));
+  }
+}
+
+function maybeLogAnthropicUsageEvent(event: AnthropicResponseUsageEvent): void {
+  if (process.env.KAINCLAW_DEBUG_PROMPT_COST !== "1") {
+    return;
+  }
+  const usage = event.usage;
+  if (!usage) {
+    return;
+  }
+  console.debug(
+    "[anthropic-response-usage]",
+    JSON.stringify({
+      inputTokens: usage.input_tokens ?? null,
+      outputTokens: usage.output_tokens ?? null,
+      cacheCreationInputTokens: usage.cache_creation_input_tokens ?? null,
+      cacheReadInputTokens: usage.cache_read_input_tokens ?? null,
+      promptCacheStatus: "unsupported_in_adapter",
+    }),
+  );
+}
+
 export class AnthropicAdapter implements IProviderAdapter {
   private readonly config: Extract<ProviderConfig, { type: "anthropic" }>;
   private readonly systemPrompt: string;
@@ -292,6 +346,13 @@ export class AnthropicAdapter implements IProviderAdapter {
         ...(fastMode ? { speed: "fast" } : {}),
         stream: true,
       });
+      emitAnthropicRequestMetrics({
+        runtimeOptions: this.runtimeOptions,
+        config: this.config,
+        tools,
+        systemPrompt: this.systemPrompt,
+        body,
+      });
 
       let buffer = "";
       const toolUseAccum: Record<number, { id: string; name: string; inputJson: string }> = {};
@@ -315,6 +376,8 @@ export class AnthropicAdapter implements IProviderAdapter {
         } catch {
           return;
         }
+
+        maybeLogAnthropicUsageEvent(event as AnthropicResponseUsageEvent);
 
         if (event.type === "content_block_start") {
           const block = event.content_block;

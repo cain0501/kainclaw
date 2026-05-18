@@ -59,44 +59,48 @@ describe("Electron renderer settings", () => {
     const html = await readFile(rendererPath, "utf8");
     const patchableSrcdocMatches = html.match(/function buildDesignPatchableSrcdoc\(/g) ?? [];
 
-    expect(html).toContain('id="page-design"');
-    expect(html).toContain('id="design-prompt-input"');
-    expect(html).toContain('id="design-generate-btn"');
-    expect(html).toContain('id="design-mode-edit-btn"');
-    expect(html).toContain('id="design-mode-new-btn"');
     expect(html).toContain("function openDesignHub()");
+    expect(html).toContain("function showDesignPage()");
+    expect(html).toContain("openMidtai({");
     expect(html).toContain('id="page-midtai"');
     expect(html).toContain('id="midtai-state-chip"');
     expect(html).toContain('id="mtbar-img"');
     expect(html).toContain('id="mtbar-design"');
     expect(html).toContain('id="canvas-toolbar"');
+    expect(html).toContain("const promptInput = document.getElementById('midtai-design-prompt');");
+    expect(html).toContain("const outputTypeSelect = document.getElementById('midtai-output-type');");
+    expect(html).toContain("const midtaiProjectNameEl = document.getElementById('midtai-design-chat-project-name');");
+    expect(html).toContain("const midtaiProjectMetaEl = document.getElementById('midtai-design-chat-project-meta');");
+    expect(html).toContain("const slidersPanel = document.getElementById('midtai-sliders-panel');");
+    expect(html).toContain("const midtaiCanvasTweaksBtn = document.getElementById('midtai-canvas-tweak-btn');");
     expect(html).toContain("function updateStateChip()");
     expect(html).toContain("function openCanvas(projectName)");
     expect(html).toContain("function exitCanvas()");
-    expect(html).toContain('id="design-sliders-panel"');
-    expect(html).toContain('id="design-patch-popover"');
-    expect(html).toContain('id="design-patch-comment"');
-    expect(html).toContain('id="design-image-lab-btn"');
-    expect(html).toContain('id="design-versions-panel"');
-    expect(html).toContain('id="design-direction-panel"');
-    expect(html).toContain('id="design-reference-panel"');
-    expect(html).toContain('id="design-reference-input"');
-    expect(html).toContain('id="design-export-html-btn"');
-    expect(html).toContain('id="design-export-pdf-btn"');
-    expect(html).toContain('id="design-export-pptx-btn"');
-    expect(html).toContain('id="design-export-zip-btn"');
-    expect(html).toContain('id="design-tweaks-btn" class="btn-secondary" onclick="toggleDesignTweaks()"');
+    expect(html).toContain('id="midtai-canvas-tweak-btn"');
+    expect(html).toContain('id="midtai-sliders-panel"');
+    expect(html).toContain('id="mnp-image-actions"');
+    expect(html).toContain('id="mnp-patch-comment"');
+    expect(html).toContain('id="mnp-patch-status"');
+    expect(html).toContain('id="mnp-patch-apply-btn"');
+    expect(html).toContain('id="midtai-versions-panel"');
+    expect(html).toContain('id="view-design-versions"');
+    expect(html).toContain('id="midtai-design-versions-list"');
+    expect(html).toContain('id="midtai-export-menu"');
+    expect(html).toContain("function showMidtaiNodePanel(node, isImg)");
+    expect(html).toContain("function hideMidtaiNodePanel()");
+    expect(html).toContain("function applyMidtaiCanvasPatch()");
+    expect(html).toContain("function setMidtaiCanvasMode(mode)");
     expect(html).toContain("function generateDesignWorkbench()");
-    expect(html).toContain("function applyDesignPatchRequest()");
-    expect(html).toContain("function buildDesignImageLabPrompt(node, comment)");
-    expect(html).toContain("function sendDesignImageNodeToImageLab()");
     expect(html).toContain("midtaiState.replaceCtx = {");
-    expect(html).toContain("element: node.selector");
     expect(html).toContain("replaceCtx: midtaiState.replaceCtx");
     expect(html).toContain("resolveInferredImageRatio");
     expect(html).toContain("applyInferredImageRatio");
     expect(html).toContain("function loadDesignVersions()");
+    expect(html).toContain("function renderMidtaiVersionsPanel(panel)");
+    expect(html).toContain("function toggleMidtaiVersionsPanel()");
     expect(html).toContain("function restoreDesignVersion(versionId)");
+    expect(html).toContain("function toggleMidtaiExportMenu(forceOpen)");
+    expect(html).toContain("function exportDesign(format)");
     expect(html).toContain("function exportDesignWorkbench(format)");
     expect(html).toContain("function chooseDesignDirection(directionId)");
     expect(html).toContain("function skipDesignDirectionSuggestions()");
@@ -125,8 +129,6 @@ describe("Electron renderer settings", () => {
     expect(patchableSrcdocMatches).toHaveLength(1);
     expect(html).toContain("const hasSliders = (designBridgeState.sliders?.length ?? 0) > 0;");
     expect(html).toContain("const tweaksAvailable = designBridgeState.editModeAvailable || hasSliders;");
-    expect(html).toContain("tweaksBtn.disabled = !tweaksAvailable;");
-    expect(html).toContain("tweaksBtn.style.display = designBridgeState.html ? 'inline-flex' : 'none';");
     expect(html).toContain("This artifact does not expose tweak mode yet.");
     expect(html).toContain("tagName: el.tagName.toLowerCase()");
     expect(html).toContain("alt: el.getAttribute('alt') || ''");
@@ -138,13 +140,10 @@ describe("Electron renderer settings", () => {
     expect(html).toContain("contentType: 'img'");
     expect(html).toContain("send({ type: 'image:loadState' });");
     expect(html).toContain("inferredRatio");
-    expect(html).toContain("生成规格");
-    expect(html).toContain("最近支持规格");
+    expect(html).toContain("function applyInferredImageRatio(inferredRatio)");
+    expect(html).toContain("sizeByRatio[inferredRatio] || '1024x1024'");
     expect(html).toContain("insertToDesign('${result.src}')");
     expect(html).toContain("design:patchImageNode");
-    expect(html).toContain("frameEl.onload = () => {");
-    expect(html).toContain("applyAllDesignSliderValues(frameEl);");
-    expect(html).toContain("designBridgeRenderedToken = 0;");
     expect(html).toContain("referenceImageDataUrl");
     expect(html).toContain("referenceImageMimeType");
     expect(html).toContain("window.electronAPI.exportDesignPptx");
@@ -161,7 +160,6 @@ describe("Electron renderer settings", () => {
     expect(html).toContain("form.zhDescription");
     expect(html).toContain("artifact:openKainClawDesign");
     expect(html).toContain("kainclawDesign:open");
-    expect(html).toContain("__edit_mode_available");
   });
 
   it("hydrates Midtai design payloads into the shared design bridge state before switching views", async () => {
@@ -181,7 +179,8 @@ describe("Electron renderer settings", () => {
 
     expect(html).toContain("return versions.filter(version => version?.projectId === currentProjectId);");
     expect(html).toContain("loadDesignVersions();");
-    expect(html).toContain("正在加载版本记录...");
+    expect(html).toContain("function renderMidtaiVersionsPanel(panel)");
+    expect(html).toContain("panel.id === 'midtai-design-versions-list'");
   });
 
   it("uses the Midtai design tab as a project workbench instead of the legacy preview and works tabs", async () => {
@@ -189,11 +188,12 @@ describe("Electron renderer settings", () => {
     const html = await readFile(rendererPath, "utf8");
 
     expect(html).toContain('data-view="design-chat"');
-    expect(html).toContain("设计对话");
-    expect(html).toContain("画布预览");
-    expect(html).toContain("版本记录");
+    expect(html).toContain('id="view-design-chat"');
+    expect(html).toContain('id="view-design-versions"');
+    expect(html).toContain('id="view-canvas"');
     expect(html).toContain('id="midtai-design-chat-project-name"');
     expect(html).toContain('id="midtai-design-versions-list"');
+    expect(html).toContain("function handleMidtaiDesignTabOpen()");
     expect(html).toContain("function syncMidtaiDesignWorkspaceHeader()");
     expect(html).toContain("showDesignView('design-chat')");
   });
@@ -208,9 +208,9 @@ describe("Electron renderer settings", () => {
     expect(html).toContain('id="midtai-topbar-headline"');
     expect(html).toContain('id="midtai-goal-text"');
     expect(html).toContain('id="midtai-shell-context"');
-    expect(html).toContain('midtai-board-image');
-    expect(html).toContain('midtai-board-design');
-    expect(html).toContain('midtai-board-library');
+    expect(html).toContain("midtai-board-image");
+    expect(html).toContain("midtai-board-design");
+    expect(html).toContain("midtai-board-library");
     expect(html).toContain("function renderShellContext()");
     expect(html).toContain("const BOARD_META = {");
     expect(html).toContain("function showMidtaiTab(boardName)");
@@ -231,7 +231,7 @@ describe("Electron renderer settings", () => {
     expect(patchResultSlice).not.toContain("showDesignPage();");
   });
 
-  it("prefers design chat over canvas or new-entry when a switched project already has history", async () => {
+  it("keeps design entry state project-driven instead of letting chat history or tab-open heuristics override it", async () => {
     const rendererPath = path.join(__dirname, "renderer", "index.html");
     const html = await readFile(rendererPath, "utf8");
     const historyStart = html.indexOf("case 'design:chat:history':");
@@ -243,13 +243,17 @@ describe("Electron renderer settings", () => {
 
     expect(html).toContain("function hasDesignChatHistory()");
     expect(html).toContain("function shouldKeepDesignEntryDialog()");
-    expect(html).toContain("const designEntryPendingProjectIds = new Set();");
-    expect(html).toContain("const designEntrySelectionsByProjectId = new Map();");
-    expect(historyBlock).toContain("if (hasDesignChatHistory() && midtaiState.type === 'design' && !shouldKeepDesignEntryDialog()) {");
-    expect(historyBlock).toContain("showDesignView('design-chat');");
-    expect(tabBlock).toContain("const hasHistory = hasDesignChatHistory();");
-    expect(html).toContain("&& designEntryPendingProjectIds.has(currentProjectId)");
-    expect(tabBlock).toContain("showDesignView(hasHistory ? 'design-chat' : (designBridgeState.html ? 'canvas' : 'design-chat'));");
+    expect(html).toContain("let designEntryCurrentSelection = null;");
+    expect(html).toContain("let designEntryCurrentPending = false;");
+    expect(html).toContain("type: 'design:entry-choice'");
+    expect(historyBlock).toContain("designChatMessages = Array.isArray(msg.messages) ? msg.messages : [];");
+    expect(historyBlock).not.toContain("showDesignView('design-chat');");
+    expect(html).toContain("designEntryCurrentPending = !!msg.entryPending;");
+    expect(html).toContain("designEntryCurrentSelection = msg.entryPath === 'quick' || msg.entryPath === 'detailed'");
+    expect(html).toContain("if (designEntryCurrentPending && !hasDesignEntrySelection() && midtaiState.type === 'design' && midtaiState.shellTab === 'design') {");
+    expect(tabBlock).toContain("showDesignView(midtaiState.designTabView || 'design-chat');");
+    expect(tabBlock).toContain("if (designEntryAwaitingProjectCreation) {");
+    expect(tabBlock).toContain("if (!midtaiState.currentDesignProjectId && !pendingProjectSwitch && !designResumeLookupAttempted) {");
     expect(tabBlock).toContain("if (shouldKeepDesignEntryDialog()) {");
   });
 
