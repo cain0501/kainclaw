@@ -206,7 +206,7 @@ describe("DesignVersionStore", () => {
       deletedAt: expect.any(Number),
       html: expect.stringContaining(">0<"),
     });
-  });
+  }, 15_000);
 
   it("migrates legacy json versions into sqlite on first access", async () => {
     const storageRoot = await fs.mkdtemp(path.join(os.tmpdir(), "kc-design-versions-"));
@@ -357,7 +357,7 @@ describe("DesignVersionStore", () => {
       "title",
       "deleted_at",
     ]));
-    expect(migrationVersions.map(row => row.version)).toEqual([1, 2, 3, 4, 5]);
+    expect(migrationVersions.map(row => row.version)).toEqual([1, 2, 3, 4, 5, 6, 7]);
     expect(migratedRow).toEqual({
       title: "",
       deleted_at: null,

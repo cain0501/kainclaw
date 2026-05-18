@@ -6971,7 +6971,9 @@ Freeze skill body.
     expect(path.normalize(await realpath(statePayload?.workspaceInfo.activeWorktree?.worktreePath ?? ""))).toBe(
       path.normalize(await realpath(worktreeRoot)),
     );
-    expect(path.normalize(statePayload?.workspaceInfo.gitRoot ?? "")).toBe(path.normalize(repoRoot));
+    expect(path.normalize(await realpath(statePayload?.workspaceInfo.gitRoot ?? ""))).toBe(
+      path.normalize(await realpath(repoRoot)),
+    );
     expect(statePayload?.workspaceInfo.detail).toContain("feature/demo");
   });
 
