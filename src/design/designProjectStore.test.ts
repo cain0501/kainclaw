@@ -156,7 +156,7 @@ describe("DesignProjectStore", () => {
     expect(projectColumns.map(column => column.name)).toEqual(
       expect.arrayContaining(["thumbnail", "conversation_history"]),
     );
-  });
+  }, 15_000);
 
   it("cascades version deletion when a project is deleted", async () => {
     const storageRoot = await fs.mkdtemp(path.join(os.tmpdir(), "kc-design-projects-"));
@@ -225,5 +225,5 @@ describe("DesignProjectStore", () => {
       isDraft: true,
       sourceArtifactId: "artifact-keep",
     });
-  }, 15_000);
+  });
 });
