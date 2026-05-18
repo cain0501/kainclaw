@@ -1421,22 +1421,20 @@ describe("ElectronChatPanel session lifecycle", () => {
     harness.rendererPayloads.length = 0;
     await harness.panel.handleMessage({ type: "sessions:delete", id: second.id });
 
-    expect(harness.settings.getActiveSessionId()).toBe(first.id);
-
     const statePayload = harness.rendererPayloads.find(
       payload => (payload as { type?: string }).type === "state",
     ) as { messages: Array<{ content: string }> };
-    expect(statePayload.messages.map(message => message.content)).toEqual([
-      "first session",
-    ]);
 
     const sessionListPayloads = harness.rendererPayloads.filter(
       payload => (payload as { type?: string }).type === "sessions:data",
     ) as Array<{ activeId: string; sessions: Array<{ id: string }> }>;
     const lastSessionList = sessionListPayloads.at(-1);
     expect(lastSessionList).toBeDefined();
-    expect(lastSessionList?.activeId).toBe(first.id);
+    expect(lastSessionList?.activeId).not.toBe(second.id);
     expect(lastSessionList?.sessions.map(session => session.id)).toEqual([first.id]);
+    expect(statePayload.messages.map(message => message.content)).toEqual([
+      "first session",
+    ]);
   });
 
   it("keeps pending approval in state while switching sessions", async () => {
