@@ -457,7 +457,21 @@ describe("ElectronChatPanel session lifecycle", () => {
     const sessionId = harness.settings.getActiveSessionId();
     expect(sessionId).toBeTruthy();
 
-    const messages = await harness.sessions.loadMessages(sessionId!);
+    let messages = await harness.sessions.loadMessages(sessionId!);
+    let statePayload:
+      | { messages: Array<{ content: string }> }
+      | undefined;
+    await vi.waitFor(async () => {
+      messages = await harness.sessions.loadMessages(sessionId!);
+      statePayload = [...harness.rendererPayloads]
+        .reverse()
+        .find(payload => (payload as { type?: string }).type === "state") as
+        | { messages: Array<{ content: string }> }
+        | undefined;
+      expect(messages.some(message => message.kind === "tool_result")).toBe(true);
+      expect(statePayload?.messages.at(-1)?.content).toBe("我已经读取到 1 个用户。");
+    }, { timeout: 10_000 });
+
     const toolUseMessage = messages.find(message => message.kind === "tool_use");
     const toolResultMessage = messages.find(message => message.kind === "tool_result");
     expect(toolUseMessage).toMatchObject({
@@ -473,7 +487,6 @@ describe("ElectronChatPanel session lifecycle", () => {
       toolIsError: false,
       excludeFromConversation: true,
     });
-    expect(messages[messages.length - 1]?.content).toBe("我已经读取到 1 个用户。");
   });
 
   it("exposes Agent to Electron main chat and wires spawnSubAgent with built-in agent constraints", async () => {
@@ -1453,10 +1466,11 @@ describe("ElectronChatPanel session lifecycle", () => {
 
       expect(lastSessionList).toBeDefined();
       expect(statePayload).toBeDefined();
-    });
+    }, { timeout: 10_000 });
 
     expect(lastSessionList?.sessions.map(session => session.id)).toEqual([first.id]);
     expect(harness.settings.getActiveSessionId()).toBe(first.id);
+    await expect(harness.sessions.getSessionMeta(second.id)).resolves.toBeUndefined();
     expect(statePayload?.messages.map(message => message.content)).toEqual([
       "first session",
     ]);
