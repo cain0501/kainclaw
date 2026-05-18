@@ -1447,33 +1447,33 @@ describe("ElectronChatPanel session lifecycle", () => {
     await harness.panel.handleMessage({ type: "sessions:delete", id: second.id });
 
     let statePayload: { messages: Array<{ content: string }> } | undefined;
-    let lastSessionList:
-      | { activeId: string; sessions: Array<{ id: string }> }
-      | undefined;
-
     await vi.waitFor(() => {
-      statePayload = harness.rendererPayloads.find(
+      statePayload = [...harness.rendererPayloads]
+        .reverse()
+        .find(
         payload => (payload as { type?: string }).type === "state",
       ) as { messages: Array<{ content: string }> } | undefined;
 
-      const sessionListPayloads = harness.rendererPayloads.filter(
-        payload => (payload as { type?: string }).type === "sessions:data",
-      ) as Array<{ activeId: string; sessions: Array<{ id: string }> }>;
-      lastSessionList = sessionListPayloads.findLast(payload =>
-        payload.sessions.length === 1 &&
-        payload.sessions[0]?.id === first.id
-      );
-
-      expect(lastSessionList).toBeDefined();
       expect(statePayload).toBeDefined();
+      expect(statePayload?.messages.map(message => message.content)).toEqual([
+        "first session",
+      ]);
     }, { timeout: 10_000 });
 
-    expect(lastSessionList?.sessions.map(session => session.id)).toEqual([first.id]);
     expect(harness.settings.getActiveSessionId()).toBe(first.id);
     await expect(harness.sessions.getSessionMeta(second.id)).resolves.toBeUndefined();
-    expect(statePayload?.messages.map(message => message.content)).toEqual([
-      "first session",
-    ]);
+    const index = await harness.sessions.readIndex();
+    expect(index.sessions.map(session => session.id)).toEqual([first.id]);
+
+    harness.rendererPayloads.length = 0;
+    await harness.panel.handleMessage({ type: "sessions:load" });
+    const sessionList = getLastRendererPayloadOfType<{
+      type?: string;
+      activeId: string;
+      sessions: Array<{ id: string }>;
+    }>(harness.rendererPayloads, "sessions:data");
+    expect(sessionList?.sessions.map(session => session.id)).toEqual([first.id]);
+    expect(sessionList?.activeId).toBe(first.id);
   }, 15_000);
 
   it("keeps pending approval in state while switching sessions", async () => {
