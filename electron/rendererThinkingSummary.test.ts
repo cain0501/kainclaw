@@ -14,6 +14,7 @@ async function renderThinkingSummaryMessage() {
 
 const script = `
 const expandedThinkingSummaries = new Set();
+const appState = { messages: [null, null, null] };
 const DEFAULT_SHELL_STRINGS = {
   thinkingSummaryTitle: "Thought summary",
 };

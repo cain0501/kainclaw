@@ -458,8 +458,21 @@ describe("ElectronChatPanel session lifecycle", () => {
     expect(sessionId).toBeTruthy();
 
     const messages = await harness.sessions.loadMessages(sessionId!);
-    expect(messages.some(message => message.kind === "tool_use")).toBe(false);
-    expect(messages.some(message => message.kind === "tool_result")).toBe(false);
+    const toolUseMessage = messages.find(message => message.kind === "tool_use");
+    const toolResultMessage = messages.find(message => message.kind === "tool_result");
+    expect(toolUseMessage).toMatchObject({
+      role: "assistant",
+      kind: "tool_use",
+      toolName: "mcp__notion__notion-get-users",
+      excludeFromConversation: true,
+    });
+    expect(toolResultMessage).toMatchObject({
+      role: "assistant",
+      kind: "tool_result",
+      toolSummary: "Fetched users",
+      toolIsError: false,
+      excludeFromConversation: true,
+    });
     expect(messages[messages.length - 1]?.content).toBe("我已经读取到 1 个用户。");
   });
 

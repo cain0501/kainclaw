@@ -415,6 +415,7 @@ export class ElectronChatPanel {
     {
       abortController: AbortController;
       streamingText: string;
+      thinkingSummary: string;
       kind: ActiveRequestKind;
     }
   >();
@@ -1849,6 +1850,47 @@ export class ElectronChatPanel {
       .catch(() => undefined)
       .then(runWrite);
     await this.sessionMessageWriteQueue;
+  }
+
+  private async appendToolUseMessageToSession(
+    sessionId: string,
+    toolName: string,
+    inputPreview?: string,
+  ): Promise<void> {
+    await this.appendAssistantMessageToSession(
+      sessionId,
+      {
+        role: "assistant",
+        kind: "tool_use",
+        content: "",
+        toolName,
+        ...(inputPreview ? { toolInputPreview: inputPreview } : {}),
+        excludeFromConversation: true,
+        timestamp: Date.now(),
+      },
+      { updatePreview: false },
+    );
+  }
+
+  private async appendToolResultMessageToSession(
+    sessionId: string,
+    summary: string,
+    content: string,
+    isError: boolean,
+  ): Promise<void> {
+    await this.appendAssistantMessageToSession(
+      sessionId,
+      {
+        role: "assistant",
+        kind: "tool_result",
+        content,
+        toolSummary: summary,
+        toolIsError: isError,
+        excludeFromConversation: true,
+        timestamp: Date.now(),
+      },
+      { updatePreview: false },
+    );
   }
 
   private async appendUserMessageToSession(
@@ -3443,6 +3485,7 @@ export class ElectronChatPanel {
     this.inFlightRequests.set(requestSessionId, {
       abortController,
       streamingText: "",
+      thinkingSummary: "",
       kind: "chat",
     });
 
@@ -4086,6 +4129,7 @@ export class ElectronChatPanel {
     this.inFlightRequests.set(requestSessionId, {
       abortController,
       streamingText: "",
+      thinkingSummary: "",
       kind: "chat",
     });
 
@@ -4560,13 +4604,24 @@ export class ElectronChatPanel {
               type: "stateUpdate",
               isBusy: true,
               streamingText: this.streamingText,
+              thinkingSummary: requestState.thinkingSummary,
             });
           }
         },
+        onThinkingSummary: (summary) => {
+          this.updateThinkingSummary(requestSessionId, summary);
+        },
         onToolStart: (toolName, _input, _execId) => {
+          void this.appendToolUseMessageToSession(requestSessionId, toolName, undefined);
           this.sendToRenderer({ type: "tool:start", toolName });
         },
         onToolEnd: (_execId, summary, isError, content) => {
+          void this.appendToolResultMessageToSession(
+            requestSessionId,
+            summary,
+            typeof content === "string" ? content : "",
+            isError,
+          );
           this.sendToRenderer({ type: "tool:end", summary, isError });
         },
         abortSignal: abortController.signal,
@@ -4578,6 +4633,7 @@ export class ElectronChatPanel {
         content: finalText,
         timestamp: Date.now(),
       };
+      const thinkingSummary = this.inFlightRequests.get(requestSessionId)?.thinkingSummary?.trim() ?? "";
       if (activeSessionInstalledSkillHooks.length > 0) {
         await triggerHooks(
           "PostPrompt",
@@ -4589,6 +4645,15 @@ export class ElectronChatPanel {
           },
           installedSkillAgentRunner,
         );
+      }
+      if (thinkingSummary && this.settings.getShowThinkingSummaries()) {
+        await this.appendAssistantMessageToSession(requestSessionId, {
+          role: "assistant",
+          kind: "thinking",
+          content: thinkingSummary,
+          excludeFromConversation: true,
+          timestamp: Date.now(),
+        }, { updatePreview: false });
       }
       await this.appendAssistantMessageToSession(requestSessionId, assistantMessage);
       const detectedArtifact = this.detectArtifactFromSessionMessage(
@@ -4672,6 +4737,9 @@ export class ElectronChatPanel {
     message: ChatMessage,
     index: number,
   ) {
+    if (message.kind === "tool_use" || message.kind === "tool_result" || message.kind === "thinking") {
+      return null;
+    }
     return detectArtifact(message.content, {
       id: this.buildArtifactRecordId(sessionId, message, index),
       now: message.timestamp,
@@ -6395,6 +6463,24 @@ ${html.slice(0, 8000)}
         type: "stateUpdate",
         isBusy: true,
         streamingText: this.streamingText,
+        thinkingSummary: requestState.thinkingSummary,
+      });
+    }
+  }
+
+  private updateThinkingSummary(sessionId: string, summary: string): void {
+    const requestState = this.inFlightRequests.get(sessionId);
+    if (!requestState) {
+      return;
+    }
+
+    requestState.thinkingSummary = summary.trim();
+    if (this.isViewingSession(sessionId)) {
+      this.sendToRenderer({
+        type: "stateUpdate",
+        isBusy: true,
+        streamingText: this.streamingText,
+        thinkingSummary: requestState.thinkingSummary,
       });
     }
   }
@@ -6403,6 +6489,7 @@ ${html.slice(0, 8000)}
     const requestState = this.inFlightRequests.get(sessionId);
     if (requestState) {
       requestState.streamingText = "";
+      requestState.thinkingSummary = "";
     }
     if (this.isViewingSession(sessionId)) {
       this.streamingText = "";
@@ -6410,6 +6497,7 @@ ${html.slice(0, 8000)}
         type: "stateUpdate",
         isBusy: true,
         streamingText: "",
+        thinkingSummary: "",
       });
     }
   }
@@ -6988,6 +7076,7 @@ ${html.slice(0, 8000)}
     this.inFlightRequests.set(requestSessionId, {
       abortController,
       streamingText: "",
+      thinkingSummary: "",
       kind: "image",
     });
     const batchExecution = this.resolveImageBatchExecution(message);
@@ -7125,6 +7214,7 @@ ${html.slice(0, 8000)}
       type: "state",
       isBusy: sessionBusy,
       activeRequestKind: activeRequest?.kind ?? (backgroundBusy ? "background" : null),
+      thinkingSummary: activeRequest?.thinkingSummary ?? "",
       providerLabel: localizedProviderLabel,
       mcpServers,
       desktopRuntime: this.buildDesktopRuntimeState(),

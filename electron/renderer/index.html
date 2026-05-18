@@ -269,6 +269,21 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-seri
 .typing-dots span:nth-child(2){animation-delay:.2s}
 .typing-dots span:nth-child(3){animation-delay:.4s}
 @keyframes blink{0%,80%,100%{opacity:.2}40%{opacity:1}}
+.live-stack{display:flex;flex-direction:column;gap:10px}
+.live-card{border-radius:14px;border:1px solid #ececf1;background:linear-gradient(180deg,#ffffff 0%,#fbfbfd 100%);box-shadow:0 1px 2px rgba(24,24,27,.03)}
+.live-card.thinking{border-color:#ebe7ff;background:linear-gradient(180deg,#ffffff 0%,#fbfaff 100%)}
+.live-card.answer{border-color:#e7e7ec;background:linear-gradient(180deg,#ffffff 0%,#fcfcfd 100%)}
+.live-card.tool{border-color:#ececf1;background:linear-gradient(180deg,#fcfcfd 0%,#f8f8fb 100%)}
+.live-card-body{padding:12px 14px}
+.live-kicker{font-size:10px;font-weight:700;letter-spacing:.09em;color:#8b8ba0;text-transform:uppercase;margin:0 0 8px}
+.live-kicker.answer{color:#6b7280}
+.live-kicker.tool{color:#7c7c8b}
+.live-thinking-title{font-size:12px;font-weight:700;color:#5b5bd6;margin:0 0 6px}
+.live-thinking-copy{font-size:12px;line-height:1.65;color:#52525b}
+.live-tool-row{font-size:12px;color:#52525b;display:flex;align-items:center;gap:7px}
+.live-answer-copy{font-size:13px;line-height:1.72;color:#18181b;white-space:normal}
+.live-answer-copy p{margin:0 0 8px}
+.live-answer-copy p:last-child{margin-bottom:0}
 
 /* Session item in sidebar */
 .sess-item{display:flex;align-items:center;gap:7px;padding:7px 8px;border-radius:6px;cursor:pointer;color:#52525b;font-size:13px;position:relative}
@@ -1710,6 +1725,11 @@ window.addEventListener('mouseleave', () => {
 let appState = {
   isBusy: false,
   activeRequestKind: null,
+  activeToolName: '',
+  activeToolStatus: 'idle',
+  lastToolStatusLabel: '',
+  waitingForApproval: false,
+  activeThinkingSummary: '',
   sessionType: 'default',
   messages: [],
   streamingText: '',
@@ -1722,6 +1742,7 @@ let appState = {
   uiLanguage: 'zh-CN',
   dialogStrings: null,
   shellStrings: null,
+  showThinkingSummaries: true,
   artifactState: {
     activeArtifact: null,
     activeArtifactId: null,
@@ -2980,7 +3001,15 @@ function handleMessage(msg) {
     case 'stateUpdate':
       appState.isBusy = msg.isBusy;
       appState.streamingText = msg.streamingText || '';
-      renderMessages();
+      appState.activeThinkingSummary = msg.thinkingSummary || '';
+      if (!appState.isBusy) {
+        appState.activeToolName = '';
+        appState.activeToolStatus = 'idle';
+        appState.lastToolStatusLabel = '';
+        appState.waitingForApproval = false;
+        appState.activeThinkingSummary = '';
+      }
+      renderMessages({ liveOnly: true });
       updateBusyUi();
       break;
     case 'showOnboarding':
@@ -3390,29 +3419,36 @@ function handleMessage(msg) {
       break;
     case 'approval:pending':
       if (msg.id) {
+        appState.waitingForApproval = true;
         renderApproval({ title: msg.title, summary: msg.summary, diff: msg.diff, inputPreview: msg.inputPreview });
       } else {
+        appState.waitingForApproval = false;
         renderApproval(null);
       }
+      renderMessages({ liveOnly: true });
       break;
     case 'mcp:status':
       renderMcpServers(msg.servers || []);
       break;
     case 'tool:start':
-      // Show brief tool indicator in streaming area
       if (!appState.isBusy) break;
-      appState.streamingText = appState.streamingText || '';
-      document.getElementById('tool-indicator')?.remove();
-      {
-        const ti = document.createElement('div');
-        ti.id = 'tool-indicator';
-        ti.style.cssText = 'font-size:11px;color:#a1a1aa;padding:4px 0;display:flex;align-items:center;gap:5px';
-        ti.innerHTML = `<div class="spinner"></div> ${escapeHtml(shellText('toolRunningPrefix'))} ${escapeHtml(String(msg.toolName || ''))}`;
-        document.getElementById('messages')?.appendChild(ti);
-      }
+      appState.activeToolName = String(msg.toolName || '').trim();
+      appState.activeToolStatus = 'running';
+      appState.lastToolStatusLabel = '';
+      renderMessages({ liveOnly: true });
       break;
     case 'tool:end':
-      document.getElementById('tool-indicator')?.remove();
+      appState.lastToolStatusLabel = appState.activeToolName || String(msg.summary || '').trim();
+      appState.activeToolStatus = msg.isError ? 'error' : 'done';
+      appState.activeToolName = '';
+      setTimeout(() => {
+        if (appState.activeToolStatus === 'done' || appState.activeToolStatus === 'error') {
+          appState.activeToolStatus = 'idle';
+          appState.lastToolStatusLabel = '';
+          renderMessages({ liveOnly: true });
+        }
+      }, 1600);
+      renderMessages({ liveOnly: true });
       break;
     case 'onboarding:keyValid':
       document.getElementById('ob-ok').style.display = 'block';
@@ -3661,12 +3697,18 @@ function applyState(state) {
 
   appState.isBusy = state.isBusy;
   appState.activeRequestKind = state.activeRequestKind || null;
+  appState.activeThinkingSummary = state.thinkingSummary || '';
+  if (!appState.isBusy) {
+    appState.activeToolName = '';
+    appState.activeThinkingSummary = '';
+  }
   appState.sessionType = state.sessionType === 'design' ? 'design' : 'default';
   if (!appState.isBusy || appState.activeRequestKind !== 'image') {
     chatPendingImageRequest = null;
   }
   appState.messages = nextMessages;
   appState.streamingText = state.streamingText || '';
+  appState.showThinkingSummaries = state.showThinkingSummaries !== false;
   appState.providerLabel = state.providerLabel || '未配置';
   appState.onboardingDone = state.onboardingDone;
   appState.pendingApproval = state.pendingApproval || null;
@@ -8776,9 +8818,45 @@ function renderArtifactPanel() {
 
 // Message Rendering
 let _emptyStateEl = null;
+let _messagesCommittedEl = null;
+let _messagesLiveEl = null;
 function getEmptyState() {
   if (!_emptyStateEl) _emptyStateEl = document.getElementById('empty-state');
   return _emptyStateEl;
+}
+
+function ensureMainChatMessageLayout() {
+  const container = document.getElementById('messages');
+  const emptyState = getEmptyState();
+
+  if (!_messagesCommittedEl || !document.body.contains(_messagesCommittedEl)) {
+    _messagesCommittedEl = document.createElement('div');
+    _messagesCommittedEl.id = 'messages-committed';
+    _messagesCommittedEl.style.cssText = 'display:none;flex-direction:column;gap:16px';
+  }
+  if (_messagesCommittedEl.parentNode !== container) {
+    container.appendChild(_messagesCommittedEl);
+  }
+
+  if (!_messagesLiveEl || !document.body.contains(_messagesLiveEl)) {
+    _messagesLiveEl = document.createElement('div');
+    _messagesLiveEl.id = 'messages-live';
+    _messagesLiveEl.style.cssText = 'display:none;flex-direction:column;gap:8px';
+  }
+  if (_messagesLiveEl.parentNode !== container) {
+    container.appendChild(_messagesLiveEl);
+  }
+
+  if (emptyState && emptyState.parentNode !== container) {
+    container.appendChild(emptyState);
+  }
+
+  return {
+    container,
+    committedHost: _messagesCommittedEl,
+    liveHost: _messagesLiveEl,
+    emptyState,
+  };
 }
 
 function clearExpandedThinkingSummaries() {
@@ -8828,6 +8906,234 @@ function didMessageListReset(previousMessages, nextMessages) {
   }
 
   return false;
+}
+
+function normalizeComparableChatText(text) {
+  return String(text || '').replace(/\r\n/g, '\n').trimEnd();
+}
+
+function shouldHideStreamingDuplicate(messages, streamingText) {
+  if (!streamingText) {
+    return false;
+  }
+
+  const lastMessage = Array.isArray(messages) && messages.length > 0
+    ? messages[messages.length - 1]
+    : null;
+  if (!lastMessage || lastMessage.role !== 'assistant' || lastMessage.kind) {
+    return false;
+  }
+
+  return normalizeComparableChatText(lastMessage.content) === normalizeComparableChatText(streamingText);
+}
+
+function renderMainChatStreamingBubble(streamingText) {
+  return `<div class="msg-wrap">
+    <div class="klogo" style="flex-shrink:0;margin-top:2px">K</div>
+    <div style="flex:1;min-width:0">
+      <div class="live-card answer">
+        <div class="live-card-body">
+          <div class="live-kicker answer">Answer</div>
+          <div class="live-answer-copy msg-streaming" style="opacity:.96">${escapeHtml(streamingText).replace(/\n/g,'<br>')}</div>
+        </div>
+      </div>
+    </div>
+  </div>`;
+}
+
+function renderMainChatThinkingSummary(summary) {
+  if (!summary || !appState.showThinkingSummaries) {
+    return '';
+  }
+
+  return `<div class="msg-wrap">
+    <div class="klogo" style="flex-shrink:0;margin-top:2px">K</div>
+    <div style="flex:1;min-width:0">
+      <div class="live-card thinking">
+        <div class="live-card-body">
+          <div class="live-kicker">State</div>
+          <div class="live-thinking-title">${escapeHtml(shellText('thinkingSummaryTitle'))}</div>
+          <div class="live-thinking-copy">${escapeHtml(summary).replace(/\n/g,'<br>')}</div>
+        </div>
+      </div>
+    </div>
+  </div>`;
+}
+
+function renderMainChatThinkingPlaceholder() {
+  const title = appState.waitingForApproval
+    ? 'Waiting for confirmation'
+    : appState.activeToolName
+      ? 'Using tools'
+      : 'Thinking';
+  const subtitle = appState.waitingForApproval
+    ? 'A command or external action needs your approval before execution can continue.'
+    : appState.activeToolName
+      ? 'Running the requested tool and waiting for the result.'
+      : 'Analyzing your request and preparing the response.';
+
+  return `<div class="msg-wrap">
+    <div class="klogo" style="flex-shrink:0;margin-top:2px">K</div>
+    <div style="flex:1;min-width:0">
+      <div class="live-card thinking">
+        <div class="live-card-body">
+          <div class="live-kicker">State</div>
+          <div class="live-thinking-title">${escapeHtml(title)}</div>
+          <div class="live-thinking-copy" style="margin-bottom:8px">${escapeHtml(subtitle)}</div>
+          <div class="typing-dots"><span></span><span></span><span></span></div>
+        </div>
+      </div>
+    </div>
+  </div>`;
+}
+
+function renderMainChatToolIndicator(toolName) {
+  if (!toolName) {
+    return '';
+  }
+
+  return `<div class="msg-wrap">
+    <div class="klogo" style="flex-shrink:0;margin-top:2px">K</div>
+    <div style="flex:1;min-width:0">
+      <div class="live-card tool">
+        <div class="live-card-body">
+          <div class="live-kicker tool">Tool</div>
+          <div class="live-tool-row">
+          <div class="spinner"></div>
+          <span>${escapeHtml(shellText('toolRunningPrefix'))} ${escapeHtml(toolName)}</span>
+        </div>
+        </div>
+      </div>
+    </div>
+  </div>`;
+}
+
+function buildMainChatLiveHtml(messages) {
+  const busy = !!appState.isBusy;
+  const streamingText = String(appState.streamingText || '');
+  const thinkingSummary = String(appState.activeThinkingSummary || '').trim();
+  const liveParts = [];
+  const lastMessage = Array.isArray(messages) && messages.length > 0
+    ? messages[messages.length - 1]
+    : null;
+
+  if (!busy) {
+    return liveParts.join('');
+  }
+
+  if (!streamingText
+    && !thinkingSummary
+    && !appState.waitingForApproval
+    && lastMessage?.kind === 'tool_result'
+    && appState.activeRequestKind !== 'image'
+    && appState.activeRequestKind !== 'background') {
+    return '';
+  }
+
+  liveParts.push('<div class="live-stack">');
+
+  if (streamingText && !shouldHideStreamingDuplicate(messages, streamingText)) {
+    liveParts.push(renderMainChatStreamingBubble(streamingText));
+    return liveParts.join('');
+  }
+
+  if (thinkingSummary) {
+    liveParts.push(renderMainChatThinkingSummary(thinkingSummary));
+  } else {
+    liveParts.push(renderMainChatThinkingPlaceholder());
+  }
+
+  if (!streamingText && (chatPendingImageRequest || appState.activeRequestKind === 'image')) {
+    liveParts.push(renderChatImagePendingBlock());
+    return liveParts.join('');
+  }
+
+  if (!streamingText && appState.activeRequestKind === 'background') {
+    liveParts.push(`<div class="msg-wrap">
+      <div class="klogo" style="flex-shrink:0;margin-top:2px">K</div>
+      <div style="flex:1;min-width:0">
+        <div class="live-card tool">
+          <div class="live-card-body">
+            <div class="live-kicker tool">Background</div>
+            <div class="live-tool-row">
+              <div class="spinner"></div>
+              <div>${escapeHtml(shellText('backgroundTaskBubble'))}</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>`);
+    liveParts.push('</div>');
+    return liveParts.join('');
+  }
+
+  if (!streamingText) {
+    if (thinkingSummary) {
+      liveParts.push(`<div class="msg-wrap">
+        <div class="klogo" style="flex-shrink:0;margin-top:2px">K</div>
+        <div style="flex:1;min-width:0">
+          <div class="live-card answer">
+            <div class="live-card-body">
+            <div class="live-kicker answer">Preparing answer</div>
+            <div class="typing-dots"><span></span><span></span><span></span></div>
+            </div>
+          </div>
+        </div>
+      </div>`);
+    }
+  }
+
+  liveParts.push('</div>');
+  return liveParts.join('');
+}
+
+function compressAssistantToolEcho(message, previousMessage) {
+  if (!message || message.role !== 'assistant' || message.kind) {
+    return null;
+  }
+  if (!previousMessage || previousMessage.kind !== 'tool_result') {
+    return null;
+  }
+
+  const raw = String(message.content || '').trim();
+  if (!raw) {
+    return null;
+  }
+
+  const toolContent = String(previousMessage.content || '').trim();
+  if (!toolContent) {
+    return null;
+  }
+
+  const normalizedRaw = raw.replace(/\r\n/g, '\n');
+  const normalizedTool = toolContent.replace(/\r\n/g, '\n');
+  if (!normalizedRaw.includes(normalizedTool)) {
+    return null;
+  }
+
+  const lines = normalizedRaw.split('\n');
+  const summaryStart = lines.findIndex(line => /一句话总结[:：]/.test(line) || /总结[:：]/.test(line));
+  if (summaryStart >= 0) {
+    return lines.slice(summaryStart).join('\n').trim();
+  }
+
+  const strippedLines = lines.filter(line =>
+    !/^\s*```/.test(line)
+    && !line.includes('git diff --stat')
+    && !line.includes('files changed')
+    && !/^\s*electron\//.test(line),
+  );
+  const strippedSummary = strippedLines.join('\n').trim();
+  if (strippedSummary && strippedSummary !== normalizedRaw.trim()) {
+    return strippedSummary;
+  }
+
+  const withoutFence = normalizedRaw.replace(/```[\s\S]*?```/g, '').trim();
+  if (withoutFence && withoutFence !== normalizedRaw.trim()) {
+    return withoutFence;
+  }
+
+  return null;
 }
 
 function renderMessages() {
@@ -8954,7 +9260,9 @@ function renderMessage(m, messageIndex) {
   const isThinking = m.kind === 'thinking';
   const isError = m.kind === 'error';
   const cls = isError ? 'error' : (isUser ? 'user' : 'assistant');
-  const rawContent = m.content || '';
+  const previousMessage = messageIndex > 0 ? appState.messages?.[messageIndex - 1] : null;
+  const compressedToolEcho = !isUser ? compressAssistantToolEcho(m, previousMessage) : null;
+  const rawContent = compressedToolEcho ?? m.content ?? '';
   let content = renderMessageContent(rawContent, isUser, messageIndex);
 
   if (!isUser && m.kind === 'tool_use') {
@@ -10558,57 +10866,28 @@ function updateBusyUi() {
   }
 }
 
-function renderMessages() {
-  const container = document.getElementById('messages');
-  const emptyState = getEmptyState();
+function renderMessages(options = {}) {
+  const { container, committedHost, liveHost, emptyState } = ensureMainChatMessageLayout();
   const msgs = appState.messages || [];
-  const streaming = appState.streamingText;
-  const busy = appState.isBusy;
-  const isEmpty = msgs.length === 0 && !streaming;
-
-  if (emptyState && emptyState.parentNode) emptyState.remove();
-
-  if (isEmpty) {
-    container.innerHTML = '';
-    if (emptyState) {
-      emptyState.style.display = 'flex';
-      container.appendChild(emptyState);
-    }
-    return;
-  }
-
-  let html = '';
-  for (let i = 0; i < msgs.length; i += 1) {
-    html += renderMessage(msgs[i], i);
-  }
-  if (busy && streaming) {
-    html += `<div class="msg-wrap">
-      <div class="klogo" style="flex-shrink:0;margin-top:2px">K</div>
-      <div class="msg-bubble assistant msg-streaming">${escapeHtml(streaming).replace(/\n/g,'<br>')}</div>
-    </div>`;
-  } else if (busy && !streaming && (chatPendingImageRequest || appState.activeRequestKind === 'image')) {
-    html += renderChatImagePendingBlock();
-  } else if (busy && !streaming && appState.activeRequestKind === 'background') {
-    html += `<div class="msg-wrap">
-      <div class="klogo" style="flex-shrink:0;margin-top:2px">K</div>
-      <div class="msg-bubble assistant" style="padding:12px 16px;display:flex;align-items:center;gap:10px">
-        <div class="spinner"></div>
-        <div style="font-size:13px;color:#3f3f46">${escapeHtml(shellText('backgroundTaskBubble'))}</div>
-      </div>
-    </div>`;
-  } else if (busy && !streaming) {
-    html += `<div class="msg-wrap">
-      <div class="klogo" style="flex-shrink:0;margin-top:2px">K</div>
-      <div class="msg-bubble assistant" style="padding:12px 16px"><div class="typing-dots"><span></span><span></span><span></span></div></div>
-    </div>`;
-  }
-
   const wasAtBottom = container.scrollHeight - container.scrollTop <= container.clientHeight + 40;
-  container.innerHTML = html;
-  if (emptyState) {
-    emptyState.style.display = 'none';
-    container.appendChild(emptyState);
+
+  if (!options.liveOnly) {
+    let committedHtml = '';
+    for (let i = 0; i < msgs.length; i += 1) {
+      committedHtml += renderMessage(msgs[i], i);
+    }
+    committedHost.innerHTML = committedHtml;
+    committedHost.style.display = committedHtml ? 'flex' : 'none';
   }
+
+  const liveHtml = buildMainChatLiveHtml(msgs);
+  liveHost.innerHTML = liveHtml;
+  liveHost.style.display = liveHtml ? 'flex' : 'none';
+
+  if (emptyState) {
+    emptyState.style.display = msgs.length === 0 && !liveHtml ? 'flex' : 'none';
+  }
+
   if (wasAtBottom) container.scrollTop = container.scrollHeight;
 }
 
