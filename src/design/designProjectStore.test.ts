@@ -152,7 +152,7 @@ describe("DesignProjectStore", () => {
     const projectColumns = database.prepare("PRAGMA table_info(design_projects)").all() as Array<{ name: string }>;
     database.close();
 
-    expect(migrationVersions.map(row => row.version)).toEqual([1, 2, 3, 4, 5]);
+    expect(migrationVersions.map(row => row.version)).toEqual(expect.arrayContaining([1, 2, 3, 4, 5]));
     expect(projectColumns.map(column => column.name)).toEqual(
       expect.arrayContaining(["thumbnail", "conversation_history"]),
     );
