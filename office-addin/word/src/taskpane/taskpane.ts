@@ -12,6 +12,7 @@ import {
   splitWordReplyIntoSegments,
   type WordSelectedContext,
   type WordDocumentSnapshot,
+  type WordParagraphSnapshot,
 } from "../../../../src/officeBridge/wordDocumentContext";
 import {
   buildWordQuestionPrompt,
@@ -185,7 +186,7 @@ function renderContext(context: OfficeBridgeContext): void {
 
 function createMessageElement(
   message: OfficeBridgeContextMessage,
-  paragraphIndex?: Record<string, { text: string }>,
+  paragraphIndex?: Record<string, WordParagraphSnapshot>,
 ): HTMLElement {
   const messageEl = document.createElement("article");
   messageEl.className = `message ${message.role}`;

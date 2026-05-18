@@ -5,6 +5,7 @@ import {
   buildWordDocumentSnapshot,
   type WordSelectedContext,
   type WordDocumentSnapshot,
+  type WordQuestionMode,
 } from "../../../src/officeBridge/wordDocumentContext";
 
 declare const Word:
@@ -13,7 +14,7 @@ declare const Word:
         document: {
           body: {
             paragraphs: {
-              items: Array<{ text: string; style?: string }>;
+              items: Array<{ text: string; style?: string; select?: () => void }>;
               load: (props: string[]) => void;
             };
           };
@@ -66,6 +67,7 @@ export async function readSelectedDocumentContextBundle(
   options?: {
     maxParagraphs?: number;
     maxTokens?: number;
+    questionMode?: WordQuestionMode;
   },
 ): Promise<{
   snapshot: WordDocumentSnapshot;
@@ -98,11 +100,12 @@ export async function navigateToParagraph(paragraphId: string): Promise<void> {
     await context.sync();
 
     const target = paragraphs.items[index];
-    if (!target || typeof (target as { select?: unknown }).select !== "function") {
+    const select = target?.select;
+    if (typeof select !== "function") {
       throw new Error(`Paragraph not found: ${paragraphId}`);
     }
 
-    (target as { select: () => void }).select();
+    select.call(target);
     await context.sync();
   });
 }
