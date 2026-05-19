@@ -315,7 +315,7 @@ export function detectArtifact(
   }
 
   const codeBlock = findCodeFenceBlock(trimmed);
-  if (codeBlock && codeBlock.language !== "markdown") {
+  if (codeBlock && codeBlock.language !== "markdown" && isSingleOuterFence(trimmed, codeBlock)) {
     return buildArtifact({
       type: "code",
       content: codeBlock.content,

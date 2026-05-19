@@ -416,6 +416,7 @@ export class ElectronChatPanel {
       abortController: AbortController;
       streamingText: string;
       thinkingSummary: string;
+      lastToolName?: string;
       kind: ActiveRequestKind;
     }
   >();
@@ -1872,8 +1873,63 @@ export class ElectronChatPanel {
     );
   }
 
+  private buildToolInputPreview(toolName: string, input: unknown): string | undefined {
+    if (!input || typeof input !== "object" || Array.isArray(input)) {
+      return undefined;
+    }
+
+    const record = input as Record<string, unknown>;
+    const asTrimmedString = (value: unknown): string | undefined => {
+      if (typeof value !== "string") {
+        return undefined;
+      }
+      const trimmed = value.trim();
+      return trimmed ? trimmed : undefined;
+    };
+    const truncateInline = (value: string, max = 160): string =>
+      value.length > max ? `${value.slice(0, max)}...` : value;
+
+    switch (toolName) {
+      case "read_file": {
+        return asTrimmedString(record.filePath) ?? asTrimmedString(record.path);
+      }
+      case "run_command": {
+        const command = asTrimmedString(record.command);
+        return command ? truncateInline(command.replace(/\s+/g, " ")) : undefined;
+      }
+      case "search_files": {
+        const query = asTrimmedString(record.query);
+        const pathValue = asTrimmedString(record.path);
+        if (!query) {
+          return pathValue;
+        }
+        return pathValue ? `query: "${query}", path: "${pathValue}"` : `query: "${query}"`;
+      }
+      case "glob_files": {
+        const pattern = asTrimmedString(record.pattern);
+        const pathValue = asTrimmedString(record.path);
+        if (!pattern) {
+          return pathValue;
+        }
+        return pathValue
+          ? `pattern: "${pattern}", path: "${pathValue}"`
+          : `pattern: "${pattern}"`;
+      }
+      default:
+        break;
+    }
+
+    try {
+      const serialized = JSON.stringify(input);
+      return serialized ? truncateInline(serialized, 240) : undefined;
+    } catch {
+      return undefined;
+    }
+  }
+
   private async appendToolResultMessageToSession(
     sessionId: string,
+    toolName: string,
     summary: string,
     content: string,
     isError: boolean,
@@ -1881,9 +1937,10 @@ export class ElectronChatPanel {
     await this.appendAssistantMessageToSession(
       sessionId,
       {
-        role: "assistant",
+        role: "user",
         kind: "tool_result",
         content,
+        toolName,
         toolSummary: summary,
         toolIsError: isError,
         excludeFromConversation: true,
@@ -3486,6 +3543,7 @@ export class ElectronChatPanel {
       abortController,
       streamingText: "",
       thinkingSummary: "",
+      lastToolName: undefined,
       kind: "chat",
     });
 
@@ -4130,6 +4188,7 @@ export class ElectronChatPanel {
       abortController,
       streamingText: "",
       thinkingSummary: "",
+      lastToolName: undefined,
       kind: "chat",
     });
 
@@ -4611,13 +4670,23 @@ export class ElectronChatPanel {
         onThinkingSummary: (summary) => {
           this.updateThinkingSummary(requestSessionId, summary);
         },
-        onToolStart: (toolName, _input, _execId) => {
-          void this.appendToolUseMessageToSession(requestSessionId, toolName, undefined);
+        onToolStart: (toolName, input, _execId) => {
+          const requestState = this.inFlightRequests.get(requestSessionId);
+          if (requestState) {
+            requestState.lastToolName = toolName;
+          }
+          void this.appendToolUseMessageToSession(
+            requestSessionId,
+            toolName,
+            this.buildToolInputPreview(toolName, input),
+          );
           this.sendToRenderer({ type: "tool:start", toolName });
         },
         onToolEnd: (_execId, summary, isError, content) => {
+          const toolName = this.inFlightRequests.get(requestSessionId)?.lastToolName ?? "";
           void this.appendToolResultMessageToSession(
             requestSessionId,
+            toolName,
             summary,
             typeof content === "string" ? content : "",
             isError,
@@ -7077,6 +7146,7 @@ ${html.slice(0, 8000)}
       abortController,
       streamingText: "",
       thinkingSummary: "",
+      lastToolName: undefined,
       kind: "image",
     });
     const batchExecution = this.resolveImageBatchExecution(message);

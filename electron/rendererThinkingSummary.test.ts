@@ -36,6 +36,9 @@ function renderToolUseMessage() {
 function renderToolResultMessage() {
   return "";
 }
+function isEnglishUi() {
+  return true;
+}
 function shellText(key) {
   return DEFAULT_SHELL_STRINGS[key] || "";
 }
@@ -63,12 +66,12 @@ describe("Electron renderer thinking summary cards", () => {
   it("renders thinking summaries collapsed by default and expandable on demand", async () => {
     const { collapsedResult, expandedResult } = await renderThinkingSummaryMessage();
 
-    expect(collapsedResult).toContain("thinking-card-collapsed");
+    expect(collapsedResult).toContain('class="thinking-toggle"');
     expect(collapsedResult).toContain('onclick="toggleThinkingSummary(2)"');
-    expect(collapsedResult).toContain("Thought summary");
+    expect(collapsedResult).toContain("∴ Thinking");
     expect(collapsedResult).not.toContain("Both Claude and Codex reached consensus");
 
-    expect(expandedResult).toContain("thinking-card-expanded");
+    expect(expandedResult).toContain('class="thinking-summary-body"');
     expect(expandedResult).toContain("Both Claude and Codex reached consensus");
   });
 });

@@ -272,4 +272,18 @@ describe("Electron renderer settings", () => {
     expect(html).toContain("designChatPendingFormKey = getDesignChatFormStateKey(formId, formRuntime.messageId || designChatActiveFormMessageId || '');");
     expect(html).not.toContain("designChatPendingFormId = formId;");
   });
+
+  it("shows a design-chat working state before the first streamed token arrives", async () => {
+    const rendererPath = path.join(__dirname, "renderer", "index.html");
+    const html = await readFile(rendererPath, "utf8");
+
+    expect(html).toContain("let designChatBuildStatus = {");
+    expect(html).toContain("case 'design:chat:build-start':");
+    expect(html).toContain("case 'design:chat:build-tool-start':");
+    expect(html).toContain("case 'design:chat:build-tool-end':");
+    expect(html).toContain("function renderDesignChatBuildStatusBubble()");
+    expect(html).toContain("if (!designChatStreamingText && designChatBuildStatus?.active) {");
+    expect(html).toContain("parts.push(renderDesignChatBuildStatusBubble());");
+    expect(html).toContain("AI 正在工作");
+  });
 });

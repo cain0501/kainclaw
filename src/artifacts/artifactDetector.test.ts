@@ -211,7 +211,7 @@ const x = 1;
 \`\`\``);
 
     expect(unwrapped).toBeNull();
-    expect(artifact?.type).toBe("code");
+    expect(artifact).toBeNull();
   });
 
   it("exports deep-edit visibility rules with html enabled only", () => {

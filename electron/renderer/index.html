@@ -42,7 +42,10 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-seri
   .artifact-peek-strip{position:absolute;top:44px;right:0;bottom:0;z-index:19;background:rgba(255,255,255,.92)}
 }
 
-::-webkit-scrollbar{width:4px}::-webkit-scrollbar-thumb{background:#e4e4e7;border-radius:2px}
+::-webkit-scrollbar{width:12px;height:12px}
+::-webkit-scrollbar-track{background:transparent}
+::-webkit-scrollbar-thumb{background:#d4d4d8;border-radius:999px;border:3px solid transparent;background-clip:content-box;min-height:48px}
+::-webkit-scrollbar-thumb:hover{background:#a1a1aa;background-clip:content-box}
 
 .klogo{width:28px;height:28px;background:#E84040;border-radius:6px;display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:700;color:#fff;flex-shrink:0}
 
@@ -83,6 +86,24 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-seri
 
 @keyframes spin{to{transform:rotate(360deg)}}
 .spinner{width:14px;height:14px;border:2px solid #e4e4e7;border-top-color:#E84040;border-radius:50%;animation:spin .8s linear infinite;flex-shrink:0}
+@keyframes tool-dot-blink{0%,49%{opacity:1}50%,100%{opacity:.16}}
+.thinking-toggle{width:100%;display:flex;align-items:center;justify-content:space-between;gap:10px;border:none;background:transparent;padding:0;color:inherit;cursor:pointer;font-family:inherit;text-align:left}
+.thinking-toggle-main{display:flex;align-items:center;gap:8px;min-width:0}
+.thinking-toggle-caret{font-size:10px;color:#71717a;flex-shrink:0}
+.thinking-toggle-label{font-size:12px;font-style:italic;color:#71717a;line-height:1.5}
+.thinking-toggle-action{font-size:11px;color:#a1a1aa;flex-shrink:0}
+.thinking-summary-body{margin-top:8px;padding-left:18px;border-left:1px solid #e4e4e7;font-size:12px;line-height:1.7;color:#52525b}
+.tool-lane{display:flex;flex-direction:column;gap:8px}
+.tool-lane-head{display:flex;align-items:center;gap:8px;flex-wrap:wrap;min-width:0}
+.tool-lane-title{font-size:12px;font-weight:700;color:#27272a;line-height:1.5}
+.tool-lane-subtle{font-size:12px;color:#71717a;line-height:1.65}
+.tool-status-dot{width:10px;height:10px;border-radius:999px;display:inline-block;flex-shrink:0;background:#71717a}
+.tool-status-dot.queued{opacity:.45}
+.tool-status-dot.waiting{opacity:1}
+.tool-status-dot.unresolved{animation:tool-dot-blink 1s steps(1,end) infinite}
+.tool-status-dot.success{background:#16a34a}
+.tool-status-dot.error{background:#dc2626}
+
 @keyframes image-shimmer{0%{transform:translateX(-160%) skewX(-18deg)}100%{transform:translateX(160%) skewX(-18deg)}}
 @keyframes image-pulse{0%,100%{box-shadow:0 18px 42px rgba(104,91,255,.08)}50%{box-shadow:0 24px 56px rgba(255,94,143,.18)}}
 @keyframes image-rainbow-flow{0%{background-position:0% 50%}50%{background-position:100% 50%}100%{background-position:0% 50%}}
@@ -1999,6 +2020,11 @@ let designChatActiveFormId = null;
 let designChatActiveFormMessageId = null;
 let designChatPendingUserPrompt = '';
 let designChatPendingFormKey = null;
+let designChatBuildStatus = {
+  active: false,
+  toolName: '',
+  phase: 'idle',
+};
 let designResumeLookupAttempted = false;
 let designEntryAwaitingProjectCreation = false;
 let designEntryCurrentSelection = null;
@@ -3036,10 +3062,39 @@ function handleMessage(msg) {
       designChatStreamingText = '';
       designChatPendingUserPrompt = '';
       designChatPendingFormKey = null;
+      designChatBuildStatus = {
+        active: false,
+        toolName: '',
+        phase: 'idle',
+      };
       if (hasActiveDesignSession() && !designEntryDialogActive && !shouldKeepDesignEntryDialog()) {
         hideDesignEntryDialog();
         hideDesignQuickForm();
       }
+      renderMidtaiDesignChat();
+      break;
+    case 'design:chat:build-start':
+      designChatBuildStatus = {
+        active: true,
+        toolName: '',
+        phase: 'starting',
+      };
+      renderMidtaiDesignChat();
+      break;
+    case 'design:chat:build-tool-start':
+      designChatBuildStatus = {
+        active: true,
+        toolName: String(msg.toolName || '').trim(),
+        phase: 'tool',
+      };
+      renderMidtaiDesignChat();
+      break;
+    case 'design:chat:build-tool-end':
+      designChatBuildStatus = {
+        active: true,
+        toolName: '',
+        phase: 'assembling',
+      };
       renderMidtaiDesignChat();
       break;
     case 'design:chat:append':
@@ -3062,12 +3117,24 @@ function handleMessage(msg) {
           designChatStreamingId = null;
           designChatStreamingText = '';
         }
+        if (nextMessage.role === 'assistant') {
+          designChatBuildStatus = {
+            active: false,
+            toolName: '',
+            phase: 'idle',
+          };
+        }
         renderMidtaiDesignChat();
       }
       break;
     case 'design:chat:token':
       designChatStreamingId = String(msg.streamingId || '').trim() || designChatStreamingId;
       designChatStreamingText += String(msg.token || '');
+      designChatBuildStatus = {
+        active: false,
+        toolName: '',
+        phase: 'idle',
+      };
       renderMidtaiDesignChat();
       break;
     case 'design:show-diversion':
@@ -3435,19 +3502,13 @@ function handleMessage(msg) {
       appState.activeToolName = String(msg.toolName || '').trim();
       appState.activeToolStatus = 'running';
       appState.lastToolStatusLabel = '';
+      appState.waitingForApproval = false;
       renderMessages({ liveOnly: true });
       break;
     case 'tool:end':
-      appState.lastToolStatusLabel = appState.activeToolName || String(msg.summary || '').trim();
-      appState.activeToolStatus = msg.isError ? 'error' : 'done';
+      appState.lastToolStatusLabel = '';
+      appState.activeToolStatus = 'idle';
       appState.activeToolName = '';
-      setTimeout(() => {
-        if (appState.activeToolStatus === 'done' || appState.activeToolStatus === 'error') {
-          appState.activeToolStatus = 'idle';
-          appState.lastToolStatusLabel = '';
-          renderMessages({ liveOnly: true });
-        }
-      }, 1600);
       renderMessages({ liveOnly: true });
       break;
     case 'onboarding:keyValid':
@@ -4733,6 +4794,51 @@ function formatDesignChatTimestamp(timestamp) {
   return `${hours}:${minutes}`;
 }
 
+function formatDesignChatBuildToolLabel(toolName) {
+  const normalized = String(toolName || '').trim();
+  if (!normalized) {
+    return isEnglishUi() ? 'Preparing the build steps' : '准备生成步骤';
+  }
+  const labels = {
+    read_file: isEnglishUi() ? 'Reading layout references' : '读取模板与参考布局',
+    list_files: isEnglishUi() ? 'Checking the workspace files' : '检查工作区文件',
+    write_file: isEnglishUi() ? 'Writing the draft page' : '写入页面草稿',
+    replace_in_file: isEnglishUi() ? 'Refining the generated page' : '细化已生成页面',
+    run_command: isEnglishUi() ? 'Running validation commands' : '运行校验命令',
+  };
+  return labels[normalized] || (isEnglishUi()
+    ? `Running ${normalized}`
+    : `执行 ${normalized}`);
+}
+
+function renderDesignChatBuildStatusBubble() {
+  if (!designChatBuildStatus?.active) return '';
+  const phase = String(designChatBuildStatus.phase || 'starting');
+  const title = isEnglishUi() ? 'AI is working' : 'AI 正在工作';
+  let detail = isEnglishUi()
+    ? 'Preparing the design workflow before the first visible reply.'
+    : '正在启动设计生成流程，首条可见回复出来前会先准备工作区。';
+
+  if (phase === 'tool') {
+    detail = formatDesignChatBuildToolLabel(designChatBuildStatus.toolName);
+  } else if (phase === 'assembling') {
+    detail = isEnglishUi()
+      ? 'Assembling the page structure and final artifact.'
+      : '正在整理页面结构并生成最终设计结果。';
+  }
+
+  return `<div style="display:flex;justify-content:flex-start;gap:8px;align-items:flex-end">
+    <div style="width:22px;height:22px;border-radius:8px;background:linear-gradient(135deg,#1f1f23 0%,#3a2c25 100%);color:#fff;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;flex-shrink:0;box-shadow:0 6px 16px rgba(24,24,27,.16)">K</div>
+    <div style="max-width:88%;padding:12px 12px 11px;border-radius:16px 16px 16px 6px;background:linear-gradient(180deg,#fffefd 0%,#f8f5f1 100%);color:#2d1f14;font-size:12px;line-height:1.75;border:1px solid #efe7dc;box-shadow:0 8px 18px rgba(77,49,24,.06)">
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:5px">
+        <span class="badge-orange">${escapeHtml(title)}</span>
+        <span style="display:inline-flex;gap:3px;align-items:center"><span class="typing-dots"><span></span><span></span><span></span></span></span>
+      </div>
+      <div style="font-size:12px;color:#6f6258;line-height:1.7">${escapeHtml(detail)}</div>
+    </div>
+  </div>`;
+}
+
 function renderMidtaiDesignChat() {
   const wrap = document.getElementById('design-chat-messages');
   const empty = document.getElementById('design-chat-empty');
@@ -4781,6 +4887,9 @@ function renderMidtaiDesignChat() {
         <div style="font-size:10px;color:rgba(255,255,255,.74);margin-top:5px;text-align:right">发送中…</div>
       </div>
     </div>`);
+  }
+  if (!designChatStreamingText && designChatBuildStatus?.active) {
+    parts.push(renderDesignChatBuildStatusBubble());
   }
   if (designChatStreamingText) {
     const streamingBody = isDesignChatArtifactStreaming(designChatStreamingText)
@@ -8927,6 +9036,38 @@ function shouldHideStreamingDuplicate(messages, streamingText) {
   return normalizeComparableChatText(lastMessage.content) === normalizeComparableChatText(streamingText);
 }
 
+function getLastPendingToolUseIndex(messages) {
+  if (!Array.isArray(messages) || messages.length === 0) {
+    return -1;
+  }
+  for (let index = messages.length - 1; index >= 0; index -= 1) {
+    const message = messages[index];
+    if (message?.kind === 'tool_result') {
+      return -1;
+    }
+    if (message?.role === 'assistant' && message?.kind === 'tool_use') {
+      return index;
+    }
+  }
+  return -1;
+}
+
+function findToolResultForToolUse(messages, toolUseIndex) {
+  if (!Array.isArray(messages) || toolUseIndex < 0) {
+    return null;
+  }
+  for (let index = toolUseIndex + 1; index < messages.length; index += 1) {
+    const message = messages[index];
+    if (message?.kind === 'tool_result') {
+      return message;
+    }
+    if (message?.kind === 'tool_use') {
+      return null;
+    }
+  }
+  return null;
+}
+
 function renderMainChatStreamingBubble(streamingText) {
   return `<div class="msg-wrap">
     <div class="klogo" style="flex-shrink:0;margin-top:2px">K</div>
@@ -8945,63 +9086,53 @@ function renderMainChatThinkingSummary(summary) {
   if (!summary || !appState.showThinkingSummaries) {
     return '';
   }
+  const expanded = expandedThinkingSummaries.has(getThinkingSummaryToggleId('live'));
+  const actionLabel = expanded
+    ? (isEnglishUi() ? 'Collapse' : '收起')
+    : (isEnglishUi() ? 'Expand' : '展开');
 
   return `<div class="msg-wrap">
     <div class="klogo" style="flex-shrink:0;margin-top:2px">K</div>
     <div style="flex:1;min-width:0">
-      <div class="live-card thinking">
-        <div class="live-card-body">
-          <div class="live-kicker">State</div>
-          <div class="live-thinking-title">${escapeHtml(shellText('thinkingSummaryTitle'))}</div>
-          <div class="live-thinking-copy">${escapeHtml(summary).replace(/\n/g,'<br>')}</div>
-        </div>
+      <div class="msg-bubble assistant" style="padding:8px 12px;background:transparent;border:none;box-shadow:none">
+        <button type="button" class="thinking-toggle" onclick="toggleThinkingSummary('live')">
+          <span class="thinking-toggle-main">
+            <span class="thinking-toggle-caret">${expanded ? '▾' : '▸'}</span>
+            <span class="thinking-toggle-label">∴ Thinking</span>
+          </span>
+          <span class="thinking-toggle-action">${escapeHtml(actionLabel)}</span>
+        </button>
+        ${expanded ? `<div class="thinking-summary-body">${escapeHtml(summary).replace(/\n/g,'<br>')}</div>` : ''}
       </div>
     </div>
   </div>`;
 }
 
 function renderMainChatThinkingPlaceholder() {
-  const title = appState.waitingForApproval
-    ? 'Waiting for confirmation'
-    : appState.activeToolName
-      ? 'Using tools'
-      : 'Thinking';
+  const title = '∴ Thinking';
   const subtitle = appState.waitingForApproval
-    ? 'A command or external action needs your approval before execution can continue.'
+    ? (isEnglishUi()
+      ? 'A command or external action needs your approval before execution can continue.'
+      : '命令或外部操作需要你的确认后才能继续执行。')
     : appState.activeToolName
-      ? 'Running the requested tool and waiting for the result.'
-      : 'Analyzing your request and preparing the response.';
+      ? (isEnglishUi()
+        ? 'Running the requested tool and waiting for the result.'
+        : '正在运行请求的工具并等待结果返回。')
+      : (isEnglishUi()
+        ? 'Analyzing your request and preparing the response.'
+        : '正在分析你的请求并准备回复。');
 
   return `<div class="msg-wrap">
     <div class="klogo" style="flex-shrink:0;margin-top:2px">K</div>
     <div style="flex:1;min-width:0">
-      <div class="live-card thinking">
-        <div class="live-card-body">
-          <div class="live-kicker">State</div>
-          <div class="live-thinking-title">${escapeHtml(title)}</div>
-          <div class="live-thinking-copy" style="margin-bottom:8px">${escapeHtml(subtitle)}</div>
+      <div class="msg-bubble assistant" style="padding:8px 12px;background:transparent;border:none;box-shadow:none">
+        <div class="tool-lane">
+          <div class="tool-lane-head">
+            <span class="tool-status-dot ${appState.waitingForApproval ? 'waiting' : 'unresolved'}"></span>
+            <span class="tool-lane-title">${escapeHtml(title)}</span>
+          </div>
+          <div class="tool-lane-subtle">${escapeHtml(subtitle)}</div>
           <div class="typing-dots"><span></span><span></span><span></span></div>
-        </div>
-      </div>
-    </div>
-  </div>`;
-}
-
-function renderMainChatToolIndicator(toolName) {
-  if (!toolName) {
-    return '';
-  }
-
-  return `<div class="msg-wrap">
-    <div class="klogo" style="flex-shrink:0;margin-top:2px">K</div>
-    <div style="flex:1;min-width:0">
-      <div class="live-card tool">
-        <div class="live-card-body">
-          <div class="live-kicker tool">Tool</div>
-          <div class="live-tool-row">
-          <div class="spinner"></div>
-          <span>${escapeHtml(shellText('toolRunningPrefix'))} ${escapeHtml(toolName)}</span>
-        </div>
         </div>
       </div>
     </div>
@@ -9012,6 +9143,8 @@ function buildMainChatLiveHtml(messages) {
   const busy = !!appState.isBusy;
   const streamingText = String(appState.streamingText || '');
   const thinkingSummary = String(appState.activeThinkingSummary || '').trim();
+  const lastPendingToolUseIndex = getLastPendingToolUseIndex(messages);
+  const hasPendingToolUse = lastPendingToolUseIndex >= 0;
   const liveParts = [];
   const lastMessage = Array.isArray(messages) && messages.length > 0
     ? messages[messages.length - 1]
@@ -9037,10 +9170,14 @@ function buildMainChatLiveHtml(messages) {
     return liveParts.join('');
   }
 
+  if (!streamingText && hasPendingToolUse) {
+    return liveParts.join('');
+  }
+
   if (thinkingSummary) {
     liveParts.push(renderMainChatThinkingSummary(thinkingSummary));
-  } else {
-    liveParts.push(renderMainChatThinkingPlaceholder());
+    liveParts.push('</div>');
+    return liveParts.join('');
   }
 
   if (!streamingText && (chatPendingImageRequest || appState.activeRequestKind === 'image')) {
@@ -9068,19 +9205,7 @@ function buildMainChatLiveHtml(messages) {
   }
 
   if (!streamingText) {
-    if (thinkingSummary) {
-      liveParts.push(`<div class="msg-wrap">
-        <div class="klogo" style="flex-shrink:0;margin-top:2px">K</div>
-        <div style="flex:1;min-width:0">
-          <div class="live-card answer">
-            <div class="live-card-body">
-            <div class="live-kicker answer">Preparing answer</div>
-            <div class="typing-dots"><span></span><span></span><span></span></div>
-            </div>
-          </div>
-        </div>
-      </div>`);
-    }
+    liveParts.push(renderMainChatThinkingPlaceholder());
   }
 
   liveParts.push('</div>');
@@ -9107,6 +9232,23 @@ function compressAssistantToolEcho(message, previousMessage) {
 
   const normalizedRaw = raw.replace(/\r\n/g, '\n');
   const normalizedTool = toolContent.replace(/\r\n/g, '\n');
+  const previousToolName = String(previousMessage.toolName || '').trim();
+
+  if (previousToolName === 'read_file') {
+    const strippedReadFileEcho = normalizedRaw
+      .replace(/```[\s\S]*?```/g, block => {
+        return /^\s*\d+:\s/m.test(block) ? '' : block;
+      })
+      .split('\n')
+      .filter(line => !/^\s*\d+:\s/.test(line))
+      .join('\n')
+      .trim();
+
+    if (strippedReadFileEcho !== normalizedRaw.trim()) {
+      return strippedReadFileEcho;
+    }
+  }
+
   if (!normalizedRaw.includes(normalizedTool)) {
     return null;
   }
@@ -9136,7 +9278,7 @@ function compressAssistantToolEcho(message, previousMessage) {
   return null;
 }
 
-function renderMessages() {
+function legacy_renderMessages_do_not_use() {
   const container = document.getElementById('messages');
   const emptyState = getEmptyState();
   const msgs = appState.messages || [];
@@ -9189,7 +9331,7 @@ function renderMessages() {
   if (wasAtBottom) container.scrollTop = container.scrollHeight;
 }
 
-function renderChatImagePendingBlock() {
+function legacy_renderChatImagePendingBlock_do_not_use() {
   const prompt = chatPendingImageRequest?.prompt || '';
   const referenceCount = Number(chatPendingImageRequest?.referenceCount || 0);
   const batchCount = Math.max(1, Math.min(8, Number(chatPendingImageRequest?.batchCount || 1)));
@@ -9261,14 +9403,32 @@ function renderMessage(m, messageIndex) {
   const isError = m.kind === 'error';
   const cls = isError ? 'error' : (isUser ? 'user' : 'assistant');
   const previousMessage = messageIndex > 0 ? appState.messages?.[messageIndex - 1] : null;
+  const lastPendingToolUseIndex = getLastPendingToolUseIndex(appState.messages || []);
   const compressedToolEcho = !isUser ? compressAssistantToolEcho(m, previousMessage) : null;
   const rawContent = compressedToolEcho ?? m.content ?? '';
+  if (!isUser && compressedToolEcho !== null && !String(rawContent).trim()) {
+    return '';
+  }
   let content = renderMessageContent(rawContent, isUser, messageIndex);
 
   if (!isUser && m.kind === 'tool_use') {
-    content = renderToolUseMessage(m);
-  } else if (!isUser && m.kind === 'tool_result') {
-    content = renderToolResultMessage(m);
+    return `<div class="msg-wrap">
+      <div class="klogo" style="flex-shrink:0;margin-top:2px">K</div>
+      <div style="flex:1;min-width:0"><div class="msg-bubble assistant">${renderToolUseMessage(m, {
+        status: messageIndex === lastPendingToolUseIndex && appState.waitingForApproval
+          ? 'waiting'
+          : messageIndex === lastPendingToolUseIndex && appState.isBusy
+            ? 'unresolved'
+            : 'queued',
+        isPending: messageIndex === lastPendingToolUseIndex && appState.isBusy,
+        isWaitingForApproval: messageIndex === lastPendingToolUseIndex && appState.waitingForApproval,
+      })}</div></div>
+    </div>`;
+  } else if (m.kind === 'tool_result') {
+    return `<div class="msg-wrap">
+      <div class="klogo" style="flex-shrink:0;margin-top:2px">K</div>
+      <div style="flex:1;min-width:0"><div class="msg-bubble assistant">${renderToolResultMessage(m)}</div></div>
+    </div>`;
   }
 
   let attHtml = '';
@@ -9307,14 +9467,19 @@ function renderMessage(m, messageIndex) {
   if (isThinking) {
     const toggleId = getThinkingSummaryToggleId(messageIndex);
     const expanded = expandedThinkingSummaries.has(toggleId);
-    const collapseClass = expanded ? 'thinking-card-expanded' : 'thinking-card-collapsed';
+    const actionLabel = expanded
+      ? (isEnglishUi() ? 'Collapse' : '收起')
+      : (isEnglishUi() ? 'Expand' : '展开');
     return `<div class="msg-wrap">
       <div class="klogo" style="flex-shrink:0;margin-top:2px">K</div>
       <div style="flex:1;min-width:0">
-        <div class="msg-bubble assistant thinking-card ${collapseClass}">
-          <button class="thinking-head thinking-summary-toggle" type="button" onclick="toggleThinkingSummary(${messageIndex})">
-            <div class="thinking-title">${escapeHtml(shellText('thinkingSummaryTitle'))}</div>
-            <div class="thinking-chevron">▶</div>
+        <div class="msg-bubble assistant" style="padding:8px 12px;background:transparent;border:none;box-shadow:none">
+          <button type="button" class="thinking-toggle" onclick="toggleThinkingSummary(${messageIndex})">
+            <span class="thinking-toggle-main">
+              <span class="thinking-toggle-caret">${expanded ? '▾' : '▸'}</span>
+              <span class="thinking-toggle-label">∴ Thinking</span>
+            </span>
+            <span class="thinking-toggle-action">${escapeHtml(actionLabel)}</span>
           </button>
           ${expanded ? `<div class="thinking-summary-body">${content}</div>` : ''}
         </div>
@@ -9702,19 +9867,230 @@ function renderMessageContent(text, isUser = false, messageIndex = -1) {
   return renderMarkdown(text);
 }
 
-function renderToolUseMessage(message) {
+function renderToolUseMessage(message, options = {}) {
   const toolName = String(message.toolName || '').trim();
   const inputPreview = String(message.toolInputPreview || '').trim();
-  return `<div class="tool-report">
-    <div class="tool-report-head">
-      <span class="tool-report-title">Tool Use</span>
-      ${toolName ? `<span class="badge-slate tool-report-name">${escapeHtml(toolName)}</span>` : ''}
+  const status = String(options.status || 'queued').trim() || 'queued';
+  const isWaitingForApproval = options.isWaitingForApproval === true;
+  const titleMap = {
+    read_file: 'Read',
+    write_file: 'Write',
+    replace_in_file: 'Update',
+    run_command: 'Bash',
+    search_files: 'Search',
+    glob_files: 'Search',
+    list_files: 'List',
+    WebFetch: 'Fetch',
+    WebSearch: 'Web Search',
+    Agent: 'Agent',
+    AskUserQuestion: 'Ask',
+    TaskCreate: 'Task',
+    TaskGet: 'Task',
+    TaskList: 'Task',
+    TaskUpdate: 'Task',
+    browser_navigate: 'Browser',
+    browser_snapshot: 'Browser',
+    browser_click: 'Browser',
+    browser_type: 'Browser',
+    browser_wait_for: 'Browser',
+    browser_screenshot: 'Screenshot',
+    browser_close: 'Browser',
+  };
+  const title = titleMap[toolName]
+    || (toolName ? toolName.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase()) : 'Tool');
+  const detail = inputPreview
+    ? inputPreview
+    : '';
+  const progressLabel = isWaitingForApproval
+    ? 'Waiting for permission…'
+    : status === 'queued'
+      ? 'Waiting…'
+      : status === 'unresolved'
+        ? 'Running…'
+        : '';
+  return `<div class="tool-lane">
+    <div class="tool-lane-head">
+      <span class="tool-status-dot ${escapeHtml(status)}"></span>
+      <span class="tool-lane-title">${escapeHtml(title)}</span>
     </div>
-    ${inputPreview ? `<div class="tool-report-meta">Input</div><pre><code>${escapeHtml(inputPreview)}</code></pre>` : ''}
+    ${detail ? `<div class="tool-lane-subtle">${escapeHtml(detail)}</div>` : ''}
+    ${progressLabel ? `<div class="tool-lane-subtle">${escapeHtml(progressLabel)}</div>` : ''}
   </div>`;
 }
 
+function renderReadFileToolResult(message) {
+  const summary = String(message.toolSummary || '').trim();
+  const lineMatch = summary.match(/^Read\s+(.+)$/i);
+  const location = lineMatch?.[1] || '';
+  const content = String(message.content || '').trim();
+  const numLines = content ? content.split('\n').length : 0;
+  const summaryText = numLines
+    ? `Read ${numLines} ${numLines === 1 ? 'line' : 'lines'}`
+    : 'Read file';
+  return `<div class="tool-lane">
+    <div class="tool-lane-subtle">${escapeHtml(summaryText)}</div>
+    ${location ? `<div class="tool-lane-subtle">${escapeHtml(location)}</div>` : ''}
+  </div>`;
+}
+
+function renderRunCommandToolResult(message) {
+  const summary = String(message.toolSummary || '').trim();
+  const content = String(message.content || '').trim();
+  const command = String(message.toolInputPreview || '').trim();
+  const outputLines = content ? content.split('\n').filter(Boolean) : [];
+  const previewLines = outputLines.slice(0, 8);
+  const preview = previewLines.join('\n');
+  const hasMore = outputLines.length > 8;
+  const emptyLabel = message.toolIsError ? 'Command failed' : 'Done';
+  return `<div class="tool-lane">
+    ${command
+      ? `<div class="tool-lane-subtle">IN</div><pre><code>${escapeHtml(command)}</code></pre>`
+      : ''}
+    ${preview
+      ? `<div class="tool-lane-subtle">OUT</div><pre><code>${escapeHtml(preview)}${hasMore ? '\n…' : ''}</code></pre>`
+      : `<div class="tool-lane-subtle">${escapeHtml(emptyLabel)}</div>`}
+    ${summary && summary !== emptyLabel ? `<div class="tool-lane-subtle">${renderInlineMarkdown(summary)}</div>` : ''}
+  </div>`;
+}
+
+function parseSearchSummary(summary, emptyLabel) {
+  const normalized = String(summary || '').trim();
+  const countMatch = normalized.match(/^Found (at least )?(\d+) matches? for "([\s\S]+)"$/);
+  if (!countMatch) {
+    return null;
+  }
+  return {
+    approximate: !!countMatch[1],
+    count: Number(countMatch[2] || 0),
+    query: countMatch[3] || '',
+    emptyLabel,
+  };
+}
+
+function parseGlobSummary(summary, emptyLabel) {
+  const normalized = String(summary || '').trim();
+  const countMatch = normalized.match(/^Found (\d+) files matching "([\s\S]+)"$/);
+  if (!countMatch) {
+    return null;
+  }
+  return {
+    count: Number(countMatch[1] || 0),
+    pattern: countMatch[2] || '',
+    emptyLabel,
+  };
+}
+
+function renderSearchSummaryBlock(title, badgeClass, badgeLabel, metaHtml, lines, emptyLabel) {
+  const hasLines = Array.isArray(lines) && lines.length > 0;
+  const previewLines = hasLines ? lines.slice(0, 3) : [];
+  const isTruncated = hasLines && lines.length > 3;
+  return `<div class="tool-lane">
+    <div class="tool-lane-subtle">${metaHtml.replace(/^<div class="tool-report-meta">|<\/div>$/g, '')}</div>
+    ${hasLines
+      ? `<div class="tool-lane-subtle">${escapeHtml(previewLines.join(' • '))}${isTruncated ? ' ...' : ''}</div>`
+      : `<div class="tool-lane-subtle">${escapeHtml(emptyLabel)}</div>`}
+  </div>`;
+}
+
+function parseListFilesSummary(summary, emptyLabel) {
+  const normalized = String(summary || '').trim();
+  const countMatch = normalized.match(/^Listed (\d+) files under (.+)$/);
+  if (!countMatch) {
+    return null;
+  }
+  return {
+    count: Number(countMatch[1] || 0),
+    path: countMatch[2] || '',
+    emptyLabel,
+  };
+}
+
+function renderListFilesToolResult(message) {
+  const summary = String(message.toolSummary || '').trim();
+  const content = String(message.content || '').trim();
+  const parsed = parseListFilesSummary(summary, '[no files found]');
+  if (!parsed) {
+    return null;
+  }
+  const lines = content && content !== parsed.emptyLabel
+    ? content.split('\n').map(line => line.trimEnd()).filter(Boolean)
+    : [];
+  const meta = `${parsed.count} files under ${parsed.path}`;
+  return renderSearchSummaryBlock(
+    'List Files',
+    message.toolIsError ? 'badge-orange' : 'badge-green',
+    message.toolIsError ? 'error' : 'done',
+    `<div class="tool-report-meta">${escapeHtml(meta)}</div>`,
+    lines,
+    parsed.emptyLabel,
+  );
+}
+
+function renderSearchFilesToolResult(message) {
+  const summary = String(message.toolSummary || '').trim();
+  const content = String(message.content || '').trim();
+  const parsed = parseSearchSummary(summary, '[no matches found]');
+  if (!parsed) {
+    return null;
+  }
+  const lines = content && content !== parsed.emptyLabel
+    ? content.split('\n').map(line => line.trimEnd()).filter(Boolean)
+    : [];
+  const uniqueFiles = new Set(
+    lines
+      .map(line => line.match(/^(.+?):\d+:/)?.[1] || '')
+      .filter(Boolean),
+  );
+  const meta = `${parsed.approximate ? 'At least ' : ''}${parsed.count} matches for "${parsed.query}"${uniqueFiles.size ? ` across ${uniqueFiles.size} files` : ''}`;
+  return renderSearchSummaryBlock(
+    'Search',
+    message.toolIsError ? 'badge-orange' : 'badge-green',
+    message.toolIsError ? 'error' : 'done',
+    `<div class="tool-report-meta">${escapeHtml(meta)}</div>`,
+    lines,
+    parsed.emptyLabel,
+  );
+}
+
+function renderGlobFilesToolResult(message) {
+  const summary = String(message.toolSummary || '').trim();
+  const content = String(message.content || '').trim();
+  const parsed = parseGlobSummary(summary, '[no matches]');
+  if (!parsed) {
+    return null;
+  }
+  const lines = content && content !== parsed.emptyLabel
+    ? content.split('\n').map(line => line.trimEnd()).filter(Boolean)
+    : [];
+  const meta = `${parsed.count} files matching "${parsed.pattern}"`;
+  return renderSearchSummaryBlock(
+    'Glob',
+    message.toolIsError ? 'badge-orange' : 'badge-green',
+    message.toolIsError ? 'error' : 'done',
+    `<div class="tool-report-meta">${escapeHtml(meta)}</div>`,
+    lines,
+    parsed.emptyLabel,
+  );
+}
+
 function renderToolResultMessage(message) {
+  const toolName = String(message.toolName || '').trim();
+  if (toolName === 'read_file') {
+    return renderReadFileToolResult(message);
+  }
+  if (toolName === 'run_command') {
+    return renderRunCommandToolResult(message);
+  }
+  if (toolName === 'search_files') {
+    return renderSearchFilesToolResult(message) || '';
+  }
+  if (toolName === 'glob_files') {
+    return renderGlobFilesToolResult(message) || '';
+  }
+  if (toolName === 'list_files') {
+    return renderListFilesToolResult(message) || '';
+  }
+
   const summary = String(message.toolSummary || '').trim();
   const content = String(message.content || '').trim();
   const badgeClass = message.toolIsError ? 'badge-orange' : 'badge-green';

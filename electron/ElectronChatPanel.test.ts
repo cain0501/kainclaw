@@ -481,12 +481,64 @@ describe("ElectronChatPanel session lifecycle", () => {
       excludeFromConversation: true,
     });
     expect(toolResultMessage).toMatchObject({
-      role: "assistant",
+      role: "user",
       kind: "tool_result",
       toolSummary: "Fetched users",
       toolIsError: false,
       excludeFromConversation: true,
     });
+  });
+
+  it("emits tool lifecycle renderer events while persisting tool messages separately", async () => {
+    const harness = await createHarness();
+    tempDirs.push(harness.storagePath);
+
+    await harness.settings.setOnboardingDone(true);
+    await harness.panel.handleMessage({ type: "ready" });
+
+    vi.mocked(resolveProviderConfig).mockResolvedValue({
+      config: {
+        type: "anthropic",
+        apiKey: "test-key",
+        model: "claude-sonnet-4-6",
+      },
+      envMap: {},
+    });
+    vi.mocked(buildProviderAdapter).mockReturnValue({} as never);
+    vi.mocked(handleElectronPromptCommand).mockResolvedValue({ kind: "continue" });
+    vi.mocked(runAgent).mockImplementation(async (_history, options) => {
+      options.onToolStart?.("run_command", { command: "dir" }, "exec-1");
+      options.onToolEnd?.("exec-1", "Command finished", false, "file-a\nfile-b");
+      return { text: "done", messages: [] };
+    });
+
+    await harness.panel.handleMessage({
+      type: "sendPrompt",
+      prompt: "run a command",
+    });
+
+    const toolStartPayload = harness.rendererPayloads.find(payload =>
+      (payload as { type?: string }).type === "tool:start",
+    ) as { type: string; toolName: string } | undefined;
+    const toolEndPayload = harness.rendererPayloads.find(payload =>
+      (payload as { type?: string }).type === "tool:end",
+    ) as { type: string; summary: string; isError: boolean } | undefined;
+
+    expect(toolStartPayload).toMatchObject({
+      type: "tool:start",
+      toolName: "run_command",
+    });
+    expect(toolEndPayload).toMatchObject({
+      type: "tool:end",
+      summary: "Command finished",
+      isError: false,
+    });
+
+    const sessionId = harness.settings.getActiveSessionId();
+    expect(sessionId).toBeTruthy();
+    const messages = await harness.sessions.loadMessages(sessionId!);
+    expect(messages.filter(message => message.kind === "tool_use")).toHaveLength(1);
+    expect(messages.filter(message => message.kind === "tool_result")).toHaveLength(1);
   });
 
   it("exposes Agent to Electron main chat and wires spawnSubAgent with built-in agent constraints", async () => {
