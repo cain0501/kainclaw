@@ -9412,19 +9412,27 @@ function renderMessage(m, messageIndex) {
   let content = renderMessageContent(rawContent, isUser, messageIndex);
 
   if (!isUser && m.kind === 'tool_use') {
+    const messages = appState.messages || [];
+    const toolResult = findToolResultForToolUse(messages, messageIndex);
+    const isPending = messageIndex === lastPendingToolUseIndex;
+    const status = isPending && appState.waitingForApproval ? 'waiting'
+      : isPending && appState.isBusy ? 'unresolved'
+      : toolResult ? (toolResult.toolIsError ? 'error' : 'success')
+      : 'queued';
     return `<div class="msg-wrap">
       <div class="klogo" style="flex-shrink:0;margin-top:2px">K</div>
-      <div style="flex:1;min-width:0"><div class="msg-bubble assistant">${renderToolUseMessage(m, {
-        status: messageIndex === lastPendingToolUseIndex && appState.waitingForApproval
-          ? 'waiting'
-          : messageIndex === lastPendingToolUseIndex && appState.isBusy
-            ? 'unresolved'
-            : 'queued',
-        isPending: messageIndex === lastPendingToolUseIndex && appState.isBusy,
-        isWaitingForApproval: messageIndex === lastPendingToolUseIndex && appState.waitingForApproval,
-      })}</div></div>
+      <div style="flex:1;min-width:0"><div class="msg-bubble assistant">
+        ${renderToolUseMessage(m, {
+          status,
+          isPending: isPending && appState.isBusy,
+          isWaitingForApproval: isPending && appState.waitingForApproval,
+        })}
+        ${toolResult ? renderToolResultInline(toolResult) : ''}
+      </div></div>
     </div>`;
   } else if (m.kind === 'tool_result') {
+    const prevMsg = (appState.messages || [])[messageIndex - 1];
+    if (prevMsg?.kind === 'tool_use') return '';
     return `<div class="msg-wrap">
       <div class="klogo" style="flex-shrink:0;margin-top:2px">K</div>
       <div style="flex:1;min-width:0"><div class="msg-bubble assistant">${renderToolResultMessage(m)}</div></div>
@@ -9903,18 +9911,50 @@ function renderToolUseMessage(message, options = {}) {
     : '';
   const progressLabel = isWaitingForApproval
     ? 'Waiting for permission…'
-    : status === 'queued'
-      ? 'Waiting…'
-      : status === 'unresolved'
-        ? 'Running…'
-        : '';
+    : status === 'unresolved'
+      ? 'Running…'
+      : '';
+  const inlineDetail = detail || progressLabel;
   return `<div class="tool-lane">
     <div class="tool-lane-head">
       <span class="tool-status-dot ${escapeHtml(status)}"></span>
       <span class="tool-lane-title">${escapeHtml(title)}</span>
+      ${inlineDetail ? `<span class="tool-lane-subtle" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1;min-width:0">${escapeHtml(inlineDetail)}</span>` : ''}
     </div>
-    ${detail ? `<div class="tool-lane-subtle">${escapeHtml(detail)}</div>` : ''}
-    ${progressLabel ? `<div class="tool-lane-subtle">${escapeHtml(progressLabel)}</div>` : ''}
+  </div>`;
+}
+
+function renderToolResultInline(message) {
+  const toolName = String(message.toolName || '').trim();
+  const summary = String(message.toolSummary || '').trim();
+  const content = String(message.content || '').trim();
+
+  if (toolName === 'run_command') {
+    const outputLines = content ? content.split('\n').filter(Boolean) : [];
+    const previewLines = outputLines.slice(0, 8);
+    const preview = previewLines.join('\n');
+    const hasMore = outputLines.length > 8;
+    const statusLine = summary || (message.toolIsError ? 'Exit 1' : 'Done');
+    return `<div class="tool-result-inline">
+      <div class="tool-lane-subtle">⎿  ${escapeHtml(statusLine)}</div>
+      ${preview ? `<pre style="margin:2px 0 0 18px;font-size:11px"><code>${escapeHtml(preview)}${hasMore ? '\n…' : ''}</code></pre>` : ''}
+    </div>`;
+  }
+
+  let summaryLine = summary;
+  if (toolName === 'read_file') {
+    const numLines = content ? content.split('\n').length : 0;
+    summaryLine = numLines > 0
+      ? `Read ${numLines} ${numLines === 1 ? 'line' : 'lines'}`
+      : (summary || 'Read file');
+  }
+  if (message.toolIsError) {
+    summaryLine = summary || 'Error';
+  }
+  summaryLine = summaryLine || 'Done';
+
+  return `<div class="tool-result-inline">
+    <div class="tool-lane-subtle">⎿  ${escapeHtml(summaryLine)}</div>
   </div>`;
 }
 
