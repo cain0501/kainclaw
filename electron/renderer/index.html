@@ -1811,6 +1811,8 @@ const SPINNER_VERBS = [
 ];
 let currentSpinnerVerb = 'Thinking';
 let spinnerVerbInterval = null;
+let lastThinkingSummary = '';
+let thinkingStartTime = 0;
 function pickSpinnerVerb() {
   return SPINNER_VERBS[Math.floor(Math.random() * SPINNER_VERBS.length)];
 }
@@ -3081,6 +3083,12 @@ function handleMessage(msg) {
       appState.isBusy = msg.isBusy;
       appState.streamingText = msg.streamingText || '';
       appState.activeThinkingSummary = msg.thinkingSummary || '';
+      if (msg.thinkingSummary && !thinkingStartTime) {
+        thinkingStartTime = Date.now();
+      }
+      if (msg.thinkingSummary) {
+        lastThinkingSummary = msg.thinkingSummary;
+      }
       if (!appState.isBusy) {
         appState.activeToolName = '';
         appState.activeToolStatus = 'idle';
@@ -3815,6 +3823,18 @@ function applyState(state) {
   appState.isBusy = state.isBusy;
   appState.activeRequestKind = state.activeRequestKind || null;
   appState.activeThinkingSummary = state.thinkingSummary || '';
+  if (state.thinkingSummary && !thinkingStartTime) {
+    thinkingStartTime = Date.now();
+  }
+  if (state.thinkingSummary) {
+    lastThinkingSummary = state.thinkingSummary;
+  }
+  // clear when new user message detected (conversation reset or new round)
+  const lastMsg = nextMessages[nextMessages.length - 1];
+  if (lastMsg && lastMsg.role === 'user' && nextMessages.length !== previousMessages.length) {
+    lastThinkingSummary = '';
+    thinkingStartTime = 0;
+  }
   if (!appState.isBusy) {
     appState.activeToolName = '';
     appState.activeThinkingSummary = '';
@@ -9537,22 +9557,16 @@ function renderMessage(m, messageIndex) {
   if (isThinking) {
     const toggleId = getThinkingSummaryToggleId(messageIndex);
     const expanded = expandedThinkingSummaries.has(toggleId);
-    const actionLabel = expanded
-      ? (isEnglishUi() ? 'Collapse' : '收起')
-      : (isEnglishUi() ? 'Expand' : '展开');
+    const durationSec = thinkingStartTime ? Math.round((Date.now() - thinkingStartTime) / 1000) : 0;
+    const thinkLabel = durationSec > 0 ? `Thought for ${durationSec}s` : 'Thought';
     return `<div class="msg-wrap">
-      <div class="klogo" style="flex-shrink:0;margin-top:2px">K</div>
-      <div style="flex:1;min-width:0">
-        <div class="msg-bubble assistant" style="padding:8px 12px;background:transparent;border:none;box-shadow:none">
-          <button type="button" class="thinking-toggle" onclick="toggleThinkingSummary(${messageIndex})">
-            <span class="thinking-toggle-main">
-              <span class="thinking-toggle-caret">${expanded ? '▾' : '▸'}</span>
-              <span class="thinking-toggle-label">∴ Thinking</span>
-            </span>
-            <span class="thinking-toggle-action">${escapeHtml(actionLabel)}</span>
-          </button>
-          ${expanded ? `<div class="thinking-summary-body">${content}</div>` : ''}
-        </div>
+      <div style="width:28px;flex-shrink:0"></div>
+      <div style="flex:1;min-width:0;padding:4px 0">
+        <button type="button" class="thinking-toggle" onclick="toggleThinkingSummary(${messageIndex})" style="display:inline-flex;align-items:center;gap:6px;border:none;background:transparent;padding:0;cursor:pointer;font-family:inherit">
+          <span style="font-size:11px;color:#a1a1aa">${escapeHtml(thinkLabel)}</span>
+          <span style="font-size:10px;color:#a1a1aa">${expanded ? '▾' : '▸'}</span>
+        </button>
+        ${expanded ? `<div class="thinking-summary-body" style="margin-top:6px">${content}</div>` : ''}
       </div>
     </div>`;
   }
