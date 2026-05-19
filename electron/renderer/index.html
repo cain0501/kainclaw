@@ -1774,6 +1774,59 @@ let appState = {
   designArtifactVersions: {},
 };
 const expandedThinkingSummaries = new Set();
+
+const SPINNER_VERBS = [
+  'Accomplishing','Actioning','Actualizing','Architecting','Baking','Beaming',
+  "Beboppin'",'Befuddling','Billowing','Bloviating','Boogieing','Booping',
+  'Bootstrapping','Brewing','Burrowing','Calculating','Canoodling','Caramelizing',
+  'Cascading','Catapulting','Cerebrating','Channeling','Channelling','Choreographing',
+  'Churning','Clauding','Coalescing','Cogitating','Combobulating','Composing',
+  'Computing','Concocting','Considering','Contemplating','Cooking','Crafting',
+  'Creating','Crunching','Crystallizing','Cultivating','Deciphering','Deliberating',
+  'Determining','Dilly-dallying','Discombobulating','Doing','Doodling','Drizzling',
+  'Ebbing','Effecting','Elucidating','Embellishing','Enchanting','Envisioning',
+  'Evaporating','Fermenting','Fiddle-faddling','Finagling','Flambéing',
+  'Flibbertigibbeting','Flowing','Flummoxing','Fluttering','Forging','Forming',
+  'Frolicking','Frosting','Gallivanting','Galloping','Garnishing','Generating',
+  'Gesticulating','Germinating','Gitifying','Grooving','Gusting','Harmonizing',
+  'Hashing','Hatching','Herding','Honking','Hullaballooing','Hyperspacing',
+  'Ideating','Imagining','Improvising','Incubating','Inferring','Infusing',
+  'Ionizing','Jitterbugging','Julienning','Kneading','Leavening','Levitating',
+  'Lollygagging','Manifesting','Marinating','Meandering','Metamorphosing',
+  'Misting','Moonwalking','Moseying','Mulling','Mustering','Musing',
+  'Nebulizing','Nesting','Noodling','Nucleating','Orbiting','Orchestrating',
+  'Osmosing','Perambulating','Percolating','Perusing','Philosophising',
+  'Photosynthesizing','Pollinating','Pondering','Pontificating','Pouncing',
+  'Precipitating','Prestidigitating','Processing','Proofing','Propagating',
+  'Puttering','Puzzling','Quantumizing','Razzle-dazzling','Razzmatazzing',
+  'Recombobulating','Reticulating','Roosting','Ruminating','Sautéing',
+  'Scampering','Schlepping','Scurrying','Seasoning','Shenaniganing','Shimmying',
+  'Simmering','Skedaddling','Sketching','Slithering','Smooshing','Sock-hopping',
+  'Spelunking','Spinning','Sprouting','Stewing','Sublimating','Swirling',
+  'Swooping','Symbioting','Synthesizing','Tempering','Thinking','Thundering',
+  'Tinkering','Tomfoolering','Topsy-turvying','Transfiguring','Transmuting',
+  'Twisting','Undulating','Unfurling','Unravelling','Vibing','Waddling',
+  'Wandering','Warping','Whatchamacalliting','Whirlpooling','Whirring',
+  'Whisking','Wibbling','Working','Wrangling','Zesting','Zigzagging',
+];
+let currentSpinnerVerb = 'Thinking';
+let spinnerVerbInterval = null;
+function pickSpinnerVerb() {
+  return SPINNER_VERBS[Math.floor(Math.random() * SPINNER_VERBS.length)];
+}
+function startSpinnerVerbs() {
+  currentSpinnerVerb = pickSpinnerVerb();
+  if (spinnerVerbInterval) return;
+  spinnerVerbInterval = setInterval(() => {
+    if (!appState.isBusy) { stopSpinnerVerbs(); return; }
+    currentSpinnerVerb = pickSpinnerVerb();
+    renderMessages({ liveOnly: true });
+  }, 1800);
+}
+function stopSpinnerVerbs() {
+  if (spinnerVerbInterval) { clearInterval(spinnerVerbInterval); spinnerVerbInterval = null; }
+}
+
 let artifactToastTimer = null;
 let artifactPanelWidth = null;
 let artifactResizeActive = false;
@@ -3034,6 +3087,9 @@ function handleMessage(msg) {
         appState.lastToolStatusLabel = '';
         appState.waitingForApproval = false;
         appState.activeThinkingSummary = '';
+        stopSpinnerVerbs();
+      } else {
+        startSpinnerVerbs();
       }
       renderMessages({ liveOnly: true });
       updateBusyUi();
@@ -3762,6 +3818,9 @@ function applyState(state) {
   if (!appState.isBusy) {
     appState.activeToolName = '';
     appState.activeThinkingSummary = '';
+    stopSpinnerVerbs();
+  } else {
+    startSpinnerVerbs();
   }
   appState.sessionType = state.sessionType === 'design' ? 'design' : 'default';
   if (!appState.isBusy || appState.activeRequestKind !== 'image') {
@@ -9109,30 +9168,33 @@ function renderMainChatThinkingSummary(summary) {
 }
 
 function renderMainChatThinkingPlaceholder() {
-  const title = '∴ Thinking';
-  const subtitle = appState.waitingForApproval
-    ? (isEnglishUi()
+  if (appState.waitingForApproval) {
+    const subtitle = isEnglishUi()
       ? 'A command or external action needs your approval before execution can continue.'
-      : '命令或外部操作需要你的确认后才能继续执行。')
-    : appState.activeToolName
-      ? (isEnglishUi()
-        ? 'Running the requested tool and waiting for the result.'
-        : '正在运行请求的工具并等待结果返回。')
-      : (isEnglishUi()
-        ? 'Analyzing your request and preparing the response.'
-        : '正在分析你的请求并准备回复。');
-
+      : '命令或外部操作需要你的确认后才能继续执行。';
+    return `<div class="msg-wrap">
+      <div class="klogo" style="flex-shrink:0;margin-top:2px">K</div>
+      <div style="flex:1;min-width:0">
+        <div class="msg-bubble assistant" style="padding:8px 12px;background:transparent;border:none;box-shadow:none">
+          <div class="tool-lane">
+            <div class="tool-lane-head">
+              <span class="tool-status-dot waiting"></span>
+              <span class="tool-lane-title">Waiting…</span>
+            </div>
+            <div class="tool-lane-subtle">${escapeHtml(subtitle)}</div>
+          </div>
+        </div>
+      </div>
+    </div>`;
+  }
+  const verb = escapeHtml(currentSpinnerVerb || 'Thinking');
   return `<div class="msg-wrap">
     <div class="klogo" style="flex-shrink:0;margin-top:2px">K</div>
     <div style="flex:1;min-width:0">
       <div class="msg-bubble assistant" style="padding:8px 12px;background:transparent;border:none;box-shadow:none">
-        <div class="tool-lane">
-          <div class="tool-lane-head">
-            <span class="tool-status-dot ${appState.waitingForApproval ? 'waiting' : 'unresolved'}"></span>
-            <span class="tool-lane-title">${escapeHtml(title)}</span>
-          </div>
-          <div class="tool-lane-subtle">${escapeHtml(subtitle)}</div>
-          <div class="typing-dots"><span></span><span></span><span></span></div>
+        <div class="tool-lane-head">
+          <span class="tool-status-dot unresolved"></span>
+          <span class="tool-lane-title" style="font-style:italic;color:#71717a">${verb}…</span>
         </div>
       </div>
     </div>
