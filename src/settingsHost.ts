@@ -94,6 +94,7 @@ export async function loadSettingsPanelData(settings: SettingsStore): Promise<{
   imageConfig?: ImageConfig;
   imageHasKey: boolean;
   imagePromptHistory: ImagePromptHistoryEntry[];
+  effortLevel: string | undefined;
 }> {
   const providers = settings.getProviders();
   const providersWithKeyStatus = await Promise.all(
@@ -122,6 +123,7 @@ export async function loadSettingsPanelData(settings: SettingsStore): Promise<{
     imageConfig: settings.getImageConfig(),
     imageHasKey: !!(await settings.getImageApiKey()),
     imagePromptHistory: settings.getImagePromptHistory(),
+    effortLevel: settings.getEffortLevel(),
   };
 }
 

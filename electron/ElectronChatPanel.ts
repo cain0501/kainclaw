@@ -1168,6 +1168,7 @@ export class ElectronChatPanel {
     if (type === "settings:close") { await this.postState(); return; }
     if (type === "settings:setActive") { await this.setActiveProvider(String(message.id ?? "")); return; }
     if (type === "settings:setLanguage") { await this.setLanguage(String(message.language ?? "")); return; }
+    if (type === "settings:setEffortLevel") { await this.setEffortLevel(message.level as string | undefined); return; }
     if (type === "settings:saveProvider") { await this.saveProvider(message.meta, String(message.apiKey ?? "")); return; }
     if (type === "settings:deleteProvider") { await this.deleteProvider(String(message.id ?? "")); return; }
     if (type === "license:activate") { await this.activateLicense(String(message.key ?? "")); return; }
@@ -2111,6 +2112,12 @@ export class ElectronChatPanel {
 
   private async setLanguage(language: string): Promise<void> {
     await this.settings.setLanguage(language);
+    await this.loadSettings();
+    await this.postState();
+  }
+
+  private async setEffortLevel(level: string | undefined): Promise<void> {
+    await this.settings.setEffortLevel(level as EffortLevel | undefined);
     await this.loadSettings();
     await this.postState();
   }

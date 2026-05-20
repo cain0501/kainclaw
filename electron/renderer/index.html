@@ -13305,6 +13305,7 @@ function renderSettings(data) {
   currentActiveImageModelId = data.activeImageModelId || null;
   const imageConfig = data.imageConfig || {};
   const imageHasKey = !!data.imageHasKey;
+  const currentEffortLevel = data.effortLevel || '';
   const sortedProviders = [...providers].sort((left, right) => {
     const leftActive = left.id === activeId ? 1 : 0;
     const rightActive = right.id === activeId ? 1 : 0;
@@ -13392,6 +13393,19 @@ function renderSettings(data) {
         <select id="settings-language-select" onchange="saveUiLanguage(this.value)" style="width:100%;border:1px solid #e4e4e7;border-radius:10px;padding:9px 12px;font-size:13px;outline:none;font-family:inherit;color:#18181b;background:#fff">
           <option value="zh-CN"${currentLanguage === 'zh-CN' ? ' selected' : ''}>简体中文</option>
           <option value="en-US"${currentLanguage === 'en-US' ? ' selected' : ''}>English</option>
+        </select>
+      </div>
+    </section>
+    <section style="margin-bottom:18px;border:1px solid #e4e4e7;border-radius:16px;background:#fff;padding:16px 18px">
+      <div style="font-size:16px;font-weight:700;color:#18181b">思考强度（Extended Thinking）</div>
+      <div style="font-size:12px;color:#71717a;margin-top:4px">启用后 Claude 会在回复前进行深度思考，消耗更多 token，适合复杂推理任务。需要模型支持 extended thinking。</div>
+      <div style="margin-top:12px;max-width:280px">
+        <select id="settings-effort-select" onchange="saveEffortLevel(this.value)" style="width:100%;border:1px solid #e4e4e7;border-radius:10px;padding:9px 12px;font-size:13px;outline:none;font-family:inherit;color:#18181b;background:#fff">
+          <option value=""${!currentEffortLevel ? ' selected' : ''}>关闭（不思考）</option>
+          <option value="low"${currentEffortLevel === 'low' ? ' selected' : ''}>低（low）— 快速轻量思考</option>
+          <option value="medium"${currentEffortLevel === 'medium' ? ' selected' : ''}>中（medium）— 均衡</option>
+          <option value="high"${currentEffortLevel === 'high' ? ' selected' : ''}>高（high）— 深度推理</option>
+          <option value="max"${currentEffortLevel === 'max' ? ' selected' : ''}>最大（max）— 最强推理</option>
         </select>
       </div>
     </section>
@@ -13690,6 +13704,10 @@ function saveSettingsImageConfig() {
 
 function saveUiLanguage(language) {
   send({ type: 'settings:setLanguage', language });
+}
+
+function saveEffortLevel(level) {
+  send({ type: 'settings:setEffortLevel', level: level || undefined });
 }
 
 function showAddImageModelForm() {
