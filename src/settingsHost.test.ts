@@ -7,6 +7,7 @@ import type {
   ProviderMeta,
 } from "./storage/settingsRepository";
 import type { AppLanguage } from "./electronUiLanguage";
+import type { EffortLevel } from "./thinkingEffort/types";
 import {
   completeOnboardingProvider,
   deleteSettingsProvider,
@@ -29,6 +30,7 @@ class FakeSettingsStore {
   licenseActivated = false;
   showThinkingSummaries = true;
   language: AppLanguage = "zh-CN";
+  effortLevel: EffortLevel | undefined;
 
   getProviders(): ProviderMeta[] {
     return [...this.providers];
@@ -137,6 +139,10 @@ class FakeSettingsStore {
   getLanguage(): AppLanguage {
     return this.language;
   }
+
+  getEffortLevel(): EffortLevel | undefined {
+    return this.effortLevel;
+  }
 }
 
 describe("settingsHost", () => {
@@ -220,6 +226,7 @@ describe("settingsHost", () => {
         createdAt: 1_713_000_000_000,
       },
     ];
+    settings.effortLevel = "high";
 
     const result = await loadSettingsPanelData(settings);
 
@@ -269,6 +276,7 @@ describe("settingsHost", () => {
           createdAt: 1_713_000_000_000,
         },
       ],
+      effortLevel: "high",
     });
   });
 

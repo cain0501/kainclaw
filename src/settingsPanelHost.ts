@@ -6,6 +6,7 @@ import type {
   ProviderMeta,
 } from "./storage/settingsRepository";
 import type { AppLanguage } from "./electronUiLanguage";
+import type { EffortLevel } from "./thinkingEffort/types";
 import {
   completeOnboardingProvider,
   deleteSettingsProvider,
@@ -41,6 +42,7 @@ type SettingsStore = {
   setOnboardingDone(done: boolean): Promise<void>;
   getShowThinkingSummaries(): boolean;
   getLanguage(): AppLanguage;
+  getEffortLevel(): EffortLevel | undefined;
   setShowThinkingSummaries(enabled: boolean): Promise<void>;
   setLanguage(language: string): Promise<void>;
   setLicenseActivated(activated: boolean): Promise<void>;

@@ -8,6 +8,7 @@ import type {
   ProviderMeta,
 } from "./storage/settingsRepository";
 import type { AppLanguage } from "./electronUiLanguage";
+import type { EffortLevel } from "./thinkingEffort/types";
 
 type SettingsStore = {
   getProviders(): ProviderMeta[];
@@ -36,6 +37,7 @@ type SettingsStore = {
   setOnboardingDone(done: boolean): Promise<void>;
   getShowThinkingSummaries(): boolean;
   getLanguage(): AppLanguage;
+  getEffortLevel(): EffortLevel | undefined;
 };
 
 export async function validateOnboardingProviderKey(options: {
@@ -94,7 +96,7 @@ export async function loadSettingsPanelData(settings: SettingsStore): Promise<{
   imageConfig?: ImageConfig;
   imageHasKey: boolean;
   imagePromptHistory: ImagePromptHistoryEntry[];
-  effortLevel: string | undefined;
+  effortLevel: EffortLevel | undefined;
 }> {
   const providers = settings.getProviders();
   const providersWithKeyStatus = await Promise.all(

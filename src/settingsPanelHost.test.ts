@@ -6,6 +6,7 @@ import {
   createSettingsPanelControllerFactory,
 } from "./settingsPanelHost";
 import type { AppLanguage } from "./electronUiLanguage";
+import type { EffortLevel } from "./thinkingEffort/types";
 
 class FakeSettingsStore {
   providers: any[] = [];
@@ -21,6 +22,7 @@ class FakeSettingsStore {
   licenseActivated = false;
   showThinkingSummaries = true;
   language: AppLanguage = "zh-CN";
+  effortLevel: EffortLevel | undefined;
 
   getProviders() {
     return [...this.providers];
@@ -132,6 +134,10 @@ class FakeSettingsStore {
 
   getLanguage(): AppLanguage {
     return this.language;
+  }
+
+  getEffortLevel(): EffortLevel | undefined {
+    return this.effortLevel;
   }
 
   async setLanguage(language: AppLanguage) {

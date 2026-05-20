@@ -157,6 +157,7 @@ import { PersistentWorktreeRuntimeStore } from "../src/worktree/runtime";
 import type { ConversationTaskRuntime } from "../src/tasks/types";
 import type { ConversationWorktreeRuntime } from "../src/worktree/types";
 import type { EffortLevel, ProviderRuntimeOptions } from "../src/thinkingEffort/types";
+import { buildProviderRuntimeOptions as buildRuntimeOptionsFromEffort } from "../src/thinkingEffort/thinking";
 import {
   generateKainClawDesign,
   type DesignGenerateOptions,
@@ -3155,7 +3156,7 @@ export class ElectronChatPanel {
       this.settings,
       workspaceRoot,
     );
-    const runtimeOptions = this.buildProviderRuntimeOptions();
+    const runtimeOptions = this.buildProviderRuntimeOptions(config);
     const provider = this.createProviderForSystemPrompt(
       config,
       workspaceRoot,
@@ -4258,7 +4259,7 @@ export class ElectronChatPanel {
         ...getSupportedElectronTools(),
         ...mcpTools,
       ]);
-      const runtimeOptions = this.buildProviderRuntimeOptions();
+      const runtimeOptions = this.buildProviderRuntimeOptions(config);
       const promptRuntime = this.createPromptRuntime(
         workspaceRoot,
         config,
@@ -6372,8 +6373,9 @@ ${html.slice(0, 8000)}
     );
   }
 
-  private buildProviderRuntimeOptions(): ProviderRuntimeOptions {
-    return {};
+  private buildProviderRuntimeOptions(config?: AdapterProviderConfig): ProviderRuntimeOptions {
+    if (!config) return {};
+    return buildRuntimeOptionsFromEffort(config, this.settings.getEffortLevel(), this.settings.getFastMode());
   }
 
   private createPromptRuntime(
