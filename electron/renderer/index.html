@@ -7380,40 +7380,6 @@ function updateDesignTweaksButton() {
   midtaiCanvasTweaksBtn.classList.toggle('active', !!designBridgeState.editModeActive);
 }
 
-function __legacy_removed_updateDesignTweaksButton_UNUSED() {
-  const tweaksBtn = document.getElementById('design-tweaks-btn');
-  const midtaiCanvasTweaksBtn = document.getElementById('midtai-canvas-tweak-btn');
-  const legacyCanvasTweaksBtn = document.getElementById('design-canvas-tweaks-btn');
-  const hasSliders = (designBridgeState.sliders?.length ?? 0) > 0;
-  const tweaksAvailable = designBridgeState.editModeAvailable || hasSliders;
-  if (tweaksBtn) {
-    tweaksBtn.style.display = designBridgeState.html ? 'inline-flex' : 'none';
-    tweaksBtn.disabled = !tweaksAvailable;
-    tweaksBtn.style.opacity = tweaksAvailable ? '1' : '.55';
-    tweaksBtn.style.cursor = tweaksAvailable ? 'pointer' : 'not-allowed';
-    tweaksBtn.title = !designBridgeState.html
-      ? ''
-      : tweaksAvailable
-        ? (isEnglishUi() ? 'Toggle tweak mode for this artifact' : '\u5207\u6362\u8fd9\u4e2a\u539f\u578b\u7684 Tweaks \u6a21\u5f0f')
-        : (isEnglishUi() ? 'This artifact does not expose tweak mode' : '\u8fd9\u4e2a\u539f\u578b\u6ca1\u6709\u63a5\u5165 Tweaks \u6a21\u5f0f');
-    tweaksBtn.textContent = designBridgeState.editModeActive
-      ? (isEnglishUi() ? 'Hide Tweaks' : '\u5173\u95ed Tweaks')
-      : 'Tweaks';
-  }
-  [midtaiCanvasTweaksBtn, legacyCanvasTweaksBtn].forEach(button => {
-    if (!button) return;
-    button.style.display = designBridgeState.html ? 'inline-flex' : 'none';
-    button.disabled = !tweaksAvailable;
-    button.style.opacity = tweaksAvailable ? '1' : '.55';
-    button.style.cursor = tweaksAvailable ? 'pointer' : 'not-allowed';
-    button.classList.toggle('active', !!designBridgeState.editModeActive);
-  });
-  const tweaksDrawer = document.getElementById('design-tweaks-drawer');
-  if (tweaksDrawer) {
-    tweaksDrawer.style.display = 'none';
-  }
-}
-
 function positionDesignPatchPopover(popoverEl, frameEl) {
   if (!popoverEl || !frameEl || !designBridgeState.selectedNode?.rect) {
     return;
@@ -7503,56 +7469,6 @@ function ensureDesignImageUploadControls() {
     imageUploadBtn,
     imageUploadInput,
   };
-}
-
-function __legacy_removed_updateDesignCanvasToolbar_UNUSED() {
-  const viewBtn = document.getElementById('design-canvas-view-btn');
-  const selectBtn = document.getElementById('design-canvas-select-btn');
-  const frameEl = document.getElementById('design-bridge-frame');
-  const hasDesignContent = !!designBridgeState.html;
-  const activeMode = designBridgeState.editModeActive
-    ? 'tweaks'
-    : (designBridgeState.canvasMode || 'view');
-
-  [viewBtn, selectBtn].forEach(button => {
-    if (!button) return;
-    button.style.display = hasDesignContent ? 'inline-flex' : 'none';
-    button.disabled = !hasDesignContent;
-  });
-  if (viewBtn) viewBtn.classList.toggle('active', activeMode === 'view');
-  if (selectBtn) selectBtn.classList.toggle('active', activeMode === 'select');
-  console.log('[host] sending set_kc_selection_mode, active:', activeMode === 'select');
-  frameEl?.contentWindow?.postMessage(
-    { type: '__set_kc_selection_mode', active: activeMode === 'select' },
-    '*',
-  );
-}
-
-function __legacy_removed_setDesignCanvasMode_UNUSED(mode) {
-  if (!designBridgeState.html) {
-    return;
-  }
-  const frame = document.getElementById('design-bridge-frame');
-  const nextMode = mode === 'select' ? 'select' : 'view';
-  const prevMode = designBridgeState.canvasMode || 'view';
-  designBridgeState.canvasMode = nextMode;
-  frame?.contentWindow?.postMessage(
-    { type: '__set_kc_selection_mode', active: nextMode === 'select' },
-    '*',
-  );
-  if (designBridgeState.editModeActive) {
-    designBridgeState.editModeActive = false;
-  }
-  if (prevMode !== 'select' && nextMode === 'select' && designBridgeState.editModeAvailable) {
-    frame?.contentWindow?.postMessage({ type: '__activate_edit_mode' }, '*');
-  }
-  if (prevMode === 'select' && nextMode !== 'select' && designBridgeState.editModeAvailable) {
-    frame?.contentWindow?.postMessage({ type: '__deactivate_edit_mode' }, '*');
-  }
-  if (nextMode !== 'select') {
-    designBridgeState.selectedNode = null;
-  }
-  renderDesignBridgePage();
 }
 
 function renderDesignBridgePage() {
@@ -8491,28 +8407,6 @@ function handleMidtaiDesignRefUpload(event) {
   event.target.value = '';
 }
 
-function pickLatestImageLabResultForDesign() {
-  const latestImage = (imageState.resultBatches || [])
-    .flatMap(batch => batch.items || [])
-    .find(item => item?.src);
-  if (!latestImage?.src) {
-    designBridgeState.error = isEnglishUi()
-      ? 'There is no Image Lab result to reuse yet.'
-      : '当前还没有可复用的 Image Lab 结果图。';
-    renderDesignBridgePage();
-    return;
-  }
-
-  designBridgeState.referenceImage = {
-    dataUrl: latestImage.src,
-    mimeType: latestImage.src.startsWith('data:')
-      ? (latestImage.src.slice(5, latestImage.src.indexOf(';')) || 'image/png')
-      : 'image/png',
-    name: `image-lab-${latestImage.id || 'result'}.png`,
-  };
-  renderDesignBridgePage();
-}
-
 function loadDesignVersions() {
   send({
     type: 'design:loadVersions',
@@ -8663,48 +8557,11 @@ function cancelDesignPatchSelection() {
   renderDesignBridgePage();
 }
 
-function __legacy_removed_buildDesignImageLabPrompt(node, comment) {
-  if (!node) return '';
-  const descriptors = [
-    node.alt,
-    node.ariaLabel,
-    node.title,
-    node.text,
-  ]
-    .map(value => String(value || '').trim())
-    .filter(Boolean);
-
-  const subject = descriptors.length > 0
-    ? descriptors.join(' · ')
-    : (isEnglishUi() ? 'image slot in the current design' : '当前设计里的图片位');
-
-  const extraComment = String(comment || '').trim();
-  return [
-    isEnglishUi()
-      ? `Create an image for this design slot: ${subject}.`
-      : `为这个设计图片位生成一张图：${subject}。`,
-    ...(extraComment
-      ? [
-          isEnglishUi()
-            ? `Additional direction: ${extraComment}.`
-            : `补充要求：${extraComment}。`,
-        ]
-      : []),
-    isEnglishUi()
-      ? 'Match the current design mood and keep the composition clean for direct placement into the layout.'
-      : '请匹配当前设计的整体气质，构图干净，适合直接放回这个版面。',
-  ].join('\n');
-}
-
-function sendDesignImageNodeToImageLab() {
-  goReplaceInImageLab();
-}
-
 function applyDesignPatchRequest() {
   applyMidtaiCanvasPatch();
 }
 
-function __legacy_removed_handleDesignImageNodeUpload(event) {
+function handleDesignImageNodeUpload(event) {
   const input = event?.target;
   const file = Array.from(input?.files || [])[0];
   if (!file) {
@@ -8737,6 +8594,7 @@ function __legacy_removed_handleDesignImageNodeUpload(event) {
     send({
       type: 'design:patchImageNode',
       projectId: getActiveDesignProjectId(),
+      imageId: '',
       elementSelector: designBridgeState.selectedNode.selector,
       targetOuterHtml: designBridgeState.selectedNode.outerHTML,
       imageUrl: dataUrl.trim(),
@@ -8794,53 +8652,6 @@ function toggleDesignTweaks() {
   designBridgeState.canvasMode = 'view';
   updateDesignTweaksButton();
   updateDesignCanvasToolbar();
-}
-
-function __legacy_removed_handleKainClawDesignFrameMessage_UNUSED(event) {
-  if (!isDesignBridgeFrameSource(event.source)) {
-    return;
-  }
-
-  const payload = event.data || {};
-  if (payload.type === '__design_patch_target') {
-    designBridgeState.selectedNode = payload.selector && payload.outerHTML
-      ? {
-          selector: String(payload.selector),
-          outerHTML: String(payload.outerHTML),
-          text: typeof payload.text === 'string' ? payload.text : '',
-          tagName: typeof payload.tagName === 'string' ? payload.tagName : '',
-          alt: typeof payload.alt === 'string' ? payload.alt : '',
-          ariaLabel: typeof payload.ariaLabel === 'string' ? payload.ariaLabel : '',
-          title: typeof payload.title === 'string' ? payload.title : '',
-          src: typeof payload.src === 'string' ? payload.src : '',
-          role: typeof payload.role === 'string' ? payload.role : '',
-          backgroundImage: typeof payload.backgroundImage === 'string' ? payload.backgroundImage : '',
-          rect: payload.rect && typeof payload.rect === 'object'
-            ? {
-                top: Number(payload.rect.top || 0),
-                left: Number(payload.rect.left || 0),
-                width: Number(payload.rect.width || 0),
-                height: Number(payload.rect.height || 0),
-              }
-            : null,
-        }
-      : null;
-    designBridgeState.patchLoading = false;
-    clearDesignPatchStatus();
-    renderDesignBridgePage();
-    return;
-  }
-  if (payload.type === '__edit_mode_available') {
-    designBridgeState.editModeAvailable = true;
-    updateDesignTweaksButton();
-    renderDesignBridgePage();
-    return;
-  }
-
-  if (payload.type === '__edit_mode_set_keys' && payload.edits && typeof payload.edits === 'object') {
-    designBridgeState.lastEdits = payload.edits;
-    renderDesignBridgePage();
-  }
 }
 
 function clampArtifactPanelWidth(nextWidth) {

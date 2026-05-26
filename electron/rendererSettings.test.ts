@@ -124,7 +124,6 @@ describe("Electron renderer settings", () => {
     expect(html).toContain("brandContext:");
     expect(html).toContain("function renderDesignReferencePanel(metaEl, previewEl)");
     expect(html).toContain("function handleDesignReferenceUpload(event)");
-    expect(html).toContain("function pickLatestImageLabResultForDesign()");
     expect(html).toContain("function clearDesignReference()");
     expect(patchableSrcdocMatches).toHaveLength(1);
     expect(html).toContain("const hasSliders = (designBridgeState.sliders?.length ?? 0) > 0;");
@@ -142,7 +141,7 @@ describe("Electron renderer settings", () => {
     expect(html).toContain("inferredRatio");
     expect(html).toContain("function applyInferredImageRatio(inferredRatio)");
     expect(html).toContain("sizeByRatio[inferredRatio] || '1024x1024'");
-    expect(html).toContain("insertToDesign('${result.src}')");
+    expect(html).toContain("insertToDesign('${result.id}', '${result.src}')");
     expect(html).toContain("design:patchImageNode");
     expect(html).toContain("referenceImageDataUrl");
     expect(html).toContain("referenceImageMimeType");
