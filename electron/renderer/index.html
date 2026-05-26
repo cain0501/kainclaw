@@ -5316,7 +5316,7 @@ function renderMidtaiImageWorks() {
                 <div class="midtai-img-actions">
                   <a class="btn-secondary" href="${result.src}" download="kainclaw-image-${result.id}.png" style="text-decoration:none;text-align:center">下载</a>
                   ${isReplace
-                    ? `<button class="btn-red" style="justify-content:center" onclick="insertToDesign('${result.src}')">插入到设计</button>`
+                    ? `<button class="btn-red" style="justify-content:center" onclick="insertToDesign('${result.id}', '${result.src}')">插入到设计</button>`
                     : `<button class="btn-secondary" style="justify-content:center" onclick="appendMidtaiImageToConversation('${result.id}')">插入到对话</button>`}
                 </div>
                 <div class="midtai-img-actions" style="margin-top:6px">
@@ -5803,7 +5803,7 @@ function renderMidtaiLibraryImagePanel() {
             <div class="midtai-img-actions">
               <a class="btn-secondary" href="${result.src}" download="kainclaw-image-${result.id}.png" style="text-decoration:none;text-align:center">下载</a>
               ${midtaiState.currentDesignProjectId
-                ? `<button class="btn-secondary" style="justify-content:center" onclick="insertToDesign('${result.src}')">用于当前设计</button>`
+                ? `<button class="btn-secondary" style="justify-content:center" onclick="insertToDesign('${result.id}', '${result.src}')">用于当前设计</button>`
                 : `<button class="btn-secondary" style="justify-content:center;opacity:.5;cursor:not-allowed" disabled title="先进入一个设计作品">用于当前设计</button>`}
             </div>
           </div>
@@ -6586,7 +6586,7 @@ function renderMidtaiImagePreview() {
           <div class="midtai-img-actions">
             <a class="btn-secondary" href="${result.src}" download="kainclaw-image-${result.id}.png" style="text-decoration:none">下载</a>
             ${midtaiState.replaceCtx
-              ? `<button class="btn-red" style="justify-content:center" onclick="insertToDesign('${result.src}')">✓ 插入到设计</button>`
+              ? `<button class="btn-red" style="justify-content:center" onclick="insertToDesign('${result.id}', '${result.src}')">✓ 插入到设计</button>`
               : `<button class="btn-secondary" style="justify-content:center" onclick="appendMidtaiImageToConversation('${result.id}')">插入到对话</button>`}
           </div>
           <div class="midtai-img-actions" style="margin-top:6px">
@@ -6641,7 +6641,7 @@ function renderMidtaiImagePreview() {
                 <div class="midtai-img-actions">
                   <a class="btn-secondary" href="${result.src}" download="kainclaw-image-${result.id}.png" style="text-decoration:none;text-align:center">下载</a>
                   ${midtaiState.replaceCtx
-                    ? `<button class="btn-secondary" style="justify-content:center" onclick="insertToDesign('${result.src}')">插入到设计</button>`
+                    ? `<button class="btn-secondary" style="justify-content:center" onclick="insertToDesign('${result.id}', '${result.src}')">插入到设计</button>`
                     : `<button class="btn-secondary" style="justify-content:center" onclick="appendMidtaiImageToConversation('${result.id}')">插入到对话</button>`}
                 </div>
               </div>
@@ -10807,7 +10807,7 @@ function openImageLab() {
   openMidtai({ contentType: 'img', view: (midtaiState.imgTabView || 'img-preview').replace('img-', ''), replaceCtx: midtaiState.replaceCtx });
 }
 
-function insertToDesign(imageUrl) {
+function insertToDesign(imageId, imageUrl) {
   const activeProjectId = getActiveDesignProjectId();
   const selectedNode = designBridgeState.selectedNode;
   if (!activeProjectId) {
@@ -10827,6 +10827,7 @@ function insertToDesign(imageUrl) {
   send({
     type: 'design:patchImageNode',
     projectId: activeProjectId,
+    imageId: String(imageId || '').trim(),
     elementSelector: selectedNode.selector,
     targetOuterHtml: selectedNode.outerHTML,
     imageUrl: String(imageUrl || '').trim(),

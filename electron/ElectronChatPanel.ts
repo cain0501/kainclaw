@@ -1327,6 +1327,13 @@ export class ElectronChatPanel {
       return;
     }
     if (type === "chat:imageRun") {
+      if (await this.isCurrentSessionDesignType()) {
+        this.sendToRenderer({
+          type: "design:error",
+          message: "设计对话中的图片生成需要走设计专用图片线程，当前已阻止写入主对话。",
+        });
+        return;
+      }
       await this.runChatImageJob(message);
       return;
     }

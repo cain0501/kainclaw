@@ -2356,6 +2356,34 @@ describe("ElectronChatPanel session lifecycle", () => {
     });
   });
 
+  it("blocks chat image generation from design-owned sessions", async () => {
+    const harness = await createHarness();
+    tempDirs.push(harness.storagePath);
+
+    await harness.settings.setOnboardingDone(true);
+    const designSession = await harness.sessions.createSession("design-image-session", "electron", "设计对话");
+    await harness.sessions.saveRuntimeState(designSession.id, {
+      workspaceRoot: "",
+      sessionType: "design",
+      sessionOwner: "design",
+    });
+    await harness.settings.setActiveSessionId(designSession.id);
+    await harness.panel.handleMessage({ type: "ready" });
+
+    await harness.panel.handleMessage({
+      type: "chat:imageRun",
+      prompt: "生成一张适合当前设计的主视觉",
+      referenceImages: [],
+    });
+
+    expect(vi.mocked(runImageLabRequest)).not.toHaveBeenCalled();
+    await expect(harness.sessions.loadMessages(designSession.id)).resolves.toEqual([]);
+    expect(getLastRendererPayloadOfType<{
+      type: "design:error";
+      message: string;
+    }>(harness.rendererPayloads, "design:error")?.message).toContain("已阻止写入主对话");
+  });
+
   it("auto-routes strong generate prompts to image generation without requiring the image button", async () => {
     const harness = await createHarness();
     tempDirs.push(harness.storagePath);
