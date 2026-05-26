@@ -1,0 +1,1501 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Midtai Design Chat Switch Prototype</title>
+  <style>
+    :root {
+      --bg: #f6efe6;
+      --panel: #fffaf3;
+      --panel-2: #fbf4ec;
+      --line: rgba(151, 115, 82, 0.18);
+      --line-strong: rgba(151, 115, 82, 0.32);
+      --text: #2f261f;
+      --muted: #8a7767;
+      --soft: #f1e6da;
+      --accent: #e56539;
+      --accent-2: #2d776f;
+      --ink: #40342a;
+      --shadow: 0 18px 42px rgba(92, 63, 37, 0.10);
+      --radius-xl: 22px;
+      --radius-lg: 16px;
+      --radius-md: 12px;
+      --radius-sm: 8px;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    html,
+    body {
+      margin: 0;
+      min-height: 100%;
+      background: var(--bg);
+      color: var(--text);
+      font-family: "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+    }
+
+    button,
+    input,
+    textarea {
+      font: inherit;
+    }
+
+    button {
+      cursor: pointer;
+    }
+
+    .app {
+      width: 2048px;
+      min-height: 1120px;
+      margin: 0 auto;
+      background:
+        linear-gradient(90deg, rgba(79, 64, 47, 0.025) 1px, transparent 1px),
+        linear-gradient(rgba(79, 64, 47, 0.025) 1px, transparent 1px),
+        radial-gradient(circle at 78% 10%, rgba(229, 101, 57, 0.13), transparent 24%),
+        linear-gradient(180deg, #f8f1e8 0%, #f3eadf 100%);
+      background-size: 46px 46px, 46px 46px, auto, auto;
+    }
+
+    .titlebar {
+      height: 30px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 14px;
+      color: #7c6e61;
+      font-size: 12px;
+      border-bottom: 1px solid rgba(151, 115, 82, 0.10);
+      background: rgba(255, 250, 244, 0.72);
+    }
+
+    .window-left {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .dot {
+      width: 9px;
+      height: 9px;
+      border-radius: 50%;
+      background: #e65043;
+      box-shadow: 15px 0 0 #edb33b, 30px 0 0 #54aa65;
+    }
+
+    .shell-header {
+      height: 86px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 12px 18px;
+      border-bottom: 1px solid rgba(151, 115, 82, 0.14);
+      background: rgba(255, 250, 244, 0.52);
+      backdrop-filter: blur(10px);
+    }
+
+    .shell-left,
+    .shell-right {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+    }
+
+    .mode-tabs {
+      display: inline-flex;
+      gap: 4px;
+      padding: 4px;
+      border-radius: 999px;
+      background: rgba(255, 255, 255, 0.72);
+      border: 1px solid var(--line);
+    }
+
+    .mode-tab {
+      min-width: 76px;
+      padding: 10px 16px;
+      border-radius: 999px;
+      color: #786a5e;
+      font-size: 14px;
+      font-weight: 700;
+      text-align: center;
+    }
+
+    .mode-tab.active {
+      color: #fff;
+      background: linear-gradient(180deg, #ee7445 0%, #d8532d 100%);
+      box-shadow: 0 8px 22px rgba(216, 83, 45, 0.24);
+    }
+
+    .brand small,
+    .pill small {
+      display: block;
+      color: #9a8775;
+      font-size: 10px;
+      font-weight: 800;
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+    }
+
+    .brand strong {
+      display: block;
+      margin-top: 5px;
+      color: #6e5c4d;
+      font-size: 15px;
+      letter-spacing: 0.06em;
+    }
+
+    .brand h1 {
+      margin: 2px 0 0;
+      color: #856d58;
+      font-size: 30px;
+      font-weight: 500;
+      line-height: 1;
+      letter-spacing: 0.04em;
+    }
+
+    .pill {
+      min-width: 170px;
+      padding: 10px 14px;
+      border-radius: 999px;
+      border: 1px solid var(--line);
+      background: rgba(255, 255, 255, 0.76);
+    }
+
+    .pill span {
+      display: block;
+      margin-top: 3px;
+      color: #67584b;
+      font-size: 13px;
+      font-weight: 800;
+    }
+
+    .ghost-btn,
+    .solid-btn,
+    .icon-btn {
+      border: 1px solid var(--line);
+      background: rgba(255, 255, 255, 0.78);
+      color: #68584b;
+      font-size: 13px;
+      font-weight: 800;
+    }
+
+    .ghost-btn,
+    .solid-btn {
+      min-height: 38px;
+      padding: 0 14px;
+      border-radius: 999px;
+    }
+
+    .solid-btn {
+      border-color: rgba(229, 101, 57, 0.42);
+      color: #fff;
+      background: linear-gradient(180deg, #ee7445 0%, #d8532d 100%);
+      box-shadow: 0 12px 24px rgba(216, 83, 45, 0.22);
+    }
+
+    .icon-btn {
+      width: 36px;
+      height: 36px;
+      border-radius: 50%;
+      display: grid;
+      place-items: center;
+      font-size: 17px;
+      line-height: 1;
+    }
+
+    .workspace {
+      display: grid;
+      grid-template-columns: 438px minmax(0, 1fr);
+      gap: 12px;
+      padding: 10px 8px 12px;
+    }
+
+    .chat-pane,
+    .main-pane {
+      min-height: 982px;
+      border-radius: var(--radius-xl);
+      border: 1px solid rgba(151, 115, 82, 0.16);
+      background: linear-gradient(180deg, rgba(255, 255, 255, 0.76), rgba(255, 250, 243, 0.96));
+      box-shadow: var(--shadow);
+      overflow: hidden;
+    }
+
+    .chat-pane {
+      display: flex;
+      flex-direction: column;
+      position: relative;
+    }
+
+    .chat-head {
+      padding: 14px;
+      border-bottom: 1px solid rgba(151, 115, 82, 0.12);
+      background: rgba(255, 255, 255, 0.46);
+    }
+
+    .chat-title-row,
+    .conversation-switcher {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+    }
+
+    .chat-title h2 {
+      margin: 0;
+      font-size: 26px;
+      line-height: 1.05;
+      letter-spacing: -0.03em;
+    }
+
+    .chat-title span {
+      display: block;
+      margin-top: 4px;
+      color: #8b7a69;
+      font-size: 12px;
+      font-weight: 700;
+    }
+
+    .conversation-switcher {
+      margin-top: 12px;
+      padding: 10px;
+      border-radius: 16px;
+      border: 1px solid rgba(229, 101, 57, 0.22);
+      background: rgba(229, 101, 57, 0.08);
+      cursor: pointer;
+      transition: border-color 160ms ease, background 160ms ease, box-shadow 160ms ease;
+    }
+
+    .conversation-switcher:hover,
+    .conversation-switcher.open {
+      border-color: rgba(229, 101, 57, 0.38);
+      background: rgba(229, 101, 57, 0.12);
+      box-shadow: 0 12px 26px rgba(216, 83, 45, 0.12);
+    }
+
+    .active-mini {
+      min-width: 0;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .mini-thumb {
+      width: 38px;
+      height: 38px;
+      flex: 0 0 auto;
+      border-radius: 10px;
+      border: 1px solid rgba(151, 115, 82, 0.20);
+      background: var(--thumb-bg, linear-gradient(135deg, #e8c0a7, #7f9d99));
+      box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.32);
+    }
+
+    .active-mini strong,
+    .thread-copy strong {
+      display: block;
+      overflow: hidden;
+      color: #3f3127;
+      font-size: 13px;
+      font-weight: 850;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .active-mini span,
+    .thread-copy span {
+      display: block;
+      margin-top: 3px;
+      overflow: hidden;
+      color: #836f5f;
+      font-size: 11px;
+      font-weight: 700;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .switcher-popover {
+      position: absolute;
+      z-index: 20;
+      left: 14px;
+      right: 14px;
+      top: 136px;
+      display: none;
+      padding: 12px;
+      border: 1px solid rgba(151, 115, 82, 0.20);
+      border-radius: 20px;
+      background: rgba(255, 250, 243, 0.96);
+      box-shadow: 0 24px 60px rgba(74, 50, 28, 0.22);
+      backdrop-filter: blur(16px);
+    }
+
+    .switcher-popover.open {
+      display: grid;
+      gap: 10px;
+    }
+
+    .switcher-top {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .search {
+      flex: 1;
+      height: 34px;
+      border-radius: 999px;
+      border: 1px solid rgba(151, 115, 82, 0.16);
+      background: rgba(255, 255, 255, 0.72);
+      color: #8d7c6e;
+      display: flex;
+      align-items: center;
+      padding: 0 12px;
+      font-size: 12px;
+      font-weight: 700;
+    }
+
+    .thread-list {
+      display: grid;
+      gap: 8px;
+    }
+
+    .switcher-list {
+      max-height: 392px;
+      display: grid;
+      gap: 8px;
+      padding-right: 4px;
+      overflow-y: auto;
+      overscroll-behavior: contain;
+    }
+
+    .switcher-list::-webkit-scrollbar {
+      width: 8px;
+    }
+
+    .switcher-list::-webkit-scrollbar-track {
+      background: rgba(151, 115, 82, 0.08);
+      border-radius: 999px;
+    }
+
+    .switcher-list::-webkit-scrollbar-thumb {
+      background: rgba(151, 115, 82, 0.28);
+      border-radius: 999px;
+    }
+
+    .switcher-section {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      color: #917f6f;
+      font-size: 11px;
+      font-weight: 900;
+      letter-spacing: 0.10em;
+      text-transform: uppercase;
+    }
+
+    .switcher-section span:last-child {
+      letter-spacing: 0;
+      text-transform: none;
+    }
+
+    .thread-item {
+      width: 100%;
+      display: grid;
+      grid-template-columns: 46px minmax(0, 1fr) auto;
+      align-items: center;
+      gap: 10px;
+      padding: 10px;
+      border: 1px solid rgba(151, 115, 82, 0.14);
+      border-radius: 16px;
+      background: rgba(255, 255, 255, 0.72);
+      text-align: left;
+      transition: border-color 160ms ease, background 160ms ease, transform 160ms ease;
+    }
+
+    .thread-item:hover {
+      border-color: rgba(229, 101, 57, 0.30);
+      transform: translateY(-1px);
+    }
+
+    .thread-item.active {
+      border-color: rgba(229, 101, 57, 0.42);
+      background: rgba(229, 101, 57, 0.10);
+      box-shadow: inset 3px 0 0 var(--accent);
+    }
+
+    .thread-meta {
+      color: #9c8978;
+      font-size: 11px;
+      font-weight: 800;
+      white-space: nowrap;
+    }
+
+    .thread-item.active .thread-meta {
+      color: var(--accent);
+    }
+
+    .chat-body {
+      flex: 1;
+      padding: 14px;
+      display: grid;
+      align-content: start;
+      gap: 12px;
+      overflow: hidden;
+    }
+
+    .message {
+      max-width: 94%;
+      padding: 12px 13px;
+      border-radius: 16px;
+      border: 1px solid rgba(151, 115, 82, 0.14);
+      background: rgba(255, 255, 255, 0.78);
+      color: #55483d;
+      font-size: 13px;
+      line-height: 1.62;
+    }
+
+    .message.user {
+      justify-self: end;
+      border-color: rgba(229, 101, 57, 0.18);
+      background: rgba(229, 101, 57, 0.08);
+      color: #46352b;
+    }
+
+    .message.system {
+      background: rgba(242, 233, 223, 0.74);
+    }
+
+    .message label {
+      display: block;
+      margin-bottom: 5px;
+      color: #8b7a69;
+      font-size: 10px;
+      font-weight: 900;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+    }
+
+    .asset-chip {
+      margin-top: 9px;
+      display: inline-flex;
+      align-items: center;
+      gap: 7px;
+      padding: 7px 9px;
+      border-radius: 999px;
+      border: 1px solid rgba(45, 119, 111, 0.20);
+      background: rgba(45, 119, 111, 0.08);
+      color: #2d6d66;
+      font-size: 11px;
+      font-weight: 850;
+    }
+
+    .composer {
+      padding: 12px;
+      border-top: 1px solid rgba(151, 115, 82, 0.12);
+      background: rgba(255, 255, 255, 0.54);
+    }
+
+    .composer-controls {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+      margin-bottom: 10px;
+    }
+
+    .control {
+      min-height: 74px;
+      padding: 9px;
+      border-radius: 14px;
+      border: 1px solid rgba(151, 115, 82, 0.14);
+      background: rgba(255, 255, 255, 0.72);
+    }
+
+    .control.wide {
+      grid-column: 1 / -1;
+      min-height: 58px;
+    }
+
+    .control-title {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 7px;
+      color: #8b7a69;
+      font-size: 11px;
+      font-weight: 900;
+    }
+
+    .chips {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+    }
+
+    .chip {
+      min-height: 28px;
+      padding: 0 9px;
+      border-radius: 999px;
+      border: 1px solid rgba(151, 115, 82, 0.16);
+      display: inline-flex;
+      align-items: center;
+      color: #715f51;
+      background: #fff;
+      font-size: 12px;
+      font-weight: 850;
+    }
+
+    .chip.active {
+      border-color: rgba(229, 101, 57, 0.34);
+      color: var(--accent);
+      background: rgba(229, 101, 57, 0.10);
+    }
+
+    .upload-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      padding: 8px 10px;
+      border-radius: 12px;
+      border: 1px dashed rgba(229, 101, 57, 0.30);
+      color: #766759;
+      font-size: 12px;
+      font-weight: 750;
+    }
+
+    .upload-row strong {
+      color: var(--accent);
+      font-size: 12px;
+    }
+
+    .textarea {
+      min-height: 102px;
+      padding: 12px;
+      border-radius: 15px;
+      border: 1px solid rgba(151, 115, 82, 0.18);
+      background: #fffdfa;
+      color: #5f5146;
+      font-size: 13px;
+      line-height: 1.65;
+    }
+
+    .composer-foot {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      margin-top: 10px;
+      color: #8a7767;
+      font-size: 12px;
+      font-weight: 700;
+    }
+
+    .main-pane {
+      display: flex;
+      flex-direction: column;
+    }
+
+    .main-tabs {
+      display: flex;
+      align-items: center;
+      gap: 22px;
+      padding: 12px 16px 10px;
+      border-bottom: 1px solid rgba(151, 115, 82, 0.12);
+      background: rgba(255, 255, 255, 0.44);
+    }
+
+    .main-tab {
+      position: relative;
+      color: #8b7969;
+      font-size: 13px;
+      font-weight: 850;
+    }
+
+    .main-tab.active {
+      color: var(--accent);
+    }
+
+    .main-tab.active::after {
+      content: "";
+      position: absolute;
+      left: 0;
+      right: 0;
+      bottom: -11px;
+      height: 2px;
+      border-radius: 99px;
+      background: var(--accent);
+    }
+
+    .stage {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      padding: 18px;
+    }
+
+    .stage-top {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      align-items: center;
+      gap: 14px;
+      margin-bottom: 14px;
+    }
+
+    .canvas-context {
+      min-width: 0;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 10px 12px;
+      border: 1px solid rgba(151, 115, 82, 0.16);
+      border-radius: 999px;
+      background: rgba(255, 255, 255, 0.76);
+    }
+
+    .canvas-context .mini-thumb {
+      width: 32px;
+      height: 32px;
+      border-radius: 9px;
+    }
+
+    .canvas-context strong {
+      display: block;
+      overflow: hidden;
+      color: #46382e;
+      font-size: 13px;
+      font-weight: 900;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .canvas-context span {
+      display: block;
+      margin-top: 3px;
+      color: #837162;
+      font-size: 11px;
+      font-weight: 800;
+    }
+
+    .toolbar {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-wrap: wrap;
+      justify-content: flex-end;
+    }
+
+    .tool {
+      min-height: 38px;
+      padding: 0 12px;
+      border-radius: 999px;
+      border: 1px solid rgba(151, 115, 82, 0.16);
+      background: rgba(255, 255, 255, 0.78);
+      color: #756457;
+      font-size: 12px;
+      font-weight: 850;
+    }
+
+    .tool.active {
+      border-color: rgba(229, 101, 57, 0.34);
+      color: var(--accent);
+      background: rgba(229, 101, 57, 0.10);
+    }
+
+    .canvas-shell {
+      position: relative;
+      flex: 1;
+      min-height: 842px;
+      border-radius: 24px;
+      border: 1px solid rgba(151, 115, 82, 0.14);
+      background:
+        linear-gradient(90deg, rgba(55, 42, 31, 0.035) 1px, transparent 1px),
+        linear-gradient(rgba(55, 42, 31, 0.035) 1px, transparent 1px),
+        linear-gradient(135deg, #d8c9b8 0%, #efe4d6 44%, #f8f1e8 100%);
+      background-size: 74px 74px, 74px 74px, auto;
+      overflow: hidden;
+    }
+
+    .canvas-art {
+      position: absolute;
+      inset: 34px;
+      border-radius: 20px;
+      background: var(--art-bg);
+      box-shadow:
+        inset 0 0 0 1px rgba(255, 255, 255, 0.36),
+        0 26px 58px rgba(91, 64, 38, 0.16);
+      overflow: hidden;
+    }
+
+    .art-noise {
+      position: absolute;
+      inset: 0;
+      opacity: 0.32;
+      background:
+        linear-gradient(90deg, rgba(255, 255, 255, 0.07) 1px, transparent 1px),
+        linear-gradient(rgba(255, 255, 255, 0.06) 1px, transparent 1px);
+      background-size: 38px 38px;
+      pointer-events: none;
+    }
+
+    .art-copy {
+      position: absolute;
+      left: 7%;
+      top: 9%;
+      width: 33%;
+      color: var(--copy-color, #372a21);
+    }
+
+    .art-copy .eyebrow {
+      margin-bottom: 14px;
+      color: var(--accent);
+      font-size: 12px;
+      font-weight: 900;
+      letter-spacing: 0.16em;
+      text-transform: uppercase;
+    }
+
+    .art-copy h3 {
+      margin: 0;
+      font-size: 66px;
+      font-weight: 520;
+      letter-spacing: -0.055em;
+      line-height: 0.94;
+    }
+
+    .art-copy em {
+      font-family: Georgia, "Times New Roman", serif;
+      font-style: italic;
+      font-weight: 500;
+    }
+
+    .art-copy p {
+      margin: 18px 0 0;
+      color: var(--body-color, #716457);
+      font-size: 15px;
+      line-height: 1.8;
+    }
+
+    .art-buttons {
+      margin-top: 22px;
+      display: flex;
+      gap: 11px;
+    }
+
+    .art-buttons span {
+      padding: 11px 14px;
+      border-radius: 999px;
+      border: 1px solid rgba(255, 255, 255, 0.34);
+      background: rgba(255, 255, 255, 0.56);
+      font-size: 12px;
+      font-weight: 850;
+    }
+
+    .figure-zone {
+      position: absolute;
+      right: 7%;
+      top: 10%;
+      width: 45%;
+      height: 72%;
+    }
+
+    .orb {
+      position: absolute;
+      right: 11%;
+      top: 4%;
+      width: 300px;
+      height: 300px;
+      border-radius: 50%;
+      background: var(--orb-bg);
+      filter: saturate(1.05);
+    }
+
+    .subject {
+      position: absolute;
+      right: 19%;
+      top: 16%;
+      width: 270px;
+      height: 380px;
+      border-radius: var(--subject-radius);
+      background: var(--subject-bg);
+      box-shadow:
+        inset 20px 24px 36px rgba(255, 255, 255, 0.42),
+        inset -26px -24px 38px rgba(63, 43, 27, 0.20),
+        0 28px 44px rgba(73, 51, 31, 0.18);
+      transform: rotate(var(--subject-rotate));
+    }
+
+    .subject::before {
+      content: "";
+      position: absolute;
+      inset: var(--subject-inner);
+      border-radius: 22px;
+      background: var(--subject-inner-bg);
+      clip-path: var(--subject-clip);
+      opacity: 0.94;
+    }
+
+    .accent-shape {
+      position: absolute;
+      left: 15%;
+      bottom: 13%;
+      width: 160px;
+      height: 220px;
+      border-radius: 80px 80px 20px 20px;
+      background: var(--accent-shape-bg);
+      transform: rotate(-9deg);
+      opacity: 0.92;
+    }
+
+    .selection {
+      position: absolute;
+      right: 18%;
+      top: 15%;
+      width: 312px;
+      height: 430px;
+      z-index: 4;
+      border: 2px solid var(--accent);
+      background: rgba(229, 101, 57, 0.08);
+      box-shadow: 0 0 0 1800px rgba(45, 33, 24, 0.18);
+      display: none;
+    }
+
+    .selection.visible {
+      display: block;
+    }
+
+    .selection label {
+      position: absolute;
+      left: 10px;
+      top: -44px;
+      padding: 9px 12px;
+      border-radius: 12px 12px 12px 4px;
+      color: #fff;
+      background: var(--accent);
+      box-shadow: 0 16px 24px rgba(216, 83, 45, 0.24);
+      font-size: 12px;
+      font-weight: 900;
+      white-space: nowrap;
+    }
+
+    .selection i {
+      position: absolute;
+      width: 12px;
+      height: 12px;
+      border: 2px solid var(--accent);
+      border-radius: 50%;
+      background: #fff;
+    }
+
+    .selection i:nth-child(2) {
+      left: -7px;
+      top: -7px;
+    }
+
+    .selection i:nth-child(3) {
+      right: -7px;
+      top: -7px;
+    }
+
+    .selection i:nth-child(4) {
+      left: -7px;
+      bottom: -7px;
+    }
+
+    .selection i:nth-child(5) {
+      right: -7px;
+      bottom: -7px;
+    }
+
+    .version-strip {
+      position: absolute;
+      left: 18px;
+      right: 18px;
+      bottom: 18px;
+      z-index: 5;
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      gap: 12px;
+      align-items: end;
+    }
+
+    .current-card,
+    .thumb-stack {
+      border: 1px solid rgba(151, 115, 82, 0.16);
+      background: rgba(255, 250, 243, 0.90);
+      border-radius: 18px;
+      box-shadow: 0 14px 32px rgba(74, 50, 28, 0.12);
+      backdrop-filter: blur(10px);
+    }
+
+    .current-card {
+      padding: 14px;
+    }
+
+    .current-card strong {
+      display: block;
+      color: #3c3027;
+      font-size: 14px;
+      font-weight: 900;
+    }
+
+    .current-card p {
+      margin: 7px 0 0;
+      color: #756658;
+      font-size: 13px;
+      line-height: 1.6;
+    }
+
+    .thumb-stack {
+      width: 274px;
+      padding: 12px;
+    }
+
+    .thumb-stack strong {
+      display: block;
+      margin-bottom: 9px;
+      color: #483b31;
+      font-size: 13px;
+      font-weight: 900;
+    }
+
+    .small-thumbs {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 8px;
+    }
+
+    .small-thumb {
+      height: 54px;
+      border-radius: 12px;
+      border: 1px solid rgba(151, 115, 82, 0.16);
+      background: var(--thumb-bg);
+    }
+
+    @media (max-width: 1200px) {
+      .app {
+        width: 100%;
+        min-height: auto;
+      }
+
+      .workspace {
+        grid-template-columns: 1fr;
+      }
+
+      .chat-pane,
+      .main-pane {
+        min-height: auto;
+      }
+
+      .canvas-shell {
+        min-height: 720px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <div class="titlebar">
+      <div class="window-left"><span class="dot"></span><span>KainClaw</span></div>
+      <div>mid-tai.desktop</div>
+    </div>
+
+    <header class="shell-header">
+      <div class="shell-left">
+        <nav class="mode-tabs" aria-label="工作区">
+          <div class="mode-tab active">图像</div>
+          <div class="mode-tab">设计</div>
+          <div class="mode-tab">作品</div>
+        </nav>
+        <div class="brand">
+          <small>MIDTAI UNIFIED WORKBENCH</small>
+          <strong>图像生成与素材管理</strong>
+          <h1>Image Workbench</h1>
+        </div>
+      </div>
+
+      <div class="shell-right">
+        <div class="pill">
+          <small>当前入口</small>
+          <span>设计 Chat</span>
+        </div>
+        <button class="ghost-btn">返回主 Chat</button>
+      </div>
+    </header>
+
+    <div class="workspace">
+      <aside class="chat-pane">
+        <section class="chat-head">
+          <div class="chat-title-row">
+            <div class="chat-title">
+              <h2>设计 Chat</h2>
+              <span>34 条会话</span>
+            </div>
+            <button class="solid-btn">新建会话</button>
+          </div>
+
+          <button id="conversationSwitcher" class="conversation-switcher" type="button">
+            <div class="active-mini">
+              <div id="activeMiniThumb" class="mini-thumb"></div>
+              <div>
+                <strong id="activeMiniTitle">AI Studio 主视觉</strong>
+                <span id="activeMiniSub">正在编辑 hero-visual-v1.png</span>
+              </div>
+            </div>
+            <span id="switcherIcon" class="icon-btn" aria-label="展开会话列表">⌄</span>
+          </button>
+        </section>
+
+        <section id="switcherPopover" class="switcher-popover" aria-label="设计会话切换器">
+          <div class="switcher-top">
+            <div class="search">搜索设计会话</div>
+            <button class="icon-btn" aria-label="筛选">⌕</button>
+          </div>
+          <div class="switcher-section">
+            <span>置顶 / 最近</span>
+            <span>34 条</span>
+          </div>
+          <div id="threadList" class="switcher-list"></div>
+        </section>
+
+        <section id="chatBody" class="chat-body" aria-label="当前设计会话消息"></section>
+
+        <section class="composer">
+          <div class="composer-controls">
+            <div class="control wide">
+              <div class="control-title">
+                <span>参考图</span>
+                <span id="refCount">0/4</span>
+              </div>
+              <div class="upload-row">
+                <strong>+ 上传参考图</strong>
+                <span id="refText">当前未上传</span>
+              </div>
+            </div>
+
+            <div class="control">
+              <div class="control-title">默认比例</div>
+              <div id="ratioChips" class="chips"></div>
+            </div>
+
+            <div class="control">
+              <div class="control-title">出图数量</div>
+              <div id="countChips" class="chips"></div>
+            </div>
+          </div>
+
+          <div id="composerText" class="textarea"></div>
+          <div class="composer-foot">
+            <span id="composerHint">发到当前设计会话</span>
+            <button class="solid-btn">发送</button>
+          </div>
+        </section>
+      </aside>
+
+      <main class="main-pane">
+        <nav class="main-tabs" aria-label="图像工作区">
+          <div class="main-tab active">生成预览</div>
+          <div class="main-tab">我的作品</div>
+          <div class="main-tab">提示词库</div>
+        </nav>
+
+        <section class="stage">
+          <div class="stage-top">
+            <div class="canvas-context">
+              <div id="canvasContextThumb" class="mini-thumb"></div>
+              <div>
+                <strong id="canvasTitle">AI Studio 主视觉</strong>
+                <span id="canvasMeta">hero-visual-v1.png · 正在编辑选区</span>
+              </div>
+            </div>
+            <div class="toolbar">
+              <button class="tool">回到主 Chat</button>
+              <button id="selectTool" class="tool active">选择区域</button>
+              <button class="tool">刷选蒙版</button>
+              <button class="tool">替换主体</button>
+              <button class="tool">加入设计台</button>
+            </div>
+          </div>
+
+          <div class="canvas-shell">
+            <article id="canvasArt" class="canvas-art">
+              <div class="art-noise"></div>
+              <div class="art-copy">
+                <div id="artEyebrow" class="eyebrow">ATELIER ZERO / 01</div>
+                <h3 id="artTitle">Creative<br>AI<br><em>Research</em><br>Studio</h3>
+                <p id="artBody">Premium editorial landing visuals with sculpture fragments, warm paper texture, and quiet headline space.</p>
+                <div class="art-buttons">
+                  <span id="artButtonA">Start a brief</span>
+                  <span id="artButtonB">View methods</span>
+                </div>
+              </div>
+
+              <div class="figure-zone">
+                <div class="orb"></div>
+                <div class="accent-shape"></div>
+                <div class="subject"></div>
+              </div>
+
+              <div id="selectionBox" class="selection visible">
+                <label id="selectionLabel">已选中：主视觉主体区域</label>
+                <i></i><i></i><i></i><i></i>
+              </div>
+            </article>
+
+            <div class="version-strip">
+              <div class="current-card">
+                <strong id="currentCardTitle">当前会话绑定图片：hero-visual-v1.png</strong>
+                <p id="currentCardDesc">从主 Chat 发送到设计 Chat 后继续编辑。切换左侧会话时，中间画布切换到该会话自己的当前图片和编辑状态。</p>
+              </div>
+              <div class="thumb-stack">
+                <strong>本会话版本</strong>
+                <div id="versionThumbs" class="small-thumbs"></div>
+              </div>
+            </div>
+          </div>
+        </section>
+      </main>
+    </div>
+  </div>
+
+  <script>
+    const conversations = [
+      {
+        id: "studio",
+        title: "AI Studio 主视觉",
+        last: "正在编辑 hero-visual-v1.png",
+        meta: "选区编辑",
+        asset: "hero-visual-v1.png",
+        status: "正在编辑选区",
+        source: "主 Chat 导入",
+        refs: 0,
+        ratio: "方形",
+        count: "1 张",
+        thumb: "linear-gradient(135deg, #e9bd9f 0%, #f4e4d4 42%, #597f79 100%)",
+        artBg: "radial-gradient(circle at 73% 21%, rgba(229,101,57,0.22), transparent 20%), linear-gradient(135deg, #d9c7b5 0%, #efe4d6 42%, #f8f0e5 100%)",
+        orbBg: "radial-gradient(circle at 35% 34%, rgba(255,255,255,0.24), rgba(229,101,57,0.76))",
+        subjectBg: "linear-gradient(180deg, #faf6ef 0%, #ddd3c4 42%, #c6b8a7 100%)",
+        subjectInnerBg: "radial-gradient(circle at 38% 36%, rgba(177,189,207,0.9), rgba(107,123,147,0.92) 54%, rgba(47,52,60,0.9) 100%)",
+        subjectClip: "polygon(7% 6%, 100% 0, 84% 72%, 16% 100%)",
+        subjectInner: "15% 20% 40% 22%",
+        subjectRadius: "132px 132px 78px 78px",
+        subjectRotate: "0deg",
+        accentShapeBg: "radial-gradient(circle at 43% 25%, #7ca079, #4f6f56 80%)",
+        eyebrow: "ATELIER ZERO / 01",
+        artTitle: "Creative<br>AI<br><em>Research</em><br>Studio",
+        body: "Premium editorial landing visuals with sculpture fragments, warm paper texture, and quiet headline space.",
+        buttonA: "Start a brief",
+        buttonB: "View methods",
+        selected: true,
+        selectionLabel: "已选中：主视觉主体区域",
+        messages: [
+          { role: "system", label: "System", text: "已载入主 Chat 生成图 hero-visual-v1.png。", asset: "source: main_chat · role: hero" },
+          { role: "user", label: "Design Chat", text: "做一张高级感的 AI 创意工作室首页主视觉，偏编辑设计风格，左边留标题空间。" },
+          { role: "system", label: "System", text: "已生成 1 张图。默认比例：方形。默认数量：1。" },
+          { role: "user", label: "Design Chat", text: "我选中了这个主体。把树去掉，换成更克制的几何雕塑感，背景暖一点，其他别动。" }
+        ],
+        composer: "把这里换成更现代、更偏金属雕塑感的几何主体。背景再暖一点，保留左边标题布局和其它区域。",
+        versions: [
+          "linear-gradient(135deg, #dfb697, #f2e4d8)",
+          "linear-gradient(135deg, #cbb9a8, #52766f)",
+          "linear-gradient(135deg, #f0d4bd, #df6840)"
+        ]
+      },
+      {
+        id: "poster",
+        title: "发布会海报探索",
+        last: "横版 · 4 张 · 2 张参考图",
+        meta: "生成变体",
+        asset: "launch-poster-v3.png",
+        status: "等待生成变体",
+        source: "设计 Chat 创建",
+        refs: 2,
+        ratio: "横版",
+        count: "4 张",
+        thumb: "linear-gradient(135deg, #273a37 0%, #d2bd92 54%, #e85835 100%)",
+        artBg: "radial-gradient(circle at 63% 28%, rgba(232,88,53,0.32), transparent 20%), linear-gradient(135deg, #253732 0%, #6c7257 48%, #d9c08f 100%)",
+        orbBg: "radial-gradient(circle at 40% 35%, rgba(255,241,206,0.36), rgba(232,88,53,0.82))",
+        subjectBg: "linear-gradient(160deg, #f4dfae 0%, #c69257 48%, #553f2d 100%)",
+        subjectInnerBg: "linear-gradient(135deg, rgba(246,235,201,0.95), rgba(230,89,54,0.8))",
+        subjectClip: "polygon(50% 0%, 100% 82%, 68% 100%, 0 42%)",
+        subjectInner: "20% 18% 18% 18%",
+        subjectRadius: "34px 170px 42px 150px",
+        subjectRotate: "-7deg",
+        accentShapeBg: "linear-gradient(180deg, rgba(235,223,185,0.86), rgba(42,61,57,0.94))",
+        eyebrow: "PRODUCT LAUNCH / 09",
+        artTitle: "Signal<br><em>Release</em><br>Night",
+        body: "High contrast launch poster direction with dense lighting, product silhouette, and warm metallic tension.",
+        buttonA: "Invite list",
+        buttonB: "Launch deck",
+        selected: false,
+        selectionLabel: "已选中：产品轮廓",
+        messages: [
+          { role: "user", label: "Design Chat", text: "用这两张参考图做发布会横版海报，风格要更有张力，偏暗，产品主体发光。" },
+          { role: "system", label: "System", text: "已生成 4 张方向草图，当前选中第 3 张。" },
+          { role: "user", label: "Design Chat", text: "保留这个构图，下一轮把标题区拉开，产品轮廓再清楚一点。" }
+        ],
+        composer: "基于当前第 3 张继续出 4 个变体，标题区域更开阔，产品轮廓更清楚，整体不要变亮。",
+        versions: [
+          "linear-gradient(135deg, #243632, #d2bd92)",
+          "linear-gradient(135deg, #e85835, #293b36)",
+          "linear-gradient(135deg, #887a56, #f2d494)"
+        ]
+      },
+      {
+        id: "brand",
+        title: "品牌 KV 变体",
+        last: "竖版 · 2 张 · 品牌参考",
+        meta: "局部替换",
+        asset: "brand-kv-v2.png",
+        status: "正在替换背景",
+        source: "设计台生成",
+        refs: 1,
+        ratio: "竖版",
+        count: "2 张",
+        thumb: "linear-gradient(135deg, #f7e7cf 0%, #356e78 52%, #cf4d35 100%)",
+        artBg: "radial-gradient(circle at 62% 24%, rgba(53,110,120,0.28), transparent 20%), linear-gradient(135deg, #f6e5cf 0%, #cfd5c2 46%, #356e78 100%)",
+        orbBg: "radial-gradient(circle at 38% 38%, rgba(255,255,255,0.48), rgba(53,110,120,0.80))",
+        subjectBg: "linear-gradient(180deg, #fff4dd 0%, #d77d5a 46%, #8c342d 100%)",
+        subjectInnerBg: "linear-gradient(135deg, rgba(252,237,199,0.92), rgba(54,111,120,0.88))",
+        subjectClip: "polygon(18% 0, 100% 18%, 82% 100%, 0 72%)",
+        subjectInner: "18% 17% 22% 17%",
+        subjectRadius: "160px 64px 150px 50px",
+        subjectRotate: "6deg",
+        accentShapeBg: "linear-gradient(180deg, rgba(207,77,53,0.88), rgba(250,230,200,0.88))",
+        eyebrow: "BRAND SYSTEM / 04",
+        artTitle: "Daily<br><em>Ritual</em><br>Code",
+        body: "Vertical brand key visual with calm product rhythm, soft daylight, and a stronger branded color field.",
+        buttonA: "Campaign",
+        buttonB: "Assets",
+        selected: true,
+        selectionLabel: "已选中：背景色块",
+        messages: [
+          { role: "system", label: "System", text: "已接入品牌参考图 brand-ref.png。" },
+          { role: "user", label: "Design Chat", text: "做一组竖版品牌 KV，颜色要更稳，不要电商促销感。" },
+          { role: "system", label: "System", text: "已生成 2 张图。当前图进入局部替换模式。" },
+          { role: "user", label: "Design Chat", text: "只换背景色块，主体和标题位置不要动。" }
+        ],
+        composer: "只替换背景色块，加入更柔和的品牌蓝绿色层次，主体、标题位置、留白保持不变。",
+        versions: [
+          "linear-gradient(135deg, #f7e7cf, #356e78)",
+          "linear-gradient(135deg, #cf4d35, #f3dcc2)",
+          "linear-gradient(135deg, #315e67, #ead2b6)"
+        ]
+      }
+    ];
+
+    const ratios = ["方形", "横版", "竖版"];
+    const counts = ["1 张", "2 张", "4 张"];
+    const archivedTitles = [
+      "咖啡新品氛围图",
+      "播客封面方向",
+      "招聘 Banner",
+      "课程封面重做",
+      "小红书首图模板",
+      "活动倒计时海报",
+      "App Store 预览图",
+      "会员权益 KV",
+      "节日礼盒主图",
+      "线下展台背板",
+      "播客嘉宾卡片",
+      "白皮书封面",
+      "邮件头图",
+      "社群招募海报",
+      "新品详情页首屏",
+      "案例研究配图",
+      "直播预约图",
+      "团队文化墙",
+      "功能发布插画",
+      "品牌口号视觉",
+      "折扣活动素材",
+      "公众号封面",
+      "季度报告封面",
+      "创始人金句卡",
+      "产品路线图配图",
+      "线索表单 Banner",
+      "客户证言图",
+      "渠道广告图",
+      "展会邀请函",
+      "春节运营主图",
+      "启动页背景"
+    ];
+
+    conversations.push(...archivedTitles.map((title, index) => {
+      const ratiosForMock = ["方形", "横版", "竖版"];
+      const countsForMock = ["1 张", "2 张", "4 张"];
+      const hue = index % 3;
+      const thumbs = [
+        "linear-gradient(135deg, #efe0c8 0%, #c86342 48%, #557a72 100%)",
+        "linear-gradient(135deg, #293f3b 0%, #d8c18f 54%, #f0e1ca 100%)",
+        "linear-gradient(135deg, #f4d9bd 0%, #7d9584 52%, #d95b38 100%)"
+      ];
+
+      return {
+        ...conversations[hue],
+        id: `archive-${index}`,
+        title,
+        last: `${ratiosForMock[index % 3]} · ${countsForMock[index % 3]} · ${index + 2} 天前`,
+        meta: index % 4 === 0 ? "已完成" : index % 4 === 1 ? "草稿" : index % 4 === 2 ? "待修改" : "已归档",
+        asset: `archive-${index + 1}.png`,
+        status: "历史会话",
+        source: "设计 Chat 历史",
+        refs: index % 5 === 0 ? 2 : index % 3,
+        ratio: ratiosForMock[index % 3],
+        count: countsForMock[index % 3],
+        thumb: thumbs[hue],
+        selected: false,
+        messages: [
+          { role: "user", label: "Design Chat", text: `${title}：延续上一版方向，保留主体和版式，只做局部风格调整。` },
+          { role: "system", label: "System", text: "已保存为历史设计会话，可继续生成或编辑当前图片。" }
+        ],
+        composer: `继续修改「${title}」，保留当前构图，只调整视觉质感和细节。`
+      };
+    }));
+
+    let activeId = conversations[0].id;
+    let switcherOpen = false;
+
+    function getActiveConversation() {
+      return conversations.find((item) => item.id === activeId) || conversations[0];
+    }
+
+    function setText(id, value) {
+      document.getElementById(id).textContent = value;
+    }
+
+    function setThumb(element, bg) {
+      element.style.setProperty("--thumb-bg", bg);
+    }
+
+    function renderThreads() {
+      const list = document.getElementById("threadList");
+      list.innerHTML = "";
+      conversations.forEach((item) => {
+        const button = document.createElement("button");
+        button.className = `thread-item${item.id === activeId ? " active" : ""}`;
+        button.type = "button";
+        button.addEventListener("click", () => {
+          activeId = item.id;
+          switcherOpen = false;
+          render();
+        });
+
+        const thumb = document.createElement("div");
+        thumb.className = "mini-thumb";
+        thumb.style.setProperty("--thumb-bg", item.thumb);
+
+        const copy = document.createElement("div");
+        copy.className = "thread-copy";
+        copy.innerHTML = `<strong>${item.title}</strong><span>${item.last}</span>`;
+
+        const meta = document.createElement("div");
+        meta.className = "thread-meta";
+        meta.textContent = item.meta;
+
+        button.append(thumb, copy, meta);
+        list.append(button);
+      });
+    }
+
+    function renderMessages(item) {
+      const body = document.getElementById("chatBody");
+      body.innerHTML = "";
+      item.messages.forEach((message) => {
+        const div = document.createElement("div");
+        div.className = `message ${message.role}`;
+        div.innerHTML = `<label>${message.label}</label>${message.text}`;
+        if (message.asset) {
+          const chip = document.createElement("div");
+          chip.className = "asset-chip";
+          chip.textContent = message.asset;
+          div.append(chip);
+        }
+        body.append(div);
+      });
+    }
+
+    function renderChips(containerId, options, active) {
+      const container = document.getElementById(containerId);
+      container.innerHTML = "";
+      options.forEach((option) => {
+        const chip = document.createElement("span");
+        chip.className = `chip${option === active ? " active" : ""}`;
+        chip.textContent = option;
+        container.append(chip);
+      });
+    }
+
+    function renderVersions(item) {
+      const holder = document.getElementById("versionThumbs");
+      holder.innerHTML = "";
+      item.versions.forEach((bg) => {
+        const div = document.createElement("div");
+        div.className = "small-thumb";
+        div.style.setProperty("--thumb-bg", bg);
+        holder.append(div);
+      });
+    }
+
+    function renderCanvas(item) {
+      const canvas = document.getElementById("canvasArt");
+      canvas.style.setProperty("--art-bg", item.artBg);
+      canvas.style.setProperty("--orb-bg", item.orbBg);
+      canvas.style.setProperty("--subject-bg", item.subjectBg);
+      canvas.style.setProperty("--subject-inner-bg", item.subjectInnerBg);
+      canvas.style.setProperty("--subject-clip", item.subjectClip);
+      canvas.style.setProperty("--subject-inner", item.subjectInner);
+      canvas.style.setProperty("--subject-radius", item.subjectRadius);
+      canvas.style.setProperty("--subject-rotate", item.subjectRotate);
+      canvas.style.setProperty("--accent-shape-bg", item.accentShapeBg);
+
+      setText("artEyebrow", item.eyebrow);
+      document.getElementById("artTitle").innerHTML = item.artTitle;
+      setText("artBody", item.body);
+      setText("artButtonA", item.buttonA);
+      setText("artButtonB", item.buttonB);
+      setText("selectionLabel", item.selectionLabel);
+      document.getElementById("selectionBox").classList.toggle("visible", item.selected);
+      document.getElementById("selectTool").classList.toggle("active", item.selected);
+    }
+
+    function render() {
+      const item = getActiveConversation();
+      document.getElementById("conversationSwitcher").classList.toggle("open", switcherOpen);
+      document.getElementById("switcherPopover").classList.toggle("open", switcherOpen);
+      setText("switcherIcon", switcherOpen ? "⌃" : "⌄");
+      renderThreads();
+      renderMessages(item);
+      renderChips("ratioChips", ratios, item.ratio);
+      renderChips("countChips", counts, item.count);
+      renderVersions(item);
+      renderCanvas(item);
+
+      setThumb(document.getElementById("activeMiniThumb"), item.thumb);
+      setThumb(document.getElementById("canvasContextThumb"), item.thumb);
+      setText("activeMiniTitle", item.title);
+      setText("activeMiniSub", item.last);
+      setText("canvasTitle", item.title);
+      setText("canvasMeta", `${item.asset} · ${item.status}`);
+      setText("currentCardTitle", `当前会话绑定图片：${item.asset}`);
+      setText("currentCardDesc", `${item.source}。这条设计会话保存自己的参考图、比例、出图数量、消息和当前画布状态。`);
+      setText("refCount", `${item.refs}/4`);
+      setText("refText", item.refs > 0 ? `已有 ${item.refs} 张参考图` : "当前未上传");
+      setText("composerText", item.composer);
+      setText("composerHint", `发到当前设计会话 · ${item.title}`);
+    }
+
+    document.getElementById("conversationSwitcher").addEventListener("click", () => {
+      switcherOpen = !switcherOpen;
+      render();
+    });
+
+    document.addEventListener("keydown", (event) => {
+      if (event.key === "Escape" && switcherOpen) {
+        switcherOpen = false;
+        render();
+      }
+    });
+
+    render();
+  </script>
+</body>
+</html>
