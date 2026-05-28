@@ -5486,6 +5486,9 @@ function insertImageChatResultToDesign(imageId, imageUrl) {
   insertToDesign(imageId, imageUrl);
 }
 
+// ⚠️ LEGACY PATH — rendered only in the old image-chat-preview-body panel (right side stage).
+// The ACTIVE user-facing chat UI is ichat-v2 (#ichat-messages), rendered by renderIchatMessage() ~line 14812.
+// Do NOT add new features here. Add them to renderIchatMessage() instead.
 function renderImageChatThreadMessages() {
   const messages = getImageChatThreadMessages();
   if (!messages.length) {
