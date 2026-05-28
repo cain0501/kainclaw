@@ -397,6 +397,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-seri
 .image-chat-message.error{border-color:#efb4b4;background:#fff4f4;color:#8b1e1e}
 .image-chat-message-label{display:block;margin-bottom:3px;font-size:10px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:#a08e7f}
 .image-chat-message-copy{white-space:pre-wrap;word-break:break-word}
+.image-chat-caption{margin-top:6px;font-size:12px;line-height:1.6;color:#71717a}
 .image-chat-message-meta{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-top:8px;font-size:10px;color:#a08e7f}
 .image-chat-result-strip{display:grid;grid-template-columns:repeat(auto-fit,minmax(112px,1fr));gap:8px;padding:8px 0 2px}
 .image-chat-result-card{min-width:94px;border:1px solid #eadbcc;border-radius:12px;overflow:hidden;background:#fff;box-shadow:0 8px 16px rgba(77,49,24,.06)}
@@ -2230,6 +2231,7 @@ let imageChatThreadState = {
   messages: [],
   referenceImages: [],
   resultBatches: [],
+  captionsByBatchId: {},
   optimisticMessages: [],
   pendingRun: null,
   settings: {
@@ -3900,6 +3902,14 @@ function handleMessage(msg) {
       }
       renderImageChatThreadPanel();
       break;
+    case 'image:caption':
+      if (msg.batchId && msg.caption) {
+        imageChatThreadState.captionsByBatchId = Object.assign({}, imageChatThreadState.captionsByBatchId || {}, {
+          [String(msg.batchId)]: String(msg.caption),
+        });
+        renderImageChatThreadPanel();
+      }
+      break;
     case 'image:threadState':
       applyImageChatThreadState(msg);
       break;
@@ -5403,6 +5413,7 @@ function createImageChatThread() {
   imageChatThreadState.messages = [];
   imageChatThreadState.referenceImages = [];
   imageChatThreadState.resultBatches = [];
+  imageChatThreadState.captionsByBatchId = {};
   imageChatThreadState.optimisticMessages = [];
   imageChatThreadState.pendingRun = null;
   imageChatThreadState.activeResultId = null;
@@ -5424,6 +5435,7 @@ function applyImageChatThreadState(msg) {
   imageChatThreadState.messages = Array.isArray(thread.messages) ? thread.messages : [];
   imageChatThreadState.referenceImages = Array.isArray(thread.referenceImages) ? thread.referenceImages : [];
   imageChatThreadState.resultBatches = Array.isArray(msg.resultBatches) ? msg.resultBatches : [];
+  imageChatThreadState.captionsByBatchId = imageChatThreadState.captionsByBatchId || {};
   imageChatThreadState.settings = {
     size: thread.settings?.size || imageChatThreadState.settings.size || '1024x1024',
     batchCount: Math.max(1, Math.min(4, Number(thread.settings?.batchCount || imageChatThreadState.settings.batchCount || 1))),
@@ -5484,6 +5496,21 @@ function renderImageChatThreadMessages() {
     const statusClass = message.status === 'pending' ? ' pending' : message.status === 'error' ? ' error' : '';
     const resultIds = Array.isArray(message.resultIds) ? new Set(message.resultIds.map(value => String(value || '').trim()).filter(Boolean)) : null;
     const messageResults = resultIds ? getImageChatFlatResults().filter(result => resultIds.has(String(result.id || '').trim())) : [];
+    let caption = '';
+    if (!isUser && messageResults.length > 0) {
+      const captionsByBatchId = imageChatThreadState.captionsByBatchId || {};
+      const primaryBatchId = String(messageResults[0].batchId || '').trim();
+      caption = String(captionsByBatchId[primaryBatchId] || '').trim();
+      if (!caption) {
+        const fallbackBatchId = String(imageChatThreadState.activeBatchId || '').trim();
+        const isLatestAssistantWithResults = messages
+          .filter(candidate => candidate.role === 'assistant' && Array.isArray(candidate.resultIds) && candidate.resultIds.length > 0)
+          .slice(-1)[0] === message;
+        if (fallbackBatchId && isLatestAssistantWithResults) {
+          caption = String(captionsByBatchId[fallbackBatchId] || '').trim();
+        }
+      }
+    }
     const resultHtml = !isUser && messageResults.length > 0 ? `
       <div class="image-chat-result-strip">
         ${messageResults.map(result => {
@@ -5505,6 +5532,7 @@ function renderImageChatThreadMessages() {
       <div class="image-chat-message ${isUser ? 'user' : 'assistant'}${statusClass}">
         <span class="image-chat-message-label">${isUser ? 'You' : 'Image Chat'}</span>
         <div class="image-chat-message-copy">${escapeHtml(String(message.content || ''))}</div>
+        ${caption ? `<div class="image-chat-caption">${escapeHtml(caption)}</div>` : ''}
         ${resultHtml}
         <div class="image-chat-message-meta">
           <span>${escapeHtml(formatDesignChatTimestamp(message.createdAt || Date.now()))}</span>
@@ -14792,10 +14820,21 @@ function renderIchatMessage(msg) {
   const resultsHtml = (!isUser && msgResults.length > 0) ? renderIchatResultGrid(msgResults) : '';
   var rawContent = escapeHtml(String(msg.content || ''));
   var bubbleContent = (!isUser && !isPending) ? rawContent.replace(/\n/g, '<br>') : rawContent;
+  // Caption: look up by batchId of the first result in this message
+  var captionHtml = '';
+  if (!isUser && !isPending && msgResults.length > 0) {
+    var captionsByBatchId = (imageChatThreadState.captionsByBatchId) || {};
+    var batchId = String(msgResults[0].batchId || '').trim();
+    var caption = batchId ? String(captionsByBatchId[batchId] || '').trim() : '';
+    if (caption) {
+      captionHtml = '<div class="image-chat-caption">' + escapeHtml(caption) + '</div>';
+    }
+  }
   return '<div class="ichat-msg ' + (isUser ? 'user' : 'assistant') + statusCls + '">' +
     '<span class="ichat-msg-label">' + (isUser ? 'You' : 'Image Chat') + '</span>' +
     '<div class="ichat-bubble">' + bubbleContent + '</div>' +
     resultsHtml +
+    captionHtml +
     '</div>';
 }
 
