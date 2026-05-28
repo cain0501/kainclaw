@@ -14788,11 +14788,12 @@ function renderIchatResultGrid(results) {
     var esrc = encodeURIComponent(String(r.src || ''));
     var isRef = imageState.referenceImages.some(function(ref) { return ref._ichatId === r.id; });
     var selectedCls = isRef ? ' ichat-card-selected' : '';
-    return '<div class="ichat-result-card' + selectedCls + '" onclick="handleIchatCardClick(event,\'' + eid + '\')" title="⌃ Ctrl+点击 添加为参考图">' +
+    var selectLabel = isRef ? (isEnglishUi() ? '✓ Selected' : '✓ 已选') : (isEnglishUi() ? 'Select' : '选用');
+    return '<div class="ichat-result-card' + selectedCls + '" onclick="handleIchatCardClick(event,\'' + eid + '\')" title="点击选用 / Ctrl+点击 同效">' +
       '<img src="' + escapeHtml(String(r.src || '')) + '" alt="generated" loading="lazy">' +
       (isRef ? '<div class="ichat-card-ref-badge">✓ 参考图</div>' : '') +
       '<div class="ichat-result-card-actions">' +
-      '<button type="button" onclick="event.stopPropagation();openImageChatStageImage(decodeURIComponent(\'' + eid + '\'))">' + (isEnglishUi() ? 'Use' : '选用') + '</button>' +
+      '<button type="button" onclick="event.stopPropagation();toggleIchatRefSelect(\'' + r.id + '\')">' + selectLabel + '</button>' +
       '<button type="button" onclick="event.stopPropagation();insertImageChatResultToDesign(decodeURIComponent(\'' + eid + '\'),decodeURIComponent(\'' + esrc + '\'))">插入</button>' +
       '</div></div>';
   }).join('');
@@ -14801,12 +14802,8 @@ function renderIchatResultGrid(results) {
 
 function handleIchatCardClick(event, encodedId) {
   var id = decodeURIComponent(encodedId);
-  if (event.ctrlKey || event.metaKey) {
-    event.stopPropagation();
-    toggleIchatRefSelect(id);
-  } else {
-    openImageChatStageImage(id);
-  }
+  // Both plain click and Ctrl+click toggle reference selection
+  toggleIchatRefSelect(id);
 }
 
 function toggleIchatRefSelect(imageId) {
