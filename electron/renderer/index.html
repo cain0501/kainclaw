@@ -5457,9 +5457,15 @@ function openImageChatStageImage(imageId) {
     imageChatThreadState.activeBatchId = image.batchId;
     midtaiState.imgPreviewBatchId = image.batchId;
   }
-  // Switch to preview tab so the staged image is immediately visible
-  imgSwitchView('preview');
-  renderImageChatThreadPanel();
+  // Switch the right panel to preview tab without triggering refreshImageChatThreads
+  midtaiState.imgTabView = 'img-preview';
+  ['img-preview', 'img-works', 'img-plib'].forEach(v => {
+    const el = document.getElementById('view-' + v);
+    if (el) el.style.display = v === 'img-preview' ? '' : 'none';
+  });
+  document.querySelectorAll('#mtbar-img .chat-tab').forEach(btn => {
+    btn.classList.toggle('active', btn.dataset.view === 'img-preview');
+  });
   renderMidtaiImagePreview();
 }
 
