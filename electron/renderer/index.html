@@ -671,8 +671,10 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-seri
 .ichat-msg.assistant.pending .ichat-bubble{background:#fdf8f2;color:#8b7969;border:1px dashed #e5ddd0;font-style:italic}
 .ichat-msg.assistant.error .ichat-bubble{background:#fff5f2;color:#c94c2e;border:1px solid rgba(201,80,46,.2)}
 .ichat-result-grid{display:grid;gap:7px;margin-top:8px;max-width:88%}
-.ichat-result-card{border-radius:10px;overflow:hidden;border:1px solid #eadfd2;background:#fff;cursor:pointer;transition:box-shadow .12s}
+.ichat-result-card{position:relative;border-radius:10px;overflow:hidden;border:1px solid #eadfd2;background:#fff;cursor:pointer;transition:box-shadow .12s,outline .12s}
 .ichat-result-card:hover{box-shadow:0 4px 16px rgba(77,49,24,.12)}
+.ichat-result-card.ichat-card-selected{outline:2px solid #d45a35;outline-offset:-2px}
+.ichat-card-ref-badge{position:absolute;top:6px;left:6px;background:rgba(212,90,53,.92);color:#fff;font-size:10px;font-weight:700;padding:2px 7px;border-radius:20px;pointer-events:none}
 .ichat-result-card img{width:100%;display:block;object-fit:cover}
 .ichat-result-card-actions{display:flex;gap:5px;padding:6px 8px}
 .ichat-result-card-actions button{flex:1;padding:5px 0;font-size:11px;border:1px solid #e5ddd0;border-radius:6px;background:#fdfaf7;color:#57534e;cursor:pointer;font-family:inherit}
@@ -5455,6 +5457,8 @@ function openImageChatStageImage(imageId) {
     imageChatThreadState.activeBatchId = image.batchId;
     midtaiState.imgPreviewBatchId = image.batchId;
   }
+  // Switch to preview tab so the staged image is immediately visible
+  imgSwitchView('preview');
   renderImageChatThreadPanel();
   renderMidtaiImagePreview();
 }
@@ -5546,7 +5550,7 @@ function renderImageChatStageSection(stageImage) {
           </div>
           <div class="image-chat-stage-side">
             <div>
-              <div class="image-chat-stage-title">当前图片 Stage</div>
+              <div class="image-chat-stage-title">${isEnglishUi() ? 'Selected Image' : '已选用的图片'}</div>
               <div class="image-chat-stage-copy">${escapeHtml(String(stageImage.revisedPrompt || stageImage.prompt || '')) || '当前 image-chat 已有结果，可直接插入设计或继续生成变体。'}</div>
             </div>
             <div class="image-chat-stage-actions">
@@ -14776,14 +14780,53 @@ function renderIchatResultGrid(results) {
   var cards = results.map(function(r) {
     var eid = encodeURIComponent(String(r.id || ''));
     var esrc = encodeURIComponent(String(r.src || ''));
-    return '<div class="ichat-result-card" onclick="openImageChatStageImage(decodeURIComponent(\'' + eid + '\'))">' +
+    var isRef = imageState.referenceImages.some(function(ref) { return ref._ichatId === r.id; });
+    var selectedCls = isRef ? ' ichat-card-selected' : '';
+    return '<div class="ichat-result-card' + selectedCls + '" onclick="handleIchatCardClick(event,\'' + eid + '\')" title="⌃ Ctrl+点击 添加为参考图">' +
       '<img src="' + escapeHtml(String(r.src || '')) + '" alt="generated" loading="lazy">' +
+      (isRef ? '<div class="ichat-card-ref-badge">✓ 参考图</div>' : '') +
       '<div class="ichat-result-card-actions">' +
-      '<button type="button" onclick="event.stopPropagation();openImageChatStageImage(decodeURIComponent(\'' + eid + '\'))">Stage</button>' +
+      '<button type="button" onclick="event.stopPropagation();openImageChatStageImage(decodeURIComponent(\'' + eid + '\'))">' + (isEnglishUi() ? 'Use' : '选用') + '</button>' +
       '<button type="button" onclick="event.stopPropagation();insertImageChatResultToDesign(decodeURIComponent(\'' + eid + '\'),decodeURIComponent(\'' + esrc + '\'))">插入</button>' +
       '</div></div>';
   }).join('');
   return '<div class="ichat-result-grid" style="grid-template-columns:repeat(' + cols + ',1fr);' + maxW + '">' + cards + '</div>';
+}
+
+function handleIchatCardClick(event, encodedId) {
+  var id = decodeURIComponent(encodedId);
+  if (event.ctrlKey || event.metaKey) {
+    event.stopPropagation();
+    toggleIchatRefSelect(id);
+  } else {
+    openImageChatStageImage(id);
+  }
+}
+
+function toggleIchatRefSelect(imageId) {
+  // Look for the result in thread flat results (has full src)
+  var result = getImageChatFlatResults().find(function(r) { return r.id === imageId; });
+  if (!result || !result.src) {
+    setImageLabStatus('无法获取图片数据，请稍后重试。', true);
+    return;
+  }
+  var existingIdx = imageState.referenceImages.findIndex(function(ref) { return ref._ichatId === imageId; });
+  if (existingIdx >= 0) {
+    imageState.referenceImages = imageState.referenceImages.filter(function(_, i) { return i !== existingIdx; });
+    setImageLabStatus('已从参考图中移除。');
+  } else {
+    if (imageState.referenceImages.length >= 4) {
+      setImageLabStatus('参考图最多 4 张，请先移除一张。', true);
+      return;
+    }
+    imageState.referenceImages.push({ dataUrl: result.src, mimeType: 'image/png', name: 'ichat-ref.png', _ichatId: imageId });
+    setImageLabStatus('已添加为参考图。Ctrl+点击可取消选择。');
+  }
+  imageChatThreadState.referenceImages = imageState.referenceImages.map(function(r) { return Object.assign({}, r); });
+  ichatState.refsOpen = imageState.referenceImages.length > 0;
+  renderIchatRefs();
+  renderMidtaiImageRefList();
+  renderImageChatThreadPanel();
 }
 
 function renderIchatRefs() {
