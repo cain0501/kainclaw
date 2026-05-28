@@ -3770,6 +3770,10 @@ function handleMessage(msg) {
           for (const item of (batch.items || [])) {
             if (item?.id && item?.thumbnail && !thumbnailCache.has(item.id)) {
               thumbnailCache.set(item.id, item.thumbnail);
+              // Also seed imageThumbCache so observeMidtaiImageThumbs can decode it
+              if (!imageThumbCache.get(item.id)) {
+                imageThumbCache.set(item.id, item.thumbnail);
+              }
             }
           }
         }
@@ -3797,6 +3801,10 @@ function handleMessage(msg) {
           for (const item of (batch.items || [])) {
             if (item?.id && item?.thumbnail && !thumbnailCache.has(item.id)) {
               thumbnailCache.set(item.id, item.thumbnail);
+            }
+            // Preserve full src in imageThumbCache for thumbnail generation
+            if (item?.id && item?.src && !imageThumbCache.get(item.id)) {
+              imageThumbCache.set(item.id, item.src);
             }
           }
         }
@@ -5887,6 +5895,7 @@ function renderMidtaiImageWorks() {
       <div class="midtai-works-scroll">
         <div class="midtai-img-grid">
           ${results.map(result => {
+            const _eid = encodeURIComponent(String(result.id || ''));
             const cachedThumb = thumbnailCache.get(result.id) || (imageDecodeCache.has(result.id) ? imageThumbCache.get(result.id) : null);
             return `
             <div class="midtai-img-card" ${cachedThumb ? '' : `data-imgid="${result.id}"`}>
@@ -5894,14 +5903,14 @@ function renderMidtaiImageWorks() {
               <div class="midtai-img-card-body">
                 <div class="midtai-img-card-copy">${escapeHtml(String(result.revisedPrompt || result.prompt || '')).slice(0, 96)}</div>
                 <div class="midtai-img-actions">
-                  <a class="btn-secondary" href="${result.src}" download="kainclaw-image-${result.id}.png" style="text-decoration:none;text-align:center">下载</a>
+                  <button class="btn-secondary" type="button" style="text-align:center" onclick="downloadImageById('${result.id}')">下载</button>
                   ${isReplace
-                    ? `<button class="btn-red" style="justify-content:center" onclick="insertImageChatResultToDesign(decodeURIComponent('${encodedImageId}'), decodeURIComponent('${encodedImageSrc}'))">插入到设计</button>`
-                    : `<button class="btn-secondary" style="justify-content:center" onclick="openImageChatStageImage(decodeURIComponent('${encodedImageId}'))">插入到对话</button>`}
+                    ? `<button class="btn-red" style="justify-content:center" onclick="useImageInDesignById('${result.id}')">插入到设计</button>`
+                    : `<button class="btn-secondary" style="justify-content:center" onclick="openImageChatStageImage(decodeURIComponent('${_eid}'))">插入到对话</button>`}
                 </div>
                 <div class="midtai-img-actions" style="margin-top:6px">
-                  <button class="btn-secondary" style="justify-content:center" onclick="beginMidtaiImageEdit(decodeURIComponent('${encodedImageId}'))">二次编辑</button>
-                  <button class="btn-secondary" style="justify-content:center" onclick="makeMidtaiImageVariant(decodeURIComponent('${encodedImageId}'))">变体</button>
+                  <button class="btn-secondary" style="justify-content:center" onclick="beginMidtaiImageEdit(decodeURIComponent('${_eid}'))">二次编辑</button>
+                  <button class="btn-secondary" style="justify-content:center" onclick="makeMidtaiImageVariant(decodeURIComponent('${_eid}'))">变体</button>
                 </div>
               </div>
             </div>
@@ -6379,9 +6388,10 @@ function renderMidtaiLibraryImagePanel() {
 
   items.forEach(result => {
     if (!result?.id) return;
-    // Use thumbnail for lazy display; full src may be absent in lite state
+    // Use thumbnail for lazy display; full src may be absent in lite state.
+    // Don't overwrite an existing imageThumbCache entry (may be a full src cached from image:result).
     const displaySrc = result.thumbnail || result.src || '';
-    if (displaySrc && !imageDecodeCache.has(result.id)) {
+    if (displaySrc && !imageThumbCache.get(result.id) && !imageDecodeCache.has(result.id)) {
       imageThumbCache.set(result.id, displaySrc);
     }
   });
@@ -14893,6 +14903,7 @@ function submitIchat() {
     threadId: threadId,
     ownerSurface: 'image-chat',
     referenceImages: imageState.referenceImages,
+    stageImageId: imageChatThreadState.activeStageImageId || null,
   });
 }
 

@@ -2639,7 +2639,23 @@ export class ElectronChatPanel {
     }
 
     if (intent === "image_generate" || intent === "image_edit") {
-      await this.runImageJob(message);
+      let jobMessage = message;
+      // For edit intent: if no explicit reference images, auto-inject the active stage image
+      if (intent === "image_edit") {
+        const stageImageId = typeof message.stageImageId === "string" ? message.stageImageId.trim() : "";
+        const existingRefs = Array.isArray(message.referenceImages) ? message.referenceImages : [];
+        if (stageImageId && existingRefs.length === 0) {
+          await this.ensureImageResultsHydrated();
+          const stageResult = this.imageResults.find(r => r.id === stageImageId);
+          if (stageResult?.src) {
+            jobMessage = {
+              ...message,
+              referenceImages: [{ dataUrl: stageResult.src, mimeType: "image/png", name: "stage-image.png" }],
+            };
+          }
+        }
+      }
+      await this.runImageJob(jobMessage);
       return;
     }
 
