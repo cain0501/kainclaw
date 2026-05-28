@@ -376,6 +376,56 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-seri
 #midtai-image-left-pane #midtai-img-refs{margin-bottom:0}
 #midtai-design-left-pane #midtai-recent-works{padding:0;max-height:420px;overflow:hidden}
 #midtai-design-left-pane .midtai-recent-works-list{padding-right:2px;overflow:auto}
+#midtai-image-left-pane .midtai-pane-scroll{display:flex;flex-direction:column;min-height:0;overflow:hidden}
+#midtai-form-img.image-chat-shell{flex:1;min-height:0;height:100%}
+#midtai-form-img.image-chat-shell #midtai-img-refs{padding:0!important;border:none!important;border-radius:0!important;background:transparent!important;box-shadow:none!important;margin:0}
+.image-chat-shell{display:flex;flex-direction:column;min-height:0}
+.image-chat-thread-panel{flex:1;min-height:0;display:flex;flex-direction:column;overflow:hidden}
+.image-chat-head{display:flex;align-items:flex-start;justify-content:space-between;gap:10px;padding:14px 14px 12px;border:1px solid rgba(216,195,175,.7);border-radius:18px 18px 12px 12px;background:linear-gradient(180deg,rgba(255,255,255,.88),rgba(255,247,239,.84));box-shadow:inset 0 1px 0 rgba(255,255,255,.72)}
+.image-chat-title{font-size:20px;line-height:1.1;font-family:"Georgia","Times New Roman","Noto Serif SC",serif;color:#24160d}
+.image-chat-sub{margin-top:4px;font-size:11px;color:#8c7767;line-height:1.5}
+.image-chat-new-btn{border:none;border-radius:999px;background:linear-gradient(135deg,#d45a35 0%,#b64728 100%);color:#fff;font-size:11px;font-weight:800;padding:8px 12px;cursor:pointer;white-space:nowrap;box-shadow:0 10px 20px rgba(212,90,53,.16)}
+.image-chat-switcher{display:flex;align-items:center;gap:8px;padding:10px 2px 12px}
+.image-chat-select{flex:1;min-width:0;padding:8px 10px;border:1px solid #e6d9c9;border-radius:12px;background:#fffdf9;color:#5d4638;font-size:12px;font-weight:700}
+.image-chat-refresh{border:1px solid #e6d9c9;border-radius:12px;background:#fff;color:#8c7767;font-size:11px;font-weight:700;padding:8px 10px;cursor:pointer}
+.image-chat-messages{flex:1;min-height:0;overflow:auto;display:flex;flex-direction:column;gap:10px;padding:2px 2px 12px}
+.image-chat-empty{border:1px dashed #e0cdbb;border-radius:16px;background:rgba(255,255,255,.68);padding:16px;color:#8c7767;font-size:12px;line-height:1.7}
+.image-chat-message{max-width:92%;border:1px solid #eadfd2;border-radius:16px;padding:10px 12px;background:rgba(255,255,255,.86);box-shadow:0 8px 18px rgba(77,49,24,.05);font-size:12px;line-height:1.7;color:#3d2b1f}
+.image-chat-message.user{align-self:flex-end;background:linear-gradient(180deg,#fff4ed,#ffece1);border-color:#efc9ad;color:#7b341e;border-bottom-right-radius:6px}
+.image-chat-message.assistant{align-self:flex-start;border-bottom-left-radius:6px}
+.image-chat-message.pending{border-style:dashed;background:linear-gradient(180deg,#fffefd,#fbf6ef)}
+.image-chat-message.error{border-color:#efb4b4;background:#fff4f4;color:#8b1e1e}
+.image-chat-message-label{display:block;margin-bottom:3px;font-size:10px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:#a08e7f}
+.image-chat-message-copy{white-space:pre-wrap;word-break:break-word}
+.image-chat-message-meta{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-top:8px;font-size:10px;color:#a08e7f}
+.image-chat-result-strip{display:grid;grid-template-columns:repeat(auto-fit,minmax(112px,1fr));gap:8px;padding:8px 0 2px}
+.image-chat-result-card{min-width:94px;border:1px solid #eadbcc;border-radius:12px;overflow:hidden;background:#fff;box-shadow:0 8px 16px rgba(77,49,24,.06)}
+.image-chat-result-card img{display:block;width:100%;height:92px;object-fit:cover;cursor:pointer}
+.image-chat-result-actions{display:grid;grid-template-columns:1fr 1fr}
+.image-chat-result-card button{width:100%;border:none;border-top:1px solid #eadbcc;background:#fff8f1;color:#b94528;font-size:10px;font-weight:700;padding:6px;cursor:pointer}
+.image-chat-result-card button + button{border-left:1px solid #eadbcc}
+.image-chat-stage-card{border:1px solid rgba(216,195,175,.72);border-radius:22px;background:rgba(255,255,255,.94);box-shadow:0 16px 30px rgba(77,49,24,.08);overflow:hidden}
+.image-chat-stage-main{display:grid;grid-template-columns:minmax(0,1.25fr) minmax(240px,.75fr);gap:0}
+.image-chat-stage-hero{background:linear-gradient(180deg,#f8f4ef,#f1e7da);min-height:320px;display:flex;align-items:center;justify-content:center;padding:18px}
+.image-chat-stage-hero img{max-width:100%;max-height:420px;border-radius:18px;box-shadow:0 18px 36px rgba(24,16,10,.16);object-fit:contain;background:#fff}
+.image-chat-stage-side{display:flex;flex-direction:column;gap:12px;padding:18px}
+.image-chat-stage-title{font-size:13px;font-weight:800;color:#24160d}
+.image-chat-stage-copy{font-size:12px;color:#6f5a4b;line-height:1.7;white-space:pre-wrap;word-break:break-word}
+.image-chat-stage-actions{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.image-chat-stage-strip{display:grid;grid-template-columns:repeat(auto-fit,minmax(72px,1fr));gap:8px}
+.image-chat-stage-thumb{border:1px solid #eadbcc;border-radius:12px;background:#fff;padding:3px;cursor:pointer}
+.image-chat-stage-thumb.active{border-color:#d45a35;box-shadow:0 10px 20px rgba(212,90,53,.12)}
+.image-chat-stage-thumb img{display:block;width:100%;height:72px;object-fit:cover;border-radius:9px}
+.image-chat-stage-caption{font-size:10px;color:#8c7767}
+.image-chat-composer{flex-shrink:0;padding:12px 0 0;border-top:1px solid rgba(216,195,175,.55);background:linear-gradient(180deg,rgba(255,251,245,.2),rgba(255,247,239,.72))}
+.image-chat-composer-card{display:flex;flex-direction:column;gap:10px;padding:12px;border:1px solid #eadfd2;border-radius:18px;background:rgba(255,255,255,.94);box-shadow:0 10px 24px rgba(77,49,24,.05)}
+.image-chat-input{width:100%;min-height:86px;padding:0;border:none;background:transparent;font-size:13px;line-height:1.65;resize:none;font-family:inherit;color:#2d1f14}
+.image-chat-input:focus{outline:none}
+.image-chat-input::placeholder{color:#a8998a}
+.image-chat-composer-tools{display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap}
+.image-chat-control-row{display:grid;grid-template-columns:1fr 96px;gap:8px}
+.image-chat-control{display:flex;flex-direction:column;gap:6px}
+.image-chat-control-title{font-size:10px;font-weight:800;color:#a08e7f;text-transform:uppercase;letter-spacing:.06em}
 .midtai-work-item{border-radius:16px;background:rgba(255,255,255,.84);border:1px solid #e6d9c9;box-shadow:0 4px 14px rgba(77,49,24,.04)}
 .midtai-work-item.active{border-color:rgba(212,90,53,.45);background:linear-gradient(180deg,rgba(255,250,246,.95),rgba(255,255,255,.92));box-shadow:0 14px 24px rgba(212,90,53,.08);transform:translateY(-1px)}
 .midtai-work-pill{background:rgba(255,255,255,.9);border-color:#e6d9c9}
@@ -602,6 +652,52 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-seri
   .midtai-canvas-workspace,.midtai-design-versions-workspace{padding:16px}
   .midtai-panel-design .midtai-tabbar{padding:16px 16px 12px}
 }
+/* ichat-v2 — image chat rebuild */
+#ichat-v2{display:flex;flex-direction:column;height:100%;min-height:0;background:#fffdfb}
+.ichat-header{display:flex;align-items:center;justify-content:space-between;padding:10px 14px 8px;border-bottom:1px solid #f0ebe3;flex-shrink:0;gap:8px}
+.ichat-title{font-size:14px;font-weight:700;color:#1c1917;flex-shrink:0}
+.ichat-session-bar{display:flex;align-items:center;gap:6px;min-width:0;flex:1;justify-content:flex-end}
+.ichat-session-select{font-size:11px;border:1px solid #e5ddd0;border-radius:7px;padding:3px 22px 3px 7px;background:#fff url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4' stroke='%2378716c' stroke-width='1.5' fill='none' stroke-linecap='round'/%3E%3C/svg%3E") no-repeat right 7px center;color:#1c1917;font-family:inherit;max-width:130px;cursor:pointer;appearance:none}
+.ichat-new-btn{width:26px;height:26px;border-radius:7px;border:1px solid #e5ddd0;background:#fff;color:#57534e;font-size:18px;cursor:pointer;display:flex;align-items:center;justify-content:center;line-height:1;flex-shrink:0;padding:0}
+.ichat-new-btn:hover{background:#fdf5f0;border-color:#c9502e;color:#c9502e}
+.ichat-messages{flex:1;overflow-y:auto;padding:12px 12px 6px;display:flex;flex-direction:column;gap:10px;min-height:0}
+.ichat-msg{display:flex;flex-direction:column;gap:4px}
+.ichat-msg.user{align-items:flex-end}
+.ichat-msg.assistant{align-items:flex-start}
+.ichat-msg-label{font-size:10px;font-weight:600;color:#a8a29e;letter-spacing:.04em;text-transform:uppercase;padding:0 2px}
+.ichat-bubble{padding:9px 12px;border-radius:14px;font-size:13px;line-height:1.55;color:#1c1917;max-width:88%;word-break:break-word}
+.ichat-msg.user .ichat-bubble{background:#c9502e;color:#fff;border-radius:14px 14px 4px 14px}
+.ichat-msg.assistant .ichat-bubble{background:#f5f0e8;border-radius:14px 14px 14px 4px}
+.ichat-msg.assistant.pending .ichat-bubble{background:#fdf8f2;color:#8b7969;border:1px dashed #e5ddd0;font-style:italic}
+.ichat-msg.assistant.error .ichat-bubble{background:#fff5f2;color:#c94c2e;border:1px solid rgba(201,80,46,.2)}
+.ichat-result-grid{display:grid;gap:7px;margin-top:8px;max-width:88%}
+.ichat-result-card{border-radius:10px;overflow:hidden;border:1px solid #eadfd2;background:#fff;cursor:pointer;transition:box-shadow .12s}
+.ichat-result-card:hover{box-shadow:0 4px 16px rgba(77,49,24,.12)}
+.ichat-result-card img{width:100%;display:block;object-fit:cover}
+.ichat-result-card-actions{display:flex;gap:5px;padding:6px 8px}
+.ichat-result-card-actions button{flex:1;padding:5px 0;font-size:11px;border:1px solid #e5ddd0;border-radius:6px;background:#fdfaf7;color:#57534e;cursor:pointer;font-family:inherit}
+.ichat-result-card-actions button:hover{background:#f5ede3;border-color:#c9502e;color:#c9502e}
+.ichat-empty-state{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;color:#a8a29e;text-align:center;gap:8px;padding:20px}
+.ichat-empty-icon{font-size:26px}
+.ichat-empty-title{font-size:13px;font-weight:600;color:#78716c}
+.ichat-empty-copy{font-size:12px;color:#a8a29e;line-height:1.6;max-width:220px}
+.ichat-composer{border-top:1px solid #f0ebe3;padding:8px 10px 10px;background:#fffdfb;flex-shrink:0}
+.ichat-refs-strip{display:flex;align-items:center;flex-wrap:wrap;gap:5px;padding:5px 0 8px;border-bottom:1px dashed #f0ebe3;margin-bottom:6px}
+.ichat-refs-list{display:flex;gap:5px;flex-wrap:wrap}
+.ichat-ref-add-label{font-size:11px;color:#c9502e;border:1px dashed #c9502e;border-radius:999px;padding:3px 9px;cursor:pointer;background:#fff;white-space:nowrap;user-select:none}
+.ichat-ref-add-label:hover{background:#fef2f0}
+.ichat-infer-btn{font-size:11px;color:#78716c;border:1px solid #eadfd2;background:#fff;border-radius:999px;padding:3px 9px;cursor:pointer;font-family:inherit}
+.ichat-input-row{display:flex;gap:7px;align-items:flex-end}
+.ichat-input{flex:1;min-height:38px;max-height:120px;resize:none;border:1.5px solid #e5ddd0;border-radius:10px;padding:8px 10px;font-size:13px;font-family:inherit;color:#1c1917;background:#fff;outline:none;line-height:1.5;box-sizing:border-box}
+.ichat-input:focus{border-color:#c94c2e;background:#fffdfb}
+.ichat-send-btn{height:38px;padding:0 16px;font-size:13px;font-weight:700;border-radius:10px;white-space:nowrap;flex-shrink:0;align-self:flex-end}
+.ichat-tools-row{display:flex;align-items:center;gap:3px;margin-top:6px;flex-wrap:wrap}
+.ichat-tool-chip{padding:3px 8px;border:1px solid #e5ddd0;border-radius:6px;background:#fdfaf7;font-size:11px;color:#57534e;cursor:pointer;white-space:nowrap;font-family:inherit}
+.ichat-tool-chip:hover,.ichat-tool-chip.active{background:#fef2f0;border-color:#c9502e;color:#c9502e}
+.ichat-size-chip,.ichat-qty-chip{padding:3px 7px;border:1px solid #e5ddd0;border-radius:5px;background:none;font-size:11px;color:#57534e;cursor:pointer;font-family:inherit}
+.ichat-size-chip.active,.ichat-qty-chip.active{border-color:#c0392b;color:#c0392b;background:#fff5f5}
+.ichat-tool-sep{width:1px;height:13px;background:#e5ddd0;margin:0 2px;flex-shrink:0}
+.ichat-tools-note{font-size:10px;color:#c4b5a8;margin-left:auto;white-space:nowrap}
 </style>
 </head>
 <body>
@@ -1256,46 +1352,90 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-seri
         </div>
         <div class="midtai-type-divider"></div>
         <div class="midtai-left-scroll">
-        <div id="midtai-form-img" style="display:flex;flex-direction:column">
-          <div class="midtai-form">
-            <div class="midtai-form-group">
-              <label class="midtai-form-label" for="midtai-img-prompt">图像描述</label>
-              <textarea id="midtai-img-prompt" class="midtai-form-textarea" placeholder="描述你想要的图像..."></textarea>
-            </div>
-            <div style="display:flex;justify-content:flex-end;margin-top:4px;margin-bottom:8px">
-              <button type="button" onclick="toggleMidtaiPromptHistory()" style="font-size:11px;color:#78716c;background:none;border:none;cursor:pointer;padding:0">历史提示词 ▾</button>
-            </div>
-            <div id="midtai-prompt-history" style="display:none;max-height:160px;overflow-y:auto;border:1px solid #eadfd2;border-radius:8px;background:#fff;margin-bottom:8px"></div>
-            <div id="midtai-img-history-list" style="display:none"></div>
-            <div id="midtai-img-refs" style="margin-bottom:10px">
-              <div style="font-size:11px;color:#78716c;margin-bottom:6px">参考图（可选，最多 4 张）</div>
-              <div id="midtai-img-ref-list" style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:6px"></div>
-              <label id="midtai-img-ref-trigger" style="cursor:pointer;font-size:11px;color:#c9502e;border:1px dashed #c9502e;border-radius:6px;padding:4px 10px;display:inline-block">
-                <span id="midtai-img-ref-trigger-text">+ 上传参考图</span>
-                <input type="file" id="midtai-img-ref-input" accept="image/*" multiple style="display:none" onchange="handleMidtaiImageRefUpload(event)">
-              </label>
-              <button id="midtai-infer-prompt-btn" type="button" onclick="inferMidtaiPrompt()" style="font-size:11px;color:#78716c;border:1px solid #eadfd2;background:#fff;border-radius:6px;padding:4px 10px;cursor:pointer;display:none">✦ AI 反推描述</button>
-              <div id="midtai-img-ref-meta" style="margin-top:6px;font-size:11px;color:#8b7969;line-height:1.5">未上传参考图，最多 4 张。</div>
-            </div>
-            <div class="midtai-form-group">
-              <label class="midtai-form-label">比例</label>
-              <div class="midtai-ratio-row">
-                <button class="midtai-ratio-btn active" type="button" data-size="1024x1024" onclick="setMidtaiImageSize('1024x1024')">方形</button>
-                <button class="midtai-ratio-btn" type="button" data-size="1536x1024" onclick="setMidtaiImageSize('1536x1024')">横版</button>
-                <button class="midtai-ratio-btn" type="button" data-size="1024x1536" onclick="setMidtaiImageSize('1024x1536')">竖版</button>
-              </div>
-            </div>
-            <div class="midtai-form-group">
-              <label class="midtai-form-label">数量</label>
-              <div class="midtai-qty-row">
-                <button class="midtai-qty-btn active" type="button" data-count="1" onclick="setMidtaiImageCount(1)">1</button>
-                <button class="midtai-qty-btn" type="button" data-count="2" onclick="setMidtaiImageCount(2)">2</button>
-                <button class="midtai-qty-btn" type="button" data-count="4" onclick="setMidtaiImageCount(4)">4</button>
-              </div>
+        <!-- ichat-v2: rebuilt image-chat component. midtai-form-img is hidden below for safety. -->
+        <div id="ichat-v2" style="display:flex;flex-direction:column;height:100%;min-height:0">
+          <div class="ichat-header">
+            <span class="ichat-title">Image Chat</span>
+            <div class="ichat-session-bar">
+              <select id="ichat-session-select" class="ichat-session-select" onchange="selectImageChatThread(this.value)"></select>
+              <button class="ichat-new-btn" type="button" onclick="createImageChatThread()" title="新建会话">+</button>
             </div>
           </div>
-          <div class="midtai-cta-wrap">
-            <button class="btn-red" onclick="runMidtaiImage()" style="justify-content:center;font-size:13px;font-weight:700;box-shadow:0 12px 24px rgba(212,90,53,.18)">✦ 生成图片</button>
+          <div id="ichat-messages" class="ichat-messages"></div>
+          <div class="ichat-composer">
+            <div id="ichat-refs-strip" class="ichat-refs-strip" style="display:none">
+              <div id="ichat-refs-list" class="ichat-refs-list"></div>
+              <label class="ichat-ref-add-label" title="添加参考图（最多4张）">
+                + 参考图
+                <input type="file" id="ichat-ref-input" accept="image/*" multiple style="display:none" onchange="handleIchatRefUpload(event)">
+              </label>
+              <button id="ichat-infer-btn" class="ichat-infer-btn" type="button" onclick="inferIchatPrompt()" style="display:none">✦ AI 描述</button>
+            </div>
+            <div class="ichat-input-row">
+              <textarea id="ichat-input" class="ichat-input" placeholder="描述你想要的图片，可以带参考图、比例说明…" rows="2" onkeydown="handleIchatKey(event)"></textarea>
+              <button class="ichat-send-btn btn-red" type="button" onclick="submitIchat()">发送</button>
+            </div>
+            <div class="ichat-tools-row">
+              <button id="ichat-ref-toggle" class="ichat-tool-chip" type="button" onclick="toggleIchatRefs()" title="上传参考图">📎 <span id="ichat-ref-count"></span></button>
+              <div class="ichat-tool-sep"></div>
+              <button class="ichat-size-chip active" type="button" data-size="1024x1024" onclick="setIchatSize('1024x1024')" title="方形 1:1">方</button>
+              <button class="ichat-size-chip" type="button" data-size="1536x1024" onclick="setIchatSize('1536x1024')" title="横版 3:2">横</button>
+              <button class="ichat-size-chip" type="button" data-size="1024x1536" onclick="setIchatSize('1024x1536')" title="竖版 2:3">竖</button>
+              <div class="ichat-tool-sep"></div>
+              <button class="ichat-qty-chip active" type="button" data-count="1" onclick="setIchatCount(1)" title="生成1张">×1</button>
+              <button class="ichat-qty-chip" type="button" data-count="2" onclick="setIchatCount(2)" title="生成2张">×2</button>
+              <button class="ichat-qty-chip" type="button" data-count="4" onclick="setIchatCount(4)" title="生成4张">×4</button>
+              <span class="ichat-tools-note">不写入主 Chat</span>
+            </div>
+          </div>
+        </div>
+        <div id="midtai-form-img" class="image-chat-shell" style="display:none;flex-direction:column">
+          <div id="image-chat-thread-panel" class="image-chat-thread-panel"></div>
+          <div class="image-chat-composer">
+            <div class="image-chat-composer-card">
+              <textarea id="midtai-img-prompt" class="image-chat-input" placeholder="和 image-chat 描述要生成或编辑的图片。可以说：用参考图做一张横版 KV，输出 4 张。" onkeydown="handleImageChatComposerKey(event)"></textarea>
+              <div style="display:flex;justify-content:flex-end;margin-top:-4px">
+                <button type="button" onclick="toggleMidtaiPromptHistory()" style="font-size:11px;color:#78716c;background:none;border:none;cursor:pointer;padding:0">历史提示词 ▾</button>
+              </div>
+              <div id="midtai-prompt-history" style="display:none;max-height:150px;overflow-y:auto;border:1px solid #eadfd2;border-radius:10px;background:#fff;margin-bottom:2px"></div>
+              <div id="midtai-img-history-list" style="display:none"></div>
+              <div id="midtai-img-refs">
+                <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:7px">
+                  <div class="image-chat-control-title">参考图</div>
+                  <div id="midtai-img-ref-meta" style="font-size:11px;color:#8b7969;line-height:1.5">未上传参考图，最多 4 张。</div>
+                </div>
+                <div id="midtai-img-ref-list" style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:7px"></div>
+                <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+                  <label id="midtai-img-ref-trigger" style="cursor:pointer;font-size:11px;color:#c9502e;border:1px dashed #c9502e;border-radius:999px;padding:6px 10px;display:inline-block;background:#fff">
+                    <span id="midtai-img-ref-trigger-text">+ 上传参考图</span>
+                    <input type="file" id="midtai-img-ref-input" accept="image/*" multiple style="display:none" onchange="handleMidtaiImageRefUpload(event)">
+                  </label>
+                  <button id="midtai-infer-prompt-btn" type="button" onclick="inferMidtaiPrompt()" style="font-size:11px;color:#78716c;border:1px solid #eadfd2;background:#fff;border-radius:999px;padding:6px 10px;cursor:pointer;display:none">✦ AI 反推描述</button>
+                </div>
+              </div>
+              <div class="image-chat-control-row">
+                <div class="image-chat-control">
+                  <div class="image-chat-control-title">默认比例</div>
+                  <div class="midtai-ratio-row">
+                    <button class="midtai-ratio-btn active" type="button" data-size="1024x1024" onclick="setMidtaiImageSize('1024x1024')">方形</button>
+                    <button class="midtai-ratio-btn" type="button" data-size="1536x1024" onclick="setMidtaiImageSize('1536x1024')">横版</button>
+                    <button class="midtai-ratio-btn" type="button" data-size="1024x1536" onclick="setMidtaiImageSize('1024x1536')">竖版</button>
+                  </div>
+                </div>
+                <div class="image-chat-control">
+                  <div class="image-chat-control-title">出图数</div>
+                  <div class="midtai-qty-row">
+                    <button class="midtai-qty-btn active" type="button" data-count="1" onclick="setMidtaiImageCount(1)">1</button>
+                    <button class="midtai-qty-btn" type="button" data-count="2" onclick="setMidtaiImageCount(2)">2</button>
+                    <button class="midtai-qty-btn" type="button" data-count="4" onclick="setMidtaiImageCount(4)">4</button>
+                  </div>
+                </div>
+              </div>
+              <div class="image-chat-composer-tools">
+                <span style="font-size:11px;color:#9a8878;line-height:1.5">只写入当前 image-chat 会话；不写入主 Chat，也不污染 Design Chat。</span>
+                <button class="btn-red" type="button" onclick="runImageChatFromComposer()" style="justify-content:center;font-size:13px;font-weight:700;box-shadow:0 12px 24px rgba(212,90,53,.18)">发送 / 生成图片</button>
+              </div>
+            </div>
           </div>
         </div>
         <div id="midtai-form-design" style="display:none;flex-direction:column;flex:1;min-height:0">
@@ -1421,10 +1561,12 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-seri
             <button class="chat-tab" data-view="img-plib" onclick="showImgView('img-plib')">提示词库</button>
           </div>
           <div id="view-img-preview" class="midtai-view">
+            <div id="image-chat-preview-body">
             <div class="midtai-empty-view">
               <div class="midtai-empty-icon">✦</div>
               <div class="midtai-empty-title">图像生成预览</div>
               <div class="midtai-empty-copy">先在左侧输入图像描述，再生成预览结果。</div>
+            </div>
             </div>
           </div>
           <div id="view-img-works" class="midtai-view" style="display:none"></div>
@@ -2079,6 +2221,22 @@ let designChatBuildStatus = {
   active: false,
   toolName: '',
   phase: 'idle',
+};
+let imageChatThreadState = {
+  activeThreadId: null,
+  threads: [],
+  messages: [],
+  referenceImages: [],
+  resultBatches: [],
+  optimisticMessages: [],
+  pendingRun: null,
+  settings: {
+    size: '1024x1024',
+    batchCount: 1,
+  },
+  activeResultId: null,
+  activeBatchId: null,
+  activeStageImageId: null,
 };
 let designResumeLookupAttempted = false;
 let designEntryAwaitingProjectCreation = false;
@@ -3642,7 +3800,15 @@ function handleMessage(msg) {
           }
         }
       }
+      if (imageChatThreadState.pendingRun) {
+        completeImageChatPendingRun('done', { keepOptimisticUser: true, clearPrompt: true, preservePendingRun: true });
+      }
+      if (!imageChatThreadState.activeStageImageId && Array.isArray(msg.resultBatches)) {
+        const newestImage = msg.resultBatches.flatMap(batch => batch.items || [])[0];
+        imageChatThreadState.activeStageImageId = newestImage?.id || null;
+      }
       renderMidtaiImagePreview();
+      renderImageChatThreadPanel();
       {
         const latestBatchCount = Number(msg.latestBatchCount || 0);
         const latestBatchSource = String(msg.latestBatchSource || 'generate');
@@ -3653,13 +3819,59 @@ function handleMessage(msg) {
             : '生成结果';
         setImageLabStatus(
           latestBatchCount > 1
-            ? `已新增 ${latestBatchCount} 张${sourceLabel}，并保留之前的图片批次。`
-            : `已新增 1 张${sourceLabel}，并保留之前的图片批次。`,
+            ? ('??? ' + latestBatchCount + ' ?' + sourceLabel + '????????????')
+            : ('??? 1 ?' + sourceLabel + '????????????'),
         );
       }
       if (document.getElementById('page-midtai')?.classList.contains('active') && midtaiState.type === 'img') {
+        renderImageChatThreadPanel();
         renderMidtaiImagePreview();
       }
+      if (imageChatThreadState.activeThreadId) {
+        send({ type: 'image:loadThread', threadId: imageChatThreadState.activeThreadId });
+      } else {
+        refreshImageChatThreads();
+      }
+      break;
+    case 'image:threads':
+      imageChatThreadState.threads = Array.isArray(msg.threads) ? msg.threads : [];
+      if (!imageChatThreadState.activeThreadId && imageChatThreadState.threads[0]?.threadId) {
+        selectImageChatThread(imageChatThreadState.threads[0].threadId);
+        break;
+      }
+      renderImageChatThreadPanel();
+      if (!imageChatThreadState.activeThreadId && imageChatThreadState.threads.length === 0) {
+        imageChatThreadState.activeThreadId = getImageChatThreadId();
+        renderImageChatThreadPanel();
+      }
+      break;
+    case 'image:chatResponse':
+      if (imageChatThreadState.pendingRun) {
+        var _chatPendingId = imageChatThreadState.pendingRun.pendingAssistantId;
+        var _chatRunId = imageChatThreadState.pendingRun.runId;
+        imageChatThreadState.optimisticMessages = (imageChatThreadState.optimisticMessages || []).filter(function(m) {
+          return !(m.localOnly && m.id === _chatPendingId);
+        });
+        imageChatThreadState.optimisticMessages.push({
+          id: createImageChatLocalMessageId('assistant-chat'),
+          role: 'assistant',
+          content: String(msg.response || ''),
+          createdAt: Date.now(),
+          localOnly: true,
+          runId: _chatRunId,
+          status: 'done',
+        });
+        imageChatThreadState.pendingRun = null;
+      }
+      renderImageChatThreadPanel();
+      break;
+    case 'image:threadState':
+      applyImageChatThreadState(msg);
+      break;
+    case 'image:threadError':
+      completeImageChatPendingRun('error', { errorMessage: String(msg.error || 'Image thread failed to load.') });
+      setImageLabStatus(String(msg.error || 'Image thread failed to load.'), true);
+      renderImageChatThreadPanel();
       break;
     case 'design:patchImageNode:result':
       designBridgeState.patchLoading = false;
@@ -3688,6 +3900,7 @@ function handleMessage(msg) {
       imageState.lastError = String(msg.error || '图片任务失败');
       midtaiState.imgPreviewRequestNonce = 0;
       midtaiState.imgPreviewBatchId = null;
+      completeImageChatPendingRun('error', { errorMessage: String(msg.error || '图片任务失败') });
       promptLibraryInference.loading = false;
       if (
         msg.requestId &&
@@ -3698,6 +3911,7 @@ function handleMessage(msg) {
         productDrawerState.materialSearch.error = String(msg.error || '资料搜索失败');
       }
       renderMidtaiImagePreview();
+      renderImageChatThreadPanel();
       if (currentGalleryTab === 'library') renderPromptLibrary();
       if (productDrawerState.open && productDrawerState.mode === 'materials') renderProductDrawer();
       setImageLabStatus(imageState.lastError, true);
@@ -3710,7 +3924,9 @@ function handleMessage(msg) {
       imageState.lastError = '';
       midtaiState.imgPreviewRequestNonce = 0;
       midtaiState.imgPreviewBatchId = null;
+      completeImageChatPendingRun('error', { errorMessage: '本次生成已停止，可继续补充要求后重试。' });
       renderMidtaiImagePreview();
+      renderImageChatThreadPanel();
       setImageLabStatus(String(msg.message || '已停止当前图片生成。'));
       if (document.getElementById('page-midtai')?.classList.contains('active') && midtaiState.type === 'img') {
         renderMidtaiImagePreview();
@@ -3726,13 +3942,16 @@ function handleMessage(msg) {
           midtaiPromptEl.value = msg.prompt.trim();
           midtaiPromptEl.focus();
         }
+        const ichatInputEl = document.getElementById('ichat-input');
+        if (ichatInputEl && typeof msg.prompt === 'string') {
+          ichatInputEl.value = msg.prompt.trim();
+        }
       }
       {
         const btn = document.getElementById('midtai-infer-prompt-btn');
-        if (btn) {
-          btn.disabled = false;
-          btn.textContent = '✦ AI 反推描述';
-        }
+        if (btn) { btn.disabled = false; btn.textContent = '✦ AI 反推描述'; }
+        const ichatInferBtn = document.getElementById('ichat-infer-btn');
+        if (ichatInferBtn) { ichatInferBtn.disabled = false; ichatInferBtn.textContent = '✦ AI 描述'; }
       }
       setImageLabStatus('已根据参考图反推出提示词。');
       break;
@@ -4121,7 +4340,8 @@ function ensureMidtaiWorkbenchLayout() {
       <div class="midtai-section-sub">左侧放图像工具与参考输入，右侧放生成结果与素材历史。</div>
     </div>
   `;
-  imageLeftScroll.appendChild(imageIntro);
+  const ichatV2 = document.getElementById('ichat-v2');
+  if (ichatV2) imageLeftScroll.appendChild(ichatV2);
   imageLeftScroll.appendChild(imgForm);
 
   const designLeftPane = document.createElement('div');
@@ -4253,7 +4473,9 @@ function switchMidtaiType(type) {
   });
   const imgForm = document.getElementById('midtai-form-img');
   const designForm = document.getElementById('midtai-form-design');
-  if (imgForm) imgForm.style.display = midtaiState.type === 'img' ? 'flex' : 'none';
+  const ichatV2El = document.getElementById('ichat-v2');
+  if (imgForm) imgForm.style.display = 'none';
+  if (ichatV2El) ichatV2El.style.display = midtaiState.type === 'img' ? 'flex' : 'none';
   if (designForm) designForm.style.display = midtaiState.type === 'design' ? 'flex' : 'none';
   if (midtaiState.type === 'design') {
     midtaiState.designMode = localStorage.getItem('kc_design_mode') || 'simple';
@@ -4997,9 +5219,334 @@ function renderMidtaiDesignChat() {
   wrap.scrollTop = wrap.scrollHeight;
 }
 
+function getImageChatThreadId() {
+  return 'image-chat:default';
+}
+
+function createImageChatLocalMessageId(prefix = 'msg') {
+  return `${prefix}-${Date.now()}-${Math.random().toString(16).slice(2, 8)}`;
+}
+
+function getImageChatThreadMessages() {
+  const persisted = Array.isArray(imageChatThreadState.messages) ? imageChatThreadState.messages : [];
+  const optimistic = Array.isArray(imageChatThreadState.optimisticMessages) ? imageChatThreadState.optimisticMessages : [];
+  return [...persisted, ...optimistic].sort((left, right) => Number(left?.createdAt || 0) - Number(right?.createdAt || 0));
+}
+
+function getImageChatFlatResults() {
+  return (imageChatThreadState.resultBatches || []).flatMap(batch => batch.items || []);
+}
+
+function getImageChatActiveStageImage() {
+  const images = getImageChatFlatResults();
+  if (!images.length) return null;
+  const activeImageId = imageChatThreadState.activeStageImageId || imageChatThreadState.activeResultId || null;
+  return images.find(result => result.id === activeImageId) || images[0] || null;
+}
+
+function syncImageChatActiveStageImage() {
+  const activeImage = getImageChatActiveStageImage();
+  imageChatThreadState.activeStageImageId = activeImage?.id || null;
+}
+
+function getImageChatThreadSummary() {
+  const activeThreadId = imageChatThreadState.activeThreadId || getImageChatThreadId();
+  const thread = (imageChatThreadState.threads || []).find(candidate => candidate.threadId === activeThreadId);
+  if (thread?.title) return String(thread.title).trim();
+  const lastUserMessage = [...getImageChatThreadMessages()].reverse().find(message => message.role === 'user');
+  if (lastUserMessage?.content) return String(lastUserMessage.content).trim().slice(0, 48);
+  return activeThreadId === getImageChatThreadId() ? '??????' : '?????';
+}
+
+
+function completeImageChatPendingRun(status, options = {}) {
+  if (!imageChatThreadState.pendingRun) return;
+  const {
+    errorMessage = '',
+    keepOptimisticUser = false,
+    clearPrompt = false,
+    preservePendingRun = false,
+  } = options;
+  const pendingAssistantId = imageChatThreadState.pendingRun.pendingAssistantId;
+  imageChatThreadState.optimisticMessages = (imageChatThreadState.optimisticMessages || []).filter(message => {
+    if (message.localOnly && message.id === pendingAssistantId) return false;
+    if (!keepOptimisticUser && message.localOnly && message.runId === imageChatThreadState.pendingRun.runId) return false;
+    return true;
+  });
+  if (status === 'error' && errorMessage) {
+    imageChatThreadState.optimisticMessages.push({
+      id: createImageChatLocalMessageId('assistant-error'),
+      role: 'assistant',
+      content: errorMessage,
+      createdAt: Date.now(),
+      localOnly: true,
+      status: 'error',
+    });
+  }
+  if (clearPrompt) {
+    const promptEl = document.getElementById('midtai-img-prompt');
+    if (promptEl) promptEl.value = '';
+  }
+  if (!preservePendingRun) {
+    imageChatThreadState.pendingRun = null;
+  }
+}
+
+function beginImageChatPendingRun(prompt, options = {}) {
+  const normalizedPrompt = String(prompt || '').trim();
+  if (!normalizedPrompt) return null;
+  const referenceCount = Array.isArray(options.referenceImages) ? options.referenceImages.length : imageChatThreadState.referenceImages.length;
+  const batchCount = Math.max(1, Math.min(4, Number(options.batchCount || imageChatThreadState.settings.batchCount || 1)));
+  const runId = createImageChatLocalMessageId('image-run');
+  const userId = createImageChatLocalMessageId('user');
+  const assistantId = createImageChatLocalMessageId('assistant-pending');
+  const createdAt = Date.now();
+  imageChatThreadState.pendingRun = {
+    runId,
+    prompt: normalizedPrompt,
+    createdAt,
+    pendingAssistantId: assistantId,
+  };
+  imageChatThreadState.optimisticMessages = [
+    ...(imageChatThreadState.optimisticMessages || []).filter(message => !message.localOnly),
+    {
+      id: userId,
+      role: 'user',
+      content: normalizedPrompt,
+      createdAt,
+      localOnly: true,
+      runId,
+      status: 'sent',
+    },
+    {
+      id: assistantId,
+      role: 'assistant',
+      content: options.pendingContent || (referenceCount > 0
+        ? `正在基于 ${referenceCount} 张参考图生成 ${batchCount} 张图片...`
+        : `正在生成 ${batchCount} 张图片...`),
+      createdAt: createdAt + 1,
+      localOnly: true,
+      runId,
+      status: 'pending',
+    },
+  ];
+  renderImageChatThreadPanel();
+  renderMidtaiImagePreview();
+  return runId;
+}
+
+function handleImageChatComposerKey(event) {
+  if (event.key !== 'Enter' || event.shiftKey) return;
+  event.preventDefault();
+  runImageChatFromComposer();
+}
+
+function refreshImageChatThreads() {
+  renderImageChatThreadPanel();
+  send({ type: 'image:listThreads', ownerSurface: 'image-chat' });
+}
+
+function selectImageChatThread(threadId) {
+  const normalizedThreadId = String(threadId || '').trim();
+  if (!normalizedThreadId) return;
+  imageChatThreadState.activeThreadId = normalizedThreadId;
+  imageChatThreadState.optimisticMessages = [];
+  imageChatThreadState.pendingRun = null;
+  imageChatThreadState.activeStageImageId = null;
+  send({ type: 'image:loadThread', threadId: normalizedThreadId });
+  renderImageChatThreadPanel();
+}
+
+function createImageChatThread() {
+  const threadId = `image-chat:${Date.now()}-${Math.random().toString(16).slice(2, 8)}`;
+  imageChatThreadState.activeThreadId = threadId;
+  imageChatThreadState.messages = [];
+  imageChatThreadState.referenceImages = [];
+  imageChatThreadState.resultBatches = [];
+  imageChatThreadState.optimisticMessages = [];
+  imageChatThreadState.pendingRun = null;
+  imageChatThreadState.activeResultId = null;
+  imageChatThreadState.activeBatchId = null;
+  imageChatThreadState.activeStageImageId = null;
+  imageState.referenceImages = [];
+  imageState.lastError = '';
+  imageState.pendingBatch = null;
+  midtaiState.imgPreviewBatchId = null;
+  renderMidtaiImageRefList();
+  renderImageChatThreadPanel();
+  renderMidtaiImagePreview();
+}
+
+function applyImageChatThreadState(msg) {
+  const thread = msg?.thread && typeof msg.thread === 'object' ? msg.thread : null;
+  if (!thread || thread.ownerSurface !== 'image-chat') return;
+  imageChatThreadState.activeThreadId = String(thread.threadId || '').trim() || imageChatThreadState.activeThreadId;
+  imageChatThreadState.messages = Array.isArray(thread.messages) ? thread.messages : [];
+  imageChatThreadState.referenceImages = Array.isArray(thread.referenceImages) ? thread.referenceImages : [];
+  imageChatThreadState.resultBatches = Array.isArray(msg.resultBatches) ? msg.resultBatches : [];
+  imageChatThreadState.settings = {
+    size: thread.settings?.size || imageChatThreadState.settings.size || '1024x1024',
+    batchCount: Math.max(1, Math.min(4, Number(thread.settings?.batchCount || imageChatThreadState.settings.batchCount || 1))),
+  };
+  imageChatThreadState.activeResultId = thread.activeResultId || null;
+  imageChatThreadState.activeBatchId = thread.activeBatchId || null;
+  if (imageChatThreadState.pendingRun) {
+    const pendingPrompt = String(imageChatThreadState.pendingRun.prompt || '').trim();
+    const hasUserMessage = imageChatThreadState.messages.some(message => message.role === 'user' && String(message.content || '').trim() === pendingPrompt);
+    const hasAssistantResult = imageChatThreadState.messages.some(message => message.role === 'assistant' && Array.isArray(message.resultIds) && message.resultIds.length > 0);
+    if (hasUserMessage && hasAssistantResult) {
+      completeImageChatPendingRun('done');
+    }
+  }
+  imageState.referenceImages = imageChatThreadState.referenceImages.map(referenceImage => ({ ...referenceImage }));
+  midtaiState.imgPreviewBatchId = imageChatThreadState.activeBatchId || null;
+  syncImageChatActiveStageImage();
+  setMidtaiImageSize(imageChatThreadState.settings.size || '1024x1024');
+  setMidtaiImageCount(imageChatThreadState.settings.batchCount || 1);
+  renderMidtaiImageRefList();
+  renderImageChatThreadPanel();
+  renderMidtaiImagePreview();
+}
+
+function openImageChatStageImage(imageId) {
+  const normalizedImageId = String(imageId || '').trim();
+  if (!normalizedImageId) return;
+  imageChatThreadState.activeStageImageId = normalizedImageId;
+  const image = getImageChatFlatResults().find(result => result.id === normalizedImageId);
+  if (image?.batchId) {
+    imageChatThreadState.activeBatchId = image.batchId;
+    midtaiState.imgPreviewBatchId = image.batchId;
+  }
+  renderImageChatThreadPanel();
+  renderMidtaiImagePreview();
+}
+
+function insertImageChatResultToDesign(imageId, imageUrl) {
+  openImageChatStageImage(imageId);
+  insertToDesign(imageId, imageUrl);
+}
+
+function renderImageChatThreadMessages() {
+  const messages = getImageChatThreadMessages();
+  if (!messages.length) {
+    return '<div class="image-chat-empty">当前 image-chat 会话还没有消息。直接在下面输入需求，参考图、比例、出图数都跟随这个会话隔离保存。</div>';
+  }
+  return messages.map(message => {
+    const isUser = message.role === 'user';
+    const statusClass = message.status === 'pending' ? ' pending' : message.status === 'error' ? ' error' : '';
+    const resultIds = Array.isArray(message.resultIds) ? new Set(message.resultIds.map(value => String(value || '').trim()).filter(Boolean)) : null;
+    const messageResults = resultIds ? getImageChatFlatResults().filter(result => resultIds.has(String(result.id || '').trim())) : [];
+    const resultHtml = !isUser && messageResults.length > 0 ? `
+      <div class="image-chat-result-strip">
+        ${messageResults.map(result => {
+          const encodedImageId = encodeURIComponent(String(result.id || ''));
+          const encodedImageSrc = encodeURIComponent(String(result.src || ''));
+          return `
+            <div class="image-chat-result-card">
+              <img src="${escapeHtml(String(result.src || ''))}" alt="generated" onclick="openImageChatStageImage(decodeURIComponent('${encodedImageId}'))">
+              <div class="image-chat-result-actions">
+                <button type="button" onclick="openImageChatStageImage(decodeURIComponent('${encodedImageId}'))">查看</button>
+                <button type="button" onclick="insertImageChatResultToDesign(decodeURIComponent('${encodedImageId}'), decodeURIComponent('${encodedImageSrc}'))">插入设计</button>
+              </div>
+            </div>
+          `;
+        }).join('')}
+      </div>
+    ` : '';
+    return `
+      <div class="image-chat-message ${isUser ? 'user' : 'assistant'}${statusClass}">
+        <span class="image-chat-message-label">${isUser ? 'You' : 'Image Chat'}</span>
+        <div class="image-chat-message-copy">${escapeHtml(String(message.content || ''))}</div>
+        ${resultHtml}
+        <div class="image-chat-message-meta">
+          <span>${escapeHtml(formatDesignChatTimestamp(message.createdAt || Date.now()))}</span>
+          <span>${message.status === 'pending' ? '生成中' : message.status === 'error' ? '生成失败' : ''}</span>
+        </div>
+      </div>
+    `;
+  }).join('');
+}
+
+function renderImageChatThreadPanel() {
+  renderIchatV2();
+  const panel = document.getElementById('image-chat-thread-panel');
+  if (!panel) return;
+  const threads = imageChatThreadState.threads || [];
+  const activeThreadId = imageChatThreadState.activeThreadId || getImageChatThreadId();
+  const hasActiveThread = threads.some(thread => thread.threadId === activeThreadId);
+  const threadCount = threads.length + (hasActiveThread ? 0 : 1);
+  panel.innerHTML = `
+    <div class="image-chat-head">
+      <div>
+        <div class="image-chat-title">Image Chat</div>
+        <div class="image-chat-sub">${threadCount} 条图像会话 · 当前会话：${escapeHtml(getImageChatThreadSummary())} · 不写入主 Chat</div>
+      </div>
+      <button class="image-chat-new-btn" type="button" onclick="createImageChatThread()">新建会话</button>
+    </div>
+    <div class="image-chat-switcher">
+      <select class="image-chat-select" onchange="selectImageChatThread(this.value)">
+        ${!hasActiveThread ? `<option value="${escapeHtml(activeThreadId)}" selected>${activeThreadId === getImageChatThreadId() ? '默认图像会话' : '新图像会话（未生成）'}</option>` : ''}
+        ${threads.map(thread => `<option value="${escapeHtml(thread.threadId)}" ${thread.threadId === activeThreadId ? 'selected' : ''}>${escapeHtml(thread.title || thread.threadId).slice(0, 38)}</option>`).join('')}
+      </select>
+      <button class="image-chat-refresh" type="button" onclick="refreshImageChatThreads()">刷新</button>
+    </div>
+    <div class="image-chat-messages">${renderImageChatThreadMessages()}</div>
+  `;
+}
+
+function renderImageChatStageSection(stageImage) {
+  if (!stageImage) return '';
+  const stageImages = getImageChatFlatResults().slice(0, 8);
+  const encodedStageId = encodeURIComponent(String(stageImage.id || ''));
+  const encodedStageSrc = encodeURIComponent(String(stageImage.src || ''));
+  return `
+    <section style="padding:16px 16px 0">
+      <div class="image-chat-stage-card">
+        <div class="image-chat-stage-main">
+          <div class="image-chat-stage-hero">
+            <img src="${escapeHtml(String(stageImage.src || ''))}" alt="stage image" onclick="openImageLightbox(event, decodeURIComponent('${encodedStageSrc}'))">
+          </div>
+          <div class="image-chat-stage-side">
+            <div>
+              <div class="image-chat-stage-title">当前图片 Stage</div>
+              <div class="image-chat-stage-copy">${escapeHtml(String(stageImage.revisedPrompt || stageImage.prompt || '')) || '当前 image-chat 已有结果，可直接插入设计或继续生成变体。'}</div>
+            </div>
+            <div class="image-chat-stage-actions">
+              <button class="btn-red" type="button" onclick="insertImageChatResultToDesign(decodeURIComponent('${encodedStageId}'), decodeURIComponent('${encodedStageSrc}'))" style="justify-content:center">插入设计</button>
+              <button class="btn-secondary" type="button" onclick="makeMidtaiImageVariant(decodeURIComponent('${encodedStageId}'))" style="justify-content:center">生成变体</button>
+            </div>
+            ${stageImages.length > 1 ? `
+              <div>
+                <div class="image-chat-stage-caption">当前会话结果</div>
+                <div class="image-chat-stage-strip">
+                  ${stageImages.map(result => {
+                    const encodedImageId = encodeURIComponent(String(result.id || ''));
+                    return `
+                      <button class="image-chat-stage-thumb${result.id === stageImage.id ? ' active' : ''}" type="button" onclick="openImageChatStageImage(decodeURIComponent('${encodedImageId}'))">
+                        <img src="${escapeHtml(String(result.src || ''))}" alt="stage thumb">
+                      </button>
+                    `;
+                  }).join('')}
+                </div>
+              </div>
+            ` : ''}
+          </div>
+        </div>
+      </div>
+    </section>
+  `;
+}
+
+function runImageChatFromComposer() {
+  runMidtaiImage();
+}
+
 function showImgView(view) {
   if (view !== 'img-works') midtaiThumbsToken++;
   midtaiState.imgTabView = view;
+  if (view === 'img-preview') {
+    refreshImageChatThreads();
+  }
   renderMidtaiImageRefList();
   renderImageHistory();
   ['img-preview', 'img-works', 'img-plib'].forEach(currentView => {
@@ -5316,12 +5863,12 @@ function renderMidtaiImageWorks() {
                 <div class="midtai-img-actions">
                   <a class="btn-secondary" href="${result.src}" download="kainclaw-image-${result.id}.png" style="text-decoration:none;text-align:center">下载</a>
                   ${isReplace
-                    ? `<button class="btn-red" style="justify-content:center" onclick="insertToDesign('${result.id}', '${result.src}')">插入到设计</button>`
-                    : `<button class="btn-secondary" style="justify-content:center" onclick="appendMidtaiImageToConversation('${result.id}')">插入到对话</button>`}
+                    ? `<button class="btn-red" style="justify-content:center" onclick="insertImageChatResultToDesign(decodeURIComponent('${encodedImageId}'), decodeURIComponent('${encodedImageSrc}'))">插入到设计</button>`
+                    : `<button class="btn-secondary" style="justify-content:center" onclick="openImageChatStageImage(decodeURIComponent('${encodedImageId}'))">插入到对话</button>`}
                 </div>
                 <div class="midtai-img-actions" style="margin-top:6px">
-                  <button class="btn-secondary" style="justify-content:center" onclick="beginMidtaiImageEdit('${result.id}')">二次编辑</button>
-                  <button class="btn-secondary" style="justify-content:center" onclick="makeMidtaiImageVariant('${result.id}')">变体</button>
+                  <button class="btn-secondary" style="justify-content:center" onclick="beginMidtaiImageEdit(decodeURIComponent('${encodedImageId}'))">二次编辑</button>
+                  <button class="btn-secondary" style="justify-content:center" onclick="makeMidtaiImageVariant(decodeURIComponent('${encodedImageId}'))">变体</button>
                 </div>
               </div>
             </div>
@@ -5803,7 +6350,7 @@ function renderMidtaiLibraryImagePanel() {
             <div class="midtai-img-actions">
               <a class="btn-secondary" href="${result.src}" download="kainclaw-image-${result.id}.png" style="text-decoration:none;text-align:center">下载</a>
               ${midtaiState.currentDesignProjectId
-                ? `<button class="btn-secondary" style="justify-content:center" onclick="insertToDesign('${result.id}', '${result.src}')">用于当前设计</button>`
+                ? `<button class="btn-secondary" style="justify-content:center" onclick="insertImageChatResultToDesign(decodeURIComponent('${encodedImageId}'), decodeURIComponent('${encodedImageSrc}'))">用于当前设计</button>`
                 : `<button class="btn-secondary" style="justify-content:center;opacity:.5;cursor:not-allowed" disabled title="先进入一个设计作品">用于当前设计</button>`}
             </div>
           </div>
@@ -6241,6 +6788,12 @@ function exitCanvas() {
 
 function setMidtaiImageSize(size) {
   midtaiState.imgSize = size || '1024x1024';
+  if (midtaiState.type === 'img') {
+    imageChatThreadState.settings = {
+      ...imageChatThreadState.settings,
+      size: midtaiState.imgSize,
+    };
+  }
   document.querySelectorAll('#midtai-form-img .midtai-ratio-btn').forEach(button => {
     button.classList.toggle('active', button.dataset.size === midtaiState.imgSize);
   });
@@ -6249,6 +6802,12 @@ function setMidtaiImageSize(size) {
 function setMidtaiImageCount(count) {
   const nextCount = Math.max(1, Math.min(4, Number(count || 1)));
   midtaiState.imgCount = nextCount;
+  if (midtaiState.type === 'img') {
+    imageChatThreadState.settings = {
+      ...imageChatThreadState.settings,
+      batchCount: nextCount,
+    };
+  }
   document.querySelectorAll('#midtai-form-img .midtai-qty-btn').forEach(button => {
     button.classList.toggle('active', Number(button.dataset.count || 0) === nextCount);
   });
@@ -6269,10 +6828,16 @@ function runMidtaiImage() {
   }
   armMidtaiImagePreviewSession();
   imgSwitchView('preview');
+  beginImageChatPendingRun(prompt, {
+    batchCount: midtaiState.imgCount || 1,
+    referenceImages: imageState.referenceImages,
+  });
   runImageRequest({
     prompt,
     sizePreset: midtaiState.imgSize || '1024x1024',
     batchCount: midtaiState.imgCount || 1,
+    threadId: imageChatThreadState.activeThreadId || getImageChatThreadId(),
+    ownerSurface: 'image-chat',
   });
 }
 
@@ -6300,6 +6865,10 @@ function rerunMidtaiImage() {
   setMidtaiImageCount(batchCount);
   armMidtaiImagePreviewSession();
   imgSwitchView('preview');
+  beginImageChatPendingRun(prompt, {
+    batchCount,
+    referenceImages: imageState.lastRequest.referenceImages,
+  });
   runImageRequest({
     prompt,
     sizePreset: size,
@@ -6307,6 +6876,8 @@ function rerunMidtaiImage() {
     responseFormat: imageState.lastRequest.responseFormat,
     referenceImages: imageState.lastRequest.referenceImages,
     recordPromptHistory: false,
+    threadId: imageChatThreadState.activeThreadId || getImageChatThreadId(),
+    ownerSurface: 'image-chat',
   });
   setImageLabStatus('正在重生成...');
 }
@@ -6342,9 +6913,11 @@ function handleMidtaiImageRefUpload(event) {
         imageState.referenceImages,
         referenceImages.filter(referenceImage => typeof referenceImage?.dataUrl === 'string'),
       );
+      imageChatThreadState.referenceImages = imageState.referenceImages.map(referenceImage => ({ ...referenceImage }));
       invalidateImageWorkflowPlan();
       event.target.value = '';
       renderMidtaiImageRefList();
+      renderImageChatThreadPanel();
       setImageLabStatus(
         ignoredCount > 0
           ? `已加入 ${nextFiles.length} 张参考图；最多保留 4 张，另外 ${ignoredCount} 张未加入。`
@@ -6395,10 +6968,12 @@ function removeMidtaiImageRef(index) {
   if (index < 0 || index >= imageState.referenceImages.length) return;
   const removed = imageState.referenceImages[index];
   imageState.referenceImages = imageState.referenceImages.filter((_, currentIndex) => currentIndex !== index);
+  imageChatThreadState.referenceImages = imageState.referenceImages.map(referenceImage => ({ ...referenceImage }));
   invalidateImageWorkflowPlan();
   const input = document.getElementById('midtai-img-ref-input');
   if (input) input.value = '';
   renderMidtaiImageRefList();
+  renderImageChatThreadPanel();
   setImageLabStatus(`已移除参考图：${removed?.name || `第 ${index + 1} 张`}`);
 }
 
@@ -6479,7 +7054,7 @@ function clearMidtaiPromptHistory() {
 }
 
 function renderMidtaiImagePreview() {
-  const container = document.getElementById('view-img-preview');
+  const container = document.getElementById('image-chat-preview-body') || document.getElementById('view-img-preview');
   if (!container) return;
 
   const batches = imageState.resultBatches || [];
@@ -6490,8 +7065,9 @@ function renderMidtaiImagePreview() {
       ))
     : null;
   const previewError = String(imageState.lastError || '').trim();
+  const stageImage = getImageChatActiveStageImage();
 
-  if ((!batches.length && !pendingBatch) || (!midtaiState.imgPreviewBatchId && !pendingBatch)) {
+  if ((!batches.length && !pendingBatch && !stageImage) || (!midtaiState.imgPreviewBatchId && !pendingBatch && !stageImage)) {
     if (previewError) {
       container.innerHTML = `
         <div class="midtai-empty-view">
@@ -6566,97 +7142,13 @@ function renderMidtaiImagePreview() {
     `;
   })() : '';
 
-  const sortedBatches = [...batches].sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
-  const latestBatch = pendingBatch
-    ? null
-    : (midtaiState.imgPreviewBatchId
-        ? sortedBatches.find(batch => batch.id === midtaiState.imgPreviewBatchId) || null
-        : null);
-  const latestImages = latestBatch ? (latestBatch.items || []) : [];
-
-  const imageCards = latestImages.map(result => {
-    const prompt = escapeHtml(result.revisedPrompt || result.prompt || latestBatch.prompt || '');
-    return `
-      <div class="midtai-img-card${latestImages.length === 1 ? ' single-result' : ''}">
-        <div class="midtai-img-thumb-wrap">
-          <img loading="lazy" src="${result.src}" class="midtai-img-thumb" alt="generated">
-        </div>
-        <div class="midtai-img-card-body">
-          <div class="midtai-img-card-copy">${prompt.slice(0, 96)}</div>
-          <div class="midtai-img-actions">
-            <a class="btn-secondary" href="${result.src}" download="kainclaw-image-${result.id}.png" style="text-decoration:none">下载</a>
-            ${midtaiState.replaceCtx
-              ? `<button class="btn-red" style="justify-content:center" onclick="insertToDesign('${result.id}', '${result.src}')">✓ 插入到设计</button>`
-              : `<button class="btn-secondary" style="justify-content:center" onclick="appendMidtaiImageToConversation('${result.id}')">插入到对话</button>`}
-          </div>
-          <div class="midtai-img-actions" style="margin-top:6px">
-            <button class="btn-secondary" style="justify-content:center" onclick="beginMidtaiImageEdit('${result.id}')">二次编辑</button>
-            <button class="btn-secondary" style="justify-content:center" onclick="makeMidtaiImageVariant('${result.id}')">变体</button>
-          </div>
-        </div>
-      </div>
-    `;
-  }).join('');
-
-  const colCount = latestImages.length === 1 ? 1 : latestImages.length === 2 ? 2 : latestImages.length === 3 ? 3 : 2;
-  const gridStyle = latestImages.length === 1
-    ? 'display:grid;grid-template-columns:minmax(0,360px);justify-content:center;gap:12px;padding:16px'
-    : `display:grid;grid-template-columns:repeat(${colCount},1fr);gap:12px;padding:16px`;
-
-  const latestSection = latestImages.length > 0 ? `
-    <section style="padding:16px 16px 0">
-      <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin-bottom:10px">
-        <div>
-          <div style="font-size:13px;font-weight:700;color:#24160d">本轮最新结果</div>
-          <div style="font-size:11px;color:#8b7969;line-height:1.6;margin-top:4px">最新一批结果固定置顶，方便立刻插入当前设计、做变体或继续编辑。</div>
-        </div>
-        ${imageState.busy ? '' : `<button onclick="rerunMidtaiImage()" style="font-size:11px;color:#78716c;border:1px solid #eadfd2;background:#fff;border-radius:8px;padding:5px 11px;cursor:pointer;white-space:nowrap">↻ 重新生成</button>`}
-      </div>
-      <div style="${gridStyle}">${imageCards}</div>
-    </section>
-  ` : '';
-
-  const latestBatchId = latestBatch?.id || latestImages[0]?.batchId || null;
-  const historicalBatches = sortedBatches.filter(batch => {
-    if (!latestBatchId) return true;
-    return batch.id !== latestBatchId;
-  });
-  const historicalItems = historicalBatches.flatMap(batch => batch.items || []);
-  const historySection = historicalItems.length > 0 ? `
-    <section style="padding:18px 16px 20px">
-      <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin-bottom:10px">
-        <div>
-          <div style="font-size:13px;font-weight:700;color:#24160d">历史图片网格</div>
-          <div style="font-size:11px;color:#8b7969;line-height:1.6;margin-top:4px">更早的批次集中放在这里，不与当前批次混排。</div>
-        </div>
-      </div>
-      <div class="midtai-img-grid">
-        ${historicalItems.map(result => {
-          const prompt = escapeHtml(String(result.revisedPrompt || result.prompt || '')).slice(0, 88);
-          return `
-            <div class="midtai-img-card">
-              <div class="midtai-img-thumb-wrap"><img loading="lazy" src="${result.src}" class="midtai-img-thumb" alt="generated"></div>
-              <div class="midtai-img-card-body">
-                <div class="midtai-img-card-copy">${prompt}</div>
-                <div class="midtai-img-actions">
-                  <a class="btn-secondary" href="${result.src}" download="kainclaw-image-${result.id}.png" style="text-decoration:none;text-align:center">下载</a>
-                  ${midtaiState.replaceCtx
-                    ? `<button class="btn-secondary" style="justify-content:center" onclick="insertToDesign('${result.id}', '${result.src}')">插入到设计</button>`
-                    : `<button class="btn-secondary" style="justify-content:center" onclick="appendMidtaiImageToConversation('${result.id}')">插入到对话</button>`}
-                </div>
-              </div>
-            </div>
-          `;
-        }).join('')}
-      </div>
-    </section>
-  ` : '';
+  const stageSection = renderImageChatStageSection(stageImage);
 
   container.innerHTML = `
     <div class="midtai-works-shell">
       <div class="midtai-works-scroll">
         ${loadingHtml}
-        ${latestSection}
+        ${stageSection}
       </div>
     </div>
   `;
@@ -12347,9 +12839,13 @@ function runImageRequest(overrides = {}) {
   );
   setImageLabStatus(payload.referenceImages.length > 0 ? '正在根据参考图组编辑...' : '正在生成图片...');
   renderMidtaiImagePreview();
+  const threadId = overrides.threadId || imageChatThreadState.activeThreadId || getImageChatThreadId();
+  imageChatThreadState.activeThreadId = threadId;
   send({
     type: 'image:run',
     prompt,
+    threadId,
+    ownerSurface: overrides.ownerSurface || 'image-chat',
     recordPromptHistory: overrides.recordPromptHistory ?? true,
     ...payload,
   });
@@ -14145,6 +14641,222 @@ function cycleEffort() {
   effortI = (effortI + 1) % 3;
   document.getElementById('elabel').textContent = effortOpts[effortI];
 }
+
+// ─── ichat-v2: Image Chat rebuild ────────────────────────────────────────────
+let ichatState = { refsOpen: false };
+
+function renderIchatV2() {
+  const v2 = document.getElementById('ichat-v2');
+  if (!v2) return;
+
+  const threads = imageChatThreadState.threads || [];
+  const activeThreadId = imageChatThreadState.activeThreadId || getImageChatThreadId();
+
+  const select = document.getElementById('ichat-session-select');
+  if (select) {
+    const hasActive = threads.some(function(t) { return t.threadId === activeThreadId; });
+    select.innerHTML = [
+      !hasActive ? '<option value="' + escapeHtml(activeThreadId) + '" selected>当前会话</option>' : '',
+    ].concat(threads.map(function(t) {
+      return '<option value="' + escapeHtml(t.threadId) + '"' + (t.threadId === activeThreadId ? ' selected' : '') + '>' + escapeHtml((t.title || t.threadId).slice(0, 36)) + '</option>';
+    })).join('');
+  }
+
+  const messagesEl = document.getElementById('ichat-messages');
+  if (messagesEl) {
+    const allMessages = getImageChatThreadMessages();
+    if (!allMessages.length) {
+      messagesEl.innerHTML = '<div class="ichat-empty-state"><div class="ichat-empty-icon">✦</div><div class="ichat-empty-title">Image Chat</div><div class="ichat-empty-copy">在下方输入描述，可以带参考图、设定比例和出图数量，发送后结果会出现在这里。</div></div>';
+    } else {
+      const wasAtBottom = messagesEl.scrollHeight - messagesEl.scrollTop - messagesEl.clientHeight < 80;
+      messagesEl.innerHTML = allMessages.map(renderIchatMessage).join('');
+      if (wasAtBottom) messagesEl.scrollTop = messagesEl.scrollHeight;
+    }
+  }
+
+  renderIchatRefs();
+  const activeSize = midtaiState.imgSize || '1024x1024';
+  const activeCount = midtaiState.imgCount || 1;
+  v2.querySelectorAll('.ichat-size-chip').forEach(function(btn) {
+    btn.classList.toggle('active', btn.dataset.size === activeSize);
+  });
+  v2.querySelectorAll('.ichat-qty-chip').forEach(function(btn) {
+    btn.classList.toggle('active', Number(btn.dataset.count) === activeCount);
+  });
+}
+
+function renderIchatMessage(msg) {
+  const isUser = msg.role === 'user';
+  const isPending = msg.status === 'pending';
+  const isError = msg.status === 'error';
+  const statusCls = isPending ? ' pending' : isError ? ' error' : '';
+  const resultIds = Array.isArray(msg.resultIds) ? msg.resultIds.map(function(v) { return String(v || '').trim(); }).filter(Boolean) : [];
+  const allResults = getImageChatFlatResults();
+  const msgResults = resultIds.length ? allResults.filter(function(r) { return resultIds.indexOf(String(r.id || '').trim()) !== -1; }) : [];
+  const resultsHtml = (!isUser && msgResults.length > 0) ? renderIchatResultGrid(msgResults) : '';
+  var rawContent = escapeHtml(String(msg.content || ''));
+  var bubbleContent = (!isUser && !isPending) ? rawContent.replace(/\n/g, '<br>') : rawContent;
+  return '<div class="ichat-msg ' + (isUser ? 'user' : 'assistant') + statusCls + '">' +
+    '<span class="ichat-msg-label">' + (isUser ? 'You' : 'Image Chat') + '</span>' +
+    '<div class="ichat-bubble">' + bubbleContent + '</div>' +
+    resultsHtml +
+    '</div>';
+}
+
+function renderIchatResultGrid(results) {
+  var cols = results.length === 1 ? 1 : results.length === 3 ? 3 : 2;
+  var maxW = cols === 1 ? 'max-width:200px' : '';
+  var cards = results.map(function(r) {
+    var eid = encodeURIComponent(String(r.id || ''));
+    var esrc = encodeURIComponent(String(r.src || ''));
+    return '<div class="ichat-result-card" onclick="openImageChatStageImage(decodeURIComponent(\'' + eid + '\'))">' +
+      '<img src="' + escapeHtml(String(r.src || '')) + '" alt="generated" loading="lazy">' +
+      '<div class="ichat-result-card-actions">' +
+      '<button type="button" onclick="event.stopPropagation();openImageChatStageImage(decodeURIComponent(\'' + eid + '\'))">Stage</button>' +
+      '<button type="button" onclick="event.stopPropagation();insertImageChatResultToDesign(decodeURIComponent(\'' + eid + '\'),decodeURIComponent(\'' + esrc + '\'))">插入</button>' +
+      '</div></div>';
+  }).join('');
+  return '<div class="ichat-result-grid" style="grid-template-columns:repeat(' + cols + ',1fr);' + maxW + '">' + cards + '</div>';
+}
+
+function renderIchatRefs() {
+  var strip = document.getElementById('ichat-refs-strip');
+  var list = document.getElementById('ichat-refs-list');
+  var infer = document.getElementById('ichat-infer-btn');
+  var countEl = document.getElementById('ichat-ref-count');
+  var refs = imageState.referenceImages || [];
+  if (countEl) countEl.textContent = refs.length > 0 ? '(' + refs.length + ')' : '';
+  var refToggle = document.getElementById('ichat-ref-toggle');
+  if (refToggle) refToggle.classList.toggle('active', refs.length > 0);
+  if (strip) strip.style.display = (ichatState.refsOpen || refs.length > 0) ? 'flex' : 'none';
+  if (list) {
+    list.innerHTML = refs.map(function(ref, i) {
+      return '<div style="position:relative;width:40px;height:40px">' +
+        '<img src="' + ref.dataUrl + '" alt="ref ' + (i + 1) + '" style="width:40px;height:40px;object-fit:cover;border-radius:5px;border:1px solid #eadfd2">' +
+        '<button type="button" onclick="removeIchatRef(' + i + ')" style="position:absolute;top:-5px;right:-5px;width:16px;height:16px;border-radius:50%;background:#c9502e;color:#fff;border:1px solid #fff;font-size:10px;cursor:pointer;display:flex;align-items:center;justify-content:center;padding:0;line-height:1">×</button>' +
+        '</div>';
+    }).join('');
+  }
+  if (infer) infer.style.display = refs.length > 0 ? 'inline-block' : 'none';
+}
+
+function toggleIchatRefs() {
+  ichatState.refsOpen = !ichatState.refsOpen;
+  renderIchatRefs();
+}
+
+function removeIchatRef(index) {
+  if (index < 0 || index >= imageState.referenceImages.length) return;
+  imageState.referenceImages = imageState.referenceImages.filter(function(_, i) { return i !== index; });
+  imageChatThreadState.referenceImages = imageState.referenceImages.map(function(r) { return Object.assign({}, r); });
+  invalidateImageWorkflowPlan();
+  var input = document.getElementById('ichat-ref-input');
+  if (input) input.value = '';
+  renderIchatRefs();
+  renderMidtaiImageRefList();
+}
+
+function handleIchatRefUpload(event) {
+  var files = Array.from((event.target && event.target.files) || []);
+  if (!files.length) return;
+  var remaining = Math.max(0, 4 - imageState.referenceImages.length);
+  if (remaining === 0) {
+    if (event.target) event.target.value = '';
+    setImageLabStatus('参考图最多 4 张，请先移除一张再继续。', true);
+    renderIchatRefs();
+    return;
+  }
+  var toLoad = files.slice(0, remaining);
+  Promise.all(toLoad.map(function(file) {
+    return new Promise(function(resolve, reject) {
+      var reader = new FileReader();
+      reader.onload = function(e) { resolve({ dataUrl: e.target.result, mimeType: file.type || 'image/png', name: file.name || 'reference.png' }); };
+      reader.onerror = function() { reject(reader.error); };
+      reader.readAsDataURL(file);
+    });
+  })).then(function(loaded) {
+    imageState.referenceImages = imageState.referenceImages.concat(loaded);
+    imageChatThreadState.referenceImages = imageState.referenceImages.map(function(r) { return Object.assign({}, r); });
+    invalidateImageWorkflowPlan();
+    if (event.target) event.target.value = '';
+    ichatState.refsOpen = true;
+    renderIchatRefs();
+    renderMidtaiImageRefList();
+    setImageLabStatus('已添加 ' + loaded.length + ' 张参考图。');
+  }).catch(function() {
+    setImageLabStatus('读取参考图失败，请重试。', true);
+  });
+}
+
+function setIchatSize(size) {
+  setMidtaiImageSize(size);
+  var v2 = document.getElementById('ichat-v2');
+  if (v2) v2.querySelectorAll('.ichat-size-chip').forEach(function(btn) {
+    btn.classList.toggle('active', btn.dataset.size === size);
+  });
+}
+
+function setIchatCount(count) {
+  setMidtaiImageCount(count);
+  var v2 = document.getElementById('ichat-v2');
+  if (v2) v2.querySelectorAll('.ichat-qty-chip').forEach(function(btn) {
+    btn.classList.toggle('active', Number(btn.dataset.count) === count);
+  });
+}
+
+function handleIchatKey(event) {
+  if (event.key !== 'Enter' || event.shiftKey) return;
+  event.preventDefault();
+  submitIchat();
+}
+
+function submitIchat() {
+  var input = document.getElementById('ichat-input');
+  var prompt = input ? input.value.trim() : '';
+  if (!prompt) return;
+  if (!imageState.config.isConfigured) {
+    setImageLabStatus('图像模型尚未配置，请先前往设置页完成配置。', true);
+    return;
+  }
+  if (input) input.value = '';
+  armMidtaiImagePreviewSession();
+  imgSwitchView('preview');
+  var threadId = imageChatThreadState.activeThreadId || getImageChatThreadId();
+  imageChatThreadState.activeThreadId = threadId;
+  beginImageChatPendingRun(prompt, {
+    pendingContent: '思考中…',
+    batchCount: midtaiState.imgCount || 1,
+    referenceImages: imageState.referenceImages,
+  });
+  send({
+    type: 'image:chatRoute',
+    prompt: prompt,
+    sizePreset: midtaiState.imgSize || '1024x1024',
+    batchCount: midtaiState.imgCount || 1,
+    threadId: threadId,
+    ownerSurface: 'image-chat',
+    referenceImages: imageState.referenceImages,
+  });
+}
+
+function inferIchatPrompt() {
+  var refs = imageState.referenceImages || [];
+  if (!refs.length) return;
+  var btn = document.getElementById('ichat-infer-btn');
+  if (btn) { btn.disabled = true; btn.textContent = '分析中…'; }
+  inferImageLabPrompt();
+  var tries = 0;
+  var interval = setInterval(function() {
+    var oldVal = (document.getElementById('midtai-img-prompt') || {}).value;
+    var ichatInput = document.getElementById('ichat-input');
+    if (oldVal && oldVal.trim() && ichatInput && ichatInput.value !== oldVal) {
+      ichatInput.value = oldVal;
+      clearInterval(interval);
+    }
+    if (++tries > 60) clearInterval(interval);
+  }, 200);
+}
+// ─── end ichat-v2 ─────────────────────────────────────────────────────────────
 </script>
 </body>
 </html>

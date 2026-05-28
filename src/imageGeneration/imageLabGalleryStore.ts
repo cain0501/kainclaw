@@ -117,6 +117,30 @@ export class ImageLabGalleryStore {
       ...(typeof result.lastUsedByProjectId === "string" && result.lastUsedByProjectId.trim()
         ? { lastUsedByProjectId: result.lastUsedByProjectId.trim() }
         : {}),
+      ...(result.originSurface === "main-chat" ||
+        result.originSurface === "design-chat" ||
+        result.originSurface === "image-chat"
+        ? { originSurface: result.originSurface }
+        : {}),
+      ...(typeof result.originSessionId === "string" && result.originSessionId.trim()
+        ? { originSessionId: result.originSessionId.trim() }
+        : {}),
+      ...(typeof result.originThreadId === "string" && result.originThreadId.trim()
+        ? { originThreadId: result.originThreadId.trim() }
+        : {}),
+      ...(typeof result.originProjectId === "string" && result.originProjectId.trim()
+        ? { originProjectId: result.originProjectId.trim() }
+        : {}),
+      ...(Array.isArray(result.usedByProjectIds)
+        ? {
+            usedByProjectIds: Array.from(new Set(
+              result.usedByProjectIds
+                .filter((projectId): projectId is string => typeof projectId === "string")
+                .map(projectId => projectId.trim())
+                .filter(Boolean),
+            )),
+          }
+        : {}),
     };
   }
 

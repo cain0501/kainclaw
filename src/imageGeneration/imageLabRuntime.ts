@@ -41,6 +41,11 @@ export type ImageLabResultItem = {
   source: "generate" | "edit" | "variant";
   thumbnail?: string;
   lastUsedByProjectId?: string;
+  originSurface?: "main-chat" | "design-chat" | "image-chat";
+  originSessionId?: string;
+  originThreadId?: string;
+  originProjectId?: string;
+  usedByProjectIds?: string[];
 };
 
 function parseDataUrlAttachment(referenceImage: ImageLabReferenceImage): {

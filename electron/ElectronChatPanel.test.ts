@@ -1833,6 +1833,31 @@ describe("ElectronChatPanel session lifecycle", () => {
         ],
       },
     ]);
+    await expect((harness.panel as any).imageThreadStore.loadThreads()).resolves.toEqual([
+      expect.objectContaining({
+        threadId: "image-chat:default",
+        ownerSurface: "image-chat",
+        activeResultId: "img-1",
+        activeBatchId: "batch-generate-1",
+        settings: {
+          size: "1024x1024",
+          batchCount: 2,
+        },
+        resultIds: ["img-1", "img-2"],
+      }),
+    ]);
+    await expect((harness.panel as any).imageGalleryStore.loadResults()).resolves.toEqual([
+      expect.objectContaining({
+        id: "img-1",
+        originSurface: "image-chat",
+        originThreadId: "image-chat:default",
+      }),
+      expect.objectContaining({
+        id: "img-2",
+        originSurface: "image-chat",
+        originThreadId: "image-chat:default",
+      }),
+    ]);
 
     await harness.panel.handleMessage({ type: "image:variant", id: "img-1" });
     expect(vi.mocked(createImageVariant)).toHaveBeenCalledTimes(1);
@@ -1868,6 +1893,14 @@ describe("ElectronChatPanel session lifecycle", () => {
         ],
       },
     ]);
+    await expect((harness.panel as any).imageThreadStore.getThread("image-chat:default")).resolves.toEqual(
+      expect.objectContaining({
+        threadId: "image-chat:default",
+        activeResultId: "img-variant-1",
+        activeBatchId: "batch-variant-1",
+        resultIds: ["img-variant-1", "img-1", "img-2"],
+      }),
+    );
   });
 
   it("records prompt history only for explicit generate or edit submissions", async () => {
@@ -1945,6 +1978,119 @@ describe("ElectronChatPanel session lifecycle", () => {
     await harness.panel.handleMessage({ type: "image:variant", id: "img-1" });
     expect(harness.settings.getImagePromptHistory().map(entry => entry.prompt)).toEqual([
       "draw a cat",
+    ]);
+  });
+
+  it("loads image thread state by threadId without falling back to the latest gallery result", async () => {
+    const harness = await createHarness();
+    tempDirs.push(harness.storagePath);
+
+    await (harness.panel as any).imageGalleryStore.saveResults([
+      {
+        id: "latest-global-result",
+        batchId: "batch-global",
+        src: "data:image/png;base64,global",
+        prompt: "global latest",
+        createdAt: 300,
+        source: "generate",
+        originThreadId: "thread-b",
+      },
+      {
+        id: "thread-a-result",
+        batchId: "batch-a",
+        src: "data:image/png;base64,a",
+        prompt: "thread a prompt",
+        createdAt: 100,
+        source: "generate",
+        originThreadId: "thread-a",
+      },
+    ]);
+    await (harness.panel as any).imageThreadStore.saveThreads([
+      {
+        threadId: "thread-a",
+        title: "Thread A",
+        ownerSurface: "image-chat",
+        createdAt: 100,
+        updatedAt: 120,
+        activeResultId: "thread-a-result",
+        activeBatchId: "batch-a",
+        promptDraft: "draft a",
+        referenceImages: [
+          {
+            dataUrl: "data:image/png;base64,refa",
+            mimeType: "image/png",
+            name: "ref-a.png",
+          },
+        ],
+        settings: {
+          size: "1536x1024",
+          batchCount: 2,
+        },
+        messages: [
+          {
+            role: "user",
+            content: "thread a prompt",
+            createdAt: 101,
+          },
+        ],
+        resultIds: ["thread-a-result"],
+      },
+      {
+        threadId: "thread-b",
+        title: "Thread B",
+        ownerSurface: "image-chat",
+        createdAt: 200,
+        updatedAt: 320,
+        activeResultId: "latest-global-result",
+        activeBatchId: "batch-global",
+        referenceImages: [],
+        settings: {
+          size: "1024x1024",
+          batchCount: 1,
+        },
+        messages: [],
+        resultIds: ["latest-global-result"],
+      },
+    ]);
+
+    await harness.panel.handleMessage({
+      type: "image:loadThread",
+      threadId: "thread-a",
+    });
+
+    const payload = getLastRendererPayloadOfType<{
+      type: "image:threadState";
+      thread: {
+        threadId: string;
+        activeResultId?: string;
+        activeBatchId?: string;
+        promptDraft?: string;
+        settings: { size: string; batchCount: number };
+        referenceImages: Array<{ name: string }>;
+      };
+      resultBatches: Array<{ id: string; items: Array<{ id: string }> }>;
+    }>(harness.rendererPayloads, "image:threadState");
+
+    expect(payload?.thread).toMatchObject({
+      threadId: "thread-a",
+      activeResultId: "thread-a-result",
+      activeBatchId: "batch-a",
+      promptDraft: "draft a",
+      settings: {
+        size: "1536x1024",
+        batchCount: 2,
+      },
+      referenceImages: [
+        { name: "ref-a.png" },
+      ],
+    });
+    expect(payload?.resultBatches).toEqual([
+      expect.objectContaining({
+        id: "batch-a",
+        items: [
+          expect.objectContaining({ id: "thread-a-result" }),
+        ],
+      }),
     ]);
   });
 
@@ -2354,6 +2500,25 @@ describe("ElectronChatPanel session lifecycle", () => {
         },
       ],
     });
+    const threads = await (harness.panel as any).imageThreadStore.loadThreads();
+    expect(threads).toEqual([
+      expect.objectContaining({
+        threadId: expect.stringMatching(/^main-chat:/),
+        ownerSurface: "main-chat",
+        originSessionId: expect.any(String),
+        activeResultId: "img-chat-1",
+        activeBatchId: "batch-chat-1",
+        resultIds: ["img-chat-1"],
+      }),
+    ]);
+    await expect((harness.panel as any).imageGalleryStore.loadResults()).resolves.toEqual([
+      expect.objectContaining({
+        id: "img-chat-1",
+        originSurface: "main-chat",
+        originSessionId: threads[0].originSessionId,
+        originThreadId: threads[0].threadId,
+      }),
+    ]);
   });
 
   it("blocks chat image generation from design-owned sessions", async () => {
@@ -2378,10 +2543,159 @@ describe("ElectronChatPanel session lifecycle", () => {
 
     expect(vi.mocked(runImageLabRequest)).not.toHaveBeenCalled();
     await expect(harness.sessions.loadMessages(designSession.id)).resolves.toEqual([]);
+    await expect((harness.panel as any).imageThreadStore.loadThreads()).resolves.toEqual([]);
     expect(getLastRendererPayloadOfType<{
       type: "design:error";
       message: string;
     }>(harness.rendererPayloads, "design:error")?.message).toContain("已阻止写入主对话");
+  });
+
+  it("runs design-owned image generation through image threads without writing design chat history", async () => {
+    const harness = await createHarness();
+    tempDirs.push(harness.storagePath);
+
+    await harness.settings.setOnboardingDone(true);
+    await harness.settings.saveImageConfig({
+      id: "image-model-1",
+      baseUrl: "https://example.com/v1",
+      model: "gpt-image-2",
+      authMode: "raw",
+      size: "1024x1024",
+      batchCount: 1,
+      responseFormat: "url",
+    });
+    await harness.settings.storeImageModelApiKey("image-model-1", "image-secret");
+    const designSession = await harness.sessions.createSession("design-image-session", "electron", "璁捐瀵硅瘽");
+    await harness.sessions.saveRuntimeState(designSession.id, {
+      workspaceRoot: "",
+      sessionType: "design",
+      sessionOwner: "design",
+      designFlowState: {
+        flowId: "flow-1",
+        projectId: "project-design-1",
+        outputType: "prototype",
+      },
+    });
+    await harness.settings.setActiveSessionId(designSession.id);
+    vi.mocked(runImageLabRequest).mockResolvedValue([
+      {
+        id: "img-design-1",
+        batchId: "batch-design-1",
+        src: "https://example.com/generated-design-1.png",
+        prompt: "draw a hero image for this design",
+        createdAt: Date.now(),
+        source: "generate",
+      },
+    ] as never);
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({
+      ok: true,
+      arrayBuffer: async () => Uint8Array.from([5, 6, 7, 8]).buffer,
+      headers: {
+        get: (name: string) => name.toLowerCase() === "content-type" ? "image/png" : null,
+      },
+    }));
+
+    await harness.panel.handleMessage({ type: "ready" });
+    await harness.panel.handleMessage({
+      type: "design:imageRun",
+      projectId: "project-design-1",
+      prompt: "draw a hero image for this design",
+      size: "1024x1024",
+      batchCount: 1,
+      referenceImages: [],
+    });
+
+    expect(vi.mocked(runImageLabRequest)).toHaveBeenCalledTimes(1);
+    await expect(harness.sessions.loadMessages(designSession.id)).resolves.toEqual([]);
+    await expect((harness.panel as any).imageThreadStore.loadThreads()).resolves.toEqual([
+      expect.objectContaining({
+        threadId: "design-chat:project-design-1",
+        ownerSurface: "design-chat",
+        projectId: "project-design-1",
+        activeResultId: "img-design-1",
+        activeBatchId: "batch-design-1",
+        resultIds: ["img-design-1"],
+      }),
+    ]);
+    await expect((harness.panel as any).imageGalleryStore.loadResults()).resolves.toEqual([
+      expect.objectContaining({
+        id: "img-design-1",
+        src: "data:image/png;base64,BQYHCA==",
+        originSurface: "design-chat",
+        originProjectId: "project-design-1",
+        originThreadId: "design-chat:project-design-1",
+      }),
+    ]);
+    expect(getLastRendererPayloadOfType<{
+      type: "image:threadState";
+      thread: { threadId: string; ownerSurface: string; projectId?: string };
+    }>(harness.rendererPayloads, "image:threadState")?.thread).toMatchObject({
+      threadId: "design-chat:project-design-1",
+      ownerSurface: "design-chat",
+      projectId: "project-design-1",
+    });
+    expect(getLastRendererPayloadOfType<{
+      type: "image:threads";
+      threads: Array<{ threadId: string }>;
+    }>(harness.rendererPayloads, "image:threads")?.threads).toEqual([
+      expect.objectContaining({ threadId: "design-chat:project-design-1" }),
+    ]);
+  });
+
+  it("blocks design image generation when a thread belongs to another project", async () => {
+    const harness = await createHarness();
+    tempDirs.push(harness.storagePath);
+
+    await harness.settings.setOnboardingDone(true);
+    await harness.settings.saveImageConfig({
+      id: "image-model-1",
+      baseUrl: "https://example.com/v1",
+      model: "gpt-image-2",
+      authMode: "raw",
+      size: "1024x1024",
+      batchCount: 1,
+      responseFormat: "url",
+    });
+    await harness.settings.storeImageModelApiKey("image-model-1", "image-secret");
+    await (harness.panel as any).imageThreadStore.saveThreads([
+      {
+        threadId: "design-chat:project-a",
+        title: "Project A image thread",
+        ownerSurface: "design-chat",
+        projectId: "project-a",
+        createdAt: 100,
+        updatedAt: 100,
+        referenceImages: [],
+        settings: {
+          size: "1024x1024",
+          batchCount: 1,
+        },
+        messages: [],
+        resultIds: [],
+      },
+    ]);
+
+    await harness.panel.handleMessage({
+      type: "design:imageRun",
+      projectId: "project-b",
+      threadId: "design-chat:project-a",
+      prompt: "draw a product hero",
+      size: "1024x1024",
+      batchCount: 1,
+      referenceImages: [],
+    });
+
+    expect(vi.mocked(runImageLabRequest)).not.toHaveBeenCalled();
+    await expect((harness.panel as any).imageThreadStore.getThread("design-chat:project-a")).resolves.toEqual(
+      expect.objectContaining({
+        projectId: "project-a",
+        resultIds: [],
+      }),
+    );
+    expect(getLastRendererPayloadOfType<{
+      type: "design:error";
+      message: string;
+    }>(harness.rendererPayloads, "design:error")?.message).toContain("active project");
   });
 
   it("auto-routes strong generate prompts to image generation without requiring the image button", async () => {
@@ -6075,6 +6389,7 @@ Freeze skill body.
       expect.objectContaining({
         id: "img-1",
         lastUsedByProjectId: project.projectId,
+        usedByProjectIds: [project.projectId],
       }),
     ]);
   });

@@ -100,4 +100,43 @@ describe("ImageLabGalleryStore", () => {
       }),
     ]);
   });
+
+  it("normalizes optional provenance fields without breaking older records", async () => {
+    const storagePath = await mkdtemp(path.join(os.tmpdir(), "image-lab-gallery-"));
+    tempDirs.push(storagePath);
+
+    const store = new ImageLabGalleryStore(storagePath);
+    await store.saveResults([
+      createResult({
+        id: "result-1",
+        batchId: "batch-1",
+        originSurface: "design-chat",
+        originSessionId: " session-1 ",
+        originThreadId: " thread-1 ",
+        originProjectId: " project-1 ",
+        usedByProjectIds: [" project-1 ", "project-1", "", "project-2"],
+      }),
+      createResult({
+        id: "result-2",
+        batchId: "batch-2",
+      }),
+    ]);
+
+    const reloadedStore = new ImageLabGalleryStore(storagePath);
+    await expect(reloadedStore.loadResults()).resolves.toEqual([
+      createResult({
+        id: "result-1",
+        batchId: "batch-1",
+        originSurface: "design-chat",
+        originSessionId: "session-1",
+        originThreadId: "thread-1",
+        originProjectId: "project-1",
+        usedByProjectIds: ["project-1", "project-2"],
+      }),
+      createResult({
+        id: "result-2",
+        batchId: "batch-2",
+      }),
+    ]);
+  });
 });
