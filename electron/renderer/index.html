@@ -3845,6 +3845,30 @@ function handleMessage(msg) {
         renderImageChatThreadPanel();
       }
       break;
+    case 'image:srcReady': {
+      const _srcId = String(msg.id || '');
+      const _src = String(msg.src || '');
+      if (_srcId && _src) {
+        // Cache full src for future use
+        imageThumbCache.set(_srcId, _src);
+        const _action = pendingImageSrcActions.get(_srcId);
+        pendingImageSrcActions.delete(_srcId);
+        if (_action === 'lightbox') {
+          var _lbImg = document.getElementById('img-lightbox-img');
+          if (_lbImg) _lbImg.src = _src;
+          document.getElementById('img-lightbox-overlay')?.classList.add('show');
+        } else if (_action === 'download') {
+          var _a = document.createElement('a');
+          _a.href = _src;
+          _a.download = 'kainclaw-image-' + _srcId + '.png';
+          _a.click();
+        } else if (_action === 'insert') {
+          var _projectId = midtaiState.currentDesignProjectId;
+          if (_projectId) insertImageChatResultToDesign(_srcId, _src);
+        }
+      }
+      break;
+    }
     case 'image:chatResponse':
       if (imageChatThreadState.pendingRun) {
         var _chatPendingId = imageChatThreadState.pendingRun.pendingAssistantId;
@@ -6301,6 +6325,28 @@ function renderMidtaiLibraryDesignPanel() {
   scheduleDesignThumbnailLoads(items.filter(item => item?.id && !thumbnailCache.has(item.id) && !missingThumbnailCache.has(item.id) && !item?.isDraft), { maxInitial: 6 });
 }
 
+// Pending on-demand src requests: id → 'lightbox' | 'download' | 'insert'
+const pendingImageSrcActions = new Map();
+
+function requestImageSrc(id, action) {
+  pendingImageSrcActions.set(id, action);
+  send({ type: 'image:getSrc', id });
+}
+
+function openImageById(id) {
+  const cached = thumbnailCache.get(id) || imageThumbCache.get(id);
+  // thumbnailCache has small thumbs; we need full src for lightbox — always fetch
+  requestImageSrc(id, 'lightbox');
+}
+
+function downloadImageById(id) {
+  requestImageSrc(id, 'download');
+}
+
+function useImageInDesignById(id) {
+  requestImageSrc(id, 'insert');
+}
+
 function renderMidtaiLibraryImagePanel() {
   const panel = document.getElementById('midtai-library-panel-image');
   if (!panel) return;
@@ -6323,9 +6369,11 @@ function renderMidtaiLibraryImagePanel() {
   }
 
   items.forEach(result => {
-    if (!result?.id || !result?.src) return;
-    if (!imageDecodeCache.has(result.id)) {
-      imageThumbCache.set(result.id, result.src);
+    if (!result?.id) return;
+    // Use thumbnail for lazy display; full src may be absent in lite state
+    const displaySrc = result.thumbnail || result.src || '';
+    if (displaySrc && !imageDecodeCache.has(result.id)) {
+      imageThumbCache.set(result.id, displaySrc);
     }
   });
 
@@ -6334,7 +6382,7 @@ function renderMidtaiLibraryImagePanel() {
       ${items.map(result => {
         return `
         <div class="midtai-img-card" data-imgid="${result.id}">
-          <div class="midtai-img-thumb-wrap midtai-image-card-preview" style="cursor:pointer" onclick="openImageLightbox(event, '${result.src}')">
+          <div class="midtai-img-thumb-wrap midtai-image-card-preview" style="cursor:pointer" onclick="openImageById('${result.id}')">
             <div class="thumb-shimmer"></div>
             <div class="midtai-image-card-actions">
               <button
@@ -6348,9 +6396,9 @@ function renderMidtaiLibraryImagePanel() {
           <div class="midtai-img-card-body">
             <div class="midtai-img-card-copy">${escapeHtml(String(result.revisedPrompt || result.prompt || '')).slice(0, 96)}</div>
             <div class="midtai-img-actions">
-              <a class="btn-secondary" href="${result.src}" download="kainclaw-image-${result.id}.png" style="text-decoration:none;text-align:center">下载</a>
+              <button class="btn-secondary" type="button" style="text-align:center" onclick="downloadImageById('${result.id}')">下载</button>
               ${midtaiState.currentDesignProjectId
-                ? `<button class="btn-secondary" style="justify-content:center" onclick="insertImageChatResultToDesign(decodeURIComponent('${encodedImageId}'), decodeURIComponent('${encodedImageSrc}'))">用于当前设计</button>`
+                ? `<button class="btn-secondary" style="justify-content:center" onclick="useImageInDesignById('${result.id}')">用于当前设计</button>`
                 : `<button class="btn-secondary" style="justify-content:center;opacity:.5;cursor:not-allowed" disabled title="先进入一个设计作品">用于当前设计</button>`}
             </div>
           </div>

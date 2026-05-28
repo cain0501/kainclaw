@@ -1255,6 +1255,13 @@ export class ElectronChatPanel {
       await this.handleImageChatRoute(message);
       return;
     }
+    if (type === "image:getSrc") {
+      const id = typeof message.id === "string" ? message.id.trim() : "";
+      await this.ensureImageResultsHydrated();
+      const result = this.imageResults.find(r => r.id === id);
+      this.sendToRenderer({ type: "image:srcReady", id, src: result?.src ?? "" });
+      return;
+    }
     if (type === "image:loadThread") {
       await this.loadImageThreadState(String(message.threadId ?? ""));
       return;
@@ -2390,6 +2397,13 @@ export class ElectronChatPanel {
     return buildImageLabResultBatches(this.imageResults);
   }
 
+  /** Strip full src from every item — keeps thumbnail only. Used for bulk IPC to avoid >50MB payloads. */
+  private getImageResultBatchesLite(): ImageLabResultBatch[] {
+    return buildImageLabResultBatches(
+      this.imageResults.map(({ src, ...rest }) => ({ ...rest, src: "" })),
+    );
+  }
+
   private getImageThreadResultBatches(thread: ImageThreadRecord): ImageLabResultBatch[] {
     const resultIds = new Set(thread.resultIds);
     if (resultIds.size === 0) {
@@ -3334,7 +3348,7 @@ export class ElectronChatPanel {
         isConfigured,
       },
       promptHistory: this.settings.getImagePromptHistory(),
-      resultBatches: this.getImageResultBatches(),
+      resultBatches: this.getImageResultBatchesLite(),
       workflowPlan: this.imageWorkflowPlan,
       promptLibrary: await this.promptLibraryRepository.loadState(),
     });
