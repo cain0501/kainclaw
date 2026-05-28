@@ -2237,6 +2237,7 @@ let imageChatThreadState = {
   activeResultId: null,
   activeBatchId: null,
   activeStageImageId: null,
+  threadsLoaded: false,
 };
 let designResumeLookupAttempted = false;
 let designEntryAwaitingProjectCreation = false;
@@ -4514,6 +4515,11 @@ function switchMidtaiType(type) {
     if (!imageState.hasLoadedOnce) {
       send({ type: 'image:loadState' }); // 预加载，确保点我的作品时数据已就绪
     }
+    // Load thread list on first entry so image chat panel shows history immediately
+    if (!imageChatThreadState.threadsLoaded) {
+      imageChatThreadState.threadsLoaded = true;
+      refreshImageChatThreads();
+    }
   }
   renderMidtaiRecentWorks();
   updateStateChip();
@@ -5867,7 +5873,10 @@ function renderMidtaiImageWorks() {
     }
     return;
   }
-  results.forEach(r => imageThumbCache.set(r.id, r.src));
+  results.forEach(r => {
+    const displaySrc = r.src || r.thumbnail || '';
+    if (displaySrc) imageThumbCache.set(r.id, displaySrc);
+  });
 
   container.innerHTML = `
     <div class="midtai-works-shell">
