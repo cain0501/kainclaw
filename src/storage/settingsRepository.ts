@@ -89,6 +89,7 @@ export type ImageModelMeta = {
   model?: string;
   authMode?: ImageAuthMode;
   responseFormat?: "url" | "b64_json";
+  provider?: "openai" | "gemini";
 };
 
 export type ImagePromptHistoryEntry = {
@@ -191,6 +192,7 @@ export class SettingsRepository {
       ...(meta.model?.trim() ? { model: meta.model.trim() } : {}),
       ...(meta.authMode ? { authMode: meta.authMode } : {}),
       ...(meta.responseFormat ? { responseFormat: meta.responseFormat } : {}),
+      ...(meta.provider === "gemini" ? { provider: "gemini" as const } : {}),
     };
   }
 

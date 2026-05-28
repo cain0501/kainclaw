@@ -1,11 +1,17 @@
 import { randomUUID } from "node:crypto";
 
 import {
-  editImages,
-  generateImages,
+  editImages as openAIEditImages,
+  generateImages as openAIGenerateImages,
   type GeneratedImageBatchResult,
   type ImageAuthMode,
 } from "./openAIImageClient";
+import {
+  editImages as geminiEditImages,
+  generateImages as geminiGenerateImages,
+} from "./geminiImageClient";
+
+export type ImageLabProvider = "openai" | "gemini";
 
 export type ImageLabConfig = {
   apiKey: string;
@@ -15,6 +21,7 @@ export type ImageLabConfig = {
   size: string;
   batchCount: number;
   responseFormat?: "url" | "b64_json";
+  provider?: ImageLabProvider;
 };
 
 export type ImageLabReferenceImage = {
@@ -86,9 +93,13 @@ export async function runImageLabRequest(
     authMode: request.config.authMode,
   } as const;
 
+  const isGemini = request.config.provider === "gemini";
+  const doEdit = isGemini ? geminiEditImages : openAIEditImages;
+  const doGenerate = isGemini ? geminiGenerateImages : openAIGenerateImages;
+
   const referenceImages = request.referenceImages ?? [];
   const batchResult: GeneratedImageBatchResult = referenceImages.length > 0
-    ? await editImages({
+    ? await doEdit({
         config,
         prompt: executionPrompt,
         images: referenceImages.map(parseDataUrlAttachment),
@@ -97,7 +108,7 @@ export async function runImageLabRequest(
         responseFormat: request.config.responseFormat,
         signal: request.signal,
       })
-    : await generateImages({
+    : await doGenerate({
         config,
         prompt: executionPrompt,
         size: request.config.size,

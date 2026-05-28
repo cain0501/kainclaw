@@ -13856,14 +13856,21 @@ function renderSettings(data) {
         <div id="image-model-form-title" style="font-size:14px;font-weight:700;margin-bottom:14px;color:#7b4a2e">${editingImageModelId ? '编辑图像模型' : '添加图像模型'}</div>
         <div style="display:flex;flex-direction:column;gap:10px;max-width:560px">
           <div>
+            <div style="font-size:12px;color:#71717a;margin-bottom:5px">接口格式</div>
+            <select id="settings-image-provider" onchange="onImageProviderChange(this.value)" style="width:100%;border:1px solid #eadfd2;border-radius:10px;padding:9px 12px;font-size:12px;background:#fff;color:#18181b">
+              <option value="openai"${(imageFormSource?.provider || 'openai') === 'openai' ? ' selected' : ''}>OpenAI 兼容（GPT-Image-2、中转站等）</option>
+              <option value="gemini"${imageFormSource?.provider === 'gemini' ? ' selected' : ''}>Google Gemini（Nano Banana 2 官方接口）</option>
+            </select>
+          </div>
+          <div id="settings-image-baseurl-wrap">
             <div style="font-size:12px;color:#71717a;margin-bottom:5px">接口地址</div>
-            <input id="settings-image-baseurl" value="${escapeHtml(imageFormSource?.baseUrl || '')}" placeholder="第三方中转站地址，例如 https://proxy.example.com/v1" style="width:100%;border:1px solid #eadfd2;border-radius:10px;padding:9px 12px;font-size:12px;background:#fff;color:#18181b">
+            <input id="settings-image-baseurl" value="${escapeHtml(imageFormSource?.baseUrl || '')}" placeholder="${imageFormSource?.provider === 'gemini' ? '留空使用 Google 官方地址' : '第三方中转站地址，例如 https://proxy.example.com/v1'}" style="width:100%;border:1px solid #eadfd2;border-radius:10px;padding:9px 12px;font-size:12px;background:#fff;color:#18181b">
           </div>
           <div>
             <div style="font-size:12px;color:#71717a;margin-bottom:5px">图像模型</div>
-            <input id="settings-image-model" value="${escapeHtml(imageFormSource?.model || '')}" placeholder="gpt-image-2 或 Gemini 图像模型" style="width:100%;border:1px solid #eadfd2;border-radius:10px;padding:9px 12px;font-size:12px;background:#fff;color:#18181b">
+            <input id="settings-image-model" value="${escapeHtml(imageFormSource?.model || '')}" placeholder="${imageFormSource?.provider === 'gemini' ? 'gemini-3.1-flash-image-preview' : 'gpt-image-2'}" style="width:100%;border:1px solid #eadfd2;border-radius:10px;padding:9px 12px;font-size:12px;background:#fff;color:#18181b">
           </div>
-          <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+          <div id="settings-image-openai-opts" style="display:grid;grid-template-columns:1fr 1fr;gap:10px;${imageFormSource?.provider === 'gemini' ? 'display:none' : ''}">
             <div>
               <div style="font-size:12px;color:#71717a;margin-bottom:5px">鉴权方式</div>
               <select id="settings-image-authmode" style="width:100%;border:1px solid #eadfd2;border-radius:10px;padding:9px 12px;font-size:12px;background:#fff;color:#18181b">
@@ -14072,14 +14079,26 @@ function localizeSettingsSurface(currentLanguage, settingsStrings, state) {
   }
 }
 
+function onImageProviderChange(provider) {
+  const isGemini = provider === 'gemini';
+  const opts = document.getElementById('settings-image-openai-opts');
+  if (opts) opts.style.display = isGemini ? 'none' : 'grid';
+  const baseUrlInput = document.getElementById('settings-image-baseurl');
+  const modelInput = document.getElementById('settings-image-model');
+  if (baseUrlInput) baseUrlInput.placeholder = isGemini ? '留空使用 Google 官方地址' : '第三方中转站地址，例如 https://proxy.example.com/v1';
+  if (modelInput) modelInput.placeholder = isGemini ? 'gemini-3.1-flash-image-preview' : 'gpt-image-2';
+}
+
 function saveSettingsImageConfig() {
+  const provider = (document.getElementById('settings-image-provider') || {}).value || 'openai';
   send({
     type: 'image:saveConfig',
     ...(editingImageModelId ? { id: editingImageModelId } : {}),
+    provider,
     baseUrl: document.getElementById('settings-image-baseurl').value.trim(),
     model: document.getElementById('settings-image-model').value.trim(),
-    authMode: document.getElementById('settings-image-authmode').value,
-    responseFormat: document.getElementById('settings-image-responseformat').value,
+    authMode: document.getElementById('settings-image-authmode')?.value || 'bearer',
+    responseFormat: document.getElementById('settings-image-responseformat')?.value || 'url',
     apiKey: document.getElementById('settings-image-apikey').value.trim(),
   });
   document.getElementById('settings-image-apikey').value = '';

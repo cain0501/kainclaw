@@ -2208,6 +2208,9 @@ export class ElectronChatPanel {
       ...(message.responseFormat ? {
         responseFormat: message.responseFormat as "url" | "b64_json",
       } : {}),
+      ...(message.provider === "gemini" || message.provider === "openai"
+        ? { provider: message.provider as "gemini" | "openai" }
+        : {}),
     });
 
     const apiKey = typeof message.apiKey === "string" ? message.apiKey.trim() : "";
@@ -2576,9 +2579,15 @@ export class ElectronChatPanel {
         "The active image model does not have an API key yet. Open Settings and save one first.",
       );
     }
-    if (!activeImageModel.baseUrl?.trim() || !activeImageModel.model?.trim()) {
+    const isGemini = activeImageModel.provider === "gemini";
+    if (!activeImageModel.model?.trim()) {
       throw new Error(
-        "The active image model is incomplete. Open Settings and finish the base URL and model fields.",
+        "The active image model is incomplete. Open Settings and fill in the model name.",
+      );
+    }
+    if (!isGemini && !activeImageModel.baseUrl?.trim()) {
+      throw new Error(
+        "The active image model is incomplete. Open Settings and fill in the base URL.",
       );
     }
 
@@ -2597,12 +2606,13 @@ export class ElectronChatPanel {
 
     return {
       apiKey,
-      baseUrl: activeImageModel.baseUrl.trim(),
+      baseUrl: activeImageModel.baseUrl?.trim() ?? "",
       model: activeImageModel.model.trim(),
       authMode: activeImageModel.authMode ?? "bearer",
       size,
       batchCount,
       ...(responseFormat ? { responseFormat } : {}),
+      ...(activeImageModel.provider === "gemini" ? { provider: "gemini" as const } : {}),
     };
   }
 
