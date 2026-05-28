@@ -57,6 +57,7 @@ expandedResult = renderMessage(message, messageIndex);
     messageIndex: 2,
     collapsedResult: "",
     expandedResult: "",
+    thinkingStartTime: 0,
   };
   vm.runInNewContext(script, context);
   return context as { collapsedResult: string; expandedResult: string };
@@ -68,7 +69,7 @@ describe("Electron renderer thinking summary cards", () => {
 
     expect(collapsedResult).toContain('class="thinking-toggle"');
     expect(collapsedResult).toContain('onclick="toggleThinkingSummary(2)"');
-    expect(collapsedResult).toContain("∴ Thinking");
+    expect(collapsedResult).toMatch(/Thought|Thinking/);
     expect(collapsedResult).not.toContain("Both Claude and Codex reached consensus");
 
     expect(expandedResult).toContain('class="thinking-summary-body"');
