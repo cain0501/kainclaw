@@ -3901,15 +3901,19 @@ function handleMessage(msg) {
       if (imageChatThreadState.pendingRun) {
         var _chatPendingId = imageChatThreadState.pendingRun.pendingAssistantId;
         var _chatRunId = imageChatThreadState.pendingRun.runId;
-        imageChatThreadState.optimisticMessages = (imageChatThreadState.optimisticMessages || []).filter(function(m) {
-          return !(m.localOnly && m.id === _chatPendingId);
-        });
+        // Remove pending assistant bubble, promote the user's message to permanent
+        // (localOnly:false survives beginImageChatPendingRun's filter)
+        imageChatThreadState.optimisticMessages = (imageChatThreadState.optimisticMessages || []).map(function(m) {
+          if (m.localOnly && m.id === _chatPendingId) return null; // drop pending assistant
+          if (m.localOnly && m.runId === _chatRunId && m.role === 'user') return Object.assign({}, m, { localOnly: false });
+          return m;
+        }).filter(Boolean);
         imageChatThreadState.optimisticMessages.push({
           id: createImageChatLocalMessageId('assistant-chat'),
           role: 'assistant',
           content: String(msg.response || ''),
           createdAt: Date.now(),
-          localOnly: true,
+          localOnly: false, // permanent — survives next beginImageChatPendingRun
           runId: _chatRunId,
           status: 'done',
         });
