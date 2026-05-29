@@ -693,7 +693,9 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-seri
 .ichat-input-row{display:flex;gap:7px;align-items:flex-end}
 .ichat-input{flex:1;min-height:38px;max-height:120px;resize:none;border:1.5px solid #e5ddd0;border-radius:10px;padding:8px 10px;font-size:13px;font-family:inherit;color:#1c1917;background:#fff;outline:none;line-height:1.5;box-sizing:border-box}
 .ichat-input:focus{border-color:#c94c2e;background:#fffdfb}
-.ichat-send-btn{height:38px;padding:0 16px;font-size:13px;font-weight:700;border-radius:10px;white-space:nowrap;flex-shrink:0;align-self:flex-end}
+.ichat-send-btn{height:38px;padding:0 16px;font-size:13px;font-weight:700;border-radius:10px;white-space:nowrap;flex-shrink:0;align-self:flex-end;transition:background .15s,color .15s,border-color .15s}
+.ichat-send-btn.stop-mode{background:#1a1a1a;color:#fff;border-color:#1a1a1a;display:flex;align-items:center;justify-content:center;gap:6px}
+.ichat-stop-icon{width:12px;height:12px;background:currentColor;border-radius:2px;flex-shrink:0}
 .ichat-tools-row{display:flex;align-items:center;gap:3px;margin-top:6px;flex-wrap:wrap}
 .ichat-tool-chip{padding:3px 8px;border:1px solid #e5ddd0;border-radius:6px;background:#fdfaf7;font-size:11px;color:#57534e;cursor:pointer;white-space:nowrap;font-family:inherit}
 .ichat-tool-chip:hover,.ichat-tool-chip.active{background:#fef2f0;border-color:#c9502e;color:#c9502e}
@@ -1392,7 +1394,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-seri
             </div>
             <div class="ichat-input-row">
               <textarea id="ichat-input" class="ichat-input" placeholder="描述你想要的图片，可以带参考图、比例说明…" rows="2" onkeydown="handleIchatKey(event)"></textarea>
-              <button class="ichat-send-btn btn-red" type="button" onclick="submitIchat()">发送</button>
+              <button id="ichat-action-btn" class="ichat-send-btn btn-red" type="button" onclick="handleIchatActionBtn()">发送</button>
             </div>
             <div id="ichat-cfg-panel" class="ichat-cfg-panel"></div>
             <div class="ichat-tools-row">
@@ -1402,7 +1404,6 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-seri
                 <span id="ichat-cfg-label">自动 · 1:1 · 1 img</span>
                 <span style="font-size:9px;opacity:.6">▾</span>
               </button>
-              <span class="ichat-tools-note">不写入主 Chat</span>
             </div>
           </div>
         </div>
@@ -3893,6 +3894,11 @@ function handleMessage(msg) {
         } else if (_action === 'insert') {
           var _projectId = midtaiState.currentDesignProjectId;
           if (_projectId) insertImageChatResultToDesign(_srcId, _src);
+        } else if (_action === 'edit') {
+          var _editResult = (imageState.resultBatches || [])
+            .flatMap(function(batch) { return batch.items || []; })
+            .find(function(item) { return item.id === _srcId; });
+          if (_editResult) openMidtaiImageEdit(_srcId, _src, _editResult);
         }
       }
       break;
@@ -5567,6 +5573,7 @@ function renderImageChatThreadMessages() {
 
 function renderImageChatThreadPanel() {
   renderIchatV2();
+  updateIchatActionBtn();
   const panel = document.getElementById('image-chat-thread-panel');
   if (!panel) return;
   const threads = imageChatThreadState.threads || [];
@@ -5984,7 +5991,7 @@ function renderMidtaiImageWorks() {
 }
 
 function beginMidtaiImageEdit(id) {
-  openMidtaiImageEdit(id);
+  requestImageSrc(id, 'edit');
 }
 
 function makeMidtaiImageVariant(id) {
@@ -5993,13 +6000,15 @@ function makeMidtaiImageVariant(id) {
   makeImageVariant(id);
 }
 
-function openMidtaiImageEdit(id) {
-  const result = (imageState.resultBatches || []).flatMap(b => b.items || []).find(i => i.id === id);
+function openMidtaiImageEdit(id, srcOverride, resultOverride) {
+  const result = resultOverride || (imageState.resultBatches || []).flatMap(b => b.items || []).find(i => i.id === id);
   if (!result) return;
-  midtaiImageEditState = { id, src: result.src, originalPrompt: result.revisedPrompt || result.prompt || '' };
+  const fullSrc = String(srcOverride || result.src || '').trim();
+  if (!fullSrc) return;
+  midtaiImageEditState = { id, src: fullSrc, originalPrompt: result.revisedPrompt || result.prompt || '' };
   const previewEl = document.getElementById('midtai-img-edit-preview');
   const promptEl = document.getElementById('midtai-img-edit-prompt');
-  if (previewEl) previewEl.src = result.src;
+  if (previewEl) previewEl.src = fullSrc;
   if (promptEl) promptEl.value = String(result.revisedPrompt || result.prompt || '').trim();
   document.getElementById('midtai-img-edit-overlay')?.classList.add('show');
   requestAnimationFrame(() => promptEl?.focus());
@@ -11290,6 +11299,7 @@ function createPendingImageLabBatch(source, count) {
 
 function applyImageState(state) {
   imageState.busy = !!state.busy;
+  updateIchatActionBtn();
   imageState.promptInferenceBusy = !!state.promptInferenceBusy;
   imageState.workflowBusy = !!state.workflowBusy;
   imageState.materialSearchBusy = !!state.materialSearchBusy;
@@ -15090,6 +15100,27 @@ function setIchatCount(count) {
   setMidtaiImageCount(count);
   renderIchatCfgPanel();
   updateIchatCfgLabel();
+}
+
+function updateIchatActionBtn() {
+  var btn = document.getElementById('ichat-action-btn');
+  if (!btn) return;
+  var isPending = !!(imageChatThreadState.pendingRun || imageState.busy);
+  if (isPending) {
+    btn.className = 'ichat-send-btn stop-mode';
+    btn.innerHTML = '<span class="ichat-stop-icon"></span>停止';
+  } else {
+    btn.className = 'ichat-send-btn btn-red';
+    btn.innerHTML = '发送';
+  }
+}
+
+function handleIchatActionBtn() {
+  if (imageChatThreadState.pendingRun || imageState.busy) {
+    send({ type: 'image:abort' });
+  } else {
+    submitIchat();
+  }
 }
 
 function handleIchatKey(event) {
