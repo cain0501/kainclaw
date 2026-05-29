@@ -22,6 +22,7 @@ export type ImageLabConfig = {
   batchCount: number;
   responseFormat?: "url" | "b64_json";
   provider?: ImageLabProvider;
+  quality?: "auto" | "high" | "medium" | "low";
 };
 
 export type ImageLabReferenceImage = {
@@ -106,6 +107,7 @@ export async function runImageLabRequest(
         size: request.config.size,
         count: request.config.batchCount,
         responseFormat: request.config.responseFormat,
+        quality: request.config.quality,
         signal: request.signal,
       })
     : await doGenerate({
@@ -114,6 +116,7 @@ export async function runImageLabRequest(
         size: request.config.size,
         count: request.config.batchCount,
         responseFormat: request.config.responseFormat,
+        quality: request.config.quality,
         signal: request.signal,
       });
 

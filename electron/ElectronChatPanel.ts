@@ -35,6 +35,7 @@ import {
 } from "../src/electronUiLanguage";
 import { normalizeWebviewAttachments } from "../src/attachmentHandler";
 import type {
+  NormalizedImageAttachment,
   NormalizedMessage,
   ProviderConfig as AdapterProviderConfig,
 } from "../src/agent/providers/IProviderAdapter";
@@ -487,7 +488,7 @@ export class ElectronChatPanel {
         return this.imageResults;
       },
       () => this.buildDesignProjectListItems(),
-      async project => this.designProjectStore.getThumbnail(project.projectId),
+      async projects => this.designProjectStore.getThumbnails(projects.map(project => project.projectId)),
     );
     this.taskRuntimeStore = new PersistentTaskRuntimeStore(this.host.getStorageUri());
     this.worktreeRuntimeStore = new PersistentWorktreeRuntimeStore(this.host.getStorageUri());
@@ -2603,6 +2604,10 @@ export class ElectronChatPanel {
       overrides.responseFormat === "url" || overrides.responseFormat === "b64_json"
         ? overrides.responseFormat
         : saved?.responseFormat;
+    const quality =
+      overrides.quality === "high" || overrides.quality === "medium" || overrides.quality === "low"
+        ? overrides.quality as "high" | "medium" | "low"
+        : undefined;
 
     return {
       apiKey,
@@ -2612,6 +2617,7 @@ export class ElectronChatPanel {
       size,
       batchCount,
       ...(responseFormat ? { responseFormat } : {}),
+      ...(quality ? { quality } : {}),
       ...(activeImageModel.provider === "gemini" ? { provider: "gemini" as const } : {}),
     };
   }
@@ -2620,9 +2626,11 @@ export class ElectronChatPanel {
     const prompt = String(message.prompt ?? "").trim();
     if (!prompt) return;
 
+    await this.ensureImageResultsHydrated();
     const hasAttachments =
-      Array.isArray(message.referenceImages) && message.referenceImages.length > 0;
+      this.normalizeImageReferenceImages(message.referenceImages).length > 0;
     const hasRecentImageContext = this.imageResults.length > 0;
+    const recentHistory = await this.buildImageChatRecentHistory(message);
 
     let intent: ChatPromptIntent = "image_generate";
     try {
@@ -2638,6 +2646,7 @@ export class ElectronChatPanel {
         prompt,
         hasAttachments,
         hasRecentGeneratedImageContext: hasRecentImageContext,
+        recentHistory,
         provider: routerAdapter,
       });
     } catch {
@@ -2650,29 +2659,37 @@ export class ElectronChatPanel {
 
     if (intent === "image_generate" || intent === "image_edit") {
       let jobMessage = message;
-      // For edit intent: if no explicit reference images, auto-inject the active stage image
       if (intent === "image_edit") {
-        const stageImageId = typeof message.stageImageId === "string" ? message.stageImageId.trim() : "";
-        const existingRefs = Array.isArray(message.referenceImages) ? message.referenceImages : [];
-        if (stageImageId && existingRefs.length === 0) {
-          await this.ensureImageResultsHydrated();
-          const stageResult = this.imageResults.find(r => r.id === stageImageId);
-          if (stageResult?.src) {
-            jobMessage = {
-              ...message,
-              referenceImages: [{ dataUrl: stageResult.src, mimeType: "image/png", name: "stage-image.png" }],
-            };
-          }
+        const referenceImages = await this.resolveImageChatEditReferenceImages(message);
+        if (referenceImages.length > 0) {
+          jobMessage = {
+            ...message,
+            referenceImages,
+          };
         }
       }
       await this.runImageJob(jobMessage);
       return;
     }
 
+    let response = this.buildImageChatTextResponse(intent);
+    try {
+      const llmResponse = await this.generateImageChatReply({
+        intent,
+        prompt,
+        message,
+      });
+      if (llmResponse) {
+        response = llmResponse;
+      }
+    } catch {
+      // Keep the existing fixed-copy fallback when the LLM path fails.
+    }
+
     this.sendToRenderer({
       type: "image:chatResponse",
       intent,
-      response: this.buildImageChatTextResponse(intent),
+      response,
     });
   }
 
@@ -2684,6 +2701,268 @@ export class ElectronChatPanel {
       return "要把设计图转成可交互 HTML 原型，请先生成或上传一张设计图，再告诉我原型需求。";
     }
     return "你好！我是 Image Chat，专注于图片生成 🎨\n\n请描述你想要的图片，例如：\n・一幅现代简约风格的科技插画\n・一只在阳光下奔跑的金毛猎犬\n・一张未来城市夜景海报";
+  }
+  
+  private async buildImageChatRecentHistory(
+    message: Record<string, unknown>,
+  ): Promise<Array<{ role: "user" | "assistant"; content: string }>> {
+    const inlineMessages = this.normalizeImageChatThreadMessages(message.threadMessages);
+    const history = inlineMessages.length > 0
+      ? inlineMessages
+      : await this.loadImageChatThreadMessages(message);
+    return history
+      .slice(-6)
+      .map(threadMessage => ({
+        role: threadMessage.role,
+        content: threadMessage.content.slice(0, 200),
+      }));
+  }
+
+  private async loadImageChatThreadMessages(
+    message: Record<string, unknown>,
+  ): Promise<Array<{ role: "user" | "assistant"; content: string; createdAt: number }>> {
+    const threadId = this.resolveImageThreadId(message, "image-chat");
+    const thread = await this.imageThreadStore.getThread(threadId);
+    return this.normalizeImageChatThreadMessages(thread?.messages);
+  }
+
+  private normalizeImageChatThreadMessages(
+    rawMessages: unknown,
+  ): Array<{ role: "user" | "assistant"; content: string; createdAt: number }> {
+    if (!Array.isArray(rawMessages)) {
+      return [];
+    }
+
+    return rawMessages
+      .map((rawMessage, index) => {
+        if (!rawMessage || typeof rawMessage !== "object") {
+          return undefined;
+        }
+        const candidate = rawMessage as {
+          role?: unknown;
+          content?: unknown;
+          createdAt?: unknown;
+        };
+        if (candidate.role !== "user" && candidate.role !== "assistant") {
+          return undefined;
+        }
+        const content = typeof candidate.content === "string" ? candidate.content.trim() : "";
+        if (!content) {
+          return undefined;
+        }
+        return {
+          role: candidate.role,
+          content,
+          createdAt:
+            typeof candidate.createdAt === "number" && Number.isFinite(candidate.createdAt)
+              ? candidate.createdAt
+              : index,
+        };
+      })
+      .filter(
+        (
+          messageCandidate,
+        ): messageCandidate is { role: "user" | "assistant"; content: string; createdAt: number } =>
+          !!messageCandidate,
+      )
+      .sort((left, right) => left.createdAt - right.createdAt);
+  }
+
+  private async generateImageChatReply(options: {
+    intent: Exclude<ChatPromptIntent, "image_generate" | "image_edit">;
+    prompt: string;
+    message: Record<string, unknown>;
+  }): Promise<string> {
+    const workspaceRoot = this.getSelectedWorkspaceRoot();
+    const { config, envMap } = await resolveProviderConfig(this.settings, workspaceRoot);
+    const provider = this.createProviderForSystemPrompt(
+      config,
+      workspaceRoot,
+      envMap,
+      [
+        "你是 Image Chat，一个专注图像生成的 AI 助手。",
+        "用简短中文回复用户问题，引导用户描述想要生成的图片。",
+        "如果用户在改提示词、讨论如何生成、或想把图像做成其他产物，先回答当前问题，再自然引导下一步。",
+      ].join("\n"),
+      { includeRuntimeIdentityNote: false },
+    );
+    const conversation = await this.buildImageChatConversationMessages(options.message, options.prompt);
+    let streamedText = "";
+    const step = await provider.runStep(
+      conversation,
+      [],
+      token => {
+        streamedText += token;
+      },
+    );
+    return (step.text || streamedText).trim();
+  }
+
+  private async buildImageChatConversationMessages(
+    message: Record<string, unknown>,
+    prompt: string,
+  ): Promise<NormalizedMessage[]> {
+    const attachments = this.buildImageChatPromptAttachments(message.referenceImages);
+    const inlineMessages = this.normalizeImageChatThreadMessages(message.threadMessages);
+    const history = inlineMessages.length > 0
+      ? inlineMessages
+      : await this.loadImageChatThreadMessages(message);
+    const normalizedHistory = history
+      .slice(-8)
+      .map(threadMessage => ({
+        role: threadMessage.role,
+        content: threadMessage.content,
+      })) as NormalizedMessage[];
+    const lastMessage = normalizedHistory.at(-1);
+    if (lastMessage?.role === "user" && lastMessage.content === prompt) {
+      if (attachments && lastMessage.role === "user") {
+        return [
+          ...normalizedHistory.slice(0, -1),
+          {
+            ...lastMessage,
+            attachments,
+          },
+        ];
+      }
+      return normalizedHistory;
+    }
+    return [
+      ...normalizedHistory,
+      {
+        role: "user",
+        content: prompt,
+        ...(attachments ? { attachments } : {}),
+      },
+    ];
+  }
+
+  private buildImageChatPromptAttachments(
+    rawReferenceImages: unknown,
+  ): NormalizedImageAttachment[] | undefined {
+    const referenceImages = this.normalizeImageReferenceImages(rawReferenceImages);
+    if (referenceImages.length === 0) {
+      return undefined;
+    }
+    return referenceImages.map(referenceImage => ({
+      data: referenceImage.dataUrl.replace(/^data:[^;]+;base64,/, ""),
+      mimeType: referenceImage.mimeType,
+    }));
+  }
+
+  private async generateImageChatCaption(options: {
+    threadId: string;
+    batchId: string;
+    prompt: string;
+    result: ImageLabResultItem;
+    signal?: AbortSignal;
+  }): Promise<void> {
+    try {
+      const workspaceRoot = this.getSelectedWorkspaceRoot();
+      const { config, envMap } = await resolveProviderConfig(this.settings, workspaceRoot);
+      const provider = this.createProviderForSystemPrompt(
+        config,
+        workspaceRoot,
+        envMap,
+        [
+          "你是图像生成助手。",
+          "用一句简短中文描述这张图片的内容和风格，不超过 60 字，不要以“这张图”开头。",
+          "只输出一句成品文案，不要解释。",
+        ].join("\n"),
+        { includeRuntimeIdentityNote: false },
+      );
+      const imageAttachment = await this.buildReferenceImagePayloadFromSource(
+        options.result.src,
+        `caption-${options.result.id}.png`,
+        options.signal,
+      );
+      let streamedText = "";
+      const step = await provider.runStep(
+        [
+          {
+            role: "user",
+            content: `原始提示词：${options.prompt}`,
+            attachments: [
+              {
+                data: imageAttachment.dataUrl.replace(/^data:[^;]+;base64,/, ""),
+                mimeType: imageAttachment.mimeType,
+              },
+            ],
+          },
+        ],
+        [],
+        token => {
+          streamedText += token;
+        },
+        options.signal,
+      );
+      const caption = (step.text || streamedText).trim();
+      if (!caption) {
+        return;
+      }
+      this.sendToRenderer({
+        type: "image:caption",
+        threadId: options.threadId,
+        batchId: options.batchId,
+        caption,
+      });
+    } catch {
+      // Captioning is best-effort only. Never interrupt the main image flow.
+    }
+  }
+
+  private async resolveImageChatEditReferenceImages(
+    message: Record<string, unknown>,
+  ): Promise<ImageLabReferenceImage[]> {
+    const explicitReferences = this.normalizeImageReferenceImages(message.referenceImages);
+    if (explicitReferences.length > 0) {
+      return explicitReferences;
+    }
+
+    const stageImageId = typeof message.stageImageId === "string" ? message.stageImageId.trim() : "";
+    const stageReference = stageImageId
+      ? await this.buildImageChatReferenceImageByResultId(stageImageId, "stage-image.png")
+      : undefined;
+    if (stageReference) {
+      return [stageReference];
+    }
+
+    const threadId = typeof message.threadId === "string" ? message.threadId.trim() : "";
+    if (!threadId) {
+      return [];
+    }
+
+    const thread = await this.imageThreadStore.getThread(threadId);
+    if (!thread) {
+      return [];
+    }
+
+    const candidateIds = [
+      ...(thread.activeResultId ? [thread.activeResultId] : []),
+      ...thread.resultIds.slice().reverse(),
+    ];
+    for (const resultId of candidateIds) {
+      const referenceImage = await this.buildImageChatReferenceImageByResultId(
+        resultId,
+        `thread-result-${resultId}.png`,
+      );
+      if (referenceImage) {
+        return [referenceImage];
+      }
+    }
+
+    return [];
+  }
+
+  private async buildImageChatReferenceImageByResultId(
+    resultId: string,
+    name: string,
+  ): Promise<ImageLabReferenceImage | undefined> {
+    await this.ensureImageResultsHydrated();
+    const result = this.imageResults.find(candidate => candidate.id === resultId);
+    if (!result?.src) {
+      return undefined;
+    }
+    return this.buildReferenceImagePayloadFromSource(result.src, name);
   }
 
   private async runImageJob(message: Record<string, unknown>): Promise<void> {
@@ -2758,6 +3037,16 @@ export class ElectronChatPanel {
         latestBatchCount: resultsWithProvenance.length,
         latestBatchSource: resultsWithProvenance[0]?.source ?? "generate",
       });
+      const latestResult = resultsWithProvenance[0];
+      if (latestResult?.batchId) {
+        void this.generateImageChatCaption({
+          threadId,
+          batchId: latestResult.batchId,
+          prompt,
+          result: latestResult,
+          signal: abortController.signal,
+        });
+      }
     } catch (error) {
       if (abortController.signal.aborted) {
         this.sendToRenderer({
@@ -7050,12 +7339,15 @@ ${html.slice(0, 8000)}
     workspaceRoot: string,
     envMap: Record<string, string>,
     systemPrompt: string,
+    options: { includeRuntimeIdentityNote?: boolean } = {},
   ) {
     return buildProviderAdapter(
       config,
       workspaceRoot,
       systemPrompt,
       envMap,
+      {},
+      options,
     );
   }
 

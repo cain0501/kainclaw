@@ -701,6 +701,22 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-seri
 .ichat-size-chip.active,.ichat-qty-chip.active{border-color:#c0392b;color:#c0392b;background:#fff5f5}
 .ichat-tool-sep{width:1px;height:13px;background:#e5ddd0;margin:0 2px;flex-shrink:0}
 .ichat-tools-note{font-size:10px;color:#c4b5a8;margin-left:auto;white-space:nowrap}
+.ichat-cfg-btn{display:inline-flex;align-items:center;gap:4px;padding:3px 10px;border:1px solid #e5ddd0;border-radius:20px;background:#fdfaf7;font-size:11px;color:#57534e;cursor:pointer;font-family:inherit;white-space:nowrap}
+.ichat-cfg-btn:hover{border-color:#c9502e;color:#c9502e}
+.ichat-cfg-panel{position:absolute;bottom:calc(100% + 6px);left:0;right:0;background:#fff;border:1px solid #eadfd2;border-radius:14px;box-shadow:0 8px 32px rgba(77,49,24,.18);padding:14px;z-index:300;display:none}
+.ichat-cfg-panel.open{display:block}
+.ichat-cfg-section{margin-bottom:12px}
+.ichat-cfg-section:last-child{margin-bottom:0}
+.ichat-cfg-label{font-size:10px;color:#9c8474;font-weight:700;letter-spacing:.04em;margin-bottom:7px;text-transform:uppercase}
+.ichat-cfg-row{display:flex;flex-wrap:wrap;gap:5px}
+.ichat-cfg-chip{padding:4px 11px;border:1px solid #eadfd2;border-radius:20px;background:#fdfaf7;font-size:11px;color:#57534e;cursor:pointer;font-family:inherit}
+.ichat-cfg-chip.active{border-color:#c9502e;color:#c9502e;background:#fff5f5;font-weight:600}
+.ichat-size-grid{display:grid;grid-template-columns:repeat(5,1fr);gap:5px}
+.ichat-size-cell{padding:7px 2px;border:1px solid #eadfd2;border-radius:8px;background:#fdfaf7;font-size:10px;color:#57534e;cursor:pointer;text-align:center;font-family:inherit;line-height:1.3}
+.ichat-size-cell.active{border-color:#c9502e;color:#c9502e;background:#fff5f5;font-weight:600}
+.ichat-count-grid{display:grid;grid-template-columns:repeat(5,1fr);gap:5px}
+.ichat-count-cell{padding:6px 2px;border:1px solid #eadfd2;border-radius:8px;background:#fdfaf7;font-size:11px;color:#57534e;cursor:pointer;text-align:center;font-family:inherit}
+.ichat-count-cell.active{border-color:#c9502e;color:#c9502e;background:#fff5f5;font-weight:600}
 </style>
 </head>
 <body>
@@ -1378,16 +1394,16 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-seri
               <textarea id="ichat-input" class="ichat-input" placeholder="描述你想要的图片，可以带参考图、比例说明…" rows="2" onkeydown="handleIchatKey(event)"></textarea>
               <button class="ichat-send-btn btn-red" type="button" onclick="submitIchat()">发送</button>
             </div>
-            <div class="ichat-tools-row">
+            <div class="ichat-tools-row" style="position:relative">
               <button id="ichat-ref-toggle" class="ichat-tool-chip" type="button" onclick="toggleIchatRefs()" title="上传参考图">📎 <span id="ichat-ref-count"></span></button>
               <div class="ichat-tool-sep"></div>
-              <button class="ichat-size-chip active" type="button" data-size="1024x1024" onclick="setIchatSize('1024x1024')" title="方形 1:1">方</button>
-              <button class="ichat-size-chip" type="button" data-size="1536x1024" onclick="setIchatSize('1536x1024')" title="横版 3:2">横</button>
-              <button class="ichat-size-chip" type="button" data-size="1024x1536" onclick="setIchatSize('1024x1536')" title="竖版 2:3">竖</button>
-              <div class="ichat-tool-sep"></div>
-              <button class="ichat-qty-chip active" type="button" data-count="1" onclick="setIchatCount(1)" title="生成1张">×1</button>
-              <button class="ichat-qty-chip" type="button" data-count="2" onclick="setIchatCount(2)" title="生成2张">×2</button>
-              <button class="ichat-qty-chip" type="button" data-count="4" onclick="setIchatCount(4)" title="生成4张">×4</button>
+              <div style="position:relative;flex:1;min-width:0">
+                <button class="ichat-cfg-btn" type="button" id="ichat-cfg-btn" onclick="toggleIchatCfg()">
+                  <span id="ichat-cfg-label">高 · 1:1 · 1 img</span>
+                  <span style="font-size:9px;opacity:.6">▾</span>
+                </button>
+                <div id="ichat-cfg-panel" class="ichat-cfg-panel"></div>
+              </div>
               <span class="ichat-tools-note">不写入主 Chat</span>
             </div>
           </div>
@@ -2210,6 +2226,7 @@ let midtaiState = {
   leftPanelWidth: 320,
   imgSize: '1024x1024',
   imgCount: 1,
+  imgQuality: 'auto',
   imgPreviewSession: false,
   imgPreviewBatchId: null,
 };
@@ -5346,7 +5363,7 @@ function beginImageChatPendingRun(prompt, options = {}) {
   const normalizedPrompt = String(prompt || '').trim();
   if (!normalizedPrompt) return null;
   const referenceCount = Array.isArray(options.referenceImages) ? options.referenceImages.length : imageChatThreadState.referenceImages.length;
-  const batchCount = Math.max(1, Math.min(4, Number(options.batchCount || imageChatThreadState.settings.batchCount || 1)));
+  const batchCount = Math.max(1, Math.min(8, Number(options.batchCount || imageChatThreadState.settings.batchCount || 1)));
   const runId = createImageChatLocalMessageId('image-run');
   const userId = createImageChatLocalMessageId('user');
   const assistantId = createImageChatLocalMessageId('assistant-pending');
@@ -5438,7 +5455,7 @@ function applyImageChatThreadState(msg) {
   imageChatThreadState.captionsByBatchId = imageChatThreadState.captionsByBatchId || {};
   imageChatThreadState.settings = {
     size: thread.settings?.size || imageChatThreadState.settings.size || '1024x1024',
-    batchCount: Math.max(1, Math.min(4, Number(thread.settings?.batchCount || imageChatThreadState.settings.batchCount || 1))),
+    batchCount: Math.max(1, Math.min(8, Number(thread.settings?.batchCount || imageChatThreadState.settings.batchCount || 1))),
   };
   imageChatThreadState.activeResultId = thread.activeResultId || null;
   imageChatThreadState.activeBatchId = thread.activeBatchId || null;
@@ -6908,7 +6925,7 @@ function setMidtaiImageSize(size) {
 }
 
 function setMidtaiImageCount(count) {
-  const nextCount = Math.max(1, Math.min(4, Number(count || 1)));
+  const nextCount = Math.max(1, Math.min(8, Number(count || 1)));
   midtaiState.imgCount = nextCount;
   if (midtaiState.type === 'img') {
     imageChatThreadState.settings = {
@@ -6968,7 +6985,7 @@ function rerunMidtaiImage() {
     promptEl.value = prompt;
   }
   const size = String(imageState.lastRequest.size || midtaiState.imgSize || '1024x1024').trim();
-  const batchCount = Math.max(1, Math.min(4, Number(imageState.lastRequest.batchCount || midtaiState.imgCount || 1)));
+  const batchCount = Math.max(1, Math.min(8, Number(imageState.lastRequest.batchCount || midtaiState.imgCount || 1)));
   setMidtaiImageSize(size);
   setMidtaiImageCount(batchCount);
   armMidtaiImagePreviewSession();
@@ -14842,7 +14859,7 @@ function renderIchatMessage(msg) {
 }
 
 function renderIchatResultGrid(results) {
-  var cols = results.length === 1 ? 1 : results.length === 3 ? 3 : 2;
+  var cols = results.length === 1 ? 1 : results.length <= 4 ? 2 : results.length <= 6 ? 3 : 4;
   var maxW = cols === 1 ? 'max-width:200px' : '';
   var cards = results.map(function(r) {
     var eid = encodeURIComponent(String(r.id || ''));
@@ -14962,20 +14979,114 @@ function handleIchatRefUpload(event) {
   });
 }
 
+// ─── ichat config popup ───────────────────────────────────────────────────────
+
+var ICHAT_SIZE_PRESETS = [
+  { label: '1:1',      size: '1024x1024' },
+  { label: '3:2',      size: '1536x1024' },
+  { label: '2:3',      size: '1024x1536' },
+  { label: '4:3',      size: '1365x1024' },
+  { label: '3:4',      size: '1024x1365' },
+  { label: '16:9',     size: '1792x1024' },
+  { label: '9:16',     size: '1024x1792' },
+  { label: '1:1·2k',   size: '2048x2048' },
+  { label: '2:1·2k',   size: '2048x1024' },
+  { label: '1:2·2k',   size: '1024x2048' },
+];
+
+var ICHAT_QUALITY_OPTIONS = [
+  { label: '自动', value: 'auto' },
+  { label: '高',   value: 'high' },
+  { label: '中',   value: 'medium' },
+  { label: '低',   value: 'low' },
+];
+
+function getIchatSizeLabel(size) {
+  var preset = ICHAT_SIZE_PRESETS.find(function(p) { return p.size === size; });
+  return preset ? preset.label : (size || '1:1');
+}
+
+function getIchatQualityLabel(q) {
+  var opt = ICHAT_QUALITY_OPTIONS.find(function(o) { return o.value === q; });
+  return opt ? opt.label : '自动';
+}
+
+function updateIchatCfgLabel() {
+  var el = document.getElementById('ichat-cfg-label');
+  if (!el) return;
+  var q = getIchatQualityLabel(midtaiState.imgQuality || 'auto');
+  var s = getIchatSizeLabel(midtaiState.imgSize || '1024x1024');
+  var n = (midtaiState.imgCount || 1) + ' img';
+  el.textContent = q + ' · ' + s + ' · ' + n;
+}
+
+function renderIchatCfgPanel() {
+  var panel = document.getElementById('ichat-cfg-panel');
+  if (!panel) return;
+  var curSize = midtaiState.imgSize || '1024x1024';
+  var curQ = midtaiState.imgQuality || 'auto';
+  var curCount = midtaiState.imgCount || 1;
+
+  var qualityChips = ICHAT_QUALITY_OPTIONS.map(function(o) {
+    return '<button class="ichat-cfg-chip' + (o.value === curQ ? ' active' : '') + '" type="button" onclick="setIchatQuality(\'' + o.value + '\')">' + o.label + '</button>';
+  }).join('');
+
+  var sizeGrid = ICHAT_SIZE_PRESETS.map(function(p) {
+    return '<button class="ichat-size-cell' + (p.size === curSize ? ' active' : '') + '" type="button" onclick="setIchatSize(\'' + p.size + '\')">' + p.label + '</button>';
+  }).join('');
+
+  var counts = [1,2,3,4,5,6,7,8];
+  var countGrid = counts.map(function(n) {
+    return '<button class="ichat-count-cell' + (n === curCount ? ' active' : '') + '" type="button" onclick="setIchatCount(' + n + ')">' + n + ' img</button>';
+  }).join('');
+
+  panel.innerHTML =
+    '<div class="ichat-cfg-section"><div class="ichat-cfg-label">质量</div><div class="ichat-cfg-row">' + qualityChips + '</div></div>' +
+    '<div class="ichat-cfg-section"><div class="ichat-cfg-label">尺寸</div><div class="ichat-size-grid">' + sizeGrid + '</div></div>' +
+    '<div class="ichat-cfg-section"><div class="ichat-cfg-label">数量</div><div class="ichat-count-grid">' + countGrid + '</div></div>';
+}
+
+function toggleIchatCfg() {
+  var panel = document.getElementById('ichat-cfg-panel');
+  if (!panel) return;
+  var isOpen = panel.classList.contains('open');
+  if (isOpen) {
+    panel.classList.remove('open');
+  } else {
+    renderIchatCfgPanel();
+    panel.classList.add('open');
+  }
+}
+
+function closeIchatCfg() {
+  var panel = document.getElementById('ichat-cfg-panel');
+  if (panel) panel.classList.remove('open');
+}
+
+document.addEventListener('click', function(e) {
+  var btn = document.getElementById('ichat-cfg-btn');
+  var panel = document.getElementById('ichat-cfg-panel');
+  if (!panel || !panel.classList.contains('open')) return;
+  if (btn && (btn.contains(e.target) || panel.contains(e.target))) return;
+  panel.classList.remove('open');
+});
+
+function setIchatQuality(q) {
+  midtaiState.imgQuality = q;
+  renderIchatCfgPanel();
+  updateIchatCfgLabel();
+}
+
 function setIchatSize(size) {
   setMidtaiImageSize(size);
-  var v2 = document.getElementById('ichat-v2');
-  if (v2) v2.querySelectorAll('.ichat-size-chip').forEach(function(btn) {
-    btn.classList.toggle('active', btn.dataset.size === size);
-  });
+  renderIchatCfgPanel();
+  updateIchatCfgLabel();
 }
 
 function setIchatCount(count) {
   setMidtaiImageCount(count);
-  var v2 = document.getElementById('ichat-v2');
-  if (v2) v2.querySelectorAll('.ichat-qty-chip').forEach(function(btn) {
-    btn.classList.toggle('active', Number(btn.dataset.count) === count);
-  });
+  renderIchatCfgPanel();
+  updateIchatCfgLabel();
 }
 
 function handleIchatKey(event) {
@@ -15007,6 +15118,7 @@ function submitIchat() {
     prompt: prompt,
     sizePreset: midtaiState.imgSize || '1024x1024',
     batchCount: midtaiState.imgCount || 1,
+    quality: midtaiState.imgQuality || 'auto',
     threadId: threadId,
     ownerSurface: 'image-chat',
     referenceImages: imageState.referenceImages,

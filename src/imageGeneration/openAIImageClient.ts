@@ -523,6 +523,7 @@ export async function generateImages(options: {
   size?: string;
   count?: number;
   responseFormat?: "url" | "b64_json";
+  quality?: "auto" | "high" | "medium" | "low";
   signal?: AbortSignal;
 }): Promise<GeneratedImageBatchResult> {
   const prompt = options.prompt.trim();
@@ -546,6 +547,7 @@ export async function generateImages(options: {
         size: options.size ?? "1024x1024",
         ...(count > 1 ? { n: count } : {}),
         ...(options.responseFormat ? { response_format: options.responseFormat } : {}),
+        ...(options.quality && options.quality !== "auto" ? { quality: options.quality } : {}),
       },
       signal: options.signal,
     }),
@@ -568,6 +570,7 @@ export async function editImages(options: {
   size?: string;
   count?: number;
   responseFormat?: "url" | "b64_json";
+  quality?: "auto" | "high" | "medium" | "low";
   signal?: AbortSignal;
 }): Promise<GeneratedImageBatchResult> {
   const prompt = options.prompt.trim();
@@ -606,6 +609,9 @@ export async function editImages(options: {
       }
       if (options.responseFormat) {
         form.set("response_format", options.responseFormat);
+      }
+      if (options.quality && options.quality !== "auto") {
+        form.set("quality", options.quality);
       }
 
       const primaryEndpoint = buildImageEndpointUrl(options.config.baseUrl, "edits");
