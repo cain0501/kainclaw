@@ -439,6 +439,23 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-seri
 .midtai-library-subtab{border-radius:999px;padding:8px 14px;border:1px solid #e6d9c9;background:rgba(255,255,255,.78);color:#8c7767;font-size:12px;font-weight:700;line-height:1.2;transition:background .14s ease,border-color .14s ease,color .14s ease,transform .14s ease}
 .midtai-library-subtab:hover{background:#f8f1e8;border-color:#cfb9a5;color:#2d1f14;transform:translateY(-1px)}
 .midtai-library-subtab.active{background:#fff0e6;border-color:#f0c8a0;color:#7b4a2e;box-shadow:inset 0 1px 0 rgba(255,255,255,.7)}
+.midtai-library-head{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:14px}
+.midtai-library-heading{min-width:0}
+.midtai-library-title{font-size:14px;font-weight:800;color:#24160d;line-height:1.3}
+.midtai-library-copy{margin-top:3px;font-size:11px;color:#8c7767;line-height:1.55}
+.midtai-library-view-toggle{display:inline-flex;align-items:center;gap:4px;padding:4px;border:1px solid #e6d9c9;border-radius:999px;background:rgba(255,255,255,.78);flex-shrink:0}
+.midtai-library-view-toggle button{border:none;border-radius:999px;background:transparent;color:#8c7767;font-size:11px;font-weight:800;line-height:1.2;padding:7px 10px;cursor:pointer;transition:background .14s ease,color .14s ease,box-shadow .14s ease}
+.midtai-library-view-toggle button:hover{background:rgba(212,90,53,.07);color:#24160d}
+.midtai-library-view-toggle button.active{background:#fff0e6;color:#7b4a2e;box-shadow:inset 0 1px 0 rgba(255,255,255,.7)}
+.design-kanban-board{display:grid;grid-template-columns:repeat(3,minmax(210px,1fr));gap:12px;align-items:start;min-width:0}
+.design-kanban-column{min-width:0;border:1px solid #e6d9c9;border-radius:18px;background:rgba(255,255,255,.62);padding:12px;box-shadow:inset 0 1px 0 rgba(255,255,255,.75)}
+.design-kanban-column-head{display:flex;align-items:flex-start;justify-content:space-between;gap:8px;margin-bottom:10px}
+.design-kanban-column-title{font-size:12px;font-weight:800;color:#24160d;line-height:1.35}
+.design-kanban-column-sub{margin-top:2px;font-size:10px;color:#8c7767;line-height:1.5}
+.design-kanban-count{min-width:22px;height:22px;border-radius:999px;background:#fff0e6;color:#7b4a2e;display:inline-flex;align-items:center;justify-content:center;font-size:11px;font-weight:800;flex-shrink:0}
+.design-kanban-list{display:flex;flex-direction:column;gap:10px}
+.design-kanban-empty{min-height:96px;border:1px dashed #e6d9c9;border-radius:14px;display:flex;align-items:center;justify-content:center;text-align:center;padding:14px;color:#9b8574;font-size:11px;line-height:1.6;background:rgba(255,253,249,.72)}
+@media (max-width:1100px){.design-kanban-board{grid-template-columns:1fr}.midtai-library-head{align-items:flex-start;flex-direction:column}.midtai-library-view-toggle{align-self:flex-start}}
 .design-wcard,.midtai-img-card{border-radius:18px;border:1px solid #e6d9c9;box-shadow:0 10px 24px rgba(77,49,24,.07);background:rgba(255,255,255,.88)}
 .design-wcard:hover,.midtai-img-card:hover{transform:translateY(-2px);box-shadow:0 16px 32px rgba(77,49,24,.12)}
 .design-wcard-thumb{height:144px;background:linear-gradient(180deg,#fffdf9 0%,#f4e7d6 100%)}
@@ -2259,6 +2276,7 @@ let midtaiState = {
   currentProjectHasVersion: false,
   currentDesignProjectId: null,
   designLibraryItems: [],
+  designLibraryViewMode: 'grid',
   replaceCtx: null,
   selectedCanvasNode: null,
   designDirection: '',
@@ -6733,6 +6751,126 @@ function showMidtaiTab(boardName) {
   scheduleSecondarySurfaceLocalization();
 }
 
+function renderMidtaiLibraryDesignCard(item) {
+  const itemId = escapeHtml(String(item.id || ''));
+  const projectId = escapeHtml(String(item.projectId || item.id || ''));
+  const title = escapeHtml(String(item.name || item.title || 'Untitled work'));
+  const rawProjectName = String(item.name || item.title || 'Untitled work');
+  const encodedProjectName = encodeURIComponent(rawProjectName);
+  const cachedThumbnail = item.id ? thumbnailCache.get(item.id) : '';
+  const versionLabel = item.version ? escapeHtml(String(item.version)) : (isEnglishUi() ? 'Work' : '作品');
+  return `
+    <div class="design-wcard" data-version-id="${itemId}" role="button" tabindex="0" onclick="openMidtaiDesignProject('${projectId}')" onkeydown="handleMidtaiProjectCardKeydown(event, '${projectId}')">
+      <div class="wcard-thumb design-wcard-thumb midtai-design-card-preview">
+        ${cachedThumbnail
+          ? `<img src="${cachedThumbnail}" style="width:100%;height:100%;object-fit:cover;display:block" />`
+          : '<div class="thumb-shimmer"></div>'}
+        <div class="midtai-design-card-actions">
+          <button
+            class="midtai-design-card-icon"
+            type="button"
+            title="${isEnglishUi() ? 'Delete' : '删除作品'}"
+            onclick="event.stopPropagation(); deleteMidtaiDesignProject('${projectId}', decodeURIComponent('${encodedProjectName}'));"
+          >×</button>
+        </div>
+      </div>
+      <div class="design-wcard-footer">
+        <div class="design-wcard-title">${title}</div>
+        <div class="design-wcard-meta">
+          <span class="source-badge source-chat">${versionLabel}</span>
+        </div>
+        ${item.isDraft ? `<div style="font-size:11px;color:#8b7969;line-height:1.6;margin-top:4px">${isEnglishUi() ? 'Draft only. Generate the first version to formalize this work.' : '当前还是草稿，生成第一版后会升级为正式作品。'}</div>` : ''}
+        <button class="btn-secondary" type="button" style="width:100%;margin-top:4px" onclick="event.stopPropagation(); openMidtaiDesignProject('${projectId}')">${isEnglishUi() ? 'Open design' : '打开设计'}</button>
+      </div>
+    </div>
+  `;
+}
+
+function getMidtaiDesignKanbanColumns(items) {
+  const activeProjectId = String(midtaiState.currentDesignProjectId || '').trim();
+  const columns = [
+    {
+      id: 'current',
+      label: isEnglishUi() ? 'Current' : '当前',
+      copy: isEnglishUi() ? 'Work open in the design bench' : '正在设计工作台中打开',
+      empty: isEnglishUi() ? 'No current work selected.' : '尚未选中当前作品。',
+      items: [],
+    },
+    {
+      id: 'draft',
+      label: isEnglishUi() ? 'Drafts' : '草稿',
+      copy: isEnglishUi() ? 'Created but not formalized yet' : '已创建，等待生成首个正式版本',
+      empty: isEnglishUi() ? 'No draft works.' : '暂时没有草稿。',
+      items: [],
+    },
+    {
+      id: 'published',
+      label: isEnglishUi() ? 'Versioned' : '已有版本',
+      copy: isEnglishUi() ? 'Works with generated versions' : '已生成过正式版本',
+      empty: isEnglishUi() ? 'No versioned works yet.' : '暂时没有正式版本。',
+      items: [],
+    },
+  ];
+  const byId = new Map(columns.map(column => [column.id, column]));
+  items.forEach(item => {
+    const projectId = String(item.projectId || item.id || '').trim();
+    if (activeProjectId && projectId === activeProjectId) {
+      byId.get('current').items.push(item);
+      return;
+    }
+    if (item?.isDraft || item?.version === 'Draft') {
+      byId.get('draft').items.push(item);
+      return;
+    }
+    byId.get('published').items.push(item);
+  });
+  return columns;
+}
+
+function renderMidtaiDesignLibraryModeToggle(viewMode, totalCount) {
+  return `
+    <div class="midtai-library-head">
+      <div class="midtai-library-heading">
+        <div class="midtai-library-title">${isEnglishUi() ? 'Design works' : '设计作品'}</div>
+        <div class="midtai-library-copy">${isEnglishUi() ? `${totalCount} works in this library` : `${totalCount} 个作品在作品库中`}</div>
+      </div>
+      <div class="midtai-library-view-toggle" role="group" aria-label="${isEnglishUi() ? 'Design library view' : '设计作品库视图'}">
+        <button type="button" class="${viewMode === 'grid' ? 'active' : ''}" onclick="setMidtaiDesignLibraryViewMode('grid')">${isEnglishUi() ? 'Grid' : '网格'}</button>
+        <button type="button" class="${viewMode === 'board' ? 'active' : ''}" onclick="setMidtaiDesignLibraryViewMode('board')">${isEnglishUi() ? 'Board' : '看板'}</button>
+      </div>
+    </div>
+  `;
+}
+
+function renderMidtaiDesignKanbanBoard(items) {
+  const columns = getMidtaiDesignKanbanColumns(items);
+  return `
+    <div class="design-kanban-board">
+      ${columns.map(column => `
+        <section class="design-kanban-column" data-kanban-column="${escapeHtml(column.id)}">
+          <div class="design-kanban-column-head">
+            <div>
+              <div class="design-kanban-column-title">${escapeHtml(column.label)}</div>
+              <div class="design-kanban-column-sub">${escapeHtml(column.copy)}</div>
+            </div>
+            <span class="design-kanban-count">${column.items.length}</span>
+          </div>
+          <div class="design-kanban-list">
+            ${column.items.length
+              ? column.items.map(renderMidtaiLibraryDesignCard).join('')
+              : `<div class="design-kanban-empty">${escapeHtml(column.empty)}</div>`}
+          </div>
+        </section>
+      `).join('')}
+    </div>
+  `;
+}
+
+function setMidtaiDesignLibraryViewMode(mode) {
+  midtaiState.designLibraryViewMode = mode === 'board' ? 'board' : 'grid';
+  renderMidtaiLibraryDesignPanel();
+}
+
 function renderMidtaiLibraryDesignPanel() {
   const panel = document.getElementById('midtai-library-panel-design');
   if (!panel) return;
@@ -6754,7 +6892,18 @@ function renderMidtaiLibraryDesignPanel() {
     return;
   }
 
+  const viewMode = midtaiState.designLibraryViewMode === 'board' ? 'board' : 'grid';
+  if (viewMode === 'board') {
+    panel.innerHTML = `
+      ${renderMidtaiDesignLibraryModeToggle(viewMode, items.length)}
+      ${renderMidtaiDesignKanbanBoard(items)}
+    `;
+    scheduleDesignThumbnailLoads(items.filter(item => item?.id && !thumbnailCache.has(item.id) && !missingThumbnailCache.has(item.id) && !item?.isDraft), { maxInitial: 6 });
+    return;
+  }
+
   panel.innerHTML = `
+    ${renderMidtaiDesignLibraryModeToggle(viewMode, items.length)}
     <div class="design-works-grid">
       ${items.map(item => {
         const itemId = escapeHtml(String(item.id || ''));

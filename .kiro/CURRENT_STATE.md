@@ -52,7 +52,6 @@ npm run build:electron   # only when Electron behavior changed
 
 | Beads ID | Title | Status | Primer |
 |----------|-------|--------|--------|
-| vscode-extension-26q | Kanban 视图：我的作品看板模式 | OPEN P3 | — |
 | vscode-extension-0z5 | 画布草图标注工具：iframe 上层 canvas overlay | OPEN P3 | — |
 | vscode-extension-f4v | extension.ts 宿主总控继续下沉 | DEFERRED | `.kiro/primers/vscode-extension-f4v.md` |
 
@@ -208,7 +207,9 @@ npm run build:electron   # only when Electron behavior changed
   - 答案质量尾项已收口：`SYSTEM_PROMPT` 现在要求文件/测试/覆盖总结必须基于实际证据，不能在未验证完整实现/测试映射时声称每个实现文件都有同名 `.test.ts`
   - beads 已更新并关闭：`vscode-extension-kb2p` / `vscode-extension-5mxw`
 - **Direction Library cuc 已收口**：`src/design/directions.ts` 暴露 5 个中文方向（`lifestyle-redbook` / `streetwear-dark` / `tech-flagship` / `ecommerce-convert` / `short-video`），Turn 1 direction-cards 与 Turn 2 CSS binding block 已有测试覆盖
-- 下一步：P3 Kanban（`vscode-extension-26q`），然后草图标注（`vscode-extension-0z5`）
+
+- **Midtai My Works Kanban 26q closed**: Design library now has Grid / Board toggle; Board columns derive Current, Draft, and Versioned from existing designLibraryItems without persisting new status. Verified JS syntax, build:electron, build, check, and test.
+- Next: P3 sketch annotation tool (vscode-extension-0z5).
 
 ## Not Yet Started
 
