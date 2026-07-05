@@ -18,6 +18,7 @@ import {
   createImageVariant,
   runImageLabRequest,
 } from "../src/imageGeneration/imageLabRuntime";
+import { editImages as editOpenAIImages } from "../src/imageGeneration/openAIImageClient";
 import { searchPublicReferenceImages } from "../src/imageGeneration/imageMaterialSearch";
 import { generateKainClawDesign } from "../src/design/designEngine";
 import { patchKainClawDesignNode } from "../src/design/patchEngine";
@@ -118,6 +119,16 @@ vi.mock("../src/imageGeneration/imageLabRuntime", () => ({
   runImageLabRequest: vi.fn(),
   createImageVariant: vi.fn(),
 }));
+
+vi.mock("../src/imageGeneration/openAIImageClient", async () => {
+  const actual = await vi.importActual<typeof import("../src/imageGeneration/openAIImageClient")>(
+    "../src/imageGeneration/openAIImageClient",
+  );
+  return {
+    ...actual,
+    editImages: vi.fn(actual.editImages),
+  };
+});
 
 vi.mock("../src/imageGeneration/llmIntentRouter", async () => {
   const actual = await vi.importActual<typeof import("../src/imageGeneration/llmIntentRouter")>(
@@ -1903,6 +1914,133 @@ describe("ElectronChatPanel session lifecycle", () => {
     );
   });
 
+  it("publishes a best-effort image caption after image chat generation succeeds", async () => {
+    const harness = await createHarness();
+    tempDirs.push(harness.storagePath);
+
+    await harness.settings.setOnboardingDone(true);
+    await harness.settings.saveImageConfig({
+      id: "image-model-1",
+      baseUrl: "https://example.com/v1",
+      model: "gpt-image-2",
+      authMode: "raw",
+      size: "1024x1024",
+      batchCount: 1,
+      responseFormat: "url",
+    });
+    await harness.settings.storeImageModelApiKey("image-model-1", "image-secret");
+    vi.mocked(resolveProviderConfig).mockResolvedValue({
+      config: {
+        type: "anthropic",
+        apiKey: "test-key",
+        model: "claude-sonnet-4-6",
+      },
+      envMap: {},
+    });
+    vi.mocked(runImageLabRequest).mockResolvedValue([
+      {
+        id: "img-caption-1",
+        batchId: "batch-caption-1",
+        src: "https://example.com/generated-caption-1.png",
+        prompt: "draw a cat",
+        createdAt: Date.now(),
+        source: "generate",
+      },
+    ] as never);
+    vi.mocked(buildProviderAdapter).mockReturnValueOnce({
+      runStep: vi.fn().mockResolvedValue({
+        text: "暖色电影感猫咪肖像，主体清晰，氛围柔和。",
+        toolCalls: [],
+        done: true,
+      }),
+    } as never);
+
+    await harness.panel.handleMessage({
+      type: "image:run",
+      prompt: "draw a cat",
+      threadId: "image-chat:caption-thread",
+      size: "1024x1024",
+      batchCount: 1,
+      responseFormat: "url",
+    });
+
+    const captionPayload = getLastRendererPayloadOfType<{
+      type: "image:caption";
+      threadId: string;
+      batchId: string;
+      caption: string;
+    }>(harness.rendererPayloads, "image:caption");
+    expect(captionPayload).toMatchObject({
+      type: "image:caption",
+      threadId: "image-chat:caption-thread",
+      batchId: "batch-caption-1",
+      caption: "暖色电影感猫咪肖像，主体清晰，氛围柔和。",
+    });
+  });
+
+  it("still attempts image captions for claude-cli providers and stays best-effort", async () => {
+    const harness = await createHarness();
+    tempDirs.push(harness.storagePath);
+
+    await harness.settings.setOnboardingDone(true);
+    await harness.settings.saveImageConfig({
+      id: "image-model-1",
+      baseUrl: "https://example.com/v1",
+      model: "gpt-image-2",
+      authMode: "raw",
+      size: "1024x1024",
+      batchCount: 1,
+      responseFormat: "url",
+    });
+    await harness.settings.storeImageModelApiKey("image-model-1", "image-secret");
+    vi.mocked(resolveProviderConfig).mockResolvedValue({
+      config: {
+        type: "claude-cli",
+        model: "claude-sonnet-4-6",
+      },
+      envMap: {},
+    });
+    vi.mocked(runImageLabRequest).mockResolvedValue([
+      {
+        id: "img-caption-cli-1",
+        batchId: "batch-caption-cli-1",
+        src: "https://example.com/generated-caption-cli-1.png",
+        prompt: "draw a dog",
+        createdAt: Date.now(),
+        source: "generate",
+      },
+    ] as never);
+    vi.mocked(buildProviderAdapter).mockReturnValueOnce({
+      runStep: vi.fn().mockResolvedValue({
+        text: "跃起接飞盘的小狗，阳光草地风格轻快。",
+        toolCalls: [],
+        done: true,
+      }),
+    } as never);
+
+    await harness.panel.handleMessage({
+      type: "image:run",
+      prompt: "draw a dog",
+      threadId: "image-chat:caption-cli-thread",
+      size: "1024x1024",
+      batchCount: 1,
+      responseFormat: "url",
+    });
+
+    const captionPayload = getLastRendererPayloadOfType<{
+      type: "image:caption";
+      threadId: string;
+      batchId: string;
+      caption: string;
+    }>(harness.rendererPayloads, "image:caption");
+    expect(captionPayload).toMatchObject({
+      type: "image:caption",
+      threadId: "image-chat:caption-cli-thread",
+      batchId: "batch-caption-cli-1",
+      caption: "跃起接飞盘的小狗，阳光草地风格轻快。",
+    });
+  });
+
   it("records prompt history only for explicit generate or edit submissions", async () => {
     const harness = await createHarness();
     tempDirs.push(harness.storagePath);
@@ -2094,6 +2232,186 @@ describe("ElectronChatPanel session lifecycle", () => {
     ]);
   });
 
+  it("persists thread-scoped image chat ui state and stage selection across thread switches", async () => {
+    const harness = await createHarness();
+    tempDirs.push(harness.storagePath);
+
+    await (harness.panel as any).imageGalleryStore.saveResults([
+      {
+        id: "thread-a-result-1",
+        batchId: "batch-a",
+        src: "data:image/png;base64,a1",
+        prompt: "thread a prompt",
+        createdAt: 100,
+        source: "generate",
+        originThreadId: "thread-a",
+      },
+      {
+        id: "thread-a-result-2",
+        batchId: "batch-a",
+        src: "data:image/png;base64,a2",
+        prompt: "thread a prompt",
+        createdAt: 101,
+        source: "generate",
+        originThreadId: "thread-a",
+      },
+      {
+        id: "thread-b-result-1",
+        batchId: "batch-b",
+        src: "data:image/png;base64,b1",
+        prompt: "thread b prompt",
+        createdAt: 200,
+        source: "generate",
+        originThreadId: "thread-b",
+      },
+    ]);
+    await (harness.panel as any).imageThreadStore.saveThreads([
+      {
+        threadId: "thread-a",
+        title: "Thread A",
+        ownerSurface: "image-chat",
+        createdAt: 100,
+        updatedAt: 120,
+        activeResultId: "thread-a-result-2",
+        activeBatchId: "batch-a",
+        promptDraft: "draft a updated",
+        referenceImages: [
+          {
+            dataUrl: "data:image/png;base64,refa1",
+            mimeType: "image/png",
+            name: "ref-a-1.png",
+          },
+          {
+            dataUrl: "data:image/png;base64,refa2",
+            mimeType: "image/png",
+            name: "ref-a-2.png",
+          },
+        ],
+        settings: {
+          size: "1536x1024",
+          batchCount: 4,
+        },
+        messages: [
+          {
+            role: "user",
+            content: "thread a prompt",
+            createdAt: 101,
+          },
+          {
+            role: "assistant",
+            content: "Generated 2 images.",
+            resultIds: ["thread-a-result-1", "thread-a-result-2"],
+            createdAt: 102,
+          },
+        ],
+        resultIds: ["thread-a-result-1", "thread-a-result-2"],
+      },
+      {
+        threadId: "thread-b",
+        title: "Thread B",
+        ownerSurface: "image-chat",
+        createdAt: 200,
+        updatedAt: 220,
+        activeResultId: "thread-b-result-1",
+        activeBatchId: "batch-b",
+        promptDraft: "draft b",
+        referenceImages: [],
+        settings: {
+          size: "1024x1024",
+          batchCount: 1,
+        },
+        messages: [
+          {
+            role: "user",
+            content: "thread b prompt",
+            createdAt: 201,
+          },
+        ],
+        resultIds: ["thread-b-result-1"],
+      },
+    ]);
+
+    await harness.panel.handleMessage({
+      type: "image:updateThreadUiState",
+      threadId: "thread-a",
+      promptDraft: "draft a updated",
+      referenceImages: [
+        {
+          dataUrl: "data:image/png;base64,refa1",
+          mimeType: "image/png",
+          name: "ref-a-1.png",
+        },
+        {
+          dataUrl: "data:image/png;base64,refa2",
+          mimeType: "image/png",
+          name: "ref-a-2.png",
+        },
+      ],
+      settings: {
+        size: "1536x1024",
+        batchCount: 4,
+      },
+    });
+
+    await harness.panel.handleMessage({
+      type: "image:selectThreadStage",
+      threadId: "thread-a",
+      imageId: "thread-a-result-2",
+      batchId: "batch-a",
+    });
+
+    await harness.panel.handleMessage({
+      type: "image:loadThread",
+      threadId: "thread-b",
+    });
+    await harness.panel.handleMessage({
+      type: "image:loadThread",
+      threadId: "thread-a",
+    });
+
+    const payload = getLastRendererPayloadOfType<{
+      type: "image:threadState";
+      thread: {
+        threadId: string;
+        activeResultId?: string;
+        activeBatchId?: string;
+        promptDraft?: string;
+        settings: { size: string; batchCount: number };
+        referenceImages: Array<{ name: string }>;
+        messages: Array<{ role: string; content: string }>;
+      };
+      resultBatches: Array<{ id: string; items: Array<{ id: string }> }>;
+    }>(harness.rendererPayloads, "image:threadState");
+
+    expect(payload?.thread).toMatchObject({
+      threadId: "thread-a",
+      activeResultId: "thread-a-result-2",
+      activeBatchId: "batch-a",
+      promptDraft: "draft a updated",
+      settings: {
+        size: "1536x1024",
+        batchCount: 4,
+      },
+      referenceImages: [
+        { name: "ref-a-1.png" },
+        { name: "ref-a-2.png" },
+      ],
+      messages: [
+        expect.objectContaining({ role: "user", content: "thread a prompt" }),
+        expect.objectContaining({ role: "assistant", content: "Generated 2 images." }),
+      ],
+    });
+    expect(payload?.resultBatches).toEqual([
+      expect.objectContaining({
+        id: "batch-a",
+        items: [
+          expect.objectContaining({ id: "thread-a-result-1" }),
+          expect.objectContaining({ id: "thread-a-result-2" }),
+        ],
+      }),
+    ]);
+  });
+
   it("passes multiple reference images through image edit runs", async () => {
     const harness = await createHarness();
     tempDirs.push(harness.storagePath);
@@ -2156,6 +2474,191 @@ describe("ElectronChatPanel session lifecycle", () => {
         },
       ],
     }));
+  });
+
+  it("routes image:touchEdit through OpenAI edits with target image, mask, and thread result append", async () => {
+    const harness = await createHarness();
+    tempDirs.push(harness.storagePath);
+
+    await harness.settings.setOnboardingDone(true);
+    await harness.settings.saveImageConfig({
+      id: "image-model-1",
+      baseUrl: "https://example.com/v1",
+      model: "gpt-image-2",
+      authMode: "raw",
+      size: "1024x1024",
+      batchCount: 1,
+      responseFormat: "url",
+    });
+    await harness.settings.storeImageModelApiKey("image-model-1", "image-secret");
+    await (harness.panel as any).imageThreadStore.saveThreads([
+      {
+        threadId: "thread-touch-1",
+        title: "Touch Edit thread",
+        ownerSurface: "image-chat",
+        createdAt: 100,
+        updatedAt: 120,
+        activeResultId: "img-thread-source",
+        activeBatchId: "batch-thread-source",
+        referenceImages: [],
+        settings: {
+          size: "1024x1024",
+          batchCount: 1,
+        },
+        messages: [
+          {
+            role: "user",
+            content: "先生成一张",
+            createdAt: 100,
+          },
+        ],
+        resultIds: ["img-thread-source"],
+      },
+    ]);
+    await (harness.panel as any).imageGalleryStore.saveResults([
+      {
+        id: "img-thread-source",
+        batchId: "batch-thread-source",
+        src: "data:image/png;base64,c291cmNl",
+        prompt: "原始图",
+        createdAt: 110,
+        source: "generate",
+        originThreadId: "thread-touch-1",
+      },
+    ]);
+
+    vi.mocked(editOpenAIImages).mockResolvedValue({
+      created: undefined,
+      data: [
+        {
+          src: "data:image/png;base64,ZWRpdGVk",
+          revisedPrompt: "变更后的局部编辑图",
+        },
+      ],
+    });
+
+    await harness.panel.handleMessage({
+      type: "image:touchEdit",
+      prompt: "把这块背景改成蓝色",
+      threadId: "thread-touch-1",
+      stageImageId: "img-thread-source",
+      targetImage: {
+        dataUrl: "data:image/png;base64,c291cmNl",
+        mimeType: "image/png",
+        name: "target.png",
+      },
+      maskImage: {
+        dataUrl: "data:image/png;base64,bWFzaw==",
+        mimeType: "image/png",
+        name: "mask.png",
+      },
+      referenceImages: [
+        {
+          dataUrl: "data:image/png;base64,cmVm",
+          mimeType: "image/png",
+          name: "ref.png",
+        },
+      ],
+    });
+
+    expect(vi.mocked(editOpenAIImages)).toHaveBeenCalledWith(expect.objectContaining({
+      prompt: "把这块背景改成蓝色",
+      images: [
+        expect.objectContaining({
+          mimeType: "image/png",
+          name: "target.png",
+        }),
+      ],
+      mask: expect.objectContaining({
+        mimeType: "image/png",
+        name: "mask.png",
+      }),
+      count: 1,
+    }));
+
+    const resultPayload = getLastRendererPayloadOfType<{
+      type: "image:result";
+      latestBatchSource: string;
+      latestBatchCount: number;
+    }>(harness.rendererPayloads, "image:result");
+    expect(resultPayload).toMatchObject({
+      type: "image:result",
+      latestBatchSource: "edit",
+      latestBatchCount: 1,
+    });
+
+    await expect((harness.panel as any).imageThreadStore.getThread("thread-touch-1")).resolves.toEqual(
+      expect.objectContaining({
+        threadId: "thread-touch-1",
+        activeBatchId: expect.any(String),
+        activeResultId: expect.any(String),
+        promptDraft: "",
+        messages: expect.arrayContaining([
+          expect.objectContaining({ role: "user", content: "把这块背景改成蓝色" }),
+          expect.objectContaining({ role: "assistant", content: "Generated 1 image." }),
+        ]),
+      }),
+    );
+  });
+
+  it("fails clearly when image:touchEdit runs on a provider without brush-mask support", async () => {
+    const harness = await createHarness();
+    tempDirs.push(harness.storagePath);
+
+    await harness.settings.setOnboardingDone(true);
+    await harness.settings.saveImageConfig({
+      id: "image-model-1",
+      baseUrl: "https://example.com/v1",
+      model: "gemini-image",
+      authMode: "raw",
+      size: "1024x1024",
+      batchCount: 1,
+      responseFormat: "url",
+      provider: "gemini",
+    } as any);
+    await harness.settings.storeImageModelApiKey("image-model-1", "image-secret");
+    await (harness.panel as any).imageThreadStore.saveThreads([
+      {
+        threadId: "thread-touch-gemini",
+        title: "Gemini thread",
+        ownerSurface: "image-chat",
+        createdAt: 100,
+        updatedAt: 120,
+        referenceImages: [],
+        settings: {
+          size: "1024x1024",
+          batchCount: 1,
+        },
+        messages: [],
+        resultIds: [],
+      },
+    ]);
+
+    await harness.panel.handleMessage({
+      type: "image:touchEdit",
+      prompt: "把这块背景改成蓝色",
+      threadId: "thread-touch-gemini",
+      targetImage: {
+        dataUrl: "data:image/png;base64,c291cmNl",
+        mimeType: "image/png",
+        name: "target.png",
+      },
+      maskImage: {
+        dataUrl: "data:image/png;base64,bWFzaw==",
+        mimeType: "image/png",
+        name: "mask.png",
+      },
+      referenceImages: [],
+    });
+
+    expect(vi.mocked(editOpenAIImages)).not.toHaveBeenCalled();
+    expect(getLastRendererPayloadOfType<{
+      type: "image:error";
+      error: string;
+    }>(harness.rendererPayloads, "image:error")).toMatchObject({
+      type: "image:error",
+      error: "The active image provider does not support brush-mask touch edit.",
+    });
   });
 
   it("uses the active chat provider to infer a prompt from reference images", async () => {
@@ -2550,6 +3053,62 @@ describe("ElectronChatPanel session lifecycle", () => {
     }>(harness.rendererPayloads, "design:error")?.message).toContain("已阻止写入主对话");
   });
 
+  it("returns paged Image Lab library summaries without full image payloads", async () => {
+    const harness = await createHarness();
+    tempDirs.push(harness.storagePath);
+
+    await (harness.panel as any).imageGalleryStore.saveResults([
+      {
+        id: "img-old",
+        batchId: "batch-old",
+        src: "data:image/png;base64,old-full-payload",
+        thumbnail: "data:image/png;base64,old-thumb",
+        prompt: "old image",
+        createdAt: 100,
+        source: "generate",
+      },
+      {
+        id: "img-new",
+        batchId: "batch-new",
+        src: "data:image/png;base64,new-full-payload",
+        thumbnail: "data:image/png;base64,new-thumb",
+        prompt: "new image",
+        createdAt: 200,
+        source: "edit",
+      },
+    ]);
+
+    await harness.panel.handleMessage({
+      type: "image:listLibraryPage",
+      offset: 0,
+      limit: 1,
+    });
+
+    const pagePayload = getLastRendererPayloadOfType<{
+      type: "image:libraryPage";
+      items: Array<{ id: string; thumbnail?: string; src?: string }>;
+      offset: number;
+      limit: number;
+      total: number;
+      hasMore: boolean;
+      nextOffset?: number;
+    }>(harness.rendererPayloads, "image:libraryPage");
+    expect(pagePayload).toMatchObject({
+      offset: 0,
+      limit: 1,
+      total: 2,
+      hasMore: true,
+      nextOffset: 1,
+      items: [
+        {
+          id: "img-new",
+          thumbnail: "data:image/png;base64,new-thumb",
+        },
+      ],
+    });
+    expect(pagePayload?.items[0]?.src).toBeUndefined();
+  });
+
   it("runs design-owned image generation through image threads without writing design chat history", async () => {
     const harness = await createHarness();
     tempDirs.push(harness.storagePath);
@@ -2784,14 +3343,12 @@ describe("ElectronChatPanel session lifecycle", () => {
       prompt: "请帮我处理一下",
     });
 
-    expect(vi.mocked(buildProviderAdapter)).toHaveBeenCalledWith(
-      expect.objectContaining({
-        type: "anthropic",
-      }),
-      "",
-      expect.stringContaining("intent classifier"),
-      {},
-    );
+    expect(vi.mocked(buildProviderAdapter).mock.calls[0]?.[0]).toMatchObject({
+      type: "anthropic",
+    });
+    expect(vi.mocked(buildProviderAdapter).mock.calls[0]?.[1]).toBe("");
+    expect(String(vi.mocked(buildProviderAdapter).mock.calls[0]?.[2] ?? "")).toContain("intent classifier");
+    expect(vi.mocked(buildProviderAdapter).mock.calls[0]?.[3]).toEqual({});
     expect(vi.mocked(runImageLabRequest)).toHaveBeenCalledWith(expect.objectContaining({
       prompt: "请帮我处理一下",
     }));
@@ -3696,7 +4253,7 @@ Freeze skill body.
     );
   });
 
-  it("limits design chat tools to read_file and glob_files", async () => {
+  it("limits discovery-turn design chat tools to seed-asset reads plus TodoWrite", async () => {
     const harness = await createHarness();
     tempDirs.push(harness.storagePath);
 
@@ -3709,6 +4266,11 @@ Freeze skill body.
       {
         name: "glob_files",
         description: "Glob files",
+        input_schema: { type: "object", properties: {} },
+      },
+      {
+        name: "TodoWriteTool",
+        description: "Track todos",
         input_schema: { type: "object", properties: {} },
       },
       {
@@ -3750,7 +4312,11 @@ Freeze skill body.
     });
 
     const runAgentOptions = vi.mocked(runAgent).mock.calls.at(-1)?.[1];
-    expect(runAgentOptions?.tools.map(tool => tool.name)).toEqual(["read_file", "glob_files"]);
+    expect(runAgentOptions?.tools.map(tool => tool.name)).toEqual([
+      "read_file",
+      "glob_files",
+      "TodoWriteTool",
+    ]);
   });
 
   it("uses the resolved repo root for /review without rewriting the selected workspace", async () => {
@@ -6060,14 +6626,12 @@ Freeze skill body.
       referenceImageMimeType: "image/png",
     });
 
-    expect(buildProviderAdapter).toHaveBeenCalledWith(
-      expect.objectContaining({
-        type: "anthropic",
-      }),
-      "",
-      buildKainClawDesignSystemPrompt(),
-      {},
-    );
+    expect(vi.mocked(buildProviderAdapter).mock.calls[0]?.[0]).toMatchObject({
+      type: "anthropic",
+    });
+    expect(vi.mocked(buildProviderAdapter).mock.calls[0]?.[1]).toBe("");
+    expect(vi.mocked(buildProviderAdapter).mock.calls[0]?.[2]).toBe(buildKainClawDesignSystemPrompt());
+    expect(vi.mocked(buildProviderAdapter).mock.calls[0]?.[3]).toEqual({});
     expect(generateKainClawDesign).toHaveBeenCalledWith(
       expect.any(Object),
       expect.objectContaining({
@@ -6137,12 +6701,10 @@ Freeze skill body.
       html: "<!DOCTYPE html><html><body><main>Current page</main></body></html>",
     });
 
-    expect(buildProviderAdapter).toHaveBeenCalledWith(
-      expect.objectContaining({ type: "anthropic" }),
-      "",
-      expect.stringContaining("Current HTML to revise:"),
-      {},
-    );
+    expect(vi.mocked(buildProviderAdapter).mock.calls[0]?.[0]).toMatchObject({ type: "anthropic" });
+    expect(vi.mocked(buildProviderAdapter).mock.calls[0]?.[1]).toBe("");
+    expect(String(vi.mocked(buildProviderAdapter).mock.calls[0]?.[2] ?? "")).toContain("Current HTML to revise:");
+    expect(vi.mocked(buildProviderAdapter).mock.calls[0]?.[3]).toEqual({});
     const resultPayload = getLastRendererPayloadOfType<{
       type: "design:result";
       html: string;
@@ -6220,14 +6782,12 @@ Freeze skill body.
       comment: "Make the title warmer.",
     });
 
-    expect(buildProviderAdapter).toHaveBeenCalledWith(
-      expect.objectContaining({
-        type: "anthropic",
-      }),
-      "",
-      buildKainClawDesignPatchSystemPrompt(),
-      {},
-    );
+    expect(vi.mocked(buildProviderAdapter).mock.calls[0]?.[0]).toMatchObject({
+      type: "anthropic",
+    });
+    expect(vi.mocked(buildProviderAdapter).mock.calls[0]?.[1]).toBe("");
+    expect(vi.mocked(buildProviderAdapter).mock.calls[0]?.[2]).toBe(buildKainClawDesignPatchSystemPrompt());
+    expect(vi.mocked(buildProviderAdapter).mock.calls[0]?.[3]).toEqual({});
     expect(patchKainClawDesignNode).toHaveBeenCalledWith(
       expect.objectContaining({
         html: expect.stringContaining("<!DOCTYPE html>"),
@@ -7152,6 +7712,125 @@ Freeze skill body.
       .toContain('<question-form id="page-goal"');
   }, 15_000);
 
+  it("treats second-form answers as a build turn instead of stalling on discovery-only matching", async () => {
+    const harness = await createHarness();
+    tempDirs.push(harness.storagePath);
+
+    mockedBuiltinToolDefinitions.push(
+      {
+        name: "read_file",
+        description: "Read a file",
+        input_schema: { type: "object", properties: {} },
+      },
+      {
+        name: "glob_files",
+        description: "Glob files",
+        input_schema: { type: "object", properties: {} },
+      },
+      {
+        name: "list_files",
+        description: "List files",
+        input_schema: { type: "object", properties: {} },
+      },
+      {
+        name: "TodoWriteTool",
+        description: "Track todos",
+        input_schema: { type: "object", properties: {} },
+      },
+      {
+        name: "write_file",
+        description: "Write a file",
+        input_schema: { type: "object", properties: {} },
+      },
+      {
+        name: "replace_in_file",
+        description: "Replace in file",
+        input_schema: { type: "object", properties: {} },
+      },
+    );
+
+    await harness.settings.setOnboardingDone(true);
+    await harness.panel.handleMessage({ type: "ready" });
+    await harness.panel.handleMessage({ type: "sessions:new-design" });
+
+    vi.mocked(resolveProviderConfig).mockResolvedValue({
+      config: {
+        type: "anthropic",
+        apiKey: "test-key",
+        model: "claude-sonnet-4-6",
+      },
+      envMap: {},
+    });
+    const providerRunStep = vi.fn()
+      .mockResolvedValueOnce({
+        text: [
+          "先确认几个关键问题。",
+          '<question-form id="discovery" title="Quick brief">',
+          '{"questions":[{"id":"brand","label":"Brand","type":"radio","required":true,"options":["Pick a direction for me","I have a brand spec"]}]}',
+          "</question-form>",
+        ].join("\n"),
+        toolCalls: [],
+        done: true,
+      })
+      .mockResolvedValueOnce({
+        text: [
+          "先选一个方向。",
+          '<question-form id="direction" title="Pick a visual direction">',
+          '{"questions":[{"id":"direction","label":"Direction","type":"direction-cards","required":true,"options":["modern-minimal"],"cards":[{"id":"modern-minimal","label":"Modern minimal","palette":["oklch(99% 0.002 240)"],"references":["Linear"]}]}]}',
+          "</question-form>",
+        ].join("\n"),
+        toolCalls: [],
+        done: true,
+      })
+      .mockResolvedValueOnce({
+        text: [
+          '<artifact identifier="robotics-landing" type="text/html" title="Robotics Landing">',
+          "<!DOCTYPE html>",
+          "<html><head><title>Robotics Landing</title></head><body><main>Robotics Landing</main></body></html>",
+          "</artifact>",
+        ].join("\n"),
+        toolCalls: [],
+        done: true,
+      });
+    vi.mocked(buildProviderAdapter).mockReturnValue({
+      runStep: providerRunStep,
+    } as never);
+
+    await harness.panel.handleMessage({
+      type: "sendPrompt",
+      prompt: "Design a premium robotics landing page",
+      outputType: "prototype",
+    });
+
+    await harness.panel.handleMessage({
+      type: "sendPrompt",
+      prompt: "[form answers - discovery]\n- Brand: Pick a direction for me",
+      outputType: "prototype",
+      designFlowId: (await harness.sessions.loadRuntimeState(harness.settings.getActiveSessionId()!)).designFlowState?.flowId,
+    });
+
+    await harness.panel.handleMessage({
+      type: "sendPrompt",
+      prompt: "[form answers - direction]\n- Direction: modern-minimal",
+      outputType: "prototype",
+      designFlowId: (await harness.sessions.loadRuntimeState(harness.settings.getActiveSessionId()!)).designFlowState?.flowId,
+    });
+
+    const thirdRunOptions = vi.mocked(runAgent).mock.calls.at(-1)?.[1];
+    expect(thirdRunOptions?.tools.map(tool => tool.name)).toEqual([
+      "read_file",
+      "glob_files",
+      "list_files",
+      "TodoWriteTool",
+      "write_file",
+      "replace_in_file",
+    ]);
+
+    const messages = await harness.sessions.loadMessages(harness.settings.getActiveSessionId()!);
+    expect(messages.at(-1)?.role).toBe("assistant");
+    expect(messages.at(-1)?.content).toContain("<artifact");
+  }, 15_000);
+
   it("saves a design-session artifact to a project only when artifact:enter-design is triggered, then reuses it", async () => {
     const harness = await createHarness();
     tempDirs.push(harness.storagePath);
@@ -7596,5 +8275,204 @@ Freeze skill body.
       kind: "error",
     });
     expect(messages.at(-1)?.content).toContain("不支持图片理解");
+  });
+
+  it("uses a real LLM reply for image chat intents and falls back to canned copy on failure", async () => {
+    const harness = await createHarness();
+    tempDirs.push(harness.storagePath);
+
+    await harness.settings.setOnboardingDone(true);
+    vi.mocked(resolveProviderConfig).mockResolvedValue({
+      config: {
+        type: "anthropic",
+        apiKey: "test-key",
+        model: "claude-sonnet-4-6",
+      },
+      envMap: {},
+    });
+    const routerRunStep = vi.fn().mockResolvedValue({
+      text: '{"intent":"chat"}',
+      toolCalls: [],
+      done: true,
+    });
+    const replyRunStep = vi.fn().mockResolvedValue({
+      text: "我是 Image Chat。你可以先告诉我想生成什么画面，我再帮你补细节。",
+      toolCalls: [],
+      done: true,
+    });
+    vi.mocked(buildProviderAdapter)
+      .mockReturnValueOnce({ runStep: routerRunStep } as never)
+      .mockReturnValueOnce({ runStep: replyRunStep } as never);
+
+    await harness.panel.handleMessage({
+      type: "image:chatRoute",
+      prompt: "????",
+      threadId: "image-chat:default",
+      referenceImages: [
+        {
+          dataUrl: "data:image/png;base64,QUJDRA==",
+          mimeType: "image/png",
+          name: "reference.png",
+        },
+      ],
+      threadMessages: [
+        {
+          role: "user",
+          content: "??????",
+          createdAt: 1,
+        },
+        {
+          role: "assistant",
+          content: "?????????",
+          createdAt: 2,
+        },
+      ],
+    });
+
+    const firstPayload = getLastRendererPayloadOfType<{
+      type: "image:chatResponse";
+      intent: string;
+      response: string;
+    }>(harness.rendererPayloads, "image:chatResponse");
+    expect(firstPayload).toMatchObject({
+      type: "image:chatResponse",
+      intent: "chat",
+      response: "我是 Image Chat。你可以先告诉我想生成什么画面，我再帮你补细节。",
+    });
+    expect(vi.mocked(buildProviderAdapter).mock.calls[1]?.[2]).toContain("Image Chat");
+    expect(vi.mocked(buildProviderAdapter).mock.calls[1]?.[2]).not.toContain("Your identity is KainClaw");
+    expect(vi.mocked(buildProviderAdapter).mock.calls[1]?.[2]).not.toContain("multifunctional AI assistant");
+    expect(replyRunStep).toHaveBeenCalledTimes(1);
+    expect(replyRunStep.mock.calls[0]?.[0]).toEqual([
+      { role: "user", content: "??????" },
+      { role: "assistant", content: "?????????" },
+      {
+        role: "user",
+        content: "????",
+        attachments: [
+          {
+            data: "QUJDRA==",
+            mimeType: "image/png",
+          },
+        ],
+      },
+    ]);
+
+    harness.rendererPayloads.length = 0;
+    vi.mocked(buildProviderAdapter)
+      .mockReset()
+      .mockReturnValueOnce({ runStep: routerRunStep } as never)
+      .mockReturnValueOnce({
+        runStep: vi.fn().mockRejectedValue(new Error("provider failed")),
+      } as never);
+
+    await harness.panel.handleMessage({
+      type: "image:chatRoute",
+      prompt: "你是谁？",
+      threadId: "image-chat:default",
+    });
+
+    const fallbackPayload = getLastRendererPayloadOfType<{
+      type: "image:chatResponse";
+      intent: string;
+      response: string;
+    }>(harness.rendererPayloads, "image:chatResponse");
+    expect(fallbackPayload?.intent).toBe("chat");
+    expect(fallbackPayload?.response).toContain("Image Chat");
+  });
+
+  it("auto-injects the latest thread image for image_edit when no explicit reference image is provided", async () => {
+    const harness = await createHarness();
+    tempDirs.push(harness.storagePath);
+
+    await harness.settings.setOnboardingDone(true);
+    await harness.settings.saveImageConfig({
+      id: "image-model-1",
+      baseUrl: "https://example.com/v1",
+      model: "gpt-image-2",
+      authMode: "raw",
+      size: "1024x1024",
+      batchCount: 1,
+      responseFormat: "url",
+    });
+    await harness.settings.storeImageModelApiKey("image-model-1", "image-secret");
+    await (harness.panel as any).imageGalleryStore.saveResults([
+      {
+        id: "img-thread-latest",
+        batchId: "batch-thread-1",
+        src: "data:image/png;base64,dGhyZWFk",
+        prompt: "old prompt",
+        createdAt: 100,
+        source: "generate",
+      },
+    ]);
+    await (harness.panel as any).imageThreadStore.saveThreads([
+      {
+        threadId: "thread-edit-1",
+        title: "Edit thread",
+        ownerSurface: "image-chat",
+        createdAt: 100,
+        updatedAt: 120,
+        activeResultId: "img-thread-latest",
+        activeBatchId: "batch-thread-1",
+        referenceImages: [],
+        settings: {
+          size: "1024x1024",
+          batchCount: 1,
+        },
+        messages: [
+          {
+            role: "user",
+            content: "先生成一张",
+            createdAt: 100,
+          },
+        ],
+        resultIds: ["img-thread-latest"],
+      },
+    ]);
+
+    vi.mocked(resolveProviderConfig).mockResolvedValue({
+      config: {
+        type: "anthropic",
+        apiKey: "test-key",
+        model: "claude-sonnet-4-6",
+      },
+      envMap: {},
+    });
+    vi.mocked(buildProviderAdapter).mockReturnValueOnce({
+      runStep: vi.fn().mockResolvedValue({
+        text: '{"intent":"image_edit"}',
+        toolCalls: [],
+        done: true,
+      }),
+    } as never);
+    vi.mocked(runImageLabRequest).mockResolvedValue([
+      {
+        id: "img-edit-thread-1",
+        batchId: "batch-edit-thread-1",
+        src: "https://example.com/edited-thread.png",
+        prompt: "把背景改成白色",
+        createdAt: Date.now(),
+        source: "edit",
+      },
+    ] as never);
+
+    await harness.panel.handleMessage({
+      type: "image:chatRoute",
+      prompt: "把背景改成白色",
+      threadId: "thread-edit-1",
+      referenceImages: [],
+      stageImageId: null,
+    });
+
+    expect(vi.mocked(runImageLabRequest)).toHaveBeenCalledWith(expect.objectContaining({
+      prompt: "把背景改成白色",
+      referenceImages: [
+        expect.objectContaining({
+          dataUrl: "data:image/png;base64,dGhyZWFk",
+          mimeType: "image/png",
+        }),
+      ],
+    }));
   });
 });

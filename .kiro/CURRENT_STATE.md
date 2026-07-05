@@ -9,10 +9,10 @@
 
 | Metric | Value | Last Updated |
 |--------|-------|--------------|
-| Test files | 180 | 2026-05-28 |
-| Tests passing | 1478 | 2026-05-28 |
+| Test files | 181 | 2026-07-05 |
+| Tests passing | 1503 | 2026-07-05 |
 | Last verified commit | see `git log --oneline -1` | — |
-| Last clean verification | 2026-05-28 — image chat caption + Gemini API QA pass | — |
+| Last clean verification | 2026-07-05 — main chat tool rendering + evidence-based coverage summary prompt guard | — |
 
 **Required passing commands:**
 ```bash
@@ -157,7 +157,7 @@ npm run build:electron   # only when Electron behavior changed
 - Design chat path B system prompt now carries OpenDesign-style discovery philosophy, TodoWrite planning, and seed-asset guidance; OpenDesign seed assets are present under `skills/mobile-app/`, `skills/slide/`, `skills/dashboard/`, and `skills/landing-page/`
 - KainClaw Design (generate / iframe / sliders 右侧抽屉 / canvas toolbar / patch popover 贴近元素 + selector 定位 / 左侧面板 A/B / version history / export HTML+PDF+PPTX / lastOpenedProjectId 跨 session)
 - Electron artifact panel persistence (collapse / restore strip / per-session collapsed state / version navigation)
-- Image Lab chain (generate / edit / Prompt Library / reference image search)
+- Image Lab chain (generate / edit / Prompt Library / reference image search / asset-backed gallery storage / paged image-material library thumbnails)
 - Midtai P0 foundations (explicit `midtai:open` routing, library DTO aggregation, deterministic design image replacement IPC)
 - Midtai My Works (design-wcard 卡片：gradient thumb / hover lift / dark version badge / source color badges / 图片网格 158px + 设计网格 210px)
 - Midtai Canvas Selection (fo7 bridge: 选择模式 crosshair → node panel → Replace 图片 / 去 Image Lab / 从我的作品选择)
@@ -173,6 +173,8 @@ npm run build:electron   # only when Electron behavior changed
 - Midtai Unified Workbench (p1-p4: 统一工作台 UI / design:switch-project / conversationHistory project 层 / design session 侧栏下沉)
 - Design Home stripping complete (Phase 1-5): Midtai open, recent works, new design question form generation, canvas patch/return, version restore, image material writeback, and cross-work switching all passed final manual smoke; duplicate renderer project tracking and Design Home-only host glue are removed
 - v3 canonical history authority (gqr / cddd9b8): `DesignProjectStore.conversationHistory` is the only durable source; `designFlowState.conversationHistory` is stripped from `.state.json` on every save, kept only as in-memory projection; legacy backfill (session state → project store) fires on first `design:switch-project` when project history is empty
+- v3 Project-only design lifecycle (28m.3): clicking `新建作品` creates a real draft Project immediately, Recent Works is Project-backed, quick/detailed entry paths keep stable `projectId`, and Electron smoke verified draft creation/switching behavior
+- Design entry dialog (c68): old 小白/专业 toggle is gone; quick path shows the 3-question form, detailed path sends `__trigger_discovery__`, and Electron smoke verified the entry messages and `designMode=pro`
 - Local Bridge / Word Add-in (read + write-back + Track Changes + comments)
 - Electron i18n (shellStrings covering all surfaces)
 
@@ -180,8 +182,6 @@ npm run build:electron   # only when Electron behavior changed
 
 - Deleting the last provider may show "Provider not found" in chat area
 - `supabase` MCP may occasionally show `Connection closed`
-- Full `npm test` is currently blocked by unrelated existing failures in `src/design/versionStore.test.ts` and `src/design/designProjectStore.test.ts`
-- `electron/ElectronChatPanel.test.ts` dirty baseline: **6 remaining failures** after `vscode-extension-ut1`. Known failures: `__trigger_discovery__`（1 条）；design-chat build-turn / `output/index.html not found`（5 条：skill file path、artifact build turn、enter-design reuse、tombstone、question-form first turn）。ut1 已消除 patch/binding missing 的 3 条失败（editCurrent、patch、text-only patch）。
 
 ## Key Risks (still active)
 
@@ -191,12 +191,23 @@ npm run build:electron   # only when Electron behavior changed
 
 ## Current Focus
 
-- **v3 Design Project Lifecycle 全部收口**（yth / gqr / ut1 / sez / 3ka）：
+- **v3 Design Project Lifecycle 已收口**（yth / gqr / ut1 / sez / 3ka / 28m.3）：
   - gqr：`DesignProjectStore.conversationHistory` 是唯一持久真相源，session 只做内存 projection
   - ut1：patch/edit 缺 binding 时返回 `DESIGN_PROJECT_BINDING_MISSING`，renderer 按 `code` 展示可恢复提示
   - sez：Recent Works 显示 draft 条目，启动/刷新自动 prune 三无 ghost row，formal project 只在 durable save 或 artifact→design promote 时创建
   - 3ka：`design:patchImageNode` 成功后写 `lastUsedByProjectId` 轻量 provenance，生成时不写
-- 下一阶段：P3 功能（Kanban / 草图标注）或其他新需求
+  - 28m.3：`Project` 成为唯一 work identity，新建设计立即创建 draft Project，Electron smoke 已验证
+- **设计入口 c68 已验证**：详细路径触发 discovery，快速路径保持本地 3 问表单，不再显示小白/专业 toggle
+- **主 chat parity / 工具渲染 parity 正在推进**（`vscode-extension-kb2p` / `vscode-extension-5mxw`）：
+  - 已重读上游 Claude thinking/tool-use/tool-result 组件
+  - renderer 已对齐 persisted thinking 的 `∴ Thinking` collapsed UI
+  - `run_command` pending/completed DOM smoke 已通过：permission/progress 行在 tool header 下方，完成态顺序为 `Bash -> result -> assistant summary`
+  - `read_file` + `glob_files` injected DOM smoke 已通过：read summary + compact glob preview lines
+  - 真实模型驱动 `read_file` 已由用户截图验证：`Read package.json` 工具行 + `Read 89 lines` compact result + concise summary
+  - 真实模型驱动 `glob_files/search_files` 已由用户截图验证：宽泛 glob 失败会显示可读错误，不再是空白红色 Search；收窄后显示 `65 files matching "**/*prompt*.ts"` 与 compact preview lines
+  - 答案质量尾项已收口：`SYSTEM_PROMPT` 现在要求文件/测试/覆盖总结必须基于实际证据，不能在未验证完整实现/测试映射时声称每个实现文件都有同名 `.test.ts`
+  - beads 已更新并关闭：`vscode-extension-kb2p` / `vscode-extension-5mxw`
+- P3 功能（Kanban / 草图标注）排在主 chat parity 后面
 
 ## Not Yet Started
 

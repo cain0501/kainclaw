@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { runAgent } from "./agentRunner";
+import { SYSTEM_PROMPT, runAgent } from "./agentRunner";
 import type { IProviderAdapter, NormalizedMessage, NormalizedStep } from "./providers/IProviderAdapter";
 import type { ProviderConfig } from "./providers/IProviderAdapter";
 import type { ToolContext, ToolDefinition } from "../toolRuntime";
@@ -21,6 +21,12 @@ class ScriptedProvider implements IProviderAdapter {
 }
 
 describe("agentRunner", () => {
+  it("keeps file/test coverage summaries evidence-based", () => {
+    expect(SYSTEM_PROMPT).toContain("When summarizing file discovery, tests, or coverage");
+    expect(SYSTEM_PROMPT).toContain("Do not say every implementation file has a matching test");
+    expect(SYSTEM_PROMPT).toContain("unless you actually verified the full implementation/test mapping");
+  });
+
   it("returns the final assistant text when the provider is done", async () => {
     const provider = new ScriptedProvider([
       {

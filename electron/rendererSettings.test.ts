@@ -198,6 +198,32 @@ describe("Electron renderer settings", () => {
     expect(html).toContain("showDesignView('design-chat')");
   });
 
+  it("preserves design-chat question-form scroll position unless the user was already near the bottom", async () => {
+    const rendererPath = path.join(__dirname, "renderer", "index.html");
+    const html = await readFile(rendererPath, "utf8");
+
+    expect(html).toContain("const previousScrollTop = wrap.scrollTop;");
+    expect(html).toContain("const previousScrollHeight = wrap.scrollHeight;");
+    expect(html).toContain("const wasNearBottom = previousScrollHeight - previousScrollTop - wrap.clientHeight <= 40;");
+    expect(html).toContain("const heightDelta = wrap.scrollHeight - previousScrollHeight;");
+    expect(html).toContain("wrap.scrollTop = Math.max(0, previousScrollTop + heightDelta);");
+  });
+
+  it("uses a unified image editor with overall and touch modes instead of a separate legacy text-only modal", async () => {
+    const rendererPath = path.join(__dirname, "renderer", "index.html");
+    const html = await readFile(rendererPath, "utf8");
+
+    expect(html).toContain('id="chat-image-editor-mode-overall"');
+    expect(html).toContain('id="chat-image-editor-mode-touch"');
+    expect(html).toContain("function setChatImageEditorMode(mode)");
+    expect(html).toContain("chatImageEditorState.mode === 'touch'");
+    expect(html).toContain("type: 'image:touchEdit'");
+    expect(html).toContain("type: 'chat:imageRun'");
+    expect(html).toContain("openMidtaiImageEdit(id, srcOverride, resultOverride)");
+    expect(html).toContain("openChatImageEditor(messageIndex, imageIndex);");
+    expect(html).not.toContain('id="midtai-img-edit-overlay"');
+  });
+
   it("renders Midtai inside the unified workbench shell structure from jzu", async () => {
     const rendererPath = path.join(__dirname, "renderer", "index.html");
     const html = await readFile(rendererPath, "utf8");
@@ -321,12 +347,15 @@ describe("Electron renderer settings", () => {
     expect(html).toContain("case 'image:threads':");
     expect(html).toContain("case 'image:threadState':");
     expect(html).toContain("case 'image:result':");
+    expect(html).toContain("case 'image:caption':");
     expect(html).toContain("case 'image:error':");
     expect(html).toContain("case 'image:aborted':");
     expect(html).toContain("ownerSurface: 'image-chat'");
+    expect(html).toContain("captionsByBatchId: {}");
     expect(html).toContain("optimisticMessages: []");
     expect(html).toContain("pendingRun: null");
     expect(html).toContain("activeStageImageId: null");
+    expect(html).toContain('class="image-chat-caption"');
     expect(html).toContain('class="image-chat-stage-card"');
     expect(html).toContain("openImageChatStageImage(decodeURIComponent('${encodedImageId}'))");
     expect(html).toContain("insertImageChatResultToDesign(decodeURIComponent('${encodedImageId}'), decodeURIComponent('${encodedImageSrc}'))");

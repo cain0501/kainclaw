@@ -115,6 +115,12 @@ import {
   type ImageLabResultItem,
 } from "../src/imageGeneration/imageLabRuntime";
 import {
+  buildImageLayerBreakdownPrompt,
+} from "../src/imageGeneration/imageLayerBreakdown";
+import {
+  editImages as editOpenAIImages,
+} from "../src/imageGeneration/openAIImageClient";
+import {
   IMAGE_PROMPT_INFERENCE_SYSTEM_PROMPT,
   VISIBLE_IMAGE_PROMPT_PAIR_SYSTEM_PROMPT,
   inferVisiblePromptPairFromReferenceImages,
@@ -262,14 +268,23 @@ const SUPPORTED_ELECTRON_TOOL_NAMES = new Set([
   "glob_files",
 ]);
 
-const DESIGN_CHAT_ALLOWED_TOOLS_DISCOVERY = new Set(["read_file", "glob_files"]);
+const DESIGN_CHAT_ALLOWED_TOOLS_DISCOVERY = new Set([
+  "read_file",
+  "glob_files",
+  "TodoWriteTool",
+]);
 const DESIGN_CHAT_ALLOWED_TOOLS_BUILD = new Set([
   "read_file",
   "glob_files",
   "list_files",
+  "TodoWriteTool",
   "write_file",
   "replace_in_file",
 ]);
+
+function isDesignChatFormAnswerPrompt(prompt: string): boolean {
+  return /^\[form answers\s*-\s*[a-z0-9_-]+\]/i.test(prompt.trim());
+}
 
 function getDesignChatTools(turn: "discovery" | "build"): ToolDefinition[] {
   const allowed =
@@ -355,6 +370,8 @@ type ImageThreadWriteOptions = {
   };
   originSessionId?: string;
   projectId?: string;
+  activeResultId?: string;
+  activeBatchId?: string;
 };
 type PendingQuestionState = {
   request: AskUserQuestionRequest & { id: string };
@@ -483,12 +500,10 @@ export class ElectronChatPanel {
     this.designProjectStore = new DesignProjectStore(this.host.getStorageUri());
     this.designVersionStore = new DesignVersionStore(this.host.getStorageUri());
     this.midtaiLibraryHost = new MidtaiLibraryHost(
-      async () => {
-        await this.ensureImageResultsHydrated();
-        return this.imageResults;
-      },
+      () => this.imageGalleryStore.loadResultSummaries(),
       () => this.buildDesignProjectListItems(),
       async projects => this.designProjectStore.getThumbnails(projects.map(project => project.projectId)),
+      options => this.imageGalleryStore.loadResultSummaryPage(options),
     );
     this.taskRuntimeStore = new PersistentTaskRuntimeStore(this.host.getStorageUri());
     this.worktreeRuntimeStore = new PersistentWorktreeRuntimeStore(this.host.getStorageUri());
@@ -1196,6 +1211,13 @@ export class ElectronChatPanel {
     if (type === "license:activate") { await this.activateLicense(String(message.key ?? "")); return; }
     if (type === "settings:reset") { await this.resetAllConfig(); return; }
     if (type === "image:loadState") { await this.postImageState(); return; }
+    if (type === "image:listLibraryPage") {
+      await this.postImageLibraryPage({
+        offset: message.offset,
+        limit: message.limit,
+      });
+      return;
+    }
     if (type === "image:saveThumbnail") {
       const id = typeof message.id === "string" ? message.id.trim() : "";
       const dataUrl = typeof message.dataUrl === "string" ? message.dataUrl.trim() : "";
@@ -1252,19 +1274,34 @@ export class ElectronChatPanel {
       await this.runImageJob(message);
       return;
     }
+    if (type === "image:layerBreakdown") {
+      await this.runImageLayerBreakdown(String(message.id ?? ""));
+      return;
+    }
     if (type === "image:chatRoute") {
       await this.handleImageChatRoute(message);
       return;
     }
+    if (type === "image:touchEdit") {
+      await this.runImageTouchEdit(message);
+      return;
+    }
     if (type === "image:getSrc") {
       const id = typeof message.id === "string" ? message.id.trim() : "";
-      await this.ensureImageResultsHydrated();
-      const result = this.imageResults.find(r => r.id === id);
+      const result = await this.getImageResultById(id);
       this.sendToRenderer({ type: "image:srcReady", id, src: result?.src ?? "" });
       return;
     }
     if (type === "image:loadThread") {
       await this.loadImageThreadState(String(message.threadId ?? ""));
+      return;
+    }
+    if (type === "image:selectThreadStage") {
+      await this.handleImageThreadStageSelection(message);
+      return;
+    }
+    if (type === "image:updateThreadUiState") {
+      await this.handleImageThreadUiStateUpdate(message);
       return;
     }
     if (type === "image:listThreads") {
@@ -2295,6 +2332,212 @@ export class ElectronChatPanel {
     });
   }
 
+  private async upsertImageThreadDraft(options: {
+    ownerSurface: ImageThreadOwnerSurface;
+    threadId: string;
+    prompt: string;
+    referenceImages: ImageLabReferenceImage[];
+    settings: {
+      size: string;
+      batchCount: number;
+    };
+    originSessionId?: string;
+    projectId?: string;
+  }): Promise<void> {
+    const now = Date.now();
+    const existing = await this.imageThreadStore.getThread(options.threadId);
+    const title = existing?.title && existing.title !== "Untitled image thread"
+      ? existing.title
+      : options.prompt.slice(0, 80) || "Untitled image thread";
+    const existingMessages = existing?.messages ?? [];
+    const hasTrailingPendingDraft =
+      existing?.promptDraft &&
+      existingMessages.length >= 2 &&
+      existingMessages.at(-1)?.role === "assistant" &&
+      existingMessages.at(-1)?.content === "Generating..." &&
+      existingMessages.at(-2)?.role === "user" &&
+      existingMessages.at(-2)?.content === existing.promptDraft;
+    const nextMessages = hasTrailingPendingDraft
+      ? existingMessages
+      : [
+        ...existingMessages,
+        {
+          role: "user" as const,
+          content: options.prompt,
+          createdAt: now,
+        },
+        {
+          role: "assistant" as const,
+          content: "Generating...",
+          createdAt: now + 1,
+        },
+      ];
+
+    await this.imageThreadStore.upsertThread({
+      threadId: options.threadId,
+      title,
+      ownerSurface: options.ownerSurface,
+      ...(options.originSessionId ? { originSessionId: options.originSessionId } : {}),
+      ...(options.projectId ? { projectId: options.projectId } : {}),
+      createdAt: existing?.createdAt ?? now,
+      updatedAt: now,
+      ...(existing?.activeResultId ? { activeResultId: existing.activeResultId } : {}),
+      ...(existing?.activeBatchId ? { activeBatchId: existing.activeBatchId } : {}),
+      promptDraft: options.prompt,
+      referenceImages: options.referenceImages,
+      settings: {
+        size: options.settings.size,
+        batchCount: options.settings.batchCount,
+      },
+      messages: nextMessages,
+      resultIds: existing?.resultIds ?? [],
+    });
+
+    if (options.ownerSurface === "image-chat") {
+      await this.listImageThreads({ ownerSurface: "image-chat" });
+    }
+  }
+
+  private async clearImageThreadDraft(
+    threadId: string,
+    fallbackPrompt = "",
+  ): Promise<void> {
+    const existing = await this.imageThreadStore.getThread(threadId);
+    if (!existing) {
+      return;
+    }
+
+    const draftPrompt = (existing.promptDraft ?? fallbackPrompt).trim();
+    const nextMessages = draftPrompt && existing.messages.length >= 2 &&
+      existing.messages.at(-1)?.role === "assistant" &&
+      existing.messages.at(-1)?.content === "Generating..." &&
+      existing.messages.at(-2)?.role === "user" &&
+      existing.messages.at(-2)?.content === draftPrompt
+      ? existing.messages.slice(0, -2)
+      : existing.messages;
+
+    await this.imageThreadStore.upsertThread({
+      ...existing,
+      updatedAt: Date.now(),
+      promptDraft: "",
+      messages: nextMessages,
+    });
+
+    if (existing.ownerSurface === "image-chat") {
+      await this.listImageThreads({ ownerSurface: "image-chat" });
+    }
+  }
+
+  private async resolveImageThreadDraft(options: {
+    threadId: string;
+    prompt?: string;
+    assistantMessage?: {
+      content: string;
+      resultIds?: string[];
+    };
+  }): Promise<void> {
+    const existing = await this.imageThreadStore.getThread(options.threadId);
+    if (!existing) {
+      return;
+    }
+    const draftPrompt = (existing.promptDraft ?? options.prompt ?? "").trim();
+    const baseMessages = draftPrompt && existing.messages.length >= 2 &&
+      existing.messages.at(-1)?.role === "assistant" &&
+      existing.messages.at(-1)?.content === "Generating..." &&
+      existing.messages.at(-2)?.role === "user" &&
+      existing.messages.at(-2)?.content === draftPrompt
+      ? existing.messages.slice(0, -2)
+      : existing.messages;
+    const nextMessages = options.assistantMessage
+      ? [
+        ...baseMessages,
+        {
+          role: "user" as const,
+          content: draftPrompt || options.prompt || "",
+          createdAt: Date.now(),
+        },
+        {
+          role: "assistant" as const,
+          content: options.assistantMessage.content,
+          ...(options.assistantMessage.resultIds?.length ? { resultIds: options.assistantMessage.resultIds } : {}),
+          createdAt: Date.now() + 1,
+        },
+      ].filter(message => message.content.trim())
+      : baseMessages;
+
+    await this.imageThreadStore.upsertThread({
+      ...existing,
+      updatedAt: Date.now(),
+      promptDraft: "",
+      messages: nextMessages,
+    });
+  }
+
+  private async updateImageThreadStageSelection(options: {
+    threadId: string;
+    activeResultId: string;
+    activeBatchId?: string;
+  }): Promise<void> {
+    const trimmedThreadId = options.threadId.trim();
+    const activeResultId = options.activeResultId.trim();
+    if (!trimmedThreadId || !activeResultId) {
+      return;
+    }
+    const existing = await this.imageThreadStore.getThread(trimmedThreadId);
+    if (!existing) {
+      return;
+    }
+    await this.imageThreadStore.upsertThread({
+      ...existing,
+      updatedAt: Date.now(),
+      activeResultId,
+      activeBatchId: options.activeBatchId?.trim() || existing.activeBatchId,
+    });
+  }
+
+  private async updateImageThreadUiState(options: {
+    threadId: string;
+    referenceImages?: ImageLabReferenceImage[];
+    settings?: {
+      size?: string;
+      batchCount?: number;
+    };
+    promptDraft?: string;
+  }): Promise<void> {
+    const trimmedThreadId = options.threadId.trim();
+    if (!trimmedThreadId) {
+      return;
+    }
+    const existing = await this.imageThreadStore.getThread(trimmedThreadId);
+    if (!existing) {
+      return;
+    }
+
+    const nextReferenceImages = Array.isArray(options.referenceImages)
+      ? options.referenceImages
+      : existing.referenceImages;
+    const nextSize = typeof options.settings?.size === "string" && options.settings.size.trim()
+      ? options.settings.size.trim()
+      : existing.settings.size;
+    const nextBatchCount = typeof options.settings?.batchCount === "number" && Number.isFinite(options.settings.batchCount)
+      ? Math.max(1, Math.min(8, Math.floor(options.settings.batchCount)))
+      : existing.settings.batchCount;
+    const nextPromptDraft = typeof options.promptDraft === "string"
+      ? options.promptDraft
+      : existing.promptDraft;
+
+    await this.imageThreadStore.upsertThread({
+      ...existing,
+      updatedAt: Date.now(),
+      promptDraft: nextPromptDraft,
+      referenceImages: nextReferenceImages,
+      settings: {
+        size: nextSize,
+        batchCount: nextBatchCount,
+      },
+    });
+  }
+
   private async listImageThreads(message: Record<string, unknown>): Promise<void> {
     const ownerSurface = message.ownerSurface === "main-chat" ||
       message.ownerSurface === "design-chat" ||
@@ -2334,6 +2577,19 @@ export class ElectronChatPanel {
 
     this.imageResults = await this.imageGalleryStore.loadResults();
     this.imageResultsHydrated = true;
+  }
+
+  private async getImageResultById(id: string): Promise<ImageLabResultItem | undefined> {
+    const trimmedId = id.trim();
+    if (!trimmedId) {
+      return undefined;
+    }
+
+    if (this.imageResultsHydrated) {
+      return this.imageResults.find(result => result.id === trimmedId);
+    }
+
+    return this.imageGalleryStore.loadResultById(trimmedId);
   }
 
   private async savePromptLibraryEntry(message: Record<string, unknown>): Promise<void> {
@@ -2499,15 +2755,29 @@ export class ElectronChatPanel {
       ...(options.projectId ? { projectId: options.projectId } : {}),
       createdAt: existing?.createdAt ?? now,
       updatedAt: now,
-      activeResultId: firstResult.id,
-      activeBatchId: firstResult.batchId,
+      activeResultId: options.activeResultId && resultIds.includes(options.activeResultId)
+        ? options.activeResultId
+        : firstResult.id,
+      activeBatchId: options.activeBatchId && options.results.some(result => result.batchId === options.activeBatchId)
+        ? options.activeBatchId
+        : firstResult.batchId,
       referenceImages: options.referenceImages,
+      promptDraft: "",
       settings: {
         size: options.settings.size,
         batchCount: options.settings.batchCount,
       },
       messages: [
-        ...(existing?.messages ?? []),
+        ...(
+          existing?.promptDraft &&
+          existing.messages.length >= 2 &&
+          existing.messages.at(-1)?.role === "assistant" &&
+          existing.messages.at(-1)?.content === "Generating..." &&
+          existing.messages.at(-2)?.role === "user" &&
+          existing.messages.at(-2)?.content === existing.promptDraft
+            ? existing.messages.slice(0, -2)
+            : (existing?.messages ?? [])
+        ),
         {
           role: "user",
           content: options.prompt,
@@ -2627,8 +2897,27 @@ export class ElectronChatPanel {
     if (!prompt) return;
 
     await this.ensureImageResultsHydrated();
+    const threadId = this.resolveImageThreadId(message, "image-chat");
+    const referenceImages = this.normalizeImageReferenceImages(message.referenceImages);
+    const savedImageConfig = this.settings.getImageConfig();
+    const batchExecution = this.resolveImageBatchExecution(message);
+    const size = typeof message.size === "string" && message.size.trim()
+      ? message.size.trim()
+      : resolveRequestedImageSize(prompt)?.size
+        ?? savedImageConfig?.size
+        ?? "1024x1024";
+    await this.upsertImageThreadDraft({
+      ownerSurface: "image-chat",
+      threadId,
+      prompt,
+      referenceImages,
+      settings: {
+        size,
+        batchCount: batchExecution.batchCount,
+      },
+    });
     const hasAttachments =
-      this.normalizeImageReferenceImages(message.referenceImages).length > 0;
+      referenceImages.length > 0;
     const hasRecentImageContext = this.imageResults.length > 0;
     const recentHistory = await this.buildImageChatRecentHistory(message);
 
@@ -2690,6 +2979,13 @@ export class ElectronChatPanel {
       type: "image:chatResponse",
       intent,
       response,
+    });
+    await this.resolveImageThreadDraft({
+      threadId,
+      prompt,
+      assistantMessage: {
+        content: response,
+      },
     });
   }
 
@@ -2965,6 +3261,173 @@ export class ElectronChatPanel {
     return this.buildReferenceImagePayloadFromSource(result.src, name);
   }
 
+  private parseImageEditInput(raw: unknown, label: string): ImageLabReferenceImage {
+    if (
+      !raw ||
+      typeof raw !== "object" ||
+      typeof (raw as ImageLabReferenceImage).dataUrl !== "string" ||
+      typeof (raw as ImageLabReferenceImage).mimeType !== "string" ||
+      typeof (raw as ImageLabReferenceImage).name !== "string"
+    ) {
+      throw new Error(`${label} is required.`);
+    }
+    return raw as ImageLabReferenceImage;
+  }
+
+  private decodeImageEditInput(input: ImageLabReferenceImage): {
+    data: Buffer;
+    mimeType: string;
+    name: string;
+  } {
+    const dataUrl = input.dataUrl.trim();
+    const match = dataUrl.match(/^data:([^;,]+);base64,(.+)$/);
+    if (!match) {
+      throw new Error(`Invalid data URL for ${input.name || "image"}.`);
+    }
+    return {
+      data: Buffer.from(match[2], "base64"),
+      mimeType: input.mimeType || match[1] || "image/png",
+      name: input.name || "image.png",
+    };
+  }
+
+  private async runImageTouchEdit(message: Record<string, unknown>): Promise<void> {
+    const prompt = String(message.prompt ?? "").trim();
+    if (!prompt) {
+      this.sendToRenderer({ type: "image:error", error: "Prompt is required." });
+      return;
+    }
+    if (this.imageBusy) {
+      return;
+    }
+
+    const threadId = this.resolveImageThreadId(message, "image-chat");
+    const abortController = new AbortController();
+    this.activeImageAbortController = abortController;
+    this.imageBusy = true;
+    await this.postImageState();
+
+    try {
+      await this.ensureImageResultsHydrated();
+      const targetImage = this.parseImageEditInput(message.targetImage, "Target image");
+      const maskImage = this.parseImageEditInput(message.maskImage, "Mask image");
+      const extraReferenceImages = this.normalizeImageReferenceImages(message.referenceImages);
+      const config = await this.buildImageConfig({
+        ...message,
+        batchCount: 1,
+      });
+      const normalizedTouchEditModel = String(config.model || "").trim().toLowerCase();
+      if (!normalizedTouchEditModel.startsWith("gpt-image")) {
+        throw new Error("The active image provider does not support brush-mask touch edit.");
+      }
+
+      const stageImageId = typeof message.stageImageId === "string" ? message.stageImageId.trim() : "";
+      await this.upsertImageThreadDraft({
+        ownerSurface: "image-chat",
+        threadId,
+        prompt,
+        referenceImages: [targetImage, ...extraReferenceImages],
+        settings: {
+          size: config.size,
+          batchCount: 1,
+        },
+      });
+      await this.settings.pushImagePromptHistory(prompt);
+
+      const batchResult = await editOpenAIImages({
+        config: {
+          apiKey: config.apiKey,
+          model: config.model,
+          baseUrl: config.baseUrl,
+          authMode: config.authMode,
+        },
+        prompt,
+        images: [this.decodeImageEditInput(targetImage)],
+        mask: this.decodeImageEditInput(maskImage),
+        size: config.size,
+        count: 1,
+        responseFormat: config.responseFormat,
+        quality: config.quality,
+        signal: abortController.signal,
+      });
+      const rawResults = batchResult.data.map(result => ({
+        id: randomUUID(),
+        batchId: randomUUID(),
+        src: result.src,
+        prompt,
+        revisedPrompt: result.revisedPrompt,
+        createdAt: Date.now(),
+        source: "edit" as const,
+      }));
+      const results = await this.hydrateImageResultSources(rawResults, abortController.signal);
+      const resultsWithProvenance = this.withImageResultProvenance(results, {
+        originSurface: "image-chat",
+        originThreadId: threadId,
+      });
+      this.imageResults = prependImageLabResults(this.imageResults, resultsWithProvenance);
+      await this.imageGalleryStore.saveResults(this.imageResults);
+      await this.recordImageThreadRun({
+        ownerSurface: "image-chat",
+        threadId,
+        prompt,
+        results: resultsWithProvenance,
+        referenceImages: [targetImage, ...extraReferenceImages],
+        settings: {
+          size: config.size,
+          batchCount: 1,
+        },
+        activeResultId: resultsWithProvenance[0]?.id,
+        activeBatchId: resultsWithProvenance[0]?.batchId,
+      });
+      await this.settings.saveImageConfig({
+        ...(this.settings.getActiveImageModelId() ? { id: this.settings.getActiveImageModelId() } : {}),
+        size: config.size,
+        batchCount: config.batchCount,
+        responseFormat: config.responseFormat,
+      });
+
+      this.sendToRenderer({
+        type: "image:result",
+        resultBatches: this.getImageResultBatches(),
+        latestBatchId: resultsWithProvenance[0]?.batchId ?? null,
+        latestBatchCount: resultsWithProvenance.length,
+        latestBatchSource: "edit",
+      });
+      if (threadId) {
+        await this.loadImageThreadState(threadId);
+      }
+      if (stageImageId) {
+        await this.updateImageThreadStageSelection({
+          threadId,
+          activeResultId: resultsWithProvenance[0]?.id ?? stageImageId,
+          ...(resultsWithProvenance[0]?.batchId ? { activeBatchId: resultsWithProvenance[0].batchId } : {}),
+        });
+        await this.loadImageThreadState(threadId);
+      }
+    } catch (error) {
+      await this.resolveImageThreadDraft({
+        threadId,
+        prompt,
+        assistantMessage: {
+          content: error instanceof Error ? error.message : String(error),
+        },
+      });
+      this.sendToRenderer({
+        type: abortController.signal.aborted ? "image:aborted" : "image:error",
+        ...(abortController.signal.aborted
+          ? { message: "Image touch edit stopped." }
+          : { error: error instanceof Error ? error.message : String(error) }),
+      });
+    } finally {
+      if (this.activeImageAbortController === abortController) {
+        this.activeImageAbortController = undefined;
+      }
+      this.imageBusy = false;
+      await this.postImageState();
+      await this.loadSettings();
+    }
+  }
+
   private async runImageJob(message: Record<string, unknown>): Promise<void> {
     const prompt = String(message.prompt ?? "").trim();
     if (!prompt) {
@@ -2976,6 +3439,7 @@ export class ElectronChatPanel {
       return;
     }
 
+    const threadId = this.resolveImageThreadId(message, "image-chat");
     const abortController = new AbortController();
     this.activeImageAbortController = abortController;
     this.imageBusy = true;
@@ -2990,7 +3454,16 @@ export class ElectronChatPanel {
         batchCount: batchExecution.batchCount,
       });
       const referenceImages = this.normalizeImageReferenceImages(message.referenceImages);
-      const threadId = this.resolveImageThreadId(message, "image-chat");
+      await this.upsertImageThreadDraft({
+        ownerSurface: "image-chat",
+        threadId,
+        prompt,
+        referenceImages,
+        settings: {
+          size: config.size,
+          batchCount: config.batchCount,
+        },
+      });
       if (shouldRecordPromptHistory) {
         await this.settings.pushImagePromptHistory(prompt);
       }
@@ -3021,6 +3494,12 @@ export class ElectronChatPanel {
           size: config.size,
           batchCount: config.batchCount,
         },
+        activeResultId: typeof message.stageImageId === "string" && message.stageImageId.trim()
+          ? message.stageImageId.trim()
+          : undefined,
+        activeBatchId: typeof message.stageBatchId === "string" && message.stageBatchId.trim()
+          ? message.stageBatchId.trim()
+          : undefined,
       });
       const activeImageModelId = this.settings.getActiveImageModelId();
       await this.settings.saveImageConfig({
@@ -3049,6 +3528,13 @@ export class ElectronChatPanel {
       }
     } catch (error) {
       if (abortController.signal.aborted) {
+        await this.resolveImageThreadDraft({
+          threadId,
+          prompt,
+          assistantMessage: {
+            content: "本次生成已停止，可继续补充要求后重试。",
+          },
+        });
         this.sendToRenderer({
           type: "image:aborted",
           message: "已停止当前图片生成。",
@@ -3056,6 +3542,13 @@ export class ElectronChatPanel {
         return;
       }
 
+      await this.resolveImageThreadDraft({
+        threadId,
+        prompt,
+        assistantMessage: {
+          content: error instanceof Error ? error.message : String(error),
+        },
+      });
       this.sendToRenderer({
         type: "image:error",
         error: error instanceof Error ? error.message : String(error),
@@ -3068,6 +3561,48 @@ export class ElectronChatPanel {
       await this.postImageState();
       await this.loadSettings();
     }
+  }
+
+  private async handleImageThreadStageSelection(message: Record<string, unknown>): Promise<void> {
+    const threadId = typeof message.threadId === "string" ? message.threadId.trim() : "";
+    const activeResultId = typeof message.imageId === "string" ? message.imageId.trim() : "";
+    const activeBatchId = typeof message.batchId === "string" ? message.batchId.trim() : "";
+    if (!threadId || !activeResultId) {
+      return;
+    }
+    await this.updateImageThreadStageSelection({
+      threadId,
+      activeResultId,
+      ...(activeBatchId ? { activeBatchId } : {}),
+    });
+  }
+
+  private async handleImageThreadUiStateUpdate(message: Record<string, unknown>): Promise<void> {
+    const threadId = typeof message.threadId === "string" ? message.threadId.trim() : "";
+    if (!threadId) {
+      return;
+    }
+    const referenceImages = Array.isArray(message.referenceImages)
+      ? this.normalizeImageReferenceImages(message.referenceImages)
+      : undefined;
+    const settings = message.settings && typeof message.settings === "object"
+      ? {
+          ...(typeof (message.settings as { size?: unknown }).size === "string"
+            ? { size: String((message.settings as { size?: unknown }).size) }
+            : {}),
+          ...(typeof (message.settings as { batchCount?: unknown }).batchCount === "number"
+            ? { batchCount: Number((message.settings as { batchCount?: unknown }).batchCount) }
+            : {}),
+        }
+      : undefined;
+    const promptDraft = typeof message.promptDraft === "string" ? message.promptDraft : undefined;
+
+    await this.updateImageThreadUiState({
+      threadId,
+      ...(referenceImages ? { referenceImages } : {}),
+      ...(settings ? { settings } : {}),
+      ...(promptDraft !== undefined ? { promptDraft } : {}),
+    });
   }
 
   private async runImageVariant(id: string): Promise<void> {
@@ -3135,6 +3670,99 @@ export class ElectronChatPanel {
         this.sendToRenderer({
           type: "image:aborted",
           message: "已停止当前图片生成。",
+        });
+        return;
+      }
+
+      this.sendToRenderer({
+        type: "image:error",
+        error: error instanceof Error ? error.message : String(error),
+      });
+    } finally {
+      if (this.activeImageAbortController === abortController) {
+        this.activeImageAbortController = undefined;
+      }
+      this.imageBusy = false;
+      await this.postImageState();
+    }
+  }
+
+  private async runImageLayerBreakdown(id: string): Promise<void> {
+    await this.ensureImageResultsHydrated();
+    const source = this.imageResults.find(result => result.id === id.trim());
+    if (!source || this.imageBusy) {
+      return;
+    }
+
+    const abortController = new AbortController();
+    this.activeImageAbortController = abortController;
+    this.imageBusy = true;
+    await this.postImageState();
+
+    try {
+      const config = await this.buildImageConfig({
+        batchCount: 1,
+      });
+      const breakdownPrompt = buildImageLayerBreakdownPrompt(source.revisedPrompt || source.prompt);
+      const referenceImage = await this.buildReferenceImagePayloadFromSource(
+        source.src,
+        `layer-breakdown-source-${source.id}.png`,
+        abortController.signal,
+      );
+      const rawResults = await runImageLabRequest(
+        {
+          prompt: breakdownPrompt.displayPrompt,
+          executionPrompt: breakdownPrompt.executionPrompt,
+          config: {
+            ...config,
+            batchCount: 1,
+          },
+          referenceImages: [referenceImage],
+          signal: abortController.signal,
+        },
+        "edit",
+      );
+      const results = await this.hydrateImageResultSources(
+        rawResults,
+        abortController.signal,
+      );
+      const threadId = source.originThreadId || this.resolveImageThreadId({}, "image-chat");
+      const originSurface: ImageThreadOwnerSurface = source.originSurface ?? "image-chat";
+      const originSessionId = source.originSessionId;
+      const originProjectId = source.originProjectId;
+      const resultsWithProvenance = this.withImageResultProvenance(results, {
+        originSurface,
+        originThreadId: threadId,
+        ...(originSessionId ? { originSessionId } : {}),
+        ...(originProjectId ? { originProjectId } : {}),
+      });
+      this.imageResults = prependImageLabResults(this.imageResults, resultsWithProvenance);
+      await this.imageGalleryStore.saveResults(this.imageResults);
+      await this.recordImageThreadRun({
+        ownerSurface: originSurface,
+        threadId,
+        prompt: breakdownPrompt.displayPrompt,
+        results: resultsWithProvenance,
+        referenceImages: [referenceImage],
+        settings: {
+          size: config.size,
+          batchCount: 1,
+        },
+        ...(originSessionId ? { originSessionId } : {}),
+        ...(originProjectId ? { projectId: originProjectId } : {}),
+      });
+      this.sendToRenderer({
+        type: "image:result",
+        resultBatches: this.getImageResultBatches(),
+        latestBatchId: resultsWithProvenance[0]?.batchId ?? null,
+        latestBatchCount: resultsWithProvenance.length,
+        latestBatchSource: "edit",
+      });
+    } catch (error) {
+      if (abortController.signal.aborted) {
+        this.sendToRenderer({
+          type: "image:aborted",
+          message: "Image layer breakdown stopped.",
         });
         return;
       }
@@ -3667,7 +4295,6 @@ export class ElectronChatPanel {
       workflowPlan: this.imageWorkflowPlan,
       promptLibrary: await this.promptLibraryRepository.loadState(),
     });
-    await this.postMidtaiLibrary();
   }
 
   private async postMidtaiLibrary(filter?: MidtaiLibraryFilter): Promise<void> {
@@ -3676,6 +4303,20 @@ export class ElectronChatPanel {
       type: "midtai:library-update",
       items,
       filter: filter ?? "all",
+    });
+  }
+
+  private async postImageLibraryPage(options: {
+    offset?: unknown;
+    limit?: unknown;
+  } = {}): Promise<void> {
+    const page = await this.midtaiLibraryHost.getImageLibraryPage({
+      offset: typeof options.offset === "number" ? options.offset : Number(options.offset),
+      limit: typeof options.limit === "number" ? options.limit : Number(options.limit),
+    });
+    this.sendToRenderer({
+      type: "image:libraryPage",
+      ...page,
     });
   }
 
@@ -3919,7 +4560,7 @@ export class ElectronChatPanel {
     const target = options.target === "design-chat" ? "design-chat" : "default";
     const streamingId = `${options.sessionId}:design-stream:${Date.now()}`;
 
-    const isFormAnswerTurn = /^\[form answers\s*-\s*discovery\]/i.test(options.prompt);
+    const isFormAnswerTurn = isDesignChatFormAnswerPrompt(options.prompt);
     let designChatRunWorkspace: DesignChatRunWorkspace | undefined;
     if (isFormAnswerTurn) {
       designChatRunWorkspace = await this.initDesignChatRunWorkspace({
@@ -4441,7 +5082,7 @@ export class ElectronChatPanel {
     }
 
     const effectivePrompt = prompt;
-    const isFormAnswer = /^\[form answers\s*-\s*discovery\]/i.test(prompt);
+    const isFormAnswer = isDesignChatFormAnswerPrompt(prompt);
     if (!isFormAnswer && this.currentDesignProjectId) {
       const project = await this.designProjectStore.getProject(this.currentDesignProjectId);
       const hasVersion = !!(project?.activeVersionId && project.activeVersionId !== "pending-version");
@@ -6044,7 +6685,6 @@ export class ElectronChatPanel {
       type: "design:projects",
       projects,
     });
-    await this.postMidtaiLibrary();
   }
 
   private async createDesignProject(message: Record<string, unknown>): Promise<void> {

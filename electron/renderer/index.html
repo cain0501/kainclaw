@@ -49,10 +49,10 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-seri
 
 .klogo{width:28px;height:28px;background:#E84040;border-radius:6px;display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:700;color:#fff;flex-shrink:0}
 
-.btn-red{background:#E84040;color:#fff;border:none;border-radius:6px;padding:6px 12px;font-size:13px;font-weight:500;cursor:pointer;font-family:inherit;display:inline-flex;align-items:center;gap:5px;white-space:nowrap}
-.btn-red:hover{background:#d63737}
-.btn-secondary{background:#fff;border:1px solid #d4d4d8;border-radius:6px;padding:6px 12px;font-size:12px;font-weight:500;cursor:pointer;font-family:inherit;display:inline-flex;align-items:center;justify-content:center;gap:5px;white-space:nowrap;color:#52525b;flex-shrink:0}
-.btn-secondary:hover{background:#f4f4f5;border-color:#a1a1aa}
+.btn-red{background:#E84040;color:#fff;border:none;border-radius:10px;padding:7px 13px;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;display:inline-flex;align-items:center;justify-content:center;gap:6px;white-space:nowrap;line-height:1.2;box-shadow:0 10px 22px rgba(201,76,46,.16);transition:background .14s ease,box-shadow .14s ease,transform .14s ease}
+.btn-red:hover{background:#d63737;box-shadow:0 12px 24px rgba(201,76,46,.2);transform:translateY(-1px)}
+.btn-secondary{background:#fff;border:1px solid #e0d4c6;border-radius:999px;padding:7px 13px;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;display:inline-flex;align-items:center;justify-content:center;gap:6px;white-space:nowrap;color:#5d534a;flex-shrink:0;line-height:1.2;box-shadow:0 1px 0 rgba(255,255,255,.8) inset;transition:background .14s ease,border-color .14s ease,color .14s ease,transform .14s ease}
+.btn-secondary:hover{background:#f8f1e8;border-color:#cfb9a5;color:#2d1f14;transform:translateY(-1px)}
 .btn-ghost{background:transparent;border:none;width:28px;height:28px;border-radius:6px;cursor:pointer;display:flex;align-items:center;justify-content:center;color:#71717a;flex-shrink:0}
 .btn-ghost:hover{background:#f4f4f5}
 
@@ -330,13 +330,14 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-seri
 .midtai-shell-option{padding:10px 12px;border-radius:12px;border:1px solid #e6d9c9;background:rgba(255,251,247,.9);font-size:12px;color:#5d4638;line-height:1.6}
 .midtai-workspace{height:100%;min-height:0;display:grid;grid-template-rows:78px minmax(0,1fr)}
 .midtai-topbar-shell{display:flex;align-items:center;gap:12px;padding:16px 22px;border-bottom:1px solid rgba(216,195,175,.75);background:rgba(255,251,245,.72);backdrop-filter:blur(14px);position:sticky;top:0;z-index:10}
-.midtai-topbar-tabs{display:inline-flex;padding:4px;border-radius:999px;border:1px solid #d8c3af;background:rgba(255,255,255,.7);gap:4px;flex-shrink:0}
-.midtai-shell-tab{border:none;background:transparent;border-radius:999px;padding:10px 18px;font-size:13px;font-weight:700;color:#8c7767;cursor:pointer;transition:.16s ease}
+.midtai-topbar-tabs{display:inline-flex;padding:4px;border-radius:999px;border:1px solid #d8c3af;background:rgba(255,255,255,.72);gap:4px;flex-shrink:0;box-shadow:inset 0 1px 0 rgba(255,255,255,.82)}
+.midtai-shell-tab{border:none;background:transparent;border-radius:999px;padding:10px 18px;font-size:13px;font-weight:700;color:#8c7767;cursor:pointer;transition:background .16s ease,color .16s ease,box-shadow .16s ease,transform .16s ease}
+.midtai-shell-tab:hover{background:rgba(212,90,53,.08);color:#2d1f14}
 .midtai-shell-tab.active{background:linear-gradient(135deg,#d45a35 0%,#b64728 100%);color:#fff;box-shadow:0 10px 20px rgba(212,90,53,.18)}
 .midtai-topbar-copy{min-width:0}
 .midtai-topbar-eyebrow{font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:#8c7767;font-weight:700}
 .midtai-topbar-headline{margin-top:4px;font-size:20px;line-height:1.2;font-family:"Georgia","Times New Roman","Noto Serif SC",serif;color:#24160d}
-.midtai-goal-chip{margin-left:auto;padding:10px 14px;border-radius:999px;background:rgba(255,255,255,.9);border:1px solid #e6d9c9;box-shadow:0 16px 40px rgba(62,36,17,.08);display:flex;align-items:center;gap:8px;white-space:nowrap;font-size:12px;color:#5d4638}
+.midtai-goal-chip{margin-left:auto;padding:9px 14px;border-radius:999px;background:rgba(255,255,255,.9);border:1px solid #e6d9c9;box-shadow:0 12px 28px rgba(62,36,17,.06);display:flex;align-items:center;gap:8px;white-space:nowrap;font-size:12px;font-weight:600;color:#5d4638}
 .goal-dot{width:8px;height:8px;border-radius:999px;background:#d45a35;flex-shrink:0}
 .midtai-topbar-actions{display:flex;gap:8px;flex-shrink:0}
 .midtai-content{padding:16px 14px 18px;min-height:0;height:100%;display:flex;flex-direction:column;overflow:hidden}
@@ -374,7 +375,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-seri
 #midtai-design-left-pane #midtai-img-refs,
 #midtai-design-left-pane #design-advanced-fields > div{padding:14px;border:1px solid rgba(216,195,175,.7);border-radius:18px;background:rgba(255,255,255,.84);box-shadow:inset 0 1px 0 rgba(255,255,255,.72)}
 #midtai-image-left-pane #midtai-img-refs{margin-bottom:0}
-#midtai-design-left-pane #midtai-recent-works{padding:0;max-height:420px;overflow:hidden}
+#midtai-design-left-pane #midtai-recent-works{padding:0;max-height:520px;overflow:hidden}
 #midtai-design-left-pane .midtai-recent-works-list{padding-right:2px;overflow:auto}
 #midtai-image-left-pane .midtai-pane-scroll{display:flex;flex-direction:column;min-height:0;overflow:hidden}
 #midtai-form-img.image-chat-shell{flex:1;min-height:0;height:100%}
@@ -431,12 +432,13 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-seri
 .midtai-work-item.active{border-color:rgba(212,90,53,.45);background:linear-gradient(180deg,rgba(255,250,246,.95),rgba(255,255,255,.92));box-shadow:0 14px 24px rgba(212,90,53,.08);transform:translateY(-1px)}
 .midtai-work-pill{background:rgba(255,255,255,.9);border-color:#e6d9c9}
 .midtai-tabbar,.chat-tabs{display:flex;align-items:center;gap:8px;padding:0 0 14px;background:transparent;border-bottom:1px solid rgba(216,195,175,.55);flex-shrink:0;height:auto}
-.chat-tab{height:auto;padding:8px 10px;border:none;border-radius:999px;background:transparent;color:#8c7767;font-size:12px;font-weight:700;cursor:pointer}
-.chat-tab.active{background:rgba(212,90,53,.08);color:#d45a35}
-.chat-tab:hover{background:rgba(212,90,53,.06);color:#24160d}
+.chat-tab{height:auto;padding:8px 12px;border:1px solid transparent;border-radius:999px;background:transparent;color:#8c7767;font-size:12px;font-weight:700;cursor:pointer;line-height:1.2;transition:background .14s ease,border-color .14s ease,color .14s ease,transform .14s ease}
+.chat-tab.active{background:#fff0e6;border-color:#f0c8a0;color:#7b4a2e;box-shadow:inset 0 1px 0 rgba(255,255,255,.7)}
+.chat-tab:hover{background:rgba(212,90,53,.06);border-color:rgba(212,90,53,.12);color:#24160d;transform:translateY(-1px)}
 .midtai-library-subtabs{padding:0 0 18px;border-bottom:none}
-.midtai-library-subtab{border-radius:999px;padding:8px 14px;border:1px solid #e6d9c9;background:rgba(255,255,255,.78);color:#8c7767}
-.midtai-library-subtab.active{background:rgba(212,90,53,.12);border-color:rgba(212,90,53,.25);color:#d45a35}
+.midtai-library-subtab{border-radius:999px;padding:8px 14px;border:1px solid #e6d9c9;background:rgba(255,255,255,.78);color:#8c7767;font-size:12px;font-weight:700;line-height:1.2;transition:background .14s ease,border-color .14s ease,color .14s ease,transform .14s ease}
+.midtai-library-subtab:hover{background:#f8f1e8;border-color:#cfb9a5;color:#2d1f14;transform:translateY(-1px)}
+.midtai-library-subtab.active{background:#fff0e6;border-color:#f0c8a0;color:#7b4a2e;box-shadow:inset 0 1px 0 rgba(255,255,255,.7)}
 .design-wcard,.midtai-img-card{border-radius:18px;border:1px solid #e6d9c9;box-shadow:0 10px 24px rgba(77,49,24,.07);background:rgba(255,255,255,.88)}
 .design-wcard:hover,.midtai-img-card:hover{transform:translateY(-2px);box-shadow:0 16px 32px rgba(77,49,24,.12)}
 .design-wcard-thumb{height:144px;background:linear-gradient(180deg,#fffdf9 0%,#f4e7d6 100%)}
@@ -463,9 +465,9 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-seri
 .canvas-toolbar{padding:12px 14px;background:linear-gradient(180deg,#fff9f3 0%,#fffdf9 100%);border-bottom:1px solid rgba(36,22,13,.08)}
 .canvas-toolbar-btn,.canvas-mode-btn{border-radius:999px;padding:6px 12px}
 .canvas-mode-btn.active{background:#24160d;border-color:#24160d}
-.state-chip{display:none;align-items:center;gap:6px;padding:3px 10px;background:#f5f0e8;border:1px solid #e5ddd0;border-radius:20px;font-size:11px;color:#57534e}
+.state-chip{display:none;align-items:center;gap:6px;padding:9px 14px;background:rgba(255,255,255,.9);border:1px solid #e6d9c9;border-radius:999px;font-size:12px;font-weight:600;color:#5d4638;white-space:nowrap;box-shadow:0 12px 28px rgba(62,36,17,.06)}
 .state-chip.visible{display:flex}
-.state-chip-dot{width:6px;height:6px;border-radius:50%;background:#16a34a;flex-shrink:0}
+.state-chip-dot{width:7px;height:7px;border-radius:50%;background:#16a34a;flex-shrink:0}
 .midtai-shell-body{flex:1;min-height:0;height:100%;display:flex;flex-direction:column;gap:16px;overflow:hidden}
 .midtai-left-panel{width:auto;min-width:0;max-width:none;flex-shrink:1;background:transparent;border-right:none;display:flex;flex-direction:column;overflow:hidden}
 .midtai-left-resizer{display:none}
@@ -481,27 +483,36 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-seri
 .midtai-type-divider{display:none}
 .midtai-left-scroll{flex:1;overflow:hidden;display:flex;flex-direction:column;min-height:0}
 .midtai-form{padding:12px 12px 0;display:flex;flex-direction:column;gap:10px;overflow-y:auto;min-height:0}
-.midtai-recent-works{display:none;flex-direction:column;gap:10px;padding:12px 12px 0;overflow:hidden;flex-shrink:0;max-height:340px}
+.midtai-recent-works{display:none;flex-direction:column;gap:10px;padding:12px 12px 0;overflow:hidden;flex-shrink:0;max-height:520px}
 .midtai-recent-works.visible{display:flex}
 .midtai-recent-works-head{display:flex;align-items:flex-start;justify-content:space-between;gap:10px}
 .midtai-recent-works-title{font-size:13px;font-weight:700;color:#1c1917;line-height:1.4}
-.midtai-recent-works-sub{font-size:11px;color:#8b7969;line-height:1.6;margin-top:3px}
-.midtai-recent-works-list{display:flex;flex-direction:column;gap:8px;overflow:auto;padding-right:2px;min-height:0}
-.midtai-work-item{border:1px solid #eadfd2;border-radius:14px;background:#fff;padding:12px 12px 11px;cursor:pointer;transition:border-color .14s ease, box-shadow .14s ease, transform .14s ease}
+.midtai-recent-works-sub{font-size:11px;color:#8b7969;line-height:1.55;margin-top:3px;max-width:22ch}
+.midtai-recent-works-groups{display:flex;flex-direction:column;gap:10px;min-height:0}
+.midtai-recent-works-group{display:flex;flex-direction:column;gap:6px}
+.midtai-recent-works-group + .midtai-recent-works-group{padding-top:8px;border-top:1px solid rgba(224,212,198,.78)}
+.midtai-recent-works-group-head{display:flex;align-items:center;justify-content:space-between;gap:8px}
+.midtai-recent-works-group-label{font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:#9b8574}
+.midtai-recent-works-group-copy{font-size:11px;line-height:1.55;color:#8b7969}
+.midtai-recent-works-list{display:flex;flex-direction:column;gap:6px;overflow:auto;padding-right:2px;min-height:0}
+.midtai-work-item{position:relative;border:1px solid #eadfd2;border-radius:16px;background:#fff;padding:10px 10px 9px;cursor:pointer;transition:border-color .14s ease, box-shadow .14s ease, transform .14s ease}
 .midtai-work-item:hover{border-color:#d8c3af;box-shadow:0 10px 18px rgba(77,49,24,.08);transform:translateY(-1px)}
-.midtai-work-item.active{border-color:#c94c2e;background:linear-gradient(180deg,#fff6f1 0%,#fff2ea 100%);box-shadow:0 16px 30px rgba(201,76,46,.14)}
+.midtai-work-item.active{border-color:#c94c2e;background:linear-gradient(180deg,#fff7f2 0%,#fff2ea 100%);box-shadow:0 16px 30px rgba(201,76,46,.14)}
 .midtai-work-item.active .midtai-work-item-title{color:#7b4a2e}
-.midtai-work-item.active::before{content:'';display:block;height:3px;border-radius:999px;background:linear-gradient(90deg,#d45a35 0%,#f09a64 100%);margin:-12px -12px 10px}
 .midtai-work-item.transient{border-style:dashed;opacity:.78;background:#fffdfb}
-.midtai-work-item-title{font-size:12px;font-weight:700;color:#24160d;line-height:1.55}
-.midtai-work-item-meta{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:7px;font-size:10px;color:#9b8574}
+.midtai-work-item-title{font-size:12px;font-weight:700;color:#24160d;line-height:1.45}
+.midtai-work-item-meta{display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-top:5px;font-size:10px;color:#9b8574}
 .midtai-work-pill{display:inline-flex;align-items:center;padding:2px 6px;border-radius:999px;border:1px solid #eadfd2;background:#fffdfb;font-size:10px;font-weight:700;color:#6f6258}
 .midtai-work-item.active .midtai-work-pill{background:#fff;border-color:#efc3a3;color:#b5532e}
-.midtai-work-state{margin-top:8px;font-size:10px;color:#9b8574;line-height:1.6}
+.midtai-work-state{margin-top:6px;font-size:10px;color:#9b8574;line-height:1.5}
 .midtai-work-empty{padding:14px 12px;border:1px dashed #eadfd2;border-radius:14px;background:#fffdfb;color:#9b8574;font-size:11px;line-height:1.7}
+.midtai-work-item-current-badge{display:inline-flex;align-items:center;gap:6px;margin-bottom:6px;padding:3px 8px;border-radius:999px;background:#fff;border:1px solid #efc3a3;font-size:10px;font-weight:700;color:#b5532e;align-self:flex-start}
+.midtai-work-item-current-dot{width:6px;height:6px;border-radius:999px;background:#d45a35;flex-shrink:0}
+.midtai-work-item-delete{position:absolute;top:10px;right:10px;width:22px;height:22px;border:none;border-radius:999px;background:rgba(255,255,255,.92);color:#a08e7f;box-shadow:0 6px 14px rgba(77,49,24,.1);font-size:13px;font-weight:700;display:flex;align-items:center;justify-content:center;cursor:pointer;line-height:1;transition:background .14s ease,color .14s ease,transform .14s ease}
+.midtai-work-item-delete:hover{background:#fff;color:#c94c2e;transform:translateY(-1px)}
 .midtai-library-shell{display:flex;flex-direction:column;min-height:0;height:100%}
 .midtai-library-subtabs{display:flex;align-items:center;gap:8px;padding:14px 16px 10px;border-bottom:1px solid #f0ebe3;flex-shrink:0}
-.midtai-library-subtab{padding:6px 12px;border:1px solid #eadfd2;background:#fff;border-radius:999px;font-size:12px;color:#6f6258;font-weight:700;cursor:pointer}
+.midtai-library-subtab{padding:8px 14px;border:1px solid #e0d4c6;background:#fff;border-radius:999px;font-size:12px;color:#6f6258;font-weight:700;cursor:pointer;line-height:1.2;box-shadow:0 1px 0 rgba(255,255,255,.8) inset;transition:background .14s ease,border-color .14s ease,color .14s ease,transform .14s ease}
 .midtai-library-subtab.active{background:#fff0e6;border-color:#f0c8a0;color:#7b4a2e}
 .midtai-library-panel{display:none;flex:1;min-height:0;overflow:auto;padding:14px 16px 18px}
 .midtai-library-panel.active{display:block}
@@ -540,8 +551,8 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-seri
 .canvas-mode-btn{padding:6px 12px;border:1px solid #eadfd2;background:rgba(255,255,255,.84);border-radius:999px;font-size:12px;font-weight:700;color:#6f6258}
 .canvas-mode-btn.active{background:#1c1917;color:#fff;border-color:#1c1917}
 .canvas-toolbar-spacer{flex:1}
-.canvas-toolbar-btn{padding:6px 12px;border:1px solid #eadfd2;background:rgba(255,255,255,.84);border-radius:999px;font-size:12px;font-weight:700;color:#57534e}
-.canvas-toolbar-btn:hover{background:#f5f0e8}
+.canvas-toolbar-btn{padding:7px 13px;border:1px solid #e0d4c6;background:rgba(255,255,255,.9);border-radius:999px;font-size:12px;font-weight:700;color:#5d534a;line-height:1.2;box-shadow:0 1px 0 rgba(255,255,255,.8) inset;transition:background .14s ease,border-color .14s ease,color .14s ease,transform .14s ease}
+.canvas-toolbar-btn:hover{background:#f8f1e8;border-color:#cfb9a5;color:#2d1f14;transform:translateY(-1px)}
 .replace-ctx{display:none;align-items:center;gap:8px;padding:6px 16px;background:#fffbeb;border-bottom:1.5px solid #fbbf24;flex-shrink:0;height:32px}
 .replace-ctx.visible{display:flex}
 .replace-ctx-icon{font-size:12px}
@@ -622,7 +633,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-seri
 .midtai-panel-design .chat-tab{transition:all .14s ease}
 .midtai-panel-design .midtai-view{overflow:hidden}
 .midtai-design-chat-shell{display:flex;flex-direction:column;flex:1;min-height:0;height:100%}
-.midtai-design-chat-messages{flex:1;min-height:0;overflow-y:auto;padding:18px 18px 12px !important;display:flex;flex-direction:column;gap:14px}
+.midtai-design-chat-messages{flex:1;min-height:0;overflow-y:auto;padding:18px 20px 14px !important;display:flex;flex-direction:column;gap:16px}
 .midtai-design-composer{padding:16px 18px 18px;border-top:1px solid rgba(216,195,175,.55);background:linear-gradient(180deg,rgba(255,251,245,.24) 0%,rgba(255,247,239,.72) 100%);flex-shrink:0}
 .midtai-design-composer-card{display:flex;flex-direction:column;gap:10px;padding:14px 14px 12px;border:1px solid #eadfd2;border-radius:18px;background:rgba(255,255,255,.94);box-shadow:0 10px 24px rgba(77,49,24,.05)}
 .midtai-design-composer-hint{font-size:11px;color:#9a8878;line-height:1.6}
@@ -631,6 +642,19 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-seri
 #design-chat-input::placeholder{color:#a8998a}
 .midtai-design-composer-actions{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap}
 .midtai-design-composer-send{padding:8px 18px;border:none;border-radius:999px;background:linear-gradient(135deg,#d45a35 0%,#b64728 100%);color:#fff;font-size:12px;font-weight:700;cursor:pointer;box-shadow:0 12px 24px rgba(212,90,53,.18)}
+.midtai-design-chat-stage{width:min(100%,1040px);margin:0 auto;display:flex;flex-direction:column;gap:14px;min-height:100%}
+.midtai-design-chat-empty-card{display:flex;flex-direction:column;gap:14px;padding:22px 22px 18px;border:1px dashed #e0cdbb;border-radius:20px;background:linear-gradient(180deg,rgba(255,255,255,.88),rgba(255,250,244,.72));box-shadow:inset 0 1px 0 rgba(255,255,255,.8)}
+.midtai-design-chat-empty-head{display:flex;align-items:flex-start;justify-content:space-between;gap:18px}
+.midtai-design-chat-empty-copy{flex:1;min-width:0}
+.midtai-design-chat-empty-icon{width:38px;height:38px;border-radius:14px;background:linear-gradient(135deg,#f6e5d8,#fff4ea);display:flex;align-items:center;justify-content:center;color:#b5532e;font-size:18px;box-shadow:inset 0 1px 0 rgba(255,255,255,.8)}
+.midtai-design-chat-empty-title{font-size:16px;font-weight:700;line-height:1.35;color:#24160d}
+.midtai-design-chat-empty-sub{margin-top:6px;font-size:12px;line-height:1.7;color:#6f5a4b;max-width:56ch}
+.midtai-design-chat-empty-list{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}
+.midtai-design-chat-empty-item{padding:12px 12px 10px;border:1px solid #eadfd2;border-radius:16px;background:rgba(255,255,255,.9);box-shadow:0 8px 18px rgba(77,49,24,.04)}
+.midtai-design-chat-empty-item-kicker{font-size:10px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:#a08e7f}
+.midtai-design-chat-empty-item-copy{margin-top:6px;font-size:12px;line-height:1.65;color:#5d4638}
+.midtai-design-chat-empty-footer{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}
+.midtai-design-chat-empty-hint{font-size:11px;line-height:1.6;color:#9a8878}
 .midtai-canvas-workspace{padding:18px 20px 20px;overflow:hidden}
 .midtai-design-versions-workspace{padding:18px 20px 20px;overflow:hidden}
 .midtai-design-versions-shell{display:flex;flex-direction:column;gap:12px;min-height:0;height:100%}
@@ -652,6 +676,8 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-seri
   .midtai-goal-chip{display:none}
   .midtai-canvas-workspace,.midtai-design-versions-workspace{padding:16px}
   .midtai-panel-design .midtai-tabbar{padding:16px 16px 12px}
+  .midtai-design-chat-empty-list{grid-template-columns:1fr}
+  .midtai-design-chat-empty-head{flex-direction:column}
 }
 /* ichat-v2 — image chat rebuild */
 #ichat-v2{display:flex;flex-direction:column;height:100%;min-height:0;background:#fffdfb}
@@ -1021,15 +1047,28 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-seri
         <button class="btn-secondary" onclick="openPromptLibraryFromEditor()">提示词库</button>
       </div>
       <div style="flex:1;display:flex;align-items:center;justify-content:center;overflow:auto;padding:20px;background:#faf9f7">
-        <img id="chat-image-editor-preview" alt="edit target" style="max-width:min(72vw,980px);max-height:100%;border-radius:18px;box-shadow:0 18px 40px rgba(0,0,0,.12);display:none">
+        <div id="chat-image-editor-preview-wrap" style="position:relative;display:none;max-width:min(72vw,980px);max-height:100%">
+          <img id="chat-image-editor-preview" alt="edit target" style="max-width:min(72vw,980px);max-height:100%;border-radius:18px;box-shadow:0 18px 40px rgba(0,0,0,.12);display:block">
+          <canvas id="chat-image-editor-mask-canvas" style="position:absolute;inset:0;width:100%;height:100%;border-radius:18px;cursor:crosshair;touch-action:none"></canvas>
+        </div>
       </div>
       <div style="padding:14px 16px;border-top:1px solid #f1f1f3;background:#fff">
+        <div style="display:flex;gap:8px;margin-bottom:10px">
+          <button id="chat-image-editor-mode-overall" class="btn-secondary" type="button" onclick="setChatImageEditorMode('overall')">整体编辑</button>
+          <button id="chat-image-editor-mode-touch" class="btn-secondary" type="button" onclick="setChatImageEditorMode('touch')">局部涂抹</button>
+        </div>
         <div id="chat-image-editor-reference-strip" style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px"></div>
-        <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px">
+        <div id="chat-image-editor-toolbar" style="display:flex;align-items:center;gap:8px;margin-bottom:10px">
           <input id="chat-image-editor-file" type="file" accept="image/*" multiple style="display:none" onchange="handleChatImageEditorReference(event)">
           <button class="btn-secondary" onclick="document.getElementById('chat-image-editor-file').click()">添加参考图</button>
           <button class="btn-secondary" onclick="inferPromptInChatImageEditor()">识图反推提示词</button>
 <button class="btn-secondary" onclick="openMaterialSearchFromEditor()">找参考图</button>
+          <label id="chat-image-editor-brush-wrap" style="display:flex;align-items:center;gap:8px;margin-left:4px;font-size:12px;color:#7a6656">
+            笔刷
+            <input id="chat-image-editor-brush-size" type="range" min="8" max="128" step="2" value="36" oninput="setChatImageEditorBrushSize(this.value)">
+            <span id="chat-image-editor-brush-size-value">36px</span>
+          </label>
+          <button id="chat-image-editor-clear-mask" class="btn-secondary" type="button" onclick="clearChatImageEditorMask()">清除涂抹</button>
           <span id="chat-image-editor-meta" style="font-size:12px;color:#8b7969">当前会把目标图作为第一张参考图。</span>
         </div>
         <div class="textarea-box" style="margin-bottom:10px">
@@ -1037,7 +1076,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-seri
         </div>
         <div style="display:flex;align-items:center;justify-content:flex-end;gap:8px">
           <button class="btn-secondary" onclick="closeChatImageEditor()">取消</button>
-          <button id="chat-image-editor-submit" class="btn-red" onclick="submitChatImageEditor()">发送编辑</button>
+          <button id="chat-image-editor-submit" class="btn-red" onclick="submitChatImageEditor()">开始编辑</button>
         </div>
       </div>
     </div>
@@ -1393,7 +1432,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-seri
               <button id="ichat-infer-btn" class="ichat-infer-btn" type="button" onclick="inferIchatPrompt()" style="display:none">✦ AI 描述</button>
             </div>
             <div class="ichat-input-row">
-              <textarea id="ichat-input" class="ichat-input" placeholder="描述你想要的图片，可以带参考图、比例说明…" rows="2" onkeydown="handleIchatKey(event)"></textarea>
+              <textarea id="ichat-input" class="ichat-input" placeholder="描述你想要的图片，可以带参考图、比例说明…" rows="2" onkeydown="handleIchatKey(event)" oninput="handleIchatDraftInput()"></textarea>
               <button id="ichat-action-btn" class="ichat-send-btn btn-red" type="button" onclick="handleIchatActionBtn()">发送</button>
             </div>
             <div id="ichat-cfg-panel" class="ichat-cfg-panel"></div>
@@ -1461,7 +1500,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-seri
             <div class="midtai-recent-works-head">
               <div>
                 <div class="midtai-recent-works-title">最近作品</div>
-                <div class="midtai-recent-works-sub">只显示正式作品，快速切换当前设计上下文。</div>
+                <div class="midtai-recent-works-sub">切换当前设计上下文。当前作品单独置顶，其他最近作品放在下方。</div>
               </div>
               <button class="btn-red" type="button" style="padding:10px 14px;border-radius:12px;font-size:12px;font-weight:700;white-space:nowrap;box-shadow:0 12px 24px rgba(212,90,53,.18)" onclick="startNewTransientWork()">+ 新建作品</button>
             </div>
@@ -1688,11 +1727,33 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-seri
                 </button>
               </div>
               <div id="design-chat-messages" class="midtai-design-chat-messages">
-                <div id="design-chat-empty" style="display:flex;flex-direction:column;align-items:center;
-                  justify-content:center;flex:1;gap:8px;color:#a8a29e;text-align:center;padding:20px 0">
-                  <div style="font-size:24px;opacity:.4">✦</div>
-                  <div style="font-size:13px;font-weight:500;color:#78716c">从这个作品专属的设计对话开始</div>
-                  <div style="font-size:11px;line-height:1.6">描述需求、补充方向、接收引导问题；生成第一版后再进入画布继续改。</div>
+                <div id="design-chat-empty" class="midtai-design-chat-stage" style="display:none">
+                  <div class="midtai-design-chat-empty-card">
+                    <div class="midtai-design-chat-empty-head">
+                      <div class="midtai-design-chat-empty-copy">
+                        <div class="midtai-design-chat-empty-title">从这个作品专属的设计对话开始</div>
+                        <div class="midtai-design-chat-empty-sub">先把目标、想保留的感觉和需要避开的方向说清楚。生成第一版前，这里应该像一个简短的设计 briefing，而不是一块被留空的画布。</div>
+                      </div>
+                      <div class="midtai-design-chat-empty-icon">✦</div>
+                    </div>
+                    <div class="midtai-design-chat-empty-list">
+                      <div class="midtai-design-chat-empty-item">
+                        <div class="midtai-design-chat-empty-item-kicker">先说目标</div>
+                        <div class="midtai-design-chat-empty-item-copy">这页是给谁看的，要完成什么动作，为什么现在就要做。</div>
+                      </div>
+                      <div class="midtai-design-chat-empty-item">
+                        <div class="midtai-design-chat-empty-item-kicker">再说方向</div>
+                        <div class="midtai-design-chat-empty-item-copy">你想要的气质、参考对象、不能接受的风格，都可以直接写在这里。</div>
+                      </div>
+                      <div class="midtai-design-chat-empty-item">
+                        <div class="midtai-design-chat-empty-item-kicker">然后迭代</div>
+                        <div class="midtai-design-chat-empty-item-copy">第一版出来后，再切到画布和版本记录，不要一开始就把工作流拆散。</div>
+                      </div>
+                    </div>
+                    <div class="midtai-design-chat-empty-footer">
+                      <div class="midtai-design-chat-empty-hint">提示：如果你只想快速出一版，先填上面的 quick form；如果你想和 AI 先聊需求，直接在下方输入框开口。</div>
+                    </div>
+                  </div>
                 </div>
               </div>
               <div class="midtai-design-composer">
@@ -1815,27 +1876,6 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-seri
       </div>
     </div>
 </div>
-</div>
-
-<!-- MIDTAI IMAGE EDIT OVERLAY -->
-<div id="midtai-img-edit-overlay" class="overlay" onclick="if(event.target===this)closeMidtaiImageEdit()">
-  <div style="width:min(440px,calc(100vw - 32px));background:#fff;border-radius:16px;box-shadow:0 24px 64px rgba(0,0,0,.18);overflow:hidden">
-    <div style="padding:14px 16px;border-bottom:1px solid #f1ede7;display:flex;align-items:center">
-      <div style="font-size:15px;font-weight:700;color:#2d1f14">二次编辑</div>
-      <button onclick="closeMidtaiImageEdit()" style="margin-left:auto;background:transparent;border:none;font-size:18px;line-height:1;cursor:pointer;color:#9b8a7b;padding:4px 6px">×</button>
-    </div>
-    <div style="padding:16px;display:flex;flex-direction:column;gap:14px">
-      <img id="midtai-img-edit-preview" src="" alt="" style="width:100%;border-radius:10px;max-height:240px;object-fit:contain;background:#f5f0e8;display:block">
-      <div>
-        <div style="font-size:12px;font-weight:600;color:#8b7969;margin-bottom:6px;letter-spacing:.03em">修改描述</div>
-        <textarea id="midtai-img-edit-prompt" rows="3" placeholder="描述你想要的修改，或直接重新描述整张图..." style="width:100%;box-sizing:border-box;border:1px solid #e5ddd0;border-radius:8px;padding:10px 12px;font-size:13px;outline:none;font-family:inherit;color:#2d1f14;resize:vertical;background:#fdfaf7"></textarea>
-      </div>
-      <div style="display:flex;justify-content:flex-end;gap:8px">
-        <button onclick="closeMidtaiImageEdit()" style="background:transparent;border:1px solid #e4e4e7;border-radius:6px;padding:7px 14px;font-size:13px;cursor:pointer;font-family:inherit;color:#52525b">取消</button>
-        <button class="btn-red" onclick="submitMidtaiImageEdit()" style="padding:7px 16px">重新生成</button>
-      </div>
-    </div>
-  </div>
 </div>
 
 <!-- IMAGE LIGHTBOX OVERLAY -->
@@ -2250,6 +2290,8 @@ let imageChatThreadState = {
   captionsByBatchId: {},
   optimisticMessages: [],
   pendingRun: null,
+  loadingThreadId: null,
+  currentThreadRecord: null,
   settings: {
     size: '1024x1024',
     batchCount: 1,
@@ -2273,6 +2315,17 @@ const missingThumbnailCache = new Set();
 const imageThumbCache = new Map(); // imageId → src
 const imageDecodeCache = new Set(); // IDs already decoded by browser (second visit = instant)
 let midtaiThumbsToken = 0; // incremented on tab-switch to cancel in-flight rAF thumb loads
+let midtaiImageThumbObserver = null;
+const pendingImageThumbLoads = new Set();
+const MIDTAI_IMAGE_PAGE_SIZE = 24;
+let midtaiImageLibraryPageState = {
+  items: [],
+  nextOffset: 0,
+  total: 0,
+  hasMore: false,
+  loading: false,
+  loadedOnce: false,
+};
 let midtaiImageEditState = { id: null, src: null, originalPrompt: '' };
 const MIDTAI_PLIB_IMG = [
   {
@@ -3183,7 +3236,12 @@ let chatImageEditorState = {
   open: false,
   messageIndex: -1,
   imageIndex: -1,
+  mode: 'overall',
   extraReferenceImages: [],
+  brushSize: 36,
+  isDrawingMask: false,
+  maskDirty: false,
+  lastMaskPoint: null,
 };
 let imageState = {
   busy: false,
@@ -3811,11 +3869,33 @@ function handleMessage(msg) {
       }
       break;
     case 'image:result':
+      var _wasMidtaiImagePreviewRun = !!(
+        imageState.pendingBatch ||
+        midtaiState.imgPreviewSession ||
+        midtaiState.imgPreviewRequestNonce
+      );
       imageState.pendingBatch = null;
       imageState.lastError = '';
       midtaiState.imgPreviewRequestNonce = 0;
-      midtaiState.imgPreviewBatchId = typeof msg.latestBatchId === 'string' && msg.latestBatchId ? msg.latestBatchId : null;
+      midtaiState.imgPreviewSession = false;
+      var _resultBatches = Array.isArray(msg.resultBatches) ? msg.resultBatches : [];
+      var _latestBatchId = typeof msg.latestBatchId === 'string' ? msg.latestBatchId.trim() : '';
+      var _latestBatch = _latestBatchId
+        ? _resultBatches.find(function(batch) { return String(batch?.id || '').trim() === _latestBatchId; })
+        : null;
+      var _newestBatch = _latestBatch || _resultBatches[0] || null;
+      var _newestImage = (_newestBatch?.items || [])[0] || _resultBatches.flatMap(function(batch) { return batch.items || []; })[0] || null;
+      var _newestBatchId = String(_newestImage?.batchId || _newestBatch?.id || _latestBatchId || '').trim();
+      var _newestThreadId = String(_newestImage?.originThreadId || '').trim();
+      var _newestThreadOwner = String(_newestImage?.originSurface || '').trim();
+      var _shouldLoadResultThread = !!_newestThreadId && (!_newestThreadOwner || _newestThreadOwner === 'image-chat');
+      if (_wasMidtaiImagePreviewRun) {
+        midtaiState.imgPreviewBatchId = _newestBatchId || null;
+      }
       imageState.resultBatches = Array.isArray(msg.resultBatches) ? msg.resultBatches : imageState.resultBatches;
+      if (_wasMidtaiImagePreviewRun && Array.isArray(msg.resultBatches)) {
+        imageChatThreadState.resultBatches = msg.resultBatches;
+      }
       if (Array.isArray(msg.resultBatches)) {
         for (const batch of msg.resultBatches) {
           for (const item of (batch.items || [])) {
@@ -3832,9 +3912,17 @@ function handleMessage(msg) {
       if (imageChatThreadState.pendingRun) {
         completeImageChatPendingRun('done', { keepOptimisticUser: true, clearPrompt: true, preservePendingRun: true });
       }
-      if (!imageChatThreadState.activeStageImageId && Array.isArray(msg.resultBatches)) {
-        const newestImage = msg.resultBatches.flatMap(batch => batch.items || [])[0];
-        imageChatThreadState.activeStageImageId = newestImage?.id || null;
+      if (_wasMidtaiImagePreviewRun && _newestImage?.id) {
+        imageChatThreadState.activeStageImageId = _newestImage.id;
+        imageChatThreadState.activeResultId = _newestImage.id;
+        imageChatThreadState.activeBatchId = _newestBatchId || null;
+        if (_newestBatchId) {
+          midtaiState.imgPreviewBatchId = _newestBatchId;
+        }
+        if (_shouldLoadResultThread) {
+          imageChatThreadState.activeThreadId = _newestThreadId;
+          imageChatThreadState.loadingThreadId = _newestThreadId;
+        }
       }
       renderMidtaiImagePreview();
       renderImageChatThreadPanel();
@@ -3856,8 +3944,11 @@ function handleMessage(msg) {
         renderImageChatThreadPanel();
         renderMidtaiImagePreview();
       }
-      if (imageChatThreadState.activeThreadId) {
-        send({ type: 'image:loadThread', threadId: imageChatThreadState.activeThreadId });
+      var _threadIdToLoad = _wasMidtaiImagePreviewRun && _shouldLoadResultThread
+        ? _newestThreadId
+        : (!_wasMidtaiImagePreviewRun || !_newestImage ? imageChatThreadState.activeThreadId : null);
+      if (_threadIdToLoad) {
+        send({ type: 'image:loadThread', threadId: _threadIdToLoad });
       } else {
         refreshImageChatThreads();
       }
@@ -3882,6 +3973,11 @@ function handleMessage(msg) {
         imageThumbCache.set(_srcId, _src);
         const _action = pendingImageSrcActions.get(_srcId);
         pendingImageSrcActions.delete(_srcId);
+        pendingImageThumbLoads.delete(_srcId);
+        hydrateMidtaiImageCardThumbs(_srcId, _src);
+        if (_action === 'thumbnail') {
+          break;
+        }
         if (_action === 'lightbox') {
           var _lbImg = document.getElementById('img-lightbox-img');
           if (_lbImg) _lbImg.src = _src;
@@ -3900,9 +3996,15 @@ function handleMessage(msg) {
             .find(function(item) { return item.id === _srcId; });
           if (_editResult) openMidtaiImageEdit(_srcId, _src, _editResult);
         }
+      } else if (_srcId) {
+        pendingImageSrcActions.delete(_srcId);
+        pendingImageThumbLoads.delete(_srcId);
       }
       break;
     }
+    case 'image:libraryPage':
+      applyMidtaiImageLibraryPage(msg);
+      break;
     case 'image:chatResponse':
       if (imageChatThreadState.pendingRun) {
         var _chatPendingId = imageChatThreadState.pendingRun.pendingAssistantId;
@@ -3924,6 +4026,9 @@ function handleMessage(msg) {
           status: 'done',
         });
         imageChatThreadState.pendingRun = null;
+        imageChatThreadState.currentThreadRecord = Object.assign({}, imageChatThreadState.currentThreadRecord || {}, {
+          promptDraft: '',
+        });
       }
       renderImageChatThreadPanel();
       break;
@@ -4759,6 +4864,7 @@ function chooseDesignEntryPath(path) {
   if (chatInput) {
     chatInput.focus();
   }
+  send({ type: 'design:chat:send', prompt: '__trigger_discovery__' });
 }
 
 function dispatchDesignChatPrompt(prompt) {
@@ -5215,10 +5321,61 @@ function renderDesignChatBuildStatusBubble() {
   </div>`;
 }
 
+function syncDesignChatEmptyCopy(empty) {
+  if (!empty) return;
+  const chinese = !isEnglishUi();
+  const titleEl = empty.querySelector('.midtai-design-chat-empty-title');
+  const subEl = empty.querySelector('.midtai-design-chat-empty-sub');
+  const hintEl = empty.querySelector('.midtai-design-chat-empty-hint');
+  const kickerEls = Array.from(empty.querySelectorAll('.midtai-design-chat-empty-item-kicker'));
+  const copyEls = Array.from(empty.querySelectorAll('.midtai-design-chat-empty-item-copy'));
+
+  if (titleEl) {
+    titleEl.textContent = chinese
+      ? '从这个作品专属的设计对话开始'
+      : 'Start from this project-specific design chat';
+  }
+  if (subEl) {
+    subEl.textContent = chinese
+      ? '直接描述你想做什么页面、给谁看、想要什么感觉。系统会根据你的输入继续追问，或者直接生成第一版。'
+      : 'Describe the page, the audience, and the feeling you want. KainClaw will either ask follow-up questions or generate the first version directly.';
+  }
+  if (hintEl) {
+    hintEl.textContent = chinese
+      ? '提示：如果你只想快速出一版，先填上面的 quick form；如果你想边聊边收敛需求，直接在下方输入框开始。'
+      : 'Tip: use the quick form above for a fast first draft, or start typing below if you want to shape the requirement through chat.';
+  }
+
+  const nextKickers = chinese
+    ? ['作品目标', '风格方向', '关键内容']
+    : ['Goal', 'Direction', 'Key content'];
+  const nextCopies = chinese
+    ? [
+        '这是官网首页、活动页、PPT，还是信息图？希望用户看完之后做什么？',
+        '可以直接说你想要的气质、参考对象，或者明确说不要什么风格。',
+        '把必须出现的标题、卖点、模块、品牌词或参考图一起带上，会更快出结果。',
+      ]
+    : [
+        'Is this a landing page, event page, deck, or infographic? What should people do after they see it?',
+        'Call out the mood you want, the references you like, or the styles you want to avoid.',
+        'Include must-have headlines, selling points, sections, brand words, or reference images to get better results faster.',
+      ];
+
+  kickerEls.forEach((node, index) => {
+    if (nextKickers[index]) node.textContent = nextKickers[index];
+  });
+  copyEls.forEach((node, index) => {
+    if (nextCopies[index]) node.textContent = nextCopies[index];
+  });
+}
+
 function renderMidtaiDesignChat() {
   const wrap = document.getElementById('design-chat-messages');
   const empty = document.getElementById('design-chat-empty');
   if (!wrap) return;
+  const previousScrollTop = wrap.scrollTop;
+  const previousScrollHeight = wrap.scrollHeight;
+  const wasNearBottom = previousScrollHeight - previousScrollTop - wrap.clientHeight <= 40;
   syncMidtaiDesignWorkspaceHeader();
   const messages = Array.isArray(designChatMessages) ? designChatMessages : [];
   const latestFormRuntime = getDesignChatLatestFormRuntime();
@@ -5233,8 +5390,8 @@ function renderMidtaiDesignChat() {
     const isUser = message.role === 'user';
     const alignStyle = isUser ? 'justify-content:flex-end' : 'justify-content:flex-start';
     const bubbleStyle = isUser
-      ? 'max-width:88%;padding:10px 12px;border-radius:16px 16px 6px 16px;background:linear-gradient(135deg,#cf5535 0%,#c94c2e 55%,#b94528 100%);color:#fff;font-size:12px;line-height:1.75;box-shadow:0 10px 22px rgba(201,76,46,.18)'
-      : 'max-width:88%;padding:10px 12px;border-radius:16px 16px 16px 6px;background:linear-gradient(180deg,#fffefd 0%,#f8f5f1 100%);color:#2d1f14;font-size:12px;line-height:1.75;border:1px solid #efe7dc;box-shadow:0 8px 18px rgba(77,49,24,.06)';
+      ? 'max-width:92%;padding:10px 12px;border-radius:16px 16px 6px 16px;background:linear-gradient(135deg,#cf5535 0%,#c94c2e 55%,#b94528 100%);color:#fff;font-size:12px;line-height:1.75;box-shadow:0 10px 22px rgba(201,76,46,.18)'
+      : 'max-width:100%;padding:10px 12px;border-radius:16px 16px 16px 6px;background:linear-gradient(180deg,#fffefd 0%,#f8f5f1 100%);color:#2d1f14;font-size:12px;line-height:1.75;border:1px solid #efe7dc;box-shadow:0 8px 18px rgba(77,49,24,.06)';
     const metaStyle = isUser
       ? 'font-size:10px;color:rgba(255,255,255,.74);margin-top:5px;text-align:right'
       : 'font-size:10px;color:#a08e7f;margin-top:5px';
@@ -5258,7 +5415,7 @@ function renderMidtaiDesignChat() {
   });
   if (designChatPendingUserPrompt) {
     parts.push(`<div style="display:flex;justify-content:flex-end;gap:8px;align-items:flex-end;opacity:.78">
-      <div style="max-width:88%;padding:10px 12px;border-radius:16px 16px 6px 16px;background:linear-gradient(135deg,#cf5535 0%,#c94c2e 55%,#b94528 100%);color:#fff;font-size:12px;line-height:1.75;box-shadow:0 10px 22px rgba(201,76,46,.18)">
+      <div style="max-width:92%;padding:10px 12px;border-radius:16px 16px 6px 16px;background:linear-gradient(135deg,#cf5535 0%,#c94c2e 55%,#b94528 100%);color:#fff;font-size:12px;line-height:1.75;box-shadow:0 10px 22px rgba(201,76,46,.18)">
         ${renderMarkdown(designChatPendingUserPrompt)}
         <div style="font-size:10px;color:rgba(255,255,255,.74);margin-top:5px;text-align:right">发送中…</div>
       </div>
@@ -5274,7 +5431,7 @@ function renderMidtaiDesignChat() {
       : formatDesignChatText(designChatStreamingText);
     parts.push(`<div style="display:flex;justify-content:flex-start;gap:8px;align-items:flex-end">
       <div style="width:22px;height:22px;border-radius:8px;background:linear-gradient(135deg,#1f1f23 0%,#3a2c25 100%);color:#fff;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;flex-shrink:0;box-shadow:0 6px 16px rgba(24,24,27,.16)">K</div>
-      <div style="max-width:88%;padding:10px 12px;border-radius:16px 16px 16px 6px;background:linear-gradient(180deg,#fffefd 0%,#f8f5f1 100%);color:#2d1f14;font-size:12px;line-height:1.75;border:1px solid #efe7dc;box-shadow:0 8px 18px rgba(77,49,24,.06)">
+      <div style="max-width:100%;padding:10px 12px;border-radius:16px 16px 16px 6px;background:linear-gradient(180deg,#fffefd 0%,#f8f5f1 100%);color:#2d1f14;font-size:12px;line-height:1.75;border:1px solid #efe7dc;box-shadow:0 8px 18px rgba(77,49,24,.06)">
         ${streamingBody}
         <div style="display:flex;align-items:center;gap:6px;margin-top:8px;font-size:10px;color:#a08e7f">
           <span style="display:inline-flex;gap:3px;align-items:center"><span class="typing-dots"><span></span><span></span><span></span></span></span>
@@ -5285,13 +5442,14 @@ function renderMidtaiDesignChat() {
   }
   wrap.innerHTML = parts.join('');
   if (empty) {
-    const quickFormVisible = document.getElementById('design-quick-form')?.style.display !== 'none';
-    empty.style.display = messages.length === 0 && !designChatStreamingText && !quickFormVisible ? 'flex' : 'none';
-    if (empty.style.display !== 'none') {
-      wrap.appendChild(empty);
-    }
+    empty.style.display = 'none';
   }
-  wrap.scrollTop = wrap.scrollHeight;
+  if (wasNearBottom) {
+    wrap.scrollTop = wrap.scrollHeight;
+  } else {
+    const heightDelta = wrap.scrollHeight - previousScrollHeight;
+    wrap.scrollTop = Math.max(0, previousScrollTop + heightDelta);
+  }
 }
 
 function getImageChatThreadId() {
@@ -5319,9 +5477,45 @@ function getImageChatActiveStageImage() {
   return images.find(result => result.id === activeImageId) || images[0] || null;
 }
 
+function syncImageChatPendingRunFromThread() {
+  const thread = imageChatThreadState.currentThreadRecord && typeof imageChatThreadState.currentThreadRecord === 'object'
+    ? imageChatThreadState.currentThreadRecord
+    : null;
+  const draftPrompt = thread && typeof thread.promptDraft === 'string' ? thread.promptDraft.trim() : '';
+  const persistedMessages = Array.isArray(imageChatThreadState.messages) ? imageChatThreadState.messages : [];
+  if (!draftPrompt) {
+    imageChatThreadState.pendingRun = null;
+    imageChatThreadState.optimisticMessages = [];
+    return;
+  }
+  const hasDraftPair = persistedMessages.length >= 2 &&
+    persistedMessages[persistedMessages.length - 2]?.role === 'user' &&
+    String(persistedMessages[persistedMessages.length - 2]?.content || '').trim() === draftPrompt &&
+    persistedMessages[persistedMessages.length - 1]?.role === 'assistant' &&
+    String(persistedMessages[persistedMessages.length - 1]?.content || '').trim() === 'Generating...';
+  if (!hasDraftPair) {
+    imageChatThreadState.pendingRun = null;
+    imageChatThreadState.optimisticMessages = [];
+    return;
+  }
+  const userMessage = persistedMessages[persistedMessages.length - 2];
+  const pendingMessage = persistedMessages[persistedMessages.length - 1];
+  imageChatThreadState.pendingRun = {
+    runId: `persisted-${imageChatThreadState.activeThreadId || 'thread'}`,
+    prompt: draftPrompt,
+    createdAt: Number(userMessage?.createdAt || Date.now()),
+    pendingAssistantId: String(pendingMessage?.id || `persisted-pending-${imageChatThreadState.activeThreadId || 'thread'}`),
+  };
+  imageChatThreadState.optimisticMessages = [];
+}
+
 function syncImageChatActiveStageImage() {
   const activeImage = getImageChatActiveStageImage();
   imageChatThreadState.activeStageImageId = activeImage?.id || null;
+}
+
+function getImageChatPersistedMessageCount() {
+  return Array.isArray(imageChatThreadState.messages) ? imageChatThreadState.messages.length : 0;
 }
 
 function getImageChatThreadSummary() {
@@ -5421,20 +5615,53 @@ function refreshImageChatThreads() {
   send({ type: 'image:listThreads', ownerSurface: 'image-chat' });
 }
 
+function persistActiveImageChatThreadUiState(options) {
+  var threadId = imageChatThreadState.activeThreadId || getImageChatThreadId();
+  if (!threadId) return;
+  var payload = {
+    type: 'image:updateThreadUiState',
+    threadId: threadId,
+    referenceImages: imageState.referenceImages.map(function(ref) { return Object.assign({}, ref); }),
+    settings: {
+      size: imageChatThreadState.settings.size || midtaiState.imgSize || '1024x1024',
+      batchCount: imageChatThreadState.settings.batchCount || midtaiState.imgCount || 1,
+    },
+  };
+  if (options && Object.prototype.hasOwnProperty.call(options, 'promptDraft')) {
+    payload.promptDraft = String(options.promptDraft || '');
+  }
+  send(payload);
+}
+
 function selectImageChatThread(threadId) {
   const normalizedThreadId = String(threadId || '').trim();
   if (!normalizedThreadId) return;
+  persistActiveImageChatThreadUiState({
+    promptDraft: String((document.getElementById('ichat-input') || {}).value || ''),
+  });
   imageChatThreadState.activeThreadId = normalizedThreadId;
+  imageChatThreadState.loadingThreadId = normalizedThreadId;
+  imageChatThreadState.currentThreadRecord = null;
+  imageChatThreadState.messages = [];
+  imageChatThreadState.referenceImages = [];
+  imageChatThreadState.resultBatches = [];
   imageChatThreadState.optimisticMessages = [];
   imageChatThreadState.pendingRun = null;
+  imageChatThreadState.activeResultId = null;
+  imageChatThreadState.activeBatchId = null;
   imageChatThreadState.activeStageImageId = null;
   send({ type: 'image:loadThread', threadId: normalizedThreadId });
   renderImageChatThreadPanel();
 }
 
 function createImageChatThread() {
+  persistActiveImageChatThreadUiState({
+    promptDraft: String((document.getElementById('ichat-input') || {}).value || ''),
+  });
   const threadId = `image-chat:${Date.now()}-${Math.random().toString(16).slice(2, 8)}`;
   imageChatThreadState.activeThreadId = threadId;
+  imageChatThreadState.loadingThreadId = null;
+  imageChatThreadState.currentThreadRecord = null;
   imageChatThreadState.messages = [];
   imageChatThreadState.referenceImages = [];
   imageChatThreadState.resultBatches = [];
@@ -5456,7 +5683,12 @@ function createImageChatThread() {
 function applyImageChatThreadState(msg) {
   const thread = msg?.thread && typeof msg.thread === 'object' ? msg.thread : null;
   if (!thread || thread.ownerSurface !== 'image-chat') return;
+  if (imageChatThreadState.loadingThreadId && String(thread.threadId || '').trim() !== imageChatThreadState.loadingThreadId) {
+    return;
+  }
   imageChatThreadState.activeThreadId = String(thread.threadId || '').trim() || imageChatThreadState.activeThreadId;
+  imageChatThreadState.loadingThreadId = null;
+  imageChatThreadState.currentThreadRecord = thread;
   imageChatThreadState.messages = Array.isArray(thread.messages) ? thread.messages : [];
   imageChatThreadState.referenceImages = Array.isArray(thread.referenceImages) ? thread.referenceImages : [];
   imageChatThreadState.resultBatches = Array.isArray(msg.resultBatches) ? msg.resultBatches : [];
@@ -5467,19 +5699,16 @@ function applyImageChatThreadState(msg) {
   };
   imageChatThreadState.activeResultId = thread.activeResultId || null;
   imageChatThreadState.activeBatchId = thread.activeBatchId || null;
-  if (imageChatThreadState.pendingRun) {
-    const pendingPrompt = String(imageChatThreadState.pendingRun.prompt || '').trim();
-    const hasUserMessage = imageChatThreadState.messages.some(message => message.role === 'user' && String(message.content || '').trim() === pendingPrompt);
-    const hasAssistantResult = imageChatThreadState.messages.some(message => message.role === 'assistant' && Array.isArray(message.resultIds) && message.resultIds.length > 0);
-    if (hasUserMessage && hasAssistantResult) {
-      completeImageChatPendingRun('done');
-    }
-  }
+  syncImageChatPendingRunFromThread();
   imageState.referenceImages = imageChatThreadState.referenceImages.map(referenceImage => ({ ...referenceImage }));
   midtaiState.imgPreviewBatchId = imageChatThreadState.activeBatchId || null;
   syncImageChatActiveStageImage();
   setMidtaiImageSize(imageChatThreadState.settings.size || '1024x1024');
   setMidtaiImageCount(imageChatThreadState.settings.batchCount || 1);
+  var composerInput = document.getElementById('ichat-input');
+  if (composerInput) {
+    composerInput.value = String(thread.promptDraft || '');
+  }
   renderMidtaiImageRefList();
   renderImageChatThreadPanel();
   renderMidtaiImagePreview();
@@ -5489,6 +5718,7 @@ function openImageChatStageImage(imageId) {
   const normalizedImageId = String(imageId || '').trim();
   if (!normalizedImageId) return;
   imageChatThreadState.activeStageImageId = normalizedImageId;
+  imageChatThreadState.activeResultId = normalizedImageId;
   const image = getImageChatFlatResults().find(result => result.id === normalizedImageId);
   if (image?.batchId) {
     imageChatThreadState.activeBatchId = image.batchId;
@@ -5503,6 +5733,14 @@ function openImageChatStageImage(imageId) {
   document.querySelectorAll('#mtbar-img .chat-tab').forEach(btn => {
     btn.classList.toggle('active', btn.dataset.view === 'img-preview');
   });
+  if (imageChatThreadState.activeThreadId) {
+    send({
+      type: 'image:selectThreadStage',
+      threadId: imageChatThreadState.activeThreadId,
+      imageId: normalizedImageId,
+      ...(image?.batchId ? { batchId: image.batchId } : {}),
+    });
+  }
   renderMidtaiImagePreview();
 }
 
@@ -5948,10 +6186,7 @@ function renderMidtaiImageWorks() {
     }
     return;
   }
-  results.forEach(r => {
-    const displaySrc = r.src || r.thumbnail || '';
-    if (displaySrc) imageThumbCache.set(r.id, displaySrc);
-  });
+  primeMidtaiImageThumbSources(results);
 
   container.innerHTML = `
     <div class="midtai-works-shell">
@@ -5959,35 +6194,19 @@ function renderMidtaiImageWorks() {
         <span class="midtai-works-title">${isReplace ? `为「${escapeHtml(midtaiState.replaceCtx.project)} · ${escapeHtml(midtaiState.replaceCtx.element)}」选图` : '我的作品'}</span>
         <span class="midtai-works-count">${results.length}</span>
       </div>
-      <div class="midtai-works-scroll">
-        <div class="midtai-img-grid">
-          ${results.map(result => {
-            const _eid = encodeURIComponent(String(result.id || ''));
-            const cachedThumb = thumbnailCache.get(result.id) || (imageDecodeCache.has(result.id) ? imageThumbCache.get(result.id) : null);
-            return `
-            <div class="midtai-img-card" ${cachedThumb ? '' : `data-imgid="${result.id}"`}>
-              <div class="midtai-img-thumb-wrap">${cachedThumb ? `<img loading="lazy" src="${cachedThumb}" class="midtai-img-thumb" alt="generated">` : '<div class="thumb-shimmer"></div>'}</div>
-              <div class="midtai-img-card-body">
-                <div class="midtai-img-card-copy">${escapeHtml(String(result.revisedPrompt || result.prompt || '')).slice(0, 96)}</div>
-                <div class="midtai-img-actions">
-                  <button class="btn-secondary" type="button" style="text-align:center" onclick="downloadImageById('${result.id}')">下载</button>
-                  ${isReplace
-                    ? `<button class="btn-red" style="justify-content:center" onclick="useImageInDesignById('${result.id}')">插入到设计</button>`
-                    : `<button class="btn-secondary" style="justify-content:center" onclick="openImageChatStageImage(decodeURIComponent('${_eid}'))">插入到对话</button>`}
-                </div>
-                <div class="midtai-img-actions" style="margin-top:6px">
-                  <button class="btn-secondary" style="justify-content:center" onclick="beginMidtaiImageEdit(decodeURIComponent('${_eid}'))">二次编辑</button>
-                  <button class="btn-secondary" style="justify-content:center" onclick="makeMidtaiImageVariant(decodeURIComponent('${_eid}'))">变体</button>
-                </div>
-              </div>
-            </div>
-          `;
-          }).join('')}
-        </div>
+      <div class="midtai-works-scroll" data-midtai-image-pager="works">
+        <div class="midtai-img-grid"></div>
       </div>
     </div>
   `;
-  observeMidtaiImageThumbs(container);
+  midtaiThumbsToken++;
+  setupMidtaiImagePager({
+    scrollEl: container.querySelector('[data-midtai-image-pager="works"]'),
+    gridEl: container.querySelector('.midtai-img-grid'),
+    items: results,
+    mode: 'works',
+    isReplace,
+  });
 }
 
 function beginMidtaiImageEdit(id) {
@@ -5995,28 +6214,38 @@ function beginMidtaiImageEdit(id) {
 }
 
 function makeMidtaiImageVariant(id) {
+  const resolvedBatchCount = resolveImageRunBatchCount(prompt, midtaiState.imgCount || 1);
   armMidtaiImagePreviewSession();
   showImgView('img-preview');
   makeImageVariant(id);
 }
 
+function makeMidtaiImageLayerBreakdown(id) {
+  if (!id) return;
+  imageState.pendingBatch = createPendingImageLabBatch('edit', 1);
+  armMidtaiImagePreviewSession();
+  showImgView('img-preview');
+  setImageLabStatus(isEnglishUi() ? 'Creating smart layer breakdown...' : '正在生成智能分层拆解...');
+  renderMidtaiImagePreview();
+  send({ type: 'image:layerBreakdown', id });
+}
+
 function openMidtaiImageEdit(id, srcOverride, resultOverride) {
-  const result = resultOverride || (imageState.resultBatches || []).flatMap(b => b.items || []).find(i => i.id === id);
-  if (!result) return;
-  const fullSrc = String(srcOverride || result.src || '').trim();
-  if (!fullSrc) return;
-  midtaiImageEditState = { id, src: fullSrc, originalPrompt: result.revisedPrompt || result.prompt || '' };
-  const previewEl = document.getElementById('midtai-img-edit-preview');
-  const promptEl = document.getElementById('midtai-img-edit-prompt');
-  if (previewEl) previewEl.src = fullSrc;
-  if (promptEl) promptEl.value = String(result.revisedPrompt || result.prompt || '').trim();
-  document.getElementById('midtai-img-edit-overlay')?.classList.add('show');
-  requestAnimationFrame(() => promptEl?.focus());
+  const generatedMessages = Array.isArray(appState.messages) ? appState.messages : [];
+  for (let messageIndex = generatedMessages.length - 1; messageIndex >= 0; messageIndex -= 1) {
+    const message = generatedMessages[messageIndex];
+    if (!Array.isArray(message?.generatedImages)) continue;
+    const imageIndex = message.generatedImages.findIndex(image => String(image?.id || '') === String(id));
+    if (imageIndex >= 0) {
+      openChatImageEditor(messageIndex, imageIndex);
+      return;
+    }
+  }
+  alert('????????????????????????????????');
 }
 
 function closeMidtaiImageEdit() {
   midtaiImageEditState = { id: null, src: null, originalPrompt: '' };
-  document.getElementById('midtai-img-edit-overlay')?.classList.remove('show');
 }
 
 function openImageLightbox(event, src) {
@@ -6034,85 +6263,195 @@ function closeImageLightbox() {
 }
 
 function submitMidtaiImageEdit() {
-  const prompt = document.getElementById('midtai-img-edit-prompt')?.value.trim();
-  if (!prompt || !midtaiImageEditState.src) return;
-  setImageLabReferenceFromSource(midtaiImageEditState.src, `edit-${midtaiImageEditState.id}.png`, { mode: 'prepend' });
   closeMidtaiImageEdit();
-  armMidtaiImagePreviewSession();
-  showImgView('img-preview');
-  runImageRequest({
-    prompt,
-    sizePreset: midtaiState.imgSize || '1024x1024',
-    batchCount: midtaiState.imgCount || 1,
+}
+
+function primeMidtaiImageThumbSources(items) {
+  for (const item of (Array.isArray(items) ? items : [])) {
+    if (!item?.id) continue;
+    const displaySrc = item.thumbnail || item.src || '';
+    if (displaySrc && !imageThumbCache.get(item.id)) {
+      imageThumbCache.set(item.id, displaySrc);
+    }
+  }
+}
+
+function getMidtaiImageThumbSource(id) {
+  return thumbnailCache.get(id) || imageThumbCache.get(id) || '';
+}
+
+function setMidtaiImageCardThumb(card, src) {
+  if (!card || !src) return;
+  const wrap = card.querySelector('.midtai-img-thumb-wrap');
+  if (!wrap) return;
+  const id = String(card.dataset.loadedImgid || card.dataset.imgid || '');
+  const img = new Image();
+  img.className = 'midtai-img-thumb';
+  img.alt = 'generated';
+  img.loading = 'lazy';
+  img.src = src;
+  const actionOverlay = wrap.querySelector('.midtai-image-card-actions');
+  wrap.querySelector('.thumb-shimmer')?.remove();
+  wrap.querySelector('img.midtai-img-thumb')?.remove();
+  if (actionOverlay) {
+    wrap.insertBefore(img, actionOverlay);
+  } else {
+    wrap.innerHTML = '';
+    wrap.appendChild(img);
+  }
+  if (id) imageDecodeCache.add(id);
+}
+
+function hydrateMidtaiImageCardThumbs(id, src) {
+  const normalizedId = String(id || '');
+  if (!normalizedId || !src) return;
+  document.querySelectorAll('.midtai-img-card[data-loaded-imgid], .midtai-img-card[data-imgid]').forEach(function(card) {
+    if (card.dataset.loadedImgid !== normalizedId && card.dataset.imgid !== normalizedId) return;
+    card.dataset.loadedImgid = normalizedId;
+    delete card.dataset.imgid;
+    setMidtaiImageCardThumb(card, src);
   });
+}
+
+function renderMidtaiImageCard(result, options = {}) {
+  const id = String(result?.id || '');
+  const escapedId = escapeHtml(id);
+  const encodedId = encodeURIComponent(id);
+  const cachedThumb = getMidtaiImageThumbSource(id);
+  const thumbHtml = cachedThumb
+    ? `<img loading="lazy" src="${escapeHtml(cachedThumb)}" class="midtai-img-thumb" alt="generated">`
+    : '<div class="thumb-shimmer"></div>';
+  const prompt = escapeHtml(String(result?.revisedPrompt || result?.prompt || '')).slice(0, 96);
+
+  if (options.mode === 'library') {
+    return `
+      <div class="midtai-img-card" data-imgid="${escapedId}">
+        <div class="midtai-img-thumb-wrap midtai-image-card-preview" style="cursor:pointer" onclick="openImageById(decodeURIComponent('${encodedId}'))">
+          ${thumbHtml}
+          <div class="midtai-image-card-actions">
+            <button
+              class="midtai-image-card-icon"
+              type="button"
+              title="${isEnglishUi() ? 'Delete' : '删除素材'}"
+              onclick="event.stopPropagation(); deleteImageResult(decodeURIComponent('${encodedId}'))"
+            >×</button>
+          </div>
+        </div>
+        <div class="midtai-img-card-body">
+          <div class="midtai-img-card-copy">${prompt}</div>
+          <div class="midtai-img-actions">
+            <button class="btn-secondary" type="button" style="text-align:center" onclick="downloadImageById(decodeURIComponent('${encodedId}'))">下载</button>
+            ${midtaiState.currentDesignProjectId
+              ? `<button class="btn-secondary" style="justify-content:center" onclick="useImageInDesignById(decodeURIComponent('${encodedId}'))">用于当前设计</button>`
+              : `<button class="btn-secondary" style="justify-content:center;opacity:.5;cursor:not-allowed" disabled title="先进入一个设计作品">用于当前设计</button>`}
+          </div>
+        </div>
+      </div>
+    `;
+  }
+
+  return `
+    <div class="midtai-img-card" data-imgid="${escapedId}">
+      <div class="midtai-img-thumb-wrap">${thumbHtml}</div>
+      <div class="midtai-img-card-body">
+        <div class="midtai-img-card-copy">${prompt}</div>
+        <div class="midtai-img-actions">
+          <button class="btn-secondary" type="button" style="text-align:center" onclick="downloadImageById(decodeURIComponent('${encodedId}'))">下载</button>
+          ${options.isReplace
+            ? `<button class="btn-red" style="justify-content:center" onclick="useImageInDesignById(decodeURIComponent('${encodedId}'))">插入到设计</button>`
+            : `<button class="btn-secondary" style="justify-content:center" onclick="openImageChatStageImage(decodeURIComponent('${encodedId}'))">插入到对话</button>`}
+        </div>
+        <div class="midtai-img-actions" style="margin-top:6px">
+          <button class="btn-secondary" style="justify-content:center" onclick="beginMidtaiImageEdit(decodeURIComponent('${encodedId}'))">二次编辑</button>
+          <button class="btn-secondary" style="justify-content:center" onclick="makeMidtaiImageVariant(decodeURIComponent('${encodedId}'))">变体</button>
+        </div>
+        <div class="midtai-img-actions" style="margin-top:6px;grid-template-columns:1fr">
+          <button class="btn-secondary" style="justify-content:center" onclick="makeMidtaiImageLayerBreakdown(decodeURIComponent('${encodedId}'))">智能分层拆解</button>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+function setupMidtaiImagePager({ scrollEl, gridEl, items, mode, isReplace }) {
+  if (!scrollEl || !gridEl) return;
+  const sourceItems = Array.isArray(items) ? items : [];
+  let renderedCount = 0;
+  const renderNextPage = () => {
+    const nextItems = sourceItems.slice(renderedCount, renderedCount + MIDTAI_IMAGE_PAGE_SIZE);
+    if (!nextItems.length) return;
+    gridEl.insertAdjacentHTML('beforeend', nextItems.map(item => renderMidtaiImageCard(item, { mode, isReplace })).join(''));
+    renderedCount += nextItems.length;
+    observeMidtaiImageThumbs(gridEl);
+  };
+  renderNextPage();
+  scrollEl.onscroll = () => {
+    if (renderedCount >= sourceItems.length) return;
+    const remaining = scrollEl.scrollHeight - scrollEl.scrollTop - scrollEl.clientHeight;
+    if (remaining < 700) {
+      renderNextPage();
+    }
+  };
 }
 
 function observeMidtaiImageThumbs(container) {
   const cards = Array.from(container.querySelectorAll('.midtai-img-card[data-imgid]'));
   if (!cards.length) return;
-  let i = 0;
-  const CHUNK = 4;
-  const myToken = ++midtaiThumbsToken;
-  function loadChunk() {
-    if (myToken !== midtaiThumbsToken) return;
-    const end = Math.min(i + CHUNK, cards.length);
-    while (i < end) {
-      const card = cards[i++];
-      const id = card.dataset.imgid;
-      delete card.dataset.imgid;
-      const wrap = card.querySelector('.midtai-img-thumb-wrap');
-      if (!wrap) continue;
-      if (imageDecodeCache.has(id) && imageThumbCache.has(id)) {
-        const img = new Image();
-        img.className = 'midtai-img-thumb';
-        img.alt = 'generated';
-        img.src = imageThumbCache.get(id);
-        const actionOverlay = wrap.querySelector('.midtai-image-card-actions');
-        wrap.querySelector('.thumb-shimmer')?.remove();
-        wrap.querySelector('img.midtai-img-thumb')?.remove();
-        if (actionOverlay) {
-          wrap.insertBefore(img, actionOverlay);
-        } else {
-          wrap.innerHTML = '';
-          wrap.appendChild(img);
-        }
-        continue;
-      }
-      const src = imageThumbCache.get(id);
-      if (!src) continue;
+  const myToken = midtaiThumbsToken;
+  if (midtaiImageThumbObserver) {
+    midtaiImageThumbObserver.disconnect();
+  }
+  const loadCard = card => {
+    if (myToken !== midtaiThumbsToken || !card?.dataset?.imgid) return;
+    const id = card.dataset.imgid;
+    card.dataset.loadedImgid = id;
+    delete card.dataset.imgid;
+    const src = getMidtaiImageThumbSource(id);
+    if (src) {
+      setMidtaiImageCardThumb(card, src);
       const img = new Image();
       img.className = 'midtai-img-thumb';
       img.alt = 'generated';
+      img.loading = 'lazy';
       img.onload = () => {
         if (myToken !== midtaiThumbsToken) return;
         try {
-          const SIZE = 320;
-          const scale = Math.min(SIZE / img.naturalWidth, SIZE / img.naturalHeight, 1);
-          const canvas = document.createElement('canvas');
-          canvas.width = Math.round(img.naturalWidth * scale) || SIZE;
-          canvas.height = Math.round(img.naturalHeight * scale) || SIZE;
-          canvas.getContext('2d').drawImage(img, 0, 0, canvas.width, canvas.height);
-          const thumbDataUrl = canvas.toDataURL('image/jpeg', 0.65);
-          imageThumbCache.set(id, thumbDataUrl);
-          thumbnailCache.set(id, thumbDataUrl);
-          send({ type: 'image:saveThumbnail', id, dataUrl: thumbDataUrl });
+          if (!thumbnailCache.has(id)) {
+            const SIZE = 320;
+            const scale = Math.min(SIZE / img.naturalWidth, SIZE / img.naturalHeight, 1);
+            const canvas = document.createElement('canvas');
+            canvas.width = Math.round(img.naturalWidth * scale) || SIZE;
+            canvas.height = Math.round(img.naturalHeight * scale) || SIZE;
+            canvas.getContext('2d').drawImage(img, 0, 0, canvas.width, canvas.height);
+            const thumbDataUrl = canvas.toDataURL('image/jpeg', 0.65);
+            imageThumbCache.set(id, thumbDataUrl);
+            thumbnailCache.set(id, thumbDataUrl);
+            send({ type: 'image:saveThumbnail', id, dataUrl: thumbDataUrl });
+          }
         } catch (_) {}
-        imageDecodeCache.add(id);
-        const actionOverlay = wrap.querySelector('.midtai-image-card-actions');
-        wrap.querySelector('.thumb-shimmer')?.remove();
-        wrap.querySelector('img.midtai-img-thumb')?.remove();
-        if (actionOverlay) {
-          wrap.insertBefore(img, actionOverlay);
-        } else {
-          wrap.innerHTML = '';
-          wrap.appendChild(img);
-        }
+        setMidtaiImageCardThumb(card, thumbnailCache.get(id) || img.src);
       };
       img.src = src;
+      return;
     }
-    if (i < cards.length) requestAnimationFrame(loadChunk);
+    if (!pendingImageThumbLoads.has(id)) {
+      pendingImageThumbLoads.add(id);
+      requestImageSrc(id, 'thumbnail');
+    }
+  };
+
+  if (!('IntersectionObserver' in window)) {
+    cards.slice(0, MIDTAI_IMAGE_PAGE_SIZE).forEach(loadCard);
+    return;
   }
-  requestAnimationFrame(loadChunk);
+  midtaiImageThumbObserver = new IntersectionObserver(entries => {
+    for (const entry of entries) {
+      if (!entry.isIntersecting) continue;
+      midtaiImageThumbObserver.unobserve(entry.target);
+      loadCard(entry.target);
+    }
+  }, { root: container.closest('.midtai-works-scroll') || container.closest('.midtai-library-panel') || null, rootMargin: '360px 0px' });
+  cards.forEach(card => midtaiImageThumbObserver.observe(card));
 }
 
 function scheduleDesignThumbnailLoads(items, options = {}) {
@@ -6239,25 +6578,69 @@ function renderMidtaiRecentWorks() {
   const entries = items.map(item => {
     const projectId = String(item.projectId || item.id || '').trim();
     const title = escapeHtml(String(item.name || item.title || (isEnglishUi() ? 'Untitled work' : '未命名作品')));
+    const encodedProjectName = encodeURIComponent(String(item.name || item.title || ''));
     const active = midtaiState.currentDesignProjectId && projectId === midtaiState.currentDesignProjectId;
     const versionLabel = item.version ? escapeHtml(String(item.version)) : (isEnglishUi() ? 'Work' : '作品');
     const stateLabel = item.isDraft ? (isEnglishUi() ? 'Draft work' : '草稿') : versionLabel;
     const timeLabel = formatMidtaiRelativeTime(item.updatedAt || item.createdAt);
     return `
-      <button class="midtai-work-item${active ? ' active' : ''}" type="button" data-project-id="${escapeHtml(projectId)}">
+      <div class="midtai-work-item${active ? ' active' : ''}" role="button" tabindex="0" data-project-id="${escapeHtml(projectId)}">
+        <button
+          class="midtai-work-item-delete"
+          type="button"
+          title="${isEnglishUi() ? 'Delete project' : '删除作品'}"
+          aria-label="${isEnglishUi() ? 'Delete project' : '删除作品'}"
+          onclick="event.stopPropagation(); deleteMidtaiDesignProject('${escapeHtml(projectId)}', decodeURIComponent('${encodedProjectName}'));"
+        >×</button>
+        ${active ? `<span class="midtai-work-item-current-badge"><span class="midtai-work-item-current-dot"></span>${isEnglishUi() ? 'Current work' : '当前作品'}</span>` : ''}
         <div class="midtai-work-item-title">${title}</div>
         <div class="midtai-work-item-meta">
-          <span class="midtai-work-pill">${active ? (isEnglishUi() ? 'Current work' : '当前作品') : stateLabel}</span>
+          <span class="midtai-work-pill">${active ? stateLabel : stateLabel}</span>
           <span>${escapeHtml(timeLabel)}</span>
         </div>
         ${item.isDraft ? `<div class="midtai-work-state">${isEnglishUi() ? 'No durable version yet. Generate the first version to formalize it.' : '还没有正式版本。生成第一版后会升级为正式作品。'}</div>` : ''}
-      </button>
+      </div>
     `;
   });
-  list.innerHTML = entries.join('');
+  const activeIndex = items.findIndex(item => {
+    const projectId = String(item.projectId || item.id || '').trim();
+    return !!midtaiState.currentDesignProjectId && projectId === midtaiState.currentDesignProjectId;
+  });
+  const currentItem = activeIndex >= 0 ? items[activeIndex] : null;
+  const currentEntry = activeIndex >= 0 ? entries[activeIndex] : '';
+  list.innerHTML = `
+    <div class="midtai-recent-works-groups">
+      ${currentEntry ? `
+        <div class="midtai-recent-works-group">
+          <div class="midtai-recent-works-group-head">
+            <div class="midtai-recent-works-group-label">${isEnglishUi() ? 'Current' : '当前'}</div>
+            ${currentItem ? `<div class="midtai-recent-works-group-copy">${escapeHtml(formatMidtaiRelativeTime(currentItem.updatedAt || currentItem.createdAt))}</div>` : ''}
+          </div>
+          ${currentEntry}
+        </div>
+      ` : ''}
+      <div class="midtai-recent-works-group">
+        <div class="midtai-recent-works-group-head">
+          <div class="midtai-recent-works-group-label">${isEnglishUi() ? 'Recent works' : '其他最近作品'}</div>
+          <div class="midtai-recent-works-group-copy">${isEnglishUi() ? 'Ordered by recent design activity, excluding the current work.' : '按最近设计活动排序，不重复展示当前作品。'}</div>
+        </div>
+        ${entries.filter((_, index) => index !== activeIndex).length
+          ? entries.filter((_, index) => index !== activeIndex).join('')
+          : `<div class="midtai-work-empty">${isEnglishUi() ? 'No other works yet.' : '暂时没有其他作品。'}</div>`}
+      </div>
+    </div>
+  `;
+  list.scrollTop = 0;
 
   list.querySelectorAll('[data-project-id]').forEach(node => {
     node.addEventListener('click', () => {
+      const projectId = node.getAttribute('data-project-id');
+      if (!projectId) return;
+      openMidtaiDesignProject(projectId);
+    });
+    node.addEventListener('keydown', event => {
+      if (event.key !== 'Enter' && event.key !== ' ') return;
+      event.preventDefault();
       const projectId = node.getAttribute('data-project-id');
       if (!projectId) return;
       openMidtaiDesignProject(projectId);
@@ -6416,6 +6799,9 @@ function renderMidtaiLibraryDesignPanel() {
 const pendingImageSrcActions = new Map();
 
 function requestImageSrc(id, action) {
+  if (action === 'thumbnail' && pendingImageSrcActions.has(id)) {
+    return;
+  }
   pendingImageSrcActions.set(id, action);
   send({ type: 'image:getSrc', id });
 }
@@ -6437,10 +6823,8 @@ function useImageInDesignById(id) {
 function renderMidtaiLibraryImagePanel() {
   const panel = document.getElementById('midtai-library-panel-image');
   if (!panel) return;
-  const items = Array.isArray(imageState.resultBatches)
-    ? [...imageState.resultBatches]
-      .sort((a, b) => Number(b.createdAt || 0) - Number(a.createdAt || 0))
-      .flatMap(batch => batch.items || [])
+  const items = Array.isArray(midtaiImageLibraryPageState.items)
+    ? midtaiImageLibraryPageState.items
     : [];
 
   if (!items.length) {
@@ -6455,15 +6839,21 @@ function renderMidtaiLibraryImagePanel() {
     return;
   }
 
-  items.forEach(result => {
-    if (!result?.id) return;
-    // Use thumbnail for lazy display; full src may be absent in lite state.
-    // Don't overwrite an existing imageThumbCache entry (may be a full src cached from image:result).
-    const displaySrc = result.thumbnail || result.src || '';
-    if (displaySrc && !imageThumbCache.get(result.id) && !imageDecodeCache.has(result.id)) {
-      imageThumbCache.set(result.id, displaySrc);
-    }
-  });
+  primeMidtaiImageThumbSources(items);
+
+  panel.innerHTML = `
+    <div class="midtai-works-scroll" data-midtai-image-library-scroll="true">
+      <div class="midtai-img-grid">
+        ${items.map(result => renderMidtaiImageCard(result, { mode: 'library' })).join('')}
+      </div>
+      ${midtaiImageLibraryPageState.hasMore
+        ? '<div class="midtai-img-card-copy" style="text-align:center;padding:12px;color:#8b7969">涓嬫粦缁х画鍔犺浇...</div>'
+        : ''}
+    </div>
+  `;
+  observeMidtaiImageThumbs(panel);
+  bindMidtaiImageLibraryScroll(panel.querySelector('[data-midtai-image-library-scroll="true"]'));
+  return;
 
   panel.innerHTML = `
     <div class="midtai-img-grid">
@@ -6498,9 +6888,69 @@ function renderMidtaiLibraryImagePanel() {
   observeMidtaiImageThumbs(panel);
 }
 
+function resetMidtaiImageLibraryPage() {
+  midtaiImageLibraryPageState = {
+    items: [],
+    nextOffset: 0,
+    total: 0,
+    hasMore: false,
+    loading: false,
+    loadedOnce: false,
+  };
+  renderMidtaiLibraryImagePanel();
+}
+
+function requestNextMidtaiImageLibraryPage() {
+  if (midtaiImageLibraryPageState.loading) return;
+  if (midtaiImageLibraryPageState.loadedOnce && !midtaiImageLibraryPageState.hasMore) return;
+  midtaiImageLibraryPageState.loading = true;
+  send({
+    type: 'image:listLibraryPage',
+    offset: midtaiImageLibraryPageState.nextOffset || 0,
+    limit: MIDTAI_IMAGE_PAGE_SIZE,
+  });
+}
+
+function applyMidtaiImageLibraryPage(msg) {
+  const incoming = Array.isArray(msg.items) ? msg.items : [];
+  primeMidtaiImageThumbSources(incoming);
+  const seen = new Set((midtaiImageLibraryPageState.items || []).map(item => String(item?.id || '')));
+  const appended = incoming.filter(item => {
+    const id = String(item?.id || '');
+    if (!id || seen.has(id)) return false;
+    seen.add(id);
+    return true;
+  });
+  midtaiImageLibraryPageState = {
+    items: [...(midtaiImageLibraryPageState.items || []), ...appended],
+    nextOffset: typeof msg.nextOffset === 'number'
+      ? msg.nextOffset
+      : Number(msg.offset || 0) + incoming.length,
+    total: Number(msg.total || incoming.length || 0),
+    hasMore: !!msg.hasMore,
+    loading: false,
+    loadedOnce: true,
+  };
+  if (midtaiState.shellTab === 'library' && midtaiState.librarySubtab === 'image') {
+    renderMidtaiLibraryImagePanel();
+  }
+}
+
+function bindMidtaiImageLibraryScroll(scrollEl) {
+  if (!scrollEl) return;
+  scrollEl.onscroll = () => {
+    if (midtaiImageLibraryPageState.loading || !midtaiImageLibraryPageState.hasMore) return;
+    const remaining = scrollEl.scrollHeight - scrollEl.scrollTop - scrollEl.clientHeight;
+    if (remaining < 700) {
+      requestNextMidtaiImageLibraryPage();
+    }
+  };
+}
+
 function requestMidtaiLibrarySubtabData(subtab) {
   if (subtab === 'image') {
-    send({ type: 'image:loadState' });
+    resetMidtaiImageLibraryPage();
+    requestNextMidtaiImageLibraryPage();
     return;
   }
   send({ type: 'midtai:request-design-library' });
@@ -6965,7 +7415,7 @@ function runMidtaiImage() {
   armMidtaiImagePreviewSession();
   imgSwitchView('preview');
   beginImageChatPendingRun(prompt, {
-    batchCount: midtaiState.imgCount || 1,
+    batchCount: resolvedBatchCount,
     referenceImages: imageState.referenceImages,
   });
   runImageRequest({
@@ -7407,12 +7857,31 @@ function hydrateDesignProjectIntoBridge(project, activeVersion) {
     }
     designProjectOpenTargetView = null;
     midtaiState.currentDesignProjectId = null;
+    midtaiState.currentProject = '';
+    midtaiState.currentProjectHasVersion = false;
     designBridgeState.designFlowId = null;
+    designBridgeState.mode = 'new';
+    designBridgeState.title = 'KainClaw Design';
+    designBridgeState.versionId = null;
+    designBridgeState.prompt = '';
+    designBridgeState.outputType = 'prototype';
+    designBridgeState.style = '';
+    designBridgeState.html = '';
+    designBridgeState.sliders = [];
+    designBridgeState.sliderValues = {};
+    designBridgeState.canvasMode = 'view';
+    designBridgeState.selectedNode = null;
+    designBridgeState.patchLoading = false;
+    designBridgeState.error = '';
+    designBridgeState.renderToken = Date.now();
     hideDesignEntryDialog();
     hideDesignQuickForm();
     showDesignView('design-chat');
     renderMidtaiRecentWorks();
+    syncMidtaiDesignWorkspaceHeader();
+    renderMidtaiDesignChat();
     renderShellContext();
+    updateStateChip();
     return;
   }
   if (!shouldKeepDesignEntryDialog()) {
@@ -9936,7 +10405,7 @@ function renderMessage(m, messageIndex) {
     const messages = appState.messages || [];
     const toolResult = findToolResultForToolUse(messages, messageIndex);
     const isPending = messageIndex === lastPendingToolUseIndex;
-    const status = isPending && appState.waitingForApproval ? 'waiting'
+    const status = isPending && appState.waitingForApproval ? 'unresolved'
       : isPending && appState.isBusy ? 'unresolved'
       : toolResult ? (toolResult.toolIsError ? 'error' : 'success')
       : 'queued';
@@ -9996,16 +10465,22 @@ function renderMessage(m, messageIndex) {
   if (isThinking) {
     const toggleId = getThinkingSummaryToggleId(messageIndex);
     const expanded = expandedThinkingSummaries.has(toggleId);
-    const durationSec = thinkingStartTime ? Math.round((Date.now() - thinkingStartTime) / 1000) : 0;
-    const thinkLabel = durationSec > 0 ? `Thought for ${durationSec}s` : 'Thought';
+    const actionLabel = expanded
+      ? (isEnglishUi() ? 'Collapse' : '收起')
+      : (isEnglishUi() ? 'Expand' : '展开');
     return `<div class="msg-wrap">
-      <div style="width:28px;flex-shrink:0"></div>
-      <div style="flex:1;min-width:0;padding:4px 0">
-        <button type="button" class="thinking-toggle" onclick="toggleThinkingSummary(${messageIndex})" style="display:inline-flex;align-items:center;gap:6px;border:none;background:transparent;padding:0;cursor:pointer;font-family:inherit">
-          <span style="font-size:11px;color:#a1a1aa">${escapeHtml(thinkLabel)}</span>
-          <span style="font-size:10px;color:#a1a1aa">${expanded ? '▾' : '▸'}</span>
+      <div class="klogo" style="flex-shrink:0;margin-top:2px">K</div>
+      <div style="flex:1;min-width:0">
+        <div class="msg-bubble assistant" style="padding:8px 12px;background:transparent;border:none;box-shadow:none">
+        <button type="button" class="thinking-toggle" onclick="toggleThinkingSummary(${messageIndex})">
+          <span class="thinking-toggle-main">
+            <span class="thinking-toggle-caret">${expanded ? '▾' : '▸'}</span>
+            <span class="thinking-toggle-label">∴ Thinking</span>
+          </span>
+          <span class="thinking-toggle-action">${escapeHtml(actionLabel)}</span>
         </button>
-        ${expanded ? `<div class="thinking-summary-body" style="margin-top:6px">${content}</div>` : ''}
+        ${expanded ? `<div class="thinking-summary-body">${content}</div>` : ''}
+        </div>
       </div>
     </div>`;
   }
@@ -10426,16 +10901,21 @@ function renderToolUseMessage(message, options = {}) {
     : '';
   const progressLabel = isWaitingForApproval
     ? 'Waiting for permission…'
-    : status === 'unresolved'
+    : status === 'queued'
+      ? 'Waiting…'
+      : status === 'unresolved'
       ? 'Running…'
       : '';
-  const inlineDetail = detail || progressLabel;
+  const progressHtml = progressLabel
+    ? `<div class="tool-lane-subtle" style="padding-left:18px">${escapeHtml(progressLabel)}</div>`
+    : '';
   return `<div class="tool-lane">
     <div class="tool-lane-head">
       <span class="tool-status-dot ${escapeHtml(status)}"></span>
       <span class="tool-lane-title">${escapeHtml(title)}</span>
-      ${inlineDetail ? `<span class="tool-lane-subtle" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1;min-width:0">${escapeHtml(inlineDetail)}</span>` : ''}
+      ${detail ? `<span class="tool-lane-subtle" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1;min-width:0">${escapeHtml(detail)}</span>` : ''}
     </div>
+    ${progressHtml}
   </div>`;
 }
 
@@ -10455,6 +10935,18 @@ function renderToolResultInline(message) {
       ${preview ? `<pre style="margin:2px 0 0 18px;font-size:11px"><code>${escapeHtml(preview)}${hasMore ? '\n…' : ''}</code></pre>` : ''}
     </div>`;
   }
+  if (toolName === 'search_files') {
+    const specialized = renderSearchFilesToolResult(message);
+    if (specialized) return specialized;
+  }
+  if (toolName === 'glob_files') {
+    const specialized = renderGlobFilesToolResult(message);
+    if (specialized) return specialized;
+  }
+  if (toolName === 'list_files') {
+    const specialized = renderListFilesToolResult(message);
+    if (specialized) return specialized;
+  }
 
   let summaryLine = summary;
   if (toolName === 'read_file') {
@@ -10467,9 +10959,15 @@ function renderToolResultInline(message) {
     summaryLine = summary || 'Error';
   }
   summaryLine = summaryLine || 'Done';
+  const errorPreviewLines = message.toolIsError && content
+    ? content.split('\n').filter(Boolean).slice(0, 6)
+    : [];
 
   return `<div class="tool-result-inline">
     <div class="tool-lane-subtle">⎿  ${escapeHtml(summaryLine)}</div>
+    ${errorPreviewLines.length > 0
+      ? `<pre style="margin:2px 0 0 18px;font-size:11px"><code>${escapeHtml(errorPreviewLines.join('\n'))}</code></pre>`
+      : ''}
   </div>`;
 }
 
@@ -10637,13 +11135,16 @@ function renderToolResultMessage(message) {
     return renderRunCommandToolResult(message);
   }
   if (toolName === 'search_files') {
-    return renderSearchFilesToolResult(message) || '';
+    const specialized = renderSearchFilesToolResult(message);
+    if (specialized) return specialized;
   }
   if (toolName === 'glob_files') {
-    return renderGlobFilesToolResult(message) || '';
+    const specialized = renderGlobFilesToolResult(message);
+    if (specialized) return specialized;
   }
   if (toolName === 'list_files') {
-    return renderListFilesToolResult(message) || '';
+    const specialized = renderListFilesToolResult(message);
+    if (specialized) return specialized;
   }
 
   const summary = String(message.toolSummary || '').trim();
@@ -11359,6 +11860,27 @@ function syncImageLabSizePreset() {
 
   customInput.style.display = 'none';
   customInput.value = '';
+}
+
+function resolveExplicitImageCountFromPrompt(prompt) {
+  const normalized = String(prompt || '').trim();
+  if (!normalized) return null;
+
+  const numericMatch = normalized.match(/(?:做成|做出|做|来|生成|给我|帮我生成|帮我做|要)\s*([2-8])\s*张/i);
+  if (numericMatch) {
+    return Math.max(1, Math.min(8, Number(numericMatch[1])));
+  }
+
+  const chineseMatch = normalized.match(/(?:做成|做出|做|来|生成|给我|帮我生成|帮我做|要)\s*(两|二|三|四|五|六|七|八)\s*张/i);
+  if (!chineseMatch) return null;
+
+  const countMap = { '两': 2, '二': 2, '三': 3, '四': 4, '五': 5, '六': 6, '七': 7, '八': 8 };
+  return countMap[chineseMatch[1]] || null;
+}
+
+function resolveImageRunBatchCount(prompt, fallbackCount) {
+  return resolveExplicitImageCountFromPrompt(prompt)
+    ?? Math.max(1, Math.min(8, Number(fallbackCount || 1)));
 }
 
 function buildImagePayload(overrides = {}) {
@@ -12659,11 +13181,17 @@ function openChatImageEditor(messageIndex, imageIndex) {
     open: true,
     messageIndex,
     imageIndex,
+    mode: 'overall',
     extraReferenceImages: [],
+    brushSize: Number(chatImageEditorState.brushSize || 36),
+    isDrawingMask: false,
+    maskDirty: false,
+    lastMaskPoint: null,
   };
   const overlay = document.getElementById('chat-image-editor-overlay');
   document.getElementById('chat-image-editor-input').value = String(image.revisedPrompt || image.prompt || '').trim();
   document.getElementById('chat-image-editor-file').value = '';
+  setChatImageEditorBrushSize(chatImageEditorState.brushSize);
   overlay.classList.add('show');
   renderChatImageEditor();
   requestAnimationFrame(() => {
@@ -12676,7 +13204,12 @@ function closeChatImageEditor() {
     open: false,
     messageIndex: -1,
     imageIndex: -1,
+    mode: 'overall',
     extraReferenceImages: [],
+    brushSize: Number(chatImageEditorState.brushSize || 36),
+    isDrawingMask: false,
+    maskDirty: false,
+    lastMaskPoint: null,
   };
   document.getElementById('chat-image-editor-overlay').classList.remove('show');
 }
@@ -12693,9 +13226,14 @@ function renderChatImageEditor() {
     return;
   }
 
+  const previewWrap = document.getElementById('chat-image-editor-preview-wrap');
   const preview = document.getElementById('chat-image-editor-preview');
   preview.src = target.image.src;
-  preview.style.display = 'block';
+  previewWrap.style.display = 'inline-block';
+  preview.onload = function() {
+    syncChatImageEditorMaskCanvas();
+  };
+  syncChatImageEditorMaskCanvas();
 
   const historyContainer = document.getElementById('chat-image-editor-history');
   historyContainer.innerHTML = history.map(entry => `
@@ -12729,7 +13267,213 @@ function renderChatImageEditor() {
       <div style="padding:6px 8px;font-size:11px;color:#7a6656;line-height:1.5;max-width:92px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${escapeHtml(reference.label)}</div>
     </div>
   `).join('');
-  document.getElementById('chat-image-editor-meta').textContent = `当前会把目标图作为第一张参考图，另外附带 ${chatImageEditorState.extraReferenceImages.length} 张额外参考图。`;
+  const isTouchMode = chatImageEditorState.mode === 'touch';
+  const overallBtn = document.getElementById('chat-image-editor-mode-overall');
+  const touchBtn = document.getElementById('chat-image-editor-mode-touch');
+  const brushWrap = document.getElementById('chat-image-editor-brush-wrap');
+  const clearMaskBtn = document.getElementById('chat-image-editor-clear-mask');
+  const maskCanvas = getChatImageEditorMaskCanvas();
+  const inputEl = document.getElementById('chat-image-editor-input');
+  const submitBtn = document.getElementById('chat-image-editor-submit');
+  if (overallBtn) {
+    overallBtn.classList.toggle('btn-red', !isTouchMode);
+    overallBtn.classList.toggle('btn-secondary', isTouchMode);
+  }
+  if (touchBtn) {
+    touchBtn.classList.toggle('btn-red', isTouchMode);
+    touchBtn.classList.toggle('btn-secondary', !isTouchMode);
+  }
+  if (brushWrap) brushWrap.style.display = isTouchMode ? 'flex' : 'none';
+  if (clearMaskBtn) clearMaskBtn.style.display = isTouchMode ? '' : 'none';
+  if (maskCanvas) {
+    maskCanvas.style.pointerEvents = isTouchMode ? 'auto' : 'none';
+    maskCanvas.style.opacity = isTouchMode ? '1' : '0';
+  }
+  if (inputEl) {
+    inputEl.placeholder = isTouchMode
+      ? '???????????????????'
+      : '???????????????????????????';
+  }
+  if (submitBtn) {
+    submitBtn.textContent = isTouchMode ? '??????' : '??????';
+  }
+  document.getElementById('chat-image-editor-meta').textContent = isTouchMode
+    ? `???????????????????????????????? ${chatImageEditorState.extraReferenceImages.length} ??`
+    : `??????????????????????????? ${chatImageEditorState.extraReferenceImages.length} ??`;
+}
+
+function setChatImageEditorMode(mode) {
+  chatImageEditorState.mode = mode === 'touch' ? 'touch' : 'overall';
+  renderChatImageEditor();
+}
+
+function setChatImageEditorBrushSize(value) {
+  const resolved = Math.max(8, Math.min(128, Number(value || 36)));
+  chatImageEditorState.brushSize = resolved;
+  const input = document.getElementById('chat-image-editor-brush-size');
+  const valueLabel = document.getElementById('chat-image-editor-brush-size-value');
+  if (input) input.value = String(resolved);
+  if (valueLabel) valueLabel.textContent = `${resolved}px`;
+}
+
+function getChatImageEditorMaskCanvas() {
+  return document.getElementById('chat-image-editor-mask-canvas');
+}
+
+function getChatImageEditorMaskContext() {
+  const canvas = getChatImageEditorMaskCanvas();
+  return canvas ? canvas.getContext('2d') : null;
+}
+
+function syncChatImageEditorMaskCanvas() {
+  const preview = document.getElementById('chat-image-editor-preview');
+  const canvas = getChatImageEditorMaskCanvas();
+  if (!preview || !canvas) return;
+  const width = Math.max(1, Math.round(preview.clientWidth || preview.naturalWidth || 1));
+  const height = Math.max(1, Math.round(preview.clientHeight || preview.naturalHeight || 1));
+  const ctx = canvas.getContext('2d');
+  if (canvas.width !== width || canvas.height !== height) {
+    const previous = document.createElement('canvas');
+    previous.width = canvas.width;
+    previous.height = canvas.height;
+    const previousCtx = previous.getContext('2d');
+    if (previousCtx && canvas.width > 0 && canvas.height > 0) {
+      previousCtx.drawImage(canvas, 0, 0);
+    }
+    canvas.width = width;
+    canvas.height = height;
+    if (ctx) {
+      ctx.clearRect(0, 0, width, height);
+      if (previous.width > 0 && previous.height > 0 && chatImageEditorState.maskDirty) {
+        ctx.drawImage(previous, 0, 0, previous.width, previous.height, 0, 0, width, height);
+      }
+    }
+  } else if (ctx && !chatImageEditorState.maskDirty) {
+    ctx.clearRect(0, 0, width, height);
+  }
+  canvas.onpointerdown = startChatImageEditorMaskStroke;
+  canvas.onpointermove = moveChatImageEditorMaskStroke;
+  canvas.onpointerup = endChatImageEditorMaskStroke;
+  canvas.onpointerleave = endChatImageEditorMaskStroke;
+  canvas.onpointercancel = endChatImageEditorMaskStroke;
+}
+
+function getChatImageEditorCanvasPoint(event) {
+  const canvas = getChatImageEditorMaskCanvas();
+  if (!canvas) return null;
+  const rect = canvas.getBoundingClientRect();
+  if (!rect.width || !rect.height) return null;
+  return {
+    x: ((event.clientX - rect.left) / rect.width) * canvas.width,
+    y: ((event.clientY - rect.top) / rect.height) * canvas.height,
+  };
+}
+
+function drawChatImageEditorMaskLine(fromPoint, toPoint) {
+  const ctx = getChatImageEditorMaskContext();
+  if (!ctx || !fromPoint || !toPoint) return;
+  ctx.save();
+  ctx.strokeStyle = 'rgba(232, 64, 64, 0.52)';
+  ctx.fillStyle = 'rgba(232, 64, 64, 0.52)';
+  ctx.lineCap = 'round';
+  ctx.lineJoin = 'round';
+  ctx.lineWidth = Number(chatImageEditorState.brushSize || 36);
+  ctx.beginPath();
+  ctx.moveTo(fromPoint.x, fromPoint.y);
+  ctx.lineTo(toPoint.x, toPoint.y);
+  ctx.stroke();
+  ctx.beginPath();
+  ctx.arc(toPoint.x, toPoint.y, ctx.lineWidth / 2, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.restore();
+}
+
+function startChatImageEditorMaskStroke(event) {
+  if (!chatImageEditorState.open) return;
+  const point = getChatImageEditorCanvasPoint(event);
+  if (!point) return;
+  const canvas = getChatImageEditorMaskCanvas();
+  if (!canvas) return;
+  chatImageEditorState.isDrawingMask = true;
+  chatImageEditorState.maskDirty = true;
+  chatImageEditorState.lastMaskPoint = point;
+  if (canvas.setPointerCapture && typeof event.pointerId === 'number') {
+    canvas.setPointerCapture(event.pointerId);
+  }
+  drawChatImageEditorMaskLine(point, point);
+  event.preventDefault();
+}
+
+function moveChatImageEditorMaskStroke(event) {
+  if (!chatImageEditorState.isDrawingMask) return;
+  const point = getChatImageEditorCanvasPoint(event);
+  const lastPoint = chatImageEditorState.lastMaskPoint;
+  if (!point || !lastPoint) return;
+  drawChatImageEditorMaskLine(lastPoint, point);
+  chatImageEditorState.lastMaskPoint = point;
+  event.preventDefault();
+}
+
+function endChatImageEditorMaskStroke(event) {
+  if (!chatImageEditorState.isDrawingMask) return;
+  const canvas = getChatImageEditorMaskCanvas();
+  if (canvas && canvas.releasePointerCapture && typeof event.pointerId === 'number') {
+    try { canvas.releasePointerCapture(event.pointerId); } catch (_) {}
+  }
+  chatImageEditorState.isDrawingMask = false;
+  chatImageEditorState.lastMaskPoint = null;
+}
+
+function clearChatImageEditorMask() {
+  const canvas = getChatImageEditorMaskCanvas();
+  const ctx = getChatImageEditorMaskContext();
+  if (!canvas || !ctx) return;
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  chatImageEditorState.maskDirty = false;
+  chatImageEditorState.isDrawingMask = false;
+  chatImageEditorState.lastMaskPoint = null;
+}
+
+function hasChatImageEditorMask() {
+  return !!chatImageEditorState.maskDirty;
+}
+
+async function buildChatImageEditorMaskPayload(targetReferenceImage) {
+  const canvas = getChatImageEditorMaskCanvas();
+  const preview = document.getElementById('chat-image-editor-preview');
+  if (!canvas || !preview || !hasChatImageEditorMask()) return null;
+  const sourceWidth = Math.max(1, Number(preview.naturalWidth || canvas.width || 1));
+  const sourceHeight = Math.max(1, Number(preview.naturalHeight || canvas.height || 1));
+  const exportCanvas = document.createElement('canvas');
+  exportCanvas.width = sourceWidth;
+  exportCanvas.height = sourceHeight;
+  const ctx = exportCanvas.getContext('2d');
+  if (!ctx) return null;
+  ctx.clearRect(0, 0, sourceWidth, sourceHeight);
+  ctx.fillStyle = '#000000';
+  ctx.fillRect(0, 0, sourceWidth, sourceHeight);
+  const overlayCanvas = document.createElement('canvas');
+  overlayCanvas.width = sourceWidth;
+  overlayCanvas.height = sourceHeight;
+  const overlayCtx = overlayCanvas.getContext('2d');
+  if (!overlayCtx) return null;
+  overlayCtx.drawImage(canvas, 0, 0, canvas.width, canvas.height, 0, 0, sourceWidth, sourceHeight);
+  const imageData = overlayCtx.getImageData(0, 0, sourceWidth, sourceHeight);
+  for (let index = 0; index < imageData.data.length; index += 4) {
+    const alpha = imageData.data[index + 3];
+    if (alpha > 0) {
+      imageData.data[index] = 0;
+      imageData.data[index + 1] = 0;
+      imageData.data[index + 2] = 0;
+      imageData.data[index + 3] = 0;
+    }
+  }
+  ctx.putImageData(imageData, 0, 0);
+  return {
+    dataUrl: exportCanvas.toDataURL('image/png'),
+    mimeType: 'image/png',
+    name: `mask-${Date.now()}.png`,
+  };
 }
 
 function handleChatImageEditorReference(event) {
@@ -12815,16 +13559,42 @@ async function submitChatImageEditor() {
       target.image.src,
       `edit-${target.image.id || 'target'}.png`,
     );
-    const referenceImages = [targetReferenceImage, ...chatImageEditorState.extraReferenceImages];
-
-    send({
-      type: 'chat:imageRun',
-      prompt,
-      referenceImages,
-    });
+    const maskImage = chatImageEditorState.mode === 'touch'
+      ? await buildChatImageEditorMaskPayload(targetReferenceImage)
+      : null;
+    if (chatImageEditorState.mode === 'touch') {
+      if (!maskImage) {
+        alert('???????????????????');
+        return;
+      }
+      const threadId = imageChatThreadState.activeThreadId || getImageChatThreadId();
+      imageChatThreadState.activeThreadId = threadId;
+      const referenceImages = [targetReferenceImage, ...chatImageEditorState.extraReferenceImages];
+      beginImageChatPendingRun(prompt, {
+        pendingContent: '????',
+        batchCount: 1,
+        referenceImages,
+      });
+      send({
+        type: 'image:touchEdit',
+        prompt,
+        threadId,
+        targetImage: targetReferenceImage,
+        maskImage,
+        referenceImages: chatImageEditorState.extraReferenceImages,
+        stageImageId: target.image.id || imageChatThreadState.activeStageImageId || null,
+      });
+    } else {
+      const referenceImages = [targetReferenceImage, ...chatImageEditorState.extraReferenceImages];
+      send({
+        type: 'chat:imageRun',
+        prompt,
+        referenceImages,
+      });
+    }
     closeChatImageEditor();
   } catch (error) {
-    alert(`打开编辑失败：${error instanceof Error ? error.message : String(error)}`);
+    alert(`???????${error instanceof Error ? error.message : String(error)}`);
   }
 }
 
@@ -14877,7 +15647,8 @@ function renderIchatResultGrid(results) {
     var eid = encodeURIComponent(String(r.id || ''));
     var esrc = encodeURIComponent(String(r.src || ''));
     var isRef = imageState.referenceImages.some(function(ref) { return ref._ichatId === r.id; });
-    var selectedCls = isRef ? ' ichat-card-selected' : '';
+    var isActiveStage = String(imageChatThreadState.activeStageImageId || imageChatThreadState.activeResultId || '') === String(r.id || '');
+    var selectedCls = (isRef || isActiveStage) ? ' ichat-card-selected' : '';
     var selectLabel = isRef ? (isEnglishUi() ? '✓ Selected' : '✓ 已选') : (isEnglishUi() ? 'Select' : '选用');
     return '<div class="ichat-result-card' + selectedCls + '" onclick="handleIchatCardClick(event,\'' + eid + '\')" title="点击选用 / Ctrl+点击 同效">' +
       '<img src="' + escapeHtml(String(r.src || '')) + '" alt="generated" loading="lazy">' +
@@ -14892,8 +15663,7 @@ function renderIchatResultGrid(results) {
 
 function handleIchatCardClick(event, encodedId) {
   var id = decodeURIComponent(encodedId);
-  // Both plain click and Ctrl+click toggle reference selection
-  toggleIchatRefSelect(id);
+  openImageChatStageImage(id);
 }
 
 function toggleIchatRefSelect(imageId) {
@@ -14917,6 +15687,7 @@ function toggleIchatRefSelect(imageId) {
   }
   imageChatThreadState.referenceImages = imageState.referenceImages.map(function(r) { return Object.assign({}, r); });
   ichatState.refsOpen = imageState.referenceImages.length > 0;
+  persistActiveImageChatThreadUiState();
   renderIchatRefs();
   renderMidtaiImageRefList();
   renderImageChatThreadPanel();
@@ -14953,6 +15724,7 @@ function removeIchatRef(index) {
   imageState.referenceImages = imageState.referenceImages.filter(function(_, i) { return i !== index; });
   imageChatThreadState.referenceImages = imageState.referenceImages.map(function(r) { return Object.assign({}, r); });
   invalidateImageWorkflowPlan();
+  persistActiveImageChatThreadUiState();
   var input = document.getElementById('ichat-ref-input');
   if (input) input.value = '';
   renderIchatRefs();
@@ -14981,6 +15753,7 @@ function handleIchatRefUpload(event) {
     imageState.referenceImages = imageState.referenceImages.concat(loaded);
     imageChatThreadState.referenceImages = imageState.referenceImages.map(function(r) { return Object.assign({}, r); });
     invalidateImageWorkflowPlan();
+    persistActiveImageChatThreadUiState();
     if (event.target) event.target.value = '';
     ichatState.refsOpen = true;
     renderIchatRefs();
@@ -15092,12 +15865,14 @@ function setIchatQuality(q) {
 
 function setIchatSize(size) {
   setMidtaiImageSize(size);
+  persistActiveImageChatThreadUiState();
   renderIchatCfgPanel();
   updateIchatCfgLabel();
 }
 
 function setIchatCount(count) {
   setMidtaiImageCount(count);
+  persistActiveImageChatThreadUiState();
   renderIchatCfgPanel();
   updateIchatCfgLabel();
 }
@@ -15129,6 +15904,14 @@ function handleIchatKey(event) {
   submitIchat();
 }
 
+function handleIchatDraftInput() {
+  imageChatThreadState.currentThreadRecord = imageChatThreadState.currentThreadRecord || {};
+  imageChatThreadState.currentThreadRecord.promptDraft = String((document.getElementById('ichat-input') || {}).value || '');
+  persistActiveImageChatThreadUiState({
+    promptDraft: imageChatThreadState.currentThreadRecord.promptDraft,
+  });
+}
+
 function submitIchat() {
   var input = document.getElementById('ichat-input');
   var prompt = input ? input.value.trim() : '';
@@ -15138,20 +15921,21 @@ function submitIchat() {
     return;
   }
   if (input) input.value = '';
+  var resolvedBatchCount = resolveImageRunBatchCount(prompt, midtaiState.imgCount || 1);
   armMidtaiImagePreviewSession();
   imgSwitchView('preview');
   var threadId = imageChatThreadState.activeThreadId || getImageChatThreadId();
   imageChatThreadState.activeThreadId = threadId;
   beginImageChatPendingRun(prompt, {
     pendingContent: '思考中…',
-    batchCount: midtaiState.imgCount || 1,
+    batchCount: resolvedBatchCount,
     referenceImages: imageState.referenceImages,
   });
   send({
     type: 'image:chatRoute',
     prompt: prompt,
     sizePreset: midtaiState.imgSize || '1024x1024',
-    batchCount: midtaiState.imgCount || 1,
+    batchCount: resolvedBatchCount,
     quality: midtaiState.imgQuality || 'auto',
     threadId: threadId,
     ownerSurface: 'image-chat',
