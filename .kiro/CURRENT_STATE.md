@@ -9,10 +9,10 @@
 
 | Metric | Value | Last Updated |
 |--------|-------|--------------|
-| Test files | 181 | 2026-07-05 |
-| Tests passing | 1503 | 2026-07-05 |
+| Test files | 181 | 2026-07-06 |
+| Tests passing | 1505 | 2026-07-06 |
 | Last verified commit | see `git log --oneline -1` | — |
-| Last clean verification | 2026-07-05 — main chat tool rendering + evidence-based coverage summary prompt guard | — |
+| Last clean verification | 2026-07-06 — Direction Library Chinese directions prompt guard | — |
 
 **Required passing commands:**
 ```bash
@@ -198,7 +198,7 @@ npm run build:electron   # only when Electron behavior changed
   - 3ka：`design:patchImageNode` 成功后写 `lastUsedByProjectId` 轻量 provenance，生成时不写
   - 28m.3：`Project` 成为唯一 work identity，新建设计立即创建 draft Project，Electron smoke 已验证
 - **设计入口 c68 已验证**：详细路径触发 discovery，快速路径保持本地 3 问表单，不再显示小白/专业 toggle
-- **主 chat parity / 工具渲染 parity 正在推进**（`vscode-extension-kb2p` / `vscode-extension-5mxw`）：
+- **主 chat parity / 工具渲染 parity 已收口**（`vscode-extension-kb2p` / `vscode-extension-5mxw`）：
   - 已重读上游 Claude thinking/tool-use/tool-result 组件
   - renderer 已对齐 persisted thinking 的 `∴ Thinking` collapsed UI
   - `run_command` pending/completed DOM smoke 已通过：permission/progress 行在 tool header 下方，完成态顺序为 `Bash -> result -> assistant summary`
@@ -207,7 +207,8 @@ npm run build:electron   # only when Electron behavior changed
   - 真实模型驱动 `glob_files/search_files` 已由用户截图验证：宽泛 glob 失败会显示可读错误，不再是空白红色 Search；收窄后显示 `65 files matching "**/*prompt*.ts"` 与 compact preview lines
   - 答案质量尾项已收口：`SYSTEM_PROMPT` 现在要求文件/测试/覆盖总结必须基于实际证据，不能在未验证完整实现/测试映射时声称每个实现文件都有同名 `.test.ts`
   - beads 已更新并关闭：`vscode-extension-kb2p` / `vscode-extension-5mxw`
-- P3 功能（Kanban / 草图标注）排在主 chat parity 后面
+- **Direction Library cuc 已收口**：`src/design/directions.ts` 暴露 5 个中文方向（`lifestyle-redbook` / `streetwear-dark` / `tech-flagship` / `ecommerce-convert` / `short-video`），Turn 1 direction-cards 与 Turn 2 CSS binding block 已有测试覆盖
+- 下一步：P3 Kanban（`vscode-extension-26q`），然后草图标注（`vscode-extension-0z5`）
 
 ## Not Yet Started
 

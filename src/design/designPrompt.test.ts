@@ -14,9 +14,19 @@ import {
   getSkillWorkflow,
   normalizeDesignOutputType,
 } from "./designPrompt";
-import { renderDirectionFormBody } from "./directions";
+import { DESIGN_DIRECTIONS, renderDirectionFormBody } from "./directions";
 
 describe("designPrompt", () => {
+  it("exposes the approved Chinese direction ids", () => {
+    expect(DESIGN_DIRECTIONS.map(direction => direction.id)).toEqual([
+      "lifestyle-redbook",
+      "streetwear-dark",
+      "tech-flagship",
+      "ecommerce-convert",
+      "short-video",
+    ]);
+  });
+
   it("normalizes unknown output types back to prototype", () => {
     expect(normalizeDesignOutputType("dashboard")).toBe("dashboard");
     expect(normalizeDesignOutputType("not-real")).toBe("prototype");
@@ -90,18 +100,18 @@ describe("designPrompt", () => {
       });
 
       expect(prompt).toContain("direction-cards");
-      expect(prompt).toContain("editorial-monocle");
-      expect(prompt).toContain("modern-minimal");
-      expect(prompt).toContain("human-approachable");
-      expect(prompt).toContain("tech-utility");
-      expect(prompt).toContain("brutalist-experimental");
+      expect(prompt).toContain("lifestyle-redbook");
+      expect(prompt).toContain("streetwear-dark");
+      expect(prompt).toContain("tech-flagship");
+      expect(prompt).toContain("ecommerce-convert");
+      expect(prompt).toContain("short-video");
     });
 
     it("injects the selected direction palette into turn 2 prompts", () => {
       const formAnswer = [
         "[form answers - discovery]",
         "- 产品名称: TestApp",
-        "- direction: modern-minimal",
+        "- direction: lifestyle-redbook",
       ].join("\n");
       const prompt = buildDesignChatUserPrompt({
         prompt: formAnswer,
@@ -109,9 +119,26 @@ describe("designPrompt", () => {
         isFormAnswerTurn: true,
       });
 
-      expect(prompt).toContain("oklch(58% 0.18 255)");
-      expect(prompt).toContain("oklch(99% 0.002 240)");
-      expect(prompt).toContain("SF Pro Display");
+      expect(prompt).toContain("oklch(63% 0.18 29)");
+      expect(prompt).toContain("oklch(98% 0.012 48)");
+      expect(prompt).toContain("Noto Serif SC");
+    });
+
+    it("injects the streetwear dark palette into turn 2 prompts", () => {
+      const formAnswer = [
+        "[form answers - discovery]",
+        "- 产品名称: DropLab",
+        "- direction: streetwear-dark",
+      ].join("\n");
+      const prompt = buildDesignChatUserPrompt({
+        prompt: formAnswer,
+        outputType: "landing-page",
+        isFormAnswerTurn: true,
+      });
+
+      expect(prompt).toContain("oklch(13% 0.018 145)");
+      expect(prompt).toContain("oklch(83% 0.26 145)");
+      expect(prompt).toContain("Streetwear Dark");
     });
 
     it("does not inject a direction spec block when turn 2 is skipped", () => {
@@ -157,8 +184,9 @@ describe("designPrompt", () => {
     expect(body).toContain('"zhDescription"');
     expect(body).toContain('"zhLabel": "设计风格方向"');
     expect(body).toContain('"zhLabel": "强调色覆盖（可选）"');
-    expect(body).toContain('"zhPlaceholder": "例如：用橙色替换默认蓝色，不要太品牌化的颜色"');
-    expect(body).toContain('"zhSummary": "杂志感 · 精致排版 · 高级感"');
+    expect(body).toContain('"zhPlaceholder": "例如：用苔藓绿替代珊瑚红，或者这个品牌不要荧光色"');
+    expect(body).toContain('"zhSummary": "珊瑚红 · 生活方式 · 精致亲和"');
+    expect(body).toContain('"zhSummary": "黑底 · 荧光绿 · 街头张力"');
   });
 
   it("includes structured user context when provided", () => {

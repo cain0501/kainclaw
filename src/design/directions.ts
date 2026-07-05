@@ -1,6 +1,8 @@
 /**
- * Built-in design direction library.
- * Ported from nexu-io/open-design apps/daemon/src/prompts/directions.ts
+ * Built-in KainClaw design direction library.
+ *
+ * These ids are product contracts used by the design-chat discovery form.
+ * Keep ids stable; visible copy can be refined.
  */
 
 export interface DesignDirection {
@@ -26,149 +28,157 @@ export interface DesignDirection {
 
 export const DESIGN_DIRECTIONS: DesignDirection[] = [
   {
-    id: "editorial-monocle",
-    label: "Editorial — Monocle / FT magazine",
-    zhLabel: "Editorial — Monocle / FT",
-    zhSummary: "杂志感 · 精致排版 · 高级感",
-    mood: "Print-magazine feel for explicitly editorial or publishing briefs. Generous whitespace, large serif headlines, restrained palette of neutral paper + ink + a single brand-justified accent. Do not use this as the default for commerce, SaaS, dashboards, or product utilities.",
-    references: ["Monocle", "The Financial Times Weekend", "NYT Magazine", "It's Nice That"],
-    displayFont: "'Iowan Old Style', 'Charter', Georgia, serif",
-    bodyFont: "-apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif",
+    id: "lifestyle-redbook",
+    label: "Warm Lifestyle / Redbook",
+    zhLabel: "暖调生活",
+    zhSummary: "珊瑚红 · 生活方式 · 精致亲和",
+    mood: "Warm lifestyle editorial for beauty, home, wellness, local services, creators, and consumer brands. Soft neutral base with a coral-red accent, tactile imagery, and elegant Chinese typography. It should feel like premium Xiaohongshu/Redbook content, not generic beige SaaS.",
+    references: ["Xiaohongshu lifestyle notes", "Kinfolk", "Airbnb editorial", "Nowness"],
+    displayFont: "'Noto Serif SC', 'Source Han Serif SC', 'Songti SC', Georgia, serif",
+    bodyFont: "'Noto Sans SC', 'PingFang SC', 'Microsoft YaHei', system-ui, sans-serif",
     palette: {
-      bg:      "oklch(98% 0.004 95)",
-      surface: "oklch(100% 0.002 95)",
-      fg:      "oklch(20% 0.018 70)",
-      muted:   "oklch(48% 0.012 70)",
-      border:  "oklch(90% 0.006 95)",
-      accent:  "oklch(52% 0.10 28)",
+      bg: "oklch(98% 0.012 48)",
+      surface: "oklch(100% 0.004 48)",
+      fg: "oklch(22% 0.026 38)",
+      muted: "oklch(52% 0.032 42)",
+      border: "oklch(89% 0.018 48)",
+      accent: "oklch(63% 0.18 29)",
     },
     posture: [
-      "serif display, sans body, mono for metadata only",
-      "no shadows, no rounded cards — borders + whitespace do the work",
-      "one decisive image, cropped only at the bottom",
-      "kicker / eyebrow in mono uppercase, one accent color, used at most twice; never create peach/pink/orange-beige page washes",
+      "use Noto Serif SC for hero/title moments and Noto Sans SC for body copy",
+      "coral red is the only dominant accent; pair it with warm ivory and ink, not orange-beige page washes",
+      "use editorial image crops, soft dividers, and tactile detail captions",
+      "cards may be softly rounded, but keep hierarchy crisp and premium",
+      "avoid generic pastel gradients, fake bokeh, and oversized marketing hero cards",
     ],
   },
   {
-    id: "modern-minimal",
-    label: "Modern minimal — Linear / Vercel",
-    zhLabel: "Modern minimal — Linear / Vercel",
-    zhSummary: "极简 · 科技感 · 大量留白",
-    mood: "Software-product minimal. Clean neutral foundation, cobalt accent, geometric display. Great for SaaS, dev tools, B2B apps, and dashboards where clarity is the product.",
-    references: ["Linear", "Vercel", "Loom", "Raycast"],
-    displayFont: "-apple-system, BlinkMacSystemFont, 'SF Pro Display', system-ui, sans-serif",
-    bodyFont: "-apple-system, BlinkMacSystemFont, 'SF Pro Text', system-ui, sans-serif",
-    palette: {
-      bg:      "oklch(99% 0.002 240)",
-      surface: "oklch(100% 0 0)",
-      fg:      "oklch(18% 0.012 250)",
-      muted:   "oklch(54% 0.012 250)",
-      border:  "oklch(92% 0.005 250)",
-      accent:  "oklch(58% 0.18 255)",
-    },
-    posture: [
-      "tight letter-spacing on display sizes (-0.02em)",
-      "hairline borders only, no shadows except dropdowns/modals",
-      "mono numerics with `font-variant-numeric: tabular-nums`",
-      "sticky frosted nav, content-led layouts with one product illustration or data visualization",
-      "controlled color system: primary action color + one secondary signal + status colors",
-    ],
-  },
-  {
-    id: "human-approachable",
-    label: "Human / approachable — Airbnb / Duolingo systems",
-    zhLabel: "Human / approachable — Airbnb / Duolingo",
-    zhSummary: "温暖亲切 · 易用感 · 友好",
-    mood: "Friendly and tactile without the generic cozy canvas. Uses a clean neutral background, product-led color system, generous radii, and clear hierarchy. Good for consumer tools, marketplaces, wellness, education, and indie SaaS.",
-    references: ["Airbnb", "Duolingo product surfaces", "Miro", "Mercury"],
-    displayFont: "'Söhne', 'Avenir Next', -apple-system, BlinkMacSystemFont, system-ui, sans-serif",
-    bodyFont: "-apple-system, BlinkMacSystemFont, 'SF Pro Text', system-ui, sans-serif",
-    palette: {
-      bg:      "oklch(98% 0.004 240)",
-      surface: "oklch(100% 0 0)",
-      fg:      "oklch(20% 0.02 240)",
-      muted:   "oklch(50% 0.018 240)",
-      border:  "oklch(90% 0.006 240)",
-      accent:  "oklch(56% 0.12 170)",
-    },
-    posture: [
-      "sans display with strong weight contrast, system body for readability",
-      "comfortable radii (12–18px) paired with crisp grid alignment",
-      "primary action color plus a secondary/domain accent and clear status colors",
-      "subtle elevation only on interactive cards",
-      "avoid generic pastel/beige gradients; use real product screenshots, data, or labelled placeholders",
-    ],
-  },
-  {
-    id: "tech-utility",
-    label: "Tech / utility — Datadog / GitHub",
-    zhLabel: "Tech / utility — Datadog / GitHub",
-    zhSummary: "功能优先 · 信息密度高 · 开发者风格",
-    mood: "Data-dense, monospace-friendly, dark or light + grid. Made for engineers and operators who want information per square inch, not vibes.",
-    references: ["Datadog", "GitHub", "Cloudflare dashboard", "Sentry"],
-    displayFont: "-apple-system, BlinkMacSystemFont, 'Inter', 'Segoe UI', system-ui, sans-serif",
-    bodyFont: "-apple-system, BlinkMacSystemFont, 'Inter', 'Segoe UI', system-ui, sans-serif",
+    id: "streetwear-dark",
+    label: "Streetwear Dark",
+    zhLabel: "潮流暗黑",
+    zhSummary: "黑底 · 荧光绿 · 街头张力",
+    mood: "Dark, high-contrast streetwear energy for fashion drops, music, youth culture, creator brands, and experimental campaigns. Black foundation, neon-green accent, condensed display type, strong edges, and confident asymmetry.",
+    references: ["Nike SNKRS", "032c", "MSCHF", "Supreme campaign pages"],
+    displayFont: "'Bebas Neue', 'Anton', 'Impact', 'Arial Black', sans-serif",
+    bodyFont: "'Inter', 'PingFang SC', 'Microsoft YaHei', system-ui, sans-serif",
     monoFont: "'JetBrains Mono', 'IBM Plex Mono', ui-monospace, Menlo, monospace",
     palette: {
-      bg:      "oklch(98% 0.005 250)",
-      surface: "oklch(100% 0 0)",
-      fg:      "oklch(22% 0.02 240)",
-      muted:   "oklch(50% 0.018 240)",
-      border:  "oklch(90% 0.008 240)",
-      accent:  "oklch(58% 0.16 145)",
+      bg: "oklch(13% 0.018 145)",
+      surface: "oklch(18% 0.02 145)",
+      fg: "oklch(96% 0.006 145)",
+      muted: "oklch(70% 0.016 145)",
+      border: "oklch(32% 0.035 145)",
+      accent: "oklch(83% 0.26 145)",
     },
     posture: [
-      "sans display + sans body (one family) is OK here — utility trumps editorial",
-      "tabular numerics everywhere, mono for code / IDs / hashes",
-      "dense tables with hairline borders, no row striping",
-      "inline status pills (success / warn / danger) with restrained tinted backgrounds",
-      "avoid: hero images, oversized headlines, marketing copy — show the product instead",
+      "dark background is mandatory; do not invert into a light lifestyle palette",
+      "neon green is the decisive accent for CTAs, highlights, and active states",
+      "use condensed display type, large numerals, sharp grid cuts, and visible borders",
+      "prefer asymmetric editorial blocks over centered SaaS hero layouts",
+      "avoid soft shadows, pastel gradients, beige surfaces, and gentle rounded-card compositions",
     ],
   },
   {
-    id: "brutalist-experimental",
-    label: "Brutalist / experimental — Are.na / Yale",
-    zhLabel: "Brutalist / experimental — Are.na / Yale",
-    zhSummary: "大胆实验 · 艺术感 · 非常规",
-    mood: "Loud type. Visible grid. System sans + a single oversized serif. Deliberate ugliness as confidence. Great for art, indie, agency, manifesto pages.",
-    references: ["Are.na", "Yale Center for British Art", "mschf", "Read.cv"],
-    displayFont: "'Times New Roman', 'Iowan Old Style', Georgia, serif",
-    bodyFont: "ui-monospace, 'IBM Plex Mono', 'JetBrains Mono', Menlo, monospace",
+    id: "tech-flagship",
+    label: "Tech Flagship",
+    zhLabel: "科技旗舰",
+    zhSummary: "冷白 · 电光蓝 · 高端科技",
+    mood: "Premium technology flagship for AI, hardware, developer tools, enterprise SaaS, and product launches. Clean cold foundation, electric-blue accent, confident whitespace, precise grids, and product-first evidence.",
+    references: ["Apple product pages", "OpenAI product surfaces", "Linear", "Vercel"],
+    displayFont: "'SF Pro Display', 'Inter', -apple-system, BlinkMacSystemFont, system-ui, sans-serif",
+    bodyFont: "'SF Pro Text', 'Inter', -apple-system, BlinkMacSystemFont, system-ui, sans-serif",
+    monoFont: "'SF Mono', 'JetBrains Mono', ui-monospace, Menlo, monospace",
     palette: {
-      bg:      "oklch(98% 0.004 240)",
-      surface: "oklch(100% 0 0)",
-      fg:      "oklch(15% 0.02 100)",
-      muted:   "oklch(40% 0.02 100)",
-      border:  "oklch(15% 0.02 100)",
-      accent:  "oklch(60% 0.22 25)",
+      bg: "oklch(99% 0.004 250)",
+      surface: "oklch(100% 0.001 250)",
+      fg: "oklch(18% 0.018 250)",
+      muted: "oklch(52% 0.018 250)",
+      border: "oklch(90% 0.008 250)",
+      accent: "oklch(61% 0.21 255)",
     },
     posture: [
-      "display = serif at extreme sizes (clamp(80px, 12vw, 200px))",
-      "body = monospace — yes, monospace as body, deliberately",
-      "borders are full-strength fg (1.5–2px), not muted greys",
-      "asymmetric layouts: one column 70%, the other 30%",
-      "almost no border-radius (0–2px). No shadows. No gradients.",
-      "underline links, no hover decoration — let the typography carry it",
+      "lead with product screenshots, metrics, or system diagrams rather than decorative illustration",
+      "use cold neutrals, electric blue, hairline borders, and disciplined spacing",
+      "make typography precise and compact; reserve large type for the actual flagship claim",
+      "use subtle glass only for functional overlays, not as a page-wide decoration",
+      "avoid purple-blue gradient sludge and generic dark-slate SaaS sameness",
+    ],
+  },
+  {
+    id: "ecommerce-convert",
+    label: "E-commerce Convert",
+    zhLabel: "电商转化",
+    zhSummary: "高转化 · 商品优先 · 清晰行动",
+    mood: "Conversion-focused commerce for stores, product detail pages, drops, offers, and service packages. Product imagery, price/value hierarchy, trust signals, and clear CTAs matter more than ambience.",
+    references: ["Shopify product pages", "Tmall product detail", "Nike commerce", "Glossier"],
+    displayFont: "'Inter Tight', 'Inter', 'PingFang SC', system-ui, sans-serif",
+    bodyFont: "'Inter', 'PingFang SC', 'Microsoft YaHei', system-ui, sans-serif",
+    palette: {
+      bg: "oklch(98% 0.006 82)",
+      surface: "oklch(100% 0.002 82)",
+      fg: "oklch(19% 0.018 78)",
+      muted: "oklch(48% 0.018 78)",
+      border: "oklch(88% 0.012 82)",
+      accent: "oklch(57% 0.2 42)",
+    },
+    posture: [
+      "product image, price/value, CTA, and proof must be visible without hunting",
+      "use comparison rows, badges, inventory cues, and compact trust modules",
+      "accent should drive buying action; avoid spreading it across decorative flourishes",
+      "keep repeated cards dense and scannable with stable image ratios",
+      "avoid editorial vagueness, oversized empty hero sections, and low-contrast beige commerce",
+    ],
+  },
+  {
+    id: "short-video",
+    label: "Short Video / Creator",
+    zhLabel: "短视频爆款",
+    zhSummary: "高能 · 节奏快 · 强视觉钩子",
+    mood: "High-energy creator and short-video campaign style for livestreams, courses, social campaigns, and attention-driven launches. Bold hooks, stacked modules, vivid accent, and rapid scan rhythm.",
+    references: ["Douyin campaign pages", "TikTok creator pages", "Bilibili event pages", "Creator launch funnels"],
+    displayFont: "'Alibaba PuHuiTi', 'PingFang SC', 'Microsoft YaHei', 'Arial Black', system-ui, sans-serif",
+    bodyFont: "'PingFang SC', 'Microsoft YaHei', system-ui, sans-serif",
+    palette: {
+      bg: "oklch(97% 0.016 338)",
+      surface: "oklch(100% 0.003 338)",
+      fg: "oklch(17% 0.03 320)",
+      muted: "oklch(48% 0.035 320)",
+      border: "oklch(88% 0.026 338)",
+      accent: "oklch(66% 0.24 338)",
+    },
+    posture: [
+      "start with an unmistakable hook and fast visual rhythm",
+      "use big numeric claims, creator/social proof strips, and stacked CTA moments",
+      "accent can be vivid, but keep backgrounds controlled so content remains readable",
+      "prefer vertical/mobile-friendly sections and clear screenshot/video placeholders",
+      "avoid slow editorial layouts, low-density SaaS cards, and decorative-only gradients",
     ],
   },
 ];
 
 export function renderDirectionFormBody(): string {
-  const cards = DESIGN_DIRECTIONS.map((d) => ({
-    id: d.id,
-    label: d.label,
-    zhLabel: d.zhLabel ?? d.label,
-    zhSummary: d.zhSummary ?? "",
-    mood: d.mood,
-    references: d.references,
-    palette: [d.palette.bg, d.palette.surface, d.palette.border, d.palette.muted, d.palette.fg, d.palette.accent],
-    displayFont: d.displayFont,
-    bodyFont: d.bodyFont,
+  const cards = DESIGN_DIRECTIONS.map(direction => ({
+    id: direction.id,
+    label: direction.label,
+    zhLabel: direction.zhLabel ?? direction.label,
+    zhSummary: direction.zhSummary ?? "",
+    mood: direction.mood,
+    references: direction.references,
+    palette: [
+      direction.palette.bg,
+      direction.palette.surface,
+      direction.palette.border,
+      direction.palette.muted,
+      direction.palette.fg,
+      direction.palette.accent,
+    ],
+    displayFont: direction.displayFont,
+    bodyFont: direction.bodyFont,
   }));
 
   const form = {
-    description: "No brand to match — pick a visual direction. Each one ships with a real palette, font stack, and layout posture. You can override the accent below.",
-    zhDescription: "没有品牌要对齐时，请先选一个设计风格方向。每个方向都自带真实配色、字体和版式姿态；你也可以在下方覆盖强调色。",
+    description: "If there is no existing brand system to match, pick one visual direction. Each direction ships with a real palette, font stack, and layout posture. You can override the accent below.",
+    zhDescription: "如果没有现成品牌系统，请先选择一个设计风格方向。每个方向都自带真实配色、字体栈和版式姿态；也可以在下方覆盖强调色。",
     questions: [
       {
         id: "direction",
@@ -176,7 +186,7 @@ export function renderDirectionFormBody(): string {
         zhLabel: "设计风格方向",
         type: "direction-cards",
         required: true,
-        options: DESIGN_DIRECTIONS.map((d) => d.id),
+        options: DESIGN_DIRECTIONS.map(direction => direction.id),
         cards,
       },
       {
@@ -184,8 +194,8 @@ export function renderDirectionFormBody(): string {
         label: "Accent override (optional)",
         zhLabel: "强调色覆盖（可选）",
         type: "text",
-        placeholder: 'e.g. "use moss green instead of cobalt", "no orange — too brand-y for us"',
-        zhPlaceholder: "例如：用橙色替换默认蓝色，不要太品牌化的颜色",
+        placeholder: 'e.g. "use moss green instead of coral", "avoid neon for this brand"',
+        zhPlaceholder: "例如：用苔藓绿替代珊瑚红，或者这个品牌不要荧光色",
       },
     ],
   };
@@ -195,42 +205,52 @@ export function renderDirectionFormBody(): string {
 
 export function renderDirectionSpecBlock(): string {
   const lines: string[] = [
-    "## Direction library — bind into `:root` when the user picks one",
+    "## Direction Library - bind into `:root` when the user picks one",
     "",
-    "Each direction below carries a CSS-ready palette (OKLch values) and font stacks. When the user selects one in the direction-form, replace the seed template's `:root` block with that direction's palette and font stacks **verbatim** — do not improvise. Posture cues describe how that direction *behaves* (border weight, radius, accent budget); honour them in the layout choices.",
+    "Each direction below carries a CSS-ready palette (OKLch values) and font stacks. When the user selects one in the direction-form, replace the seed template's `:root` block with that direction's palette and font stacks verbatim. Do not improvise colors or fonts. Posture cues describe how that direction behaves; honour them in the layout choices.",
     "",
   ];
-  for (const d of DESIGN_DIRECTIONS) {
-    lines.push(`### ${d.label}  \`(id: ${d.id})\``);
+
+  for (const direction of DESIGN_DIRECTIONS) {
+    lines.push(`### ${direction.label} \`(id: ${direction.id})\``);
     lines.push("");
-    lines.push(`**Mood:** ${d.mood}`);
+    if (direction.zhLabel) {
+      lines.push(`**Chinese label:** ${direction.zhLabel}`);
+      lines.push("");
+    }
+    lines.push(`**Mood:** ${direction.mood}`);
     lines.push("");
-    lines.push(`**References:** ${d.references.join(", ")}.`);
+    lines.push(`**References:** ${direction.references.join(", ")}.`);
     lines.push("");
     lines.push("**Palette (drop into `:root`):**");
     lines.push("");
     lines.push("```css");
-    lines.push(`:root {`);
-    lines.push(`  --bg:      ${d.palette.bg};`);
-    lines.push(`  --surface: ${d.palette.surface};`);
-    lines.push(`  --fg:      ${d.palette.fg};`);
-    lines.push(`  --muted:   ${d.palette.muted};`);
-    lines.push(`  --border:  ${d.palette.border};`);
-    lines.push(`  --accent:  ${d.palette.accent};`);
+    lines.push(":root {");
+    lines.push(`  --bg:      ${direction.palette.bg};`);
+    lines.push(`  --surface: ${direction.palette.surface};`);
+    lines.push(`  --fg:      ${direction.palette.fg};`);
+    lines.push(`  --muted:   ${direction.palette.muted};`);
+    lines.push(`  --border:  ${direction.palette.border};`);
+    lines.push(`  --accent:  ${direction.palette.accent};`);
     lines.push("");
-    lines.push(`  --font-display: ${d.displayFont};`);
-    lines.push(`  --font-body:    ${d.bodyFont};`);
-    if (d.monoFont) lines.push(`  --font-mono:    ${d.monoFont};`);
-    lines.push(`}`);
+    lines.push(`  --font-display: ${direction.displayFont};`);
+    lines.push(`  --font-body:    ${direction.bodyFont};`);
+    if (direction.monoFont) {
+      lines.push(`  --font-mono:    ${direction.monoFont};`);
+    }
+    lines.push("}");
     lines.push("```");
     lines.push("");
     lines.push("**Posture:**");
-    for (const p of d.posture) lines.push(`- ${p}`);
+    for (const posture of direction.posture) {
+      lines.push(`- ${posture}`);
+    }
     lines.push("");
   }
+
   return lines.join("\n");
 }
 
 export function findDirectionById(id: string): DesignDirection | undefined {
-  return DESIGN_DIRECTIONS.find((d) => d.id === id);
+  return DESIGN_DIRECTIONS.find(direction => direction.id === id);
 }
