@@ -92,6 +92,18 @@ describe("designPrompt", () => {
     expect(prompt).toContain("skills/landing-page/*");
   });
 
+  it("keeps skill file instructions on non-discovery follow-up form turns", () => {
+    const prompt = buildDesignChatUserPrompt({
+      prompt: "[form answers - direction]\n- Direction: lifestyle-redbook",
+      outputType: "landing-page",
+      isFormAnswerTurn: true,
+    });
+
+    expect(prompt).toContain("[form answers - direction]");
+    expect(prompt).toContain(`Path: ${getDesignChatSkillEntryRelativePath("landing-page")}`);
+    expect(prompt).toContain("skills/landing-page/*");
+  });
+
   describe("buildDesignChatUserPrompt direction picker", () => {
     it("includes direction picker guidance and all five ids on turn 1", () => {
       const prompt = buildDesignChatUserPrompt({
@@ -170,6 +182,7 @@ describe("designPrompt", () => {
     expect(prompt).toContain("Always respond in the same language as the user's latest input.");
     expect(prompt).toContain("Tailor the questions to the actual brief");
     expect(prompt).toContain("If a critical gap still blocks a good result, ask one narrower follow-up question-form");
+    expect(prompt).toContain("first tool call is TodoWrite");
     expect(prompt).toContain("Read the skill entry file");
     expect(prompt).toContain("strict order");
     expect(prompt).toContain("Step 10. Output the finished HTML.");

@@ -53,6 +53,56 @@ describe("openAIImageClient", () => {
     });
   });
 
+  it("omits legacy response_format for GPT image generation models", async () => {
+    const fetchSpy = vi.fn().mockResolvedValue({
+      ok: true,
+      text: async () =>
+        JSON.stringify({
+          data: [{ b64_json: "aGVsbG8=", mime_type: "image/png" }],
+        }),
+    });
+    vi.stubGlobal("fetch", fetchSpy);
+
+    await generateImages({
+      config: {
+        apiKey: "secret",
+        model: "gpt-image-2",
+        baseUrl: "https://example.com/v1",
+      },
+      prompt: "draw a cat",
+      responseFormat: "url",
+    });
+
+    const [, request] = fetchSpy.mock.calls[0]!;
+    const body = JSON.parse(request.body as string) as Record<string, unknown>;
+    expect(body.response_format).toBeUndefined();
+  });
+
+  it("keeps legacy response_format for non-GPT image generation models", async () => {
+    const fetchSpy = vi.fn().mockResolvedValue({
+      ok: true,
+      text: async () =>
+        JSON.stringify({
+          data: [{ url: "https://example.com/cat.png" }],
+        }),
+    });
+    vi.stubGlobal("fetch", fetchSpy);
+
+    await generateImages({
+      config: {
+        apiKey: "secret",
+        model: "dall-e-3",
+        baseUrl: "https://example.com/v1",
+      },
+      prompt: "draw a cat",
+      responseFormat: "url",
+    });
+
+    const [, request] = fetchSpy.mock.calls[0]!;
+    const body = JSON.parse(request.body as string) as Record<string, unknown>;
+    expect(body.response_format).toBe("url");
+  });
+
   it("accepts image payloads wrapped inside markdown json fences", async () => {
     vi.stubGlobal(
       "fetch",
@@ -365,6 +415,36 @@ describe("openAIImageClient", () => {
     expect(request.body).toBeInstanceOf(FormData);
   });
 
+  it("omits legacy response_format for GPT image edit models", async () => {
+    const fetchSpy = vi.fn().mockResolvedValue({
+      ok: true,
+      text: async () =>
+        JSON.stringify({
+          data: [{ b64_json: "aGVsbG8=", mime_type: "image/png" }],
+        }),
+    });
+    vi.stubGlobal("fetch", fetchSpy);
+
+    await editImages({
+      config: {
+        apiKey: "secret",
+        model: "gpt-image-2",
+        baseUrl: "https://example.com/v1",
+      },
+      prompt: "turn this cat into a bronze statue",
+      images: [{
+        data: Buffer.from("hello"),
+        mimeType: "image/png",
+        name: "reference.png",
+      }],
+      responseFormat: "url",
+    });
+
+    const [, request] = fetchSpy.mock.calls[0]!;
+    const formEntries = Array.from((request.body as FormData).entries());
+    expect(formEntries.some(([key]) => key === "response_format")).toBe(false);
+  });
+
   it("sends multiple reference images as repeated image[] fields", async () => {
     const fetchSpy = vi.fn().mockResolvedValue({
       ok: true,
@@ -399,6 +479,44 @@ describe("openAIImageClient", () => {
     const [, request] = fetchSpy.mock.calls[0]!;
     const formEntries = Array.from((request.body as FormData).entries());
     expect(formEntries.filter(([key]) => key === "image[]")).toHaveLength(2);
+  });
+
+  it("includes a mask file when image edits are requested with brush-mask input", async () => {
+    const fetchSpy = vi.fn().mockResolvedValue({
+      ok: true,
+      text: async () =>
+        JSON.stringify({
+          data: [{ b64_json: "aGVsbG8=", mime_type: "image/png" }],
+        }),
+    });
+    vi.stubGlobal("fetch", fetchSpy);
+
+    await editImages({
+      config: {
+        apiKey: "secret",
+        model: "gpt-image-2",
+        baseUrl: "https://example.com/v1",
+      },
+      prompt: "change only the masked region",
+      images: [{
+        data: Buffer.from("hello"),
+        mimeType: "image/png",
+        name: "reference.png",
+      }],
+      mask: {
+        data: Buffer.from("mask"),
+        mimeType: "image/png",
+        name: "mask.png",
+      },
+    });
+
+    const [, request] = fetchSpy.mock.calls[0]!;
+    const formEntries = Array.from((request.body as FormData).entries());
+    expect(formEntries.some(([key, value]) =>
+      key === "mask" &&
+      value instanceof File &&
+      value.name === "mask.png",
+    )).toBe(true);
   });
 
   it("does not retry edit fallbacks after a 200 success with an unparsable body", async () => {

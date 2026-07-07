@@ -6,16 +6,18 @@ export type ResolvedImageBatchPlan = {
 };
 
 const COLLAGE_PATTERNS = [
-  /拼(?:成|接)?(?:一张|在一起)/i,
+  /拼(?:成|在)?一张/i,
   /拼图|拼贴|拼版|联图|组图|九宫格|多宫格|分屏|三联画|四联画/i,
   /contact\s*sheet|collage|triptych|diptych|split[\s-]*screen|moodboard/i,
 ];
 
 const CHINESE_BATCH_PATTERNS = [
-  /(?:请|帮我|麻烦)?\s*(?:批量|分别|各自|一共|总共|共)?\s*(?:生成|做|出|给我|帮我生成|帮我做|来|创建|画)\s*([2-8])\s*张(?:独立|不同|单独)?(?:的)?(?:图片|图|图像|照片|海报|壁纸|插画)?/i,
-  /(?:请|帮我|麻烦)?\s*(?:批量|分别|各自|一共|总共|共)?\s*(?:生成|做|出|给我|帮我生成|帮我做|来|创建|画)\s*(两|二|三|四|五|六|七|八)\s*张(?:独立|不同|单独)?(?:的)?(?:图片|图|图像|照片|海报|壁纸|插画)?/i,
-  /(?:来|给我|要)\s*([2-8])\s*张(?:独立|不同|单独)?(?:的)?(?:图片|图|图像|照片|海报|壁纸|插画)?/i,
-  /(?:来|给我|要)\s*(两|二|三|四|五|六|七|八)\s*张(?:独立|不同|单独)?(?:的)?(?:图片|图|图像|照片|海报|壁纸|插画)?/i,
+  /(?:请|帮我|麻烦)?\s*(?:批量|分别|各自|一共|总共|共)?\s*(?:生成|做出|给我|帮我生成|帮我做|来|创建)?\s*([2-8])\s*张(?:独立|不同|单独)?(?:的)?(?:图片|图像|照片|海报|壁纸|插画)?/i,
+  /(?:请|帮我|麻烦)?\s*(?:批量|分别|各自|一共|总共|共)?\s*(?:生成|做出|给我|帮我生成|帮我做|来|创建)?\s*(两|二|三|四|五|六|七|八)\s*张(?:独立|不同|单独)?(?:的)?(?:图片|图像|照片|海报|壁纸|插画)?/i,
+  /(?:做成|做出|做|来)([2-8])\s*张(?:独立|不同|单独)?(?:构图|版本|方案)?(?:的)?(?:图片|图像|照片|海报|壁纸|插画)?/i,
+  /(?:做成|做出|做|来)(两|二|三|四|五|六|七|八)\s*张(?:独立|不同|单独)?(?:构图|版本|方案)?(?:的)?(?:图片|图像|照片|海报|壁纸|插画)?/i,
+  /(?:要|给我)([2-8])\s*张(?:独立|不同|单独)?(?:的)?(?:图片|图像|照片|海报|壁纸|插画)?/i,
+  /(?:要|给我)(两|二|三|四|五|六|七|八)\s*张(?:独立|不同|单独)?(?:的)?(?:图片|图像|照片|海报|壁纸|插画)?/i,
 ];
 
 const ENGLISH_BATCH_PATTERNS = [
@@ -56,9 +58,15 @@ function parseChineseCount(token: string): number | null {
 
 function trimPromptSeparators(prompt: string): string {
   return prompt
-    .replace(/^[\s,，、。:：;；!！?？-]+/, "")
-    .replace(/[\s,，、。:：;；!！?？-]+$/, "")
+    .replace(/^[\s,，。、：；！？]+/, "")
+    .replace(/[\s,，。、：；！？]+$/, "")
     .trim();
+}
+
+function normalizePromptAfterBatchStrip(prompt: string): string {
+  return trimPromptSeparators(
+    prompt.replace(/^(?:请|帮我|麻烦|做成|做出|做|来|生成|给我|帮我生成|帮我做|要)\s*/i, ""),
+  );
 }
 
 function hasCollageIntent(prompt: string): boolean {
@@ -123,7 +131,7 @@ export function resolveImageBatchPlan(options: {
   );
 
   const strippedPrompt = promptDerivedBatch
-    ? trimPromptSeparators(trimmedPrompt.replace(promptDerivedBatch.matchedText, " "))
+    ? normalizePromptAfterBatchStrip(trimmedPrompt.replace(promptDerivedBatch.matchedText, " "))
     : trimmedPrompt;
   const basePrompt = strippedPrompt || trimmedPrompt;
   const executionPrompt = batchCount > 1 && !collageRequested

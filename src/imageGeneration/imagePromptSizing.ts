@@ -5,6 +5,7 @@ export type RequestedImageSize = {
 
 const SUPPORTED_IMAGE_SIZES = {
   square: "1024x1024",
+  hdSquare: "2048x2048",
   landscape: "1536x1024",
   portrait: "1024x1536",
 } as const;

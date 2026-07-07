@@ -425,6 +425,37 @@ export class DesignProjectStore {
     });
   }
 
+  private rowToProjectListRecord(row: {
+    project_id: string;
+    name: string;
+    source: DesignProjectSource;
+    source_artifact_id: string | null;
+    active_version_id: string;
+    explicit_draft?: number | null;
+    entry_pending?: number | null;
+    entry_path?: string | null;
+    created_at: number;
+    updated_at: number;
+    last_opened_at: number;
+  }): DesignProjectRecord {
+    const { conversationHistory: _conversationHistory, ...project } = normalizeProjectRecord({
+      projectId: row.project_id,
+      name: row.name,
+      source: row.source,
+      ...(row.source_artifact_id ? { sourceArtifactId: row.source_artifact_id } : {}),
+      activeVersionId: row.active_version_id,
+      ...(row.explicit_draft ? { explicitDraft: true } : {}),
+      ...(row.entry_pending ? { entryPending: true } : {}),
+      ...(row.entry_path === "quick" || row.entry_path === "detailed"
+        ? { entryPath: row.entry_path }
+        : {}),
+      createdAt: row.created_at,
+      updatedAt: row.updated_at,
+      lastOpenedAt: row.last_opened_at,
+    });
+    return project;
+  }
+
   async createProject(options: {
     name: string;
     source: DesignProjectSource;
@@ -503,7 +534,7 @@ export class DesignProjectStore {
       }
 
       const rows = database.prepare(`
-        SELECT project_id, name, source, source_artifact_id, active_version_id, explicit_draft, entry_pending, entry_path, conversation_history, created_at, updated_at, last_opened_at
+        SELECT project_id, name, source, source_artifact_id, active_version_id, explicit_draft, entry_pending, entry_path, created_at, updated_at, last_opened_at
         FROM design_projects
         ORDER BY updated_at DESC
       `).all() as Array<{
@@ -515,14 +546,13 @@ export class DesignProjectStore {
         explicit_draft?: number | null;
         entry_pending?: number | null;
         entry_path?: string | null;
-        conversation_history: string | null;
         created_at: number;
         updated_at: number;
         last_opened_at: number;
       }>;
 
       return rows.map(row => ({
-        ...this.rowToProjectRecord(row),
+        ...this.rowToProjectListRecord(row),
         versionCount: versionCounts.get(row.project_id) ?? 0,
       }));
     });
@@ -532,7 +562,12 @@ export class DesignProjectStore {
     }
 
     const store = await this.readLegacyStore();
-    return [...store.projects].sort((left, right) => right.updatedAt - left.updatedAt);
+    return [...store.projects]
+      .map(project => {
+        const { conversationHistory: _conversationHistory, ...listProject } = project;
+        return listProject;
+      })
+      .sort((left, right) => right.updatedAt - left.updatedAt);
   }
 
   async pruneEmptyPendingProjects(
@@ -813,6 +848,38 @@ export class DesignProjectStore {
       return row?.thumbnail ?? null;
     });
     return result ?? undefined;
+  }
+
+  async getThumbnails(projectIds: string[]): Promise<Map<string, string>> {
+    const normalizedProjectIds = Array.from(new Set(
+      projectIds
+        .map(projectId => projectId.trim())
+        .filter(Boolean),
+    ));
+    if (normalizedProjectIds.length === 0) {
+      return new Map();
+    }
+
+    const result = await this.withDatabase(database => {
+      const placeholders = normalizedProjectIds.map(() => "?").join(", ");
+      const rows = database.prepare(`
+        SELECT project_id, thumbnail
+        FROM design_projects
+        WHERE project_id IN (${placeholders})
+          AND thumbnail IS NOT NULL
+      `).all(...normalizedProjectIds) as Array<{
+        project_id: string;
+        thumbnail: string | null;
+      }>;
+
+      return new Map(
+        rows
+          .filter(row => typeof row.thumbnail === "string" && row.thumbnail.trim())
+          .map(row => [row.project_id, row.thumbnail as string]),
+      );
+    });
+
+    return result ?? new Map();
   }
 
   async saveThumbnail(projectId: string, thumbnail: string): Promise<void> {

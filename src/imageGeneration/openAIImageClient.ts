@@ -13,6 +13,12 @@ export type ImageEditInput = {
   name: string;
 };
 
+export type ImageMaskInput = {
+  data: Buffer;
+  mimeType: string;
+  name: string;
+};
+
 export type GeneratedImageResult = {
   src: string;
   revisedPrompt?: string;
@@ -229,6 +235,10 @@ function normalizeImageRefusalMessage(rawMessage: string): string {
 
 function buildAuthorizationHeader(config: ImageGenerationProviderConfig): string {
   return config.authMode === "raw" ? config.apiKey : `Bearer ${config.apiKey}`;
+}
+
+function supportsLegacyResponseFormat(model: string): boolean {
+  return !/^gpt-image-/i.test(model.trim());
 }
 
 function getResponseContentType(response: Response): string {
@@ -546,7 +556,9 @@ export async function generateImages(options: {
         prompt,
         size: options.size ?? "1024x1024",
         ...(count > 1 ? { n: count } : {}),
-        ...(options.responseFormat ? { response_format: options.responseFormat } : {}),
+        ...(options.responseFormat && supportsLegacyResponseFormat(model)
+          ? { response_format: options.responseFormat }
+          : {}),
         ...(options.quality && options.quality !== "auto" ? { quality: options.quality } : {}),
       },
       signal: options.signal,
@@ -567,6 +579,7 @@ export async function editImages(options: {
   config: ImageGenerationProviderConfig;
   prompt: string;
   images: ImageEditInput[];
+  mask?: ImageMaskInput;
   size?: string;
   count?: number;
   responseFormat?: "url" | "b64_json";
@@ -601,13 +614,21 @@ export async function editImages(options: {
           }),
         );
       }
+      if (options.mask) {
+        form.set(
+          "mask",
+          new File([new Uint8Array(options.mask.data)], options.mask.name, {
+            type: options.mask.mimeType,
+          }),
+        );
+      }
       if (options.size) {
         form.set("size", options.size);
       }
       if (count > 1) {
         form.set("n", String(count));
       }
-      if (options.responseFormat) {
+      if (options.responseFormat && supportsLegacyResponseFormat(model)) {
         form.set("response_format", options.responseFormat);
       }
       if (options.quality && options.quality !== "auto") {

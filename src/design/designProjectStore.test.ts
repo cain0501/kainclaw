@@ -114,6 +114,57 @@ describe("DesignProjectStore", () => {
     });
   });
 
+  it("keeps project lists lightweight while preserving project-level history", async () => {
+    const storageRoot = await fs.mkdtemp(path.join(os.tmpdir(), "kc-design-projects-"));
+    tempDirs.push(storageRoot);
+    const store = new DesignProjectStore(storageRoot);
+
+    const created = await store.createProject({
+      name: "List Project",
+      source: "blank",
+      activeVersionId: "pending-version",
+    });
+
+    await store.saveConversationHistory(created.projectId, [
+      { role: "user", content: "brief" },
+      { role: "assistant", content: "reply" },
+    ]);
+
+    const listedProject = (await store.listProjects()).find(project => project.projectId === created.projectId);
+    expect(listedProject).toMatchObject({ projectId: created.projectId, name: "List Project" });
+    expect(listedProject?.conversationHistory).toBeUndefined();
+    await expect(store.loadConversationHistory(created.projectId)).resolves.toEqual([
+      { role: "user", content: "brief" },
+      { role: "assistant", content: "reply" },
+    ]);
+  });
+
+  it("loads thumbnails for project lists in one batch", async () => {
+    const storageRoot = await fs.mkdtemp(path.join(os.tmpdir(), "kc-design-projects-"));
+    tempDirs.push(storageRoot);
+    const store = new DesignProjectStore(storageRoot);
+
+    const first = await store.createProject({
+      name: "Project A",
+      source: "blank",
+      activeVersionId: "version-a1",
+    });
+    const second = await store.createProject({
+      name: "Project B",
+      source: "blank",
+      activeVersionId: "version-b1",
+    });
+
+    await store.saveThumbnail(first.projectId, "data:image/png;base64,first");
+    await store.saveThumbnail(second.projectId, "data:image/png;base64,second");
+
+    await expect(store.getThumbnails([first.projectId, second.projectId, first.projectId, ""]))
+      .resolves.toEqual(new Map([
+        [first.projectId, "data:image/png;base64,first"],
+        [second.projectId, "data:image/png;base64,second"],
+      ]));
+  });
+
   it("runs schema migrations and exposes non-deleted version counts", async () => {
     const storageRoot = await fs.mkdtemp(path.join(os.tmpdir(), "kc-design-projects-"));
     tempDirs.push(storageRoot);
@@ -219,8 +270,8 @@ describe("DesignProjectStore", () => {
     expect(projects.find(project => project.projectId === ghost.projectId)).toBeUndefined();
     expect(projects.find(project => project.projectId === withHistory.projectId)).toMatchObject({
       isDraft: true,
-      conversationHistory: [{ role: "user", content: "继续做这个草稿" }],
     });
+    await expect(store.loadConversationHistory(withHistory.projectId)).resolves.toHaveLength(1);
     expect(projects.find(project => project.projectId === withArtifact.projectId)).toMatchObject({
       isDraft: true,
       sourceArtifactId: "artifact-keep",

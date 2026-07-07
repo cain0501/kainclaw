@@ -74,7 +74,11 @@ export function buildKainClawRuntimeIdentityNote(
 export function buildProviderSystemPrompt(
   baseSystemPrompt: string,
   config: AdapterProviderConfig,
+  options: { includeRuntimeIdentityNote?: boolean } = {},
 ): string {
+  if (options.includeRuntimeIdentityNote === false) {
+    return baseSystemPrompt;
+  }
   return appendSystemPromptSection(
     baseSystemPrompt,
     "Runtime Identity Note",
@@ -146,8 +150,9 @@ export function buildProviderAdapter(
   systemPrompt = SYSTEM_PROMPT,
   envMap: Record<string, string> = {},
   runtimeOptions: ProviderRuntimeOptions = {},
+  options: { includeRuntimeIdentityNote?: boolean } = {},
 ) {
-  const resolvedSystemPrompt = buildProviderSystemPrompt(systemPrompt, config);
+  const resolvedSystemPrompt = buildProviderSystemPrompt(systemPrompt, config, options);
   if (config.type === "openai" || config.type === "openai-compatible") {
     return new OpenAIAdapter(config, resolvedSystemPrompt, runtimeOptions);
   }

@@ -188,4 +188,18 @@ describe("providerHost", () => {
     expect(prompt).toContain("Your identity is KainClaw.");
     expect(prompt).toContain('the app is configured to use the official OpenAI provider with model "gpt-4.1"');
   });
+
+  it("can skip the runtime identity note for role-specific prompts", () => {
+    const prompt = buildProviderSystemPrompt("image-only prompt", {
+      type: "openai",
+      apiKey: "secret",
+      model: "gpt-4.1",
+    }, {
+      includeRuntimeIdentityNote: false,
+    });
+
+    expect(prompt).toBe("image-only prompt");
+    expect(prompt).not.toContain("Your identity is KainClaw.");
+    expect(prompt).not.toContain("# Runtime Identity Note");
+  });
 });
