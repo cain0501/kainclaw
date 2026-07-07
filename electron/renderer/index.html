@@ -570,6 +570,10 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-seri
 .canvas-toolbar-spacer{flex:1}
 .canvas-toolbar-btn{padding:7px 13px;border:1px solid #e0d4c6;background:rgba(255,255,255,.9);border-radius:999px;font-size:12px;font-weight:700;color:#5d534a;line-height:1.2;box-shadow:0 1px 0 rgba(255,255,255,.8) inset;transition:background .14s ease,border-color .14s ease,color .14s ease,transform .14s ease}
 .canvas-toolbar-btn:hover{background:#f8f1e8;border-color:#cfb9a5;color:#2d1f14;transform:translateY(-1px)}
+.canvas-annotation-layer{position:absolute;inset:0;width:100%;height:100%;z-index:40;pointer-events:none;display:block;touch-action:none}
+.canvas-annotation-layer.active{pointer-events:auto;cursor:crosshair}
+.canvas-annotation-clear{display:none}
+.canvas-annotation-clear.visible{display:inline-flex}
 .replace-ctx{display:none;align-items:center;gap:8px;padding:6px 16px;background:#fffbeb;border-bottom:1.5px solid #fbbf24;flex-shrink:0;height:32px}
 .replace-ctx.visible{display:flex}
 .replace-ctx-icon{font-size:12px}
@@ -1805,8 +1809,10 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-seri
                 <button id="midtai-canvas-view-btn" class="canvas-mode-btn active" onclick="setMidtaiCanvasMode('view')">查看</button>
                 <button id="midtai-canvas-select-btn" class="canvas-mode-btn" onclick="setMidtaiCanvasMode('select')">选择</button>
                 <button id="midtai-canvas-tweak-btn" class="canvas-mode-btn" onclick="setMidtaiCanvasMode('tweak')">调节</button>
+                <button id="midtai-canvas-annotate-btn" class="canvas-mode-btn" onclick="setMidtaiCanvasMode('annotate')">标注</button>
                 <button id="midtai-canvas-critique-btn" class="canvas-mode-btn" onclick="requestManualCritique()">评审</button>
                 <div class="canvas-toolbar-spacer"></div>
+                <button id="midtai-canvas-annotation-clear-btn" class="canvas-toolbar-btn canvas-annotation-clear" onclick="clearMidtaiCanvasAnnotations()">清空标注</button>
                 <button class="canvas-toolbar-btn" onclick="exitCanvas()">退出画布</button>
                 <div style="position:relative;display:inline-block">
                   <button class="canvas-toolbar-btn" onclick="toggleMidtaiVersionsPanel()">版本历史 ▼</button>
@@ -1824,6 +1830,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-seri
               </div>
               <div class="midtai-canvas-frame">
                 <iframe id="midtai-canvas-iframe" sandbox="allow-scripts" style="flex:1;min-height:0;border:none;width:100%;display:none"></iframe>
+                <canvas id="midtai-canvas-annotation-layer" class="canvas-annotation-layer" aria-hidden="true"></canvas>
                 <div id="midtai-canvas-empty" class="midtai-canvas-title" style="display:flex;align-items:center;justify-content:center;flex:1;color:#a8998a;font-size:13px">暂无设计内容</div>
                 <div id="midtai-sliders-panel" style="display:none;position:absolute;z-index:100;width:260px;max-height:calc(100% - 56px);background:rgba(255,255,255,.97);border:1px solid #eadfd2;border-radius:12px;padding:0;overflow:hidden;box-shadow:0 8px 24px rgba(0,0,0,.14);bottom:16px;right:16px"></div>
                 <div id="design-canvas-critique-float" style="display:none;position:absolute;z-index:100;width:288px;max-height:calc(100% - 56px);overflow-y:auto;background:#fffdfb;border:1px solid #e5ddd0;border-radius:12px;box-shadow:0 4px 20px rgba(0,0,0,.16);bottom:16px;right:16px;font-size:12px"></div>
@@ -2286,6 +2293,13 @@ let midtaiState = {
   imgQuality: 'auto',
   imgPreviewSession: false,
   imgPreviewBatchId: null,
+};
+let midtaiCanvasAnnotationState = {
+  drawing: false,
+  lastX: 0,
+  lastY: 0,
+  hasStrokes: false,
+  bound: false,
 };
 let designChatMessages = [];
 let designChatStreamingId = null;
@@ -7294,6 +7308,143 @@ function postMidtaiCanvasSelectMode(active) {
   );
 }
 
+function getMidtaiCanvasAnnotationLayer() {
+  return document.getElementById('midtai-canvas-annotation-layer');
+}
+
+function resizeMidtaiCanvasAnnotationLayer() {
+  const layer = getMidtaiCanvasAnnotationLayer();
+  const frame = document.querySelector('.midtai-canvas-frame');
+  if (!layer || !frame) return;
+  const rect = frame.getBoundingClientRect();
+  const dpr = Math.max(1, window.devicePixelRatio || 1);
+  const nextWidth = Math.max(1, Math.round(rect.width * dpr));
+  const nextHeight = Math.max(1, Math.round(rect.height * dpr));
+  if (layer.width === nextWidth && layer.height === nextHeight) {
+    return;
+  }
+
+  let snapshot = null;
+  if (midtaiCanvasAnnotationState.hasStrokes && layer.width > 0 && layer.height > 0) {
+    snapshot = document.createElement('canvas');
+    snapshot.width = layer.width;
+    snapshot.height = layer.height;
+    snapshot.getContext('2d')?.drawImage(layer, 0, 0);
+  }
+
+  layer.width = nextWidth;
+  layer.height = nextHeight;
+  layer.style.width = rect.width + 'px';
+  layer.style.height = rect.height + 'px';
+  if (snapshot) {
+    layer.getContext('2d')?.drawImage(snapshot, 0, 0, nextWidth, nextHeight);
+  }
+}
+
+function updateMidtaiCanvasAnnotationLayer() {
+  const layer = getMidtaiCanvasAnnotationLayer();
+  const clearBtn = document.getElementById('midtai-canvas-annotation-clear-btn');
+  const active = midtaiState.canvasMode === 'annotate';
+  if (layer) {
+    layer.classList.toggle('active', active);
+    if (active) {
+      resizeMidtaiCanvasAnnotationLayer();
+      ensureMidtaiCanvasAnnotationHandlers();
+    }
+  }
+  if (clearBtn) {
+    clearBtn.classList.toggle('visible', active);
+  }
+}
+
+function getMidtaiAnnotationPoint(event) {
+  const layer = getMidtaiCanvasAnnotationLayer();
+  if (!layer) return null;
+  const rect = layer.getBoundingClientRect();
+  if (!rect.width || !rect.height) return null;
+  return {
+    x: (event.clientX - rect.left) * (layer.width / rect.width),
+    y: (event.clientY - rect.top) * (layer.height / rect.height),
+  };
+}
+
+function drawMidtaiAnnotationStroke(fromX, fromY, toX, toY) {
+  const layer = getMidtaiCanvasAnnotationLayer();
+  const ctx = layer?.getContext('2d');
+  if (!layer || !ctx) return;
+  const dpr = Math.max(1, window.devicePixelRatio || 1);
+  ctx.save();
+  ctx.strokeStyle = 'rgba(232,64,64,.95)';
+  ctx.lineWidth = Math.max(3, 3 * dpr);
+  ctx.lineCap = 'round';
+  ctx.lineJoin = 'round';
+  ctx.beginPath();
+  ctx.moveTo(fromX, fromY);
+  ctx.lineTo(toX, toY);
+  ctx.stroke();
+  ctx.restore();
+  midtaiCanvasAnnotationState.hasStrokes = true;
+}
+
+function beginMidtaiCanvasAnnotation(event) {
+  if (midtaiState.canvasMode !== 'annotate') return;
+  resizeMidtaiCanvasAnnotationLayer();
+  const point = getMidtaiAnnotationPoint(event);
+  if (!point) return;
+  event.preventDefault();
+  event.currentTarget?.setPointerCapture?.(event.pointerId);
+  midtaiCanvasAnnotationState.drawing = true;
+  midtaiCanvasAnnotationState.lastX = point.x;
+  midtaiCanvasAnnotationState.lastY = point.y;
+  drawMidtaiAnnotationStroke(point.x, point.y, point.x + 0.01, point.y + 0.01);
+}
+
+function moveMidtaiCanvasAnnotation(event) {
+  if (!midtaiCanvasAnnotationState.drawing || midtaiState.canvasMode !== 'annotate') return;
+  const point = getMidtaiAnnotationPoint(event);
+  if (!point) return;
+  event.preventDefault();
+  drawMidtaiAnnotationStroke(
+    midtaiCanvasAnnotationState.lastX,
+    midtaiCanvasAnnotationState.lastY,
+    point.x,
+    point.y,
+  );
+  midtaiCanvasAnnotationState.lastX = point.x;
+  midtaiCanvasAnnotationState.lastY = point.y;
+}
+
+function endMidtaiCanvasAnnotation(event) {
+  if (!midtaiCanvasAnnotationState.drawing) return;
+  midtaiCanvasAnnotationState.drawing = false;
+  event.currentTarget?.releasePointerCapture?.(event.pointerId);
+}
+
+function ensureMidtaiCanvasAnnotationHandlers() {
+  const layer = getMidtaiCanvasAnnotationLayer();
+  if (!layer || midtaiCanvasAnnotationState.bound) return;
+  layer.addEventListener('pointerdown', beginMidtaiCanvasAnnotation);
+  layer.addEventListener('pointermove', moveMidtaiCanvasAnnotation);
+  layer.addEventListener('pointerup', endMidtaiCanvasAnnotation);
+  layer.addEventListener('pointercancel', endMidtaiCanvasAnnotation);
+  layer.addEventListener('pointerleave', endMidtaiCanvasAnnotation);
+  window.addEventListener('resize', () => {
+    if (midtaiState.canvasMode === 'annotate') {
+      resizeMidtaiCanvasAnnotationLayer();
+    }
+  });
+  midtaiCanvasAnnotationState.bound = true;
+}
+
+function clearMidtaiCanvasAnnotations() {
+  const layer = getMidtaiCanvasAnnotationLayer();
+  const ctx = layer?.getContext('2d');
+  if (!layer || !ctx) return;
+  ctx.clearRect(0, 0, layer.width, layer.height);
+  midtaiCanvasAnnotationState.hasStrokes = false;
+  midtaiCanvasAnnotationState.drawing = false;
+}
+
 function showMidtaiNodePanel(node, isImg) {
   const panel = document.getElementById('midtai-node-panel');
   const tag = document.getElementById('mnp-tag');
@@ -7424,6 +7575,9 @@ function openCanvas(projectName) {
   document.getElementById('midtai-canvas-view-btn')?.classList.add('active');
   document.getElementById('midtai-canvas-select-btn')?.classList.remove('active');
   document.getElementById('midtai-canvas-tweak-btn')?.classList.remove('active');
+  document.getElementById('midtai-canvas-annotate-btn')?.classList.remove('active');
+  clearMidtaiCanvasAnnotations();
+  updateMidtaiCanvasAnnotationLayer();
   const slidersPanel = document.getElementById('midtai-sliders-panel');
   const versionsPanel = document.getElementById('midtai-versions-panel');
   const exportMenu = document.getElementById('midtai-export-menu');
@@ -7448,6 +7602,8 @@ function openCanvas(projectName) {
     freshFrame.style.cssText = 'flex:1;min-height:0;border:none;width:100%;display:block';
     freshFrame.onload = () => {
       postMidtaiCanvasSelectMode(midtaiState.canvasMode === 'select');
+      resizeMidtaiCanvasAnnotationLayer();
+      updateMidtaiCanvasAnnotationLayer();
       if (midtaiState.canvasMode === 'tweak' && slidersPanel) {
         renderDesignSlidersPanel(slidersPanel, freshFrame);
       }
@@ -7464,10 +7620,12 @@ function openCanvas(projectName) {
 }
 
 function setMidtaiCanvasMode(mode) {
-  midtaiState.canvasMode = ['select', 'tweak'].includes(mode) ? mode : 'view';
+  midtaiState.canvasMode = ['select', 'tweak', 'annotate'].includes(mode) ? mode : 'view';
   document.getElementById('midtai-canvas-view-btn')?.classList.toggle('active', midtaiState.canvasMode === 'view');
   document.getElementById('midtai-canvas-select-btn')?.classList.toggle('active', midtaiState.canvasMode === 'select');
   document.getElementById('midtai-canvas-tweak-btn')?.classList.toggle('active', midtaiState.canvasMode === 'tweak');
+  document.getElementById('midtai-canvas-annotate-btn')?.classList.toggle('active', midtaiState.canvasMode === 'annotate');
+  updateMidtaiCanvasAnnotationLayer();
   const slidersPanel = document.getElementById('midtai-sliders-panel');
   const versionsPanel = document.getElementById('midtai-versions-panel');
   const exportMenu = document.getElementById('midtai-export-menu');
@@ -7489,6 +7647,16 @@ function setMidtaiCanvasMode(mode) {
     }
     return;
   }
+  if (midtaiState.canvasMode === 'annotate') {
+    hideMidtaiNodePanel();
+    postMidtaiCanvasSelectMode(false);
+    const critiqueFloat = document.getElementById('design-canvas-critique-float');
+    if (critiqueFloat) critiqueFloat.style.display = 'none';
+    if (slidersPanel) {
+      slidersPanel.style.display = 'none';
+    }
+    return;
+  }
   if (slidersPanel) {
     slidersPanel.style.display = 'none';
   }
@@ -7501,6 +7669,8 @@ function setMidtaiCanvasMode(mode) {
 function exitCanvas() {
   midtaiState.canvasOpen = false;
   midtaiState.canvasMode = 'view';
+  updateMidtaiCanvasAnnotationLayer();
+  clearMidtaiCanvasAnnotations();
   hideMidtaiNodePanel();
   const slidersPanel = document.getElementById('midtai-sliders-panel');
   const versionsPanel = document.getElementById('midtai-versions-panel');

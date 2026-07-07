@@ -52,7 +52,6 @@ npm run build:electron   # only when Electron behavior changed
 
 | Beads ID | Title | Status | Primer |
 |----------|-------|--------|--------|
-| vscode-extension-0z5 | 画布草图标注工具：iframe 上层 canvas overlay | OPEN P3 | — |
 | vscode-extension-f4v | extension.ts 宿主总控继续下沉 | DEFERRED | `.kiro/primers/vscode-extension-f4v.md` |
 
 <details>
@@ -209,7 +208,7 @@ npm run build:electron   # only when Electron behavior changed
 - **Direction Library cuc 已收口**：`src/design/directions.ts` 暴露 5 个中文方向（`lifestyle-redbook` / `streetwear-dark` / `tech-flagship` / `ecommerce-convert` / `short-video`），Turn 1 direction-cards 与 Turn 2 CSS binding block 已有测试覆盖
 
 - **Midtai My Works Kanban 26q closed**: Design library now has Grid / Board toggle; Board columns derive Current, Draft, and Versioned from existing designLibraryItems without persisting new status. Verified JS syntax, build:electron, build, check, and test.
-- Next: P3 sketch annotation tool (vscode-extension-0z5).
+- **Midtai Canvas Sketch Annotation 0z5 closed**: Canvas toolbar now has an in-memory `标注` mode with an overlay canvas above the iframe, clear control, resize sync, and mode exit restoring iframe interaction. Verified JS syntax, build:electron, build, check, and test. Manual Electron smoke is still recommended.
 
 ## Not Yet Started
 
