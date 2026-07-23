@@ -241,6 +241,16 @@ describe("Electron renderer settings", () => {
     expect(html).not.toContain('id="midtai-img-edit-overlay"');
   });
 
+  it("exports brush-mask edits with an opaque black background and opaque white paint", async () => {
+    const rendererPath = path.join(__dirname, "renderer", "index.html");
+    const html = await readFile(rendererPath, "utf8");
+
+    expect(html).toContain("const maskData = ctx.getImageData(0, 0, sourceWidth, sourceHeight);");
+    expect(html).toContain("maskData.data[index] = 255;");
+    expect(html).toContain("maskData.data[index + 3] = 255;");
+    expect(html).not.toContain("ctx.putImageData(imageData, 0, 0);");
+  });
+
   it("renders Midtai inside the unified workbench shell structure from jzu", async () => {
     const rendererPath = path.join(__dirname, "renderer", "index.html");
     const html = await readFile(rendererPath, "utf8");

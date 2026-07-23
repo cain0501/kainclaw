@@ -3440,6 +3440,7 @@ let chatImageEditorState = {
   open: false,
   messageIndex: -1,
   imageIndex: -1,
+  targetImage: null,
   mode: 'overall',
   extraReferenceImages: [],
   brushSize: 36,
@@ -6493,7 +6494,19 @@ function openMidtaiImageEdit(id, srcOverride, resultOverride) {
       return;
     }
   }
-  alert('????????????????????????????????');
+  const fallbackImage = {
+    id: String(id || ''),
+    src: String(srcOverride || resultOverride?.src || resultOverride?.thumbnail || getMidtaiImageThumbSource(id) || ''),
+    prompt: String(resultOverride?.prompt || ''),
+    revisedPrompt: String(resultOverride?.revisedPrompt || resultOverride?.prompt || ''),
+  };
+  if (!fallbackImage.src) {
+    alert(isEnglishUi()
+      ? 'This image is still loading. Please try editing again in a moment.'
+      : '这张图片还在加载，请稍后再点二次编辑。');
+    return;
+  }
+  openChatImageEditorForTarget(fallbackImage);
 }
 
 function closeMidtaiImageEdit() {
@@ -13179,6 +13192,23 @@ function getChatGeneratedImageHistory() {
   return history;
 }
 
+function getChatImageEditorTargetEntry() {
+  const history = getChatGeneratedImageHistory();
+  const existingEntry = history.find(entry =>
+    entry.messageIndex === chatImageEditorState.messageIndex &&
+    entry.imageIndex === chatImageEditorState.imageIndex,
+  );
+  if (existingEntry) return existingEntry;
+  if (chatImageEditorState.targetImage?.src) {
+    return {
+      messageIndex: -1,
+      imageIndex: -1,
+      image: chatImageEditorState.targetImage,
+    };
+  }
+  return null;
+}
+
 function getLatestChatGeneratedImageEntry() {
   const history = getChatGeneratedImageHistory();
   return history.length ? history[history.length - 1] : null;
@@ -13194,12 +13224,7 @@ async function buildMaterialSearchContext(sourceContext = productDrawerState.sou
 
   if (normalizedSourceContext === 'editor') {
     taskPrompt = (document.getElementById('chat-image-editor-input')?.value || '').trim();
-    const target = getLatestChatGeneratedImageEntry() && chatImageEditorState.open
-      ? getChatGeneratedImageHistory().find(entry =>
-        entry.messageIndex === chatImageEditorState.messageIndex &&
-        entry.imageIndex === chatImageEditorState.imageIndex,
-      )
-      : null;
+    const target = chatImageEditorState.open ? getChatImageEditorTargetEntry() : null;
     if (target?.image?.src) {
       try {
         referenceImages.push(await buildReferenceImagePayloadFromSource(
@@ -13890,6 +13915,38 @@ function openChatImageEditor(messageIndex, imageIndex) {
     open: true,
     messageIndex,
     imageIndex,
+    targetImage: null,
+    mode: 'overall',
+    extraReferenceImages: [],
+    brushSize: Number(chatImageEditorState.brushSize || 36),
+    isDrawingMask: false,
+    maskDirty: false,
+    lastMaskPoint: null,
+  };
+  const overlay = document.getElementById('chat-image-editor-overlay');
+  document.getElementById('chat-image-editor-input').value = String(image.revisedPrompt || image.prompt || '').trim();
+  document.getElementById('chat-image-editor-file').value = '';
+  setChatImageEditorBrushSize(chatImageEditorState.brushSize);
+  overlay.classList.add('show');
+  renderChatImageEditor();
+  requestAnimationFrame(() => {
+    document.getElementById('chat-image-editor-input').focus();
+  });
+}
+
+function openChatImageEditorForTarget(image) {
+  if (!image?.src) return;
+
+  chatImageEditorState = {
+    open: true,
+    messageIndex: -1,
+    imageIndex: -1,
+    targetImage: {
+      id: String(image.id || ''),
+      src: String(image.src || ''),
+      prompt: String(image.prompt || ''),
+      revisedPrompt: String(image.revisedPrompt || image.prompt || ''),
+    },
     mode: 'overall',
     extraReferenceImages: [],
     brushSize: Number(chatImageEditorState.brushSize || 36),
@@ -13913,6 +13970,7 @@ function closeChatImageEditor() {
     open: false,
     messageIndex: -1,
     imageIndex: -1,
+    targetImage: null,
     mode: 'overall',
     extraReferenceImages: [],
     brushSize: Number(chatImageEditorState.brushSize || 36),
@@ -13926,10 +13984,7 @@ function closeChatImageEditor() {
 function renderChatImageEditor() {
   if (!chatImageEditorState.open) return;
   const history = getChatGeneratedImageHistory();
-  const target = history.find(entry =>
-    entry.messageIndex === chatImageEditorState.messageIndex &&
-    entry.imageIndex === chatImageEditorState.imageIndex,
-  );
+  const target = getChatImageEditorTargetEntry();
   if (!target) {
     closeChatImageEditor();
     return;
@@ -13945,7 +14000,7 @@ function renderChatImageEditor() {
   syncChatImageEditorMaskCanvas();
 
   const historyContainer = document.getElementById('chat-image-editor-history');
-  historyContainer.innerHTML = history.map(entry => `
+  historyContainer.innerHTML = history.length ? history.map(entry => `
     <button
       type="button"
       onclick="openChatImageEditor(${entry.messageIndex}, ${entry.imageIndex})"
@@ -13953,7 +14008,7 @@ function renderChatImageEditor() {
     >
       <img src="${entry.image.src}" alt="history image" style="width:100%;aspect-ratio:1/1;object-fit:cover;display:block">
     </button>
-  `).join('');
+  `).join('') : `<div style="font-size:12px;color:#8b7969;line-height:1.6">${isEnglishUi() ? 'The current work is selected as the edit target.' : '当前作品已作为编辑目标。'}</div>`;
 
   const references = [
     {
@@ -14000,15 +14055,21 @@ function renderChatImageEditor() {
   }
   if (inputEl) {
     inputEl.placeholder = isTouchMode
-      ? '???????????????????'
-      : '???????????????????????????';
+      ? (isEnglishUi() ? 'Describe the local edit for the painted area' : '描述涂抹区域要怎么改')
+      : (isEnglishUi() ? 'Describe the overall edit, e.g. make the background more realistic' : '描述整体编辑，例如：背景更真实一点');
   }
   if (submitBtn) {
-    submitBtn.textContent = isTouchMode ? '??????' : '??????';
+    submitBtn.textContent = isTouchMode
+      ? (isEnglishUi() ? 'Start local edit' : '开始局部编辑')
+      : (isEnglishUi() ? 'Start edit' : '开始编辑');
   }
   document.getElementById('chat-image-editor-meta').textContent = isTouchMode
-    ? `???????????????????????????????? ${chatImageEditorState.extraReferenceImages.length} ??`
-    : `??????????????????????????? ${chatImageEditorState.extraReferenceImages.length} ??`;
+    ? (isEnglishUi()
+      ? `Paint the area to change. Extra references: ${chatImageEditorState.extraReferenceImages.length}`
+      : `涂抹要修改的区域。额外参考图：${chatImageEditorState.extraReferenceImages.length} 张`)
+    : (isEnglishUi()
+      ? `The target image will be used as the first reference. Extra references: ${chatImageEditorState.extraReferenceImages.length}`
+      : `目标图会作为第一张参考图。额外参考图：${chatImageEditorState.extraReferenceImages.length} 张`);
 }
 
 function setChatImageEditorMode(mode) {
@@ -14167,17 +14228,18 @@ async function buildChatImageEditorMaskPayload(targetReferenceImage) {
   const overlayCtx = overlayCanvas.getContext('2d');
   if (!overlayCtx) return null;
   overlayCtx.drawImage(canvas, 0, 0, canvas.width, canvas.height, 0, 0, sourceWidth, sourceHeight);
-  const imageData = overlayCtx.getImageData(0, 0, sourceWidth, sourceHeight);
-  for (let index = 0; index < imageData.data.length; index += 4) {
-    const alpha = imageData.data[index + 3];
+  const overlayData = overlayCtx.getImageData(0, 0, sourceWidth, sourceHeight);
+  const maskData = ctx.getImageData(0, 0, sourceWidth, sourceHeight);
+  for (let index = 0; index < overlayData.data.length; index += 4) {
+    const alpha = overlayData.data[index + 3];
     if (alpha > 0) {
-      imageData.data[index] = 0;
-      imageData.data[index + 1] = 0;
-      imageData.data[index + 2] = 0;
-      imageData.data[index + 3] = 0;
+      maskData.data[index] = 255;
+      maskData.data[index + 1] = 255;
+      maskData.data[index + 2] = 255;
+      maskData.data[index + 3] = 255;
     }
   }
-  ctx.putImageData(imageData, 0, 0);
+  ctx.putImageData(maskData, 0, 0);
   return {
     dataUrl: exportCanvas.toDataURL('image/png'),
     mimeType: 'image/png',
@@ -14253,11 +14315,7 @@ async function buildReferenceImagePayloadFromSource(source, name) {
 }
 
 async function submitChatImageEditor() {
-  const history = getChatGeneratedImageHistory();
-  const target = history.find(entry =>
-    entry.messageIndex === chatImageEditorState.messageIndex &&
-    entry.imageIndex === chatImageEditorState.imageIndex,
-  );
+  const target = getChatImageEditorTargetEntry();
   if (!target) return;
 
   const prompt = document.getElementById('chat-image-editor-input').value.trim();
@@ -14273,14 +14331,14 @@ async function submitChatImageEditor() {
       : null;
     if (chatImageEditorState.mode === 'touch') {
       if (!maskImage) {
-        alert('???????????????????');
+        alert(isEnglishUi() ? 'Paint the area you want to edit first.' : '请先涂抹要局部修改的区域。');
         return;
       }
       const threadId = imageChatThreadState.activeThreadId || getImageChatThreadId();
       imageChatThreadState.activeThreadId = threadId;
       const referenceImages = [targetReferenceImage, ...chatImageEditorState.extraReferenceImages];
       beginImageChatPendingRun(prompt, {
-        pendingContent: '????',
+        pendingContent: isEnglishUi() ? 'Editing selected area...' : '正在编辑选中区域...',
         batchCount: 1,
         referenceImages,
       });
@@ -14303,16 +14361,12 @@ async function submitChatImageEditor() {
     }
     closeChatImageEditor();
   } catch (error) {
-    alert(`???????${error instanceof Error ? error.message : String(error)}`);
+    alert(`${isEnglishUi() ? 'Failed to start image edit: ' : '启动图片编辑失败：'}${error instanceof Error ? error.message : String(error)}`);
   }
 }
 
 async function inferPromptInChatImageEditor() {
-  const history = getChatGeneratedImageHistory();
-  const target = history.find(entry =>
-    entry.messageIndex === chatImageEditorState.messageIndex &&
-    entry.imageIndex === chatImageEditorState.imageIndex,
-  );
+  const target = getChatImageEditorTargetEntry();
   if (!target) return;
 
   try {
