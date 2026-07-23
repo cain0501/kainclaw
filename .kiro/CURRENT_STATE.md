@@ -9,8 +9,8 @@
 
 | Metric | Value | Last Updated |
 |--------|-------|--------------|
-| Test files | 184 | 2026-07-23 |
-| Tests passing | 1523 | 2026-07-23 |
+| Test files | 185 | 2026-07-23 |
+| Tests passing | 1527 | 2026-07-23 |
 | Last verified commit | see `git log --oneline -1` | — |
 | Last clean verification | 2026-07-23 — Electron MCP permission rules | — |
 
@@ -194,6 +194,7 @@ npm run build:electron   # only when Electron behavior changed
 
 ## Current Focus
 
+- **MCP Phase 4 closed (`vscode-extension-gpf4.4`)**: `src/mcp/rollinggoHotelServer.ts` exposes the RollingGo hotel CLI through a standard stdio MCP server. Search/detail are read-only, price confirmation is open-world and non-destructive, booking is explicitly destructive, and all CLI output is recursively credential-redacted. The server is compiled into `dist/mcp/rollinggoHotelServer.js` and can be added through the existing MCP configuration/UI without Electron changes. Next MCP work is Phase 5 import/templates/marketplace-lite.
 - **MCP Phase 3c closed (`vscode-extension-gpf4.3`)**: local KainClaw storage now persists canonical `mcp__server__tool` allow/deny rules, including server shorthand and `mcp__server__*`. Runtime derives keys from resolved MCP metadata, so model aliases cannot bypass a rule; deny wins. Plan/verification restrictions still run first, and destructive MCP tools still require one-time confirmation even when allowed.
 - **MCP Phase 3b closed (`vscode-extension-gpf4.2`)**: workspace `.mcp.json` / `.cain-mcp.json` servers now require an explicit local approval before `McpRuntime` exposes any tools or opens a connection. Decisions are stored under KainClaw local storage and keyed by workspace root, config source, server name, and configuration hash. Electron shows approval state and supports approve, reject, and reset without conflating approval with enabled/disabled. Phase 3c is persistent server/tool permission rules.
 - **MCP Phase 3a closed (`vscode-extension-gpf4.1`)**: the Electron MCP page can start remote OAuth, show a safe browser authorization link, report completion/failure, and log out without deleting server configuration. `McpRuntime` remains responsible for token storage, callback validation, and revocation.
