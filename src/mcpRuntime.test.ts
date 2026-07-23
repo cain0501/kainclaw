@@ -5,6 +5,7 @@ import { UnauthorizedError } from "@modelcontextprotocol/sdk/client/auth.js";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { createMcpOAuthClientProvider, type McpOAuthHost } from "./mcpOAuth";
 import { McpProjectApprovalStore } from "./mcpProjectApprovalStore";
+import { McpPermissionStore } from "./mcpPermissionStore";
 import { McpRuntime } from "./mcpRuntime";
 
 const tempDirs: string[] = [];
@@ -195,6 +196,71 @@ describe("McpRuntime config discovery cache", () => {
     await approvals.reset({ workspaceRoot, configPath, serverName: "demo", config });
     runtime.markConfigDirty();
     expect(await runtime.getToolDefinitions()).toEqual([]);
+  });
+
+  it("enforces persisted MCP deny rules before opening a connection", async () => {
+    const workspaceRoot = await fs.mkdtemp(path.join(os.tmpdir(), "cain-mcp-runtime-permission-"));
+    const storageRoot = await fs.mkdtemp(path.join(os.tmpdir(), "cain-mcp-permission-store-"));
+    tempDirs.push(workspaceRoot, storageRoot);
+    await fs.writeFile(
+      path.join(workspaceRoot, ".mcp.json"),
+      JSON.stringify({ mcpServers: { demo: { command: "node", args: ["server.js"] } } }),
+      "utf8",
+    );
+
+    const permissions = new McpPermissionStore(storageRoot);
+    await permissions.setRule("mcp__demo__delete_file", "deny");
+    const runtime = new McpRuntime(() => workspaceRoot, {}, undefined, undefined, permissions);
+    const ensureConnection = vi.spyOn(runtime as any, "ensureConnection");
+
+    await expect(runtime.executeTool("mcp__demo__delete_file", {}, { workspaceRoot }))
+      .rejects.toThrow("MCP tool denied by permission rule");
+    expect(ensureConnection).not.toHaveBeenCalled();
+  });
+
+  it("keeps plan, verification, and destructive confirmation ahead of permission rules", async () => {
+    const workspaceRoot = await fs.mkdtemp(path.join(os.tmpdir(), "cain-mcp-runtime-permission-guards-"));
+    const storageRoot = await fs.mkdtemp(path.join(os.tmpdir(), "cain-mcp-permission-guards-"));
+    tempDirs.push(workspaceRoot, storageRoot);
+    await fs.writeFile(
+      path.join(workspaceRoot, ".mcp.json"),
+      JSON.stringify({ mcpServers: { demo: { command: "node", args: ["server.js"] } } }),
+      "utf8",
+    );
+
+    const permissions = new McpPermissionStore(storageRoot);
+    await permissions.setRule("mcp__demo__read_file", "deny");
+    await permissions.setRule("mcp__demo__delete_file", "allow");
+    const runtime = new McpRuntime(() => workspaceRoot, {}, undefined, undefined, permissions);
+    await (runtime as any).refreshConfig();
+    (runtime as any).toolMetadata.set("mcp__demo__read_file", {
+      serverName: "demo",
+      toolName: "read_file",
+      annotations: { readOnlyHint: false },
+    });
+    (runtime as any).toolMetadata.set("mcp__demo__delete_file", {
+      serverName: "demo",
+      toolName: "delete_file",
+      annotations: { destructiveHint: true },
+    });
+    const permissionSpy = vi.spyOn(permissions, "getDecision");
+
+    await expect(runtime.executeTool("mcp__demo__read_file", {}, {
+      workspaceRoot,
+      planMode: { active: true },
+    } as any)).rejects.toThrow("Plan mode is active");
+    await expect(runtime.executeTool("mcp__demo__read_file", {}, {
+      workspaceRoot,
+      verificationMode: { active: true },
+    } as any)).rejects.toThrow("Verification mode is active");
+    expect(permissionSpy).not.toHaveBeenCalled();
+
+    const requestToolApproval = vi.fn(async () => false);
+    await expect(runtime.executeTool("mcp__demo__delete_file", {}, {
+      workspaceRoot,
+      requestToolApproval,
+    })).rejects.toThrow("MCP tool rejected by user");
+    expect(requestToolApproval).toHaveBeenCalledOnce();
   });
 
   it("resolves Claude MCP remote transport types without routing SSE as streamable HTTP", async () => {

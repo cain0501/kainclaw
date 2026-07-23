@@ -9,10 +9,10 @@
 
 | Metric | Value | Last Updated |
 |--------|-------|--------------|
-| Test files | 183 | 2026-07-23 |
-| Tests passing | 1519 | 2026-07-23 |
+| Test files | 184 | 2026-07-23 |
+| Tests passing | 1523 | 2026-07-23 |
 | Last verified commit | see `git log --oneline -1` | — |
-| Last clean verification | 2026-07-23 — Electron MCP project approval | — |
+| Last clean verification | 2026-07-23 — Electron MCP permission rules | — |
 
 **Required passing commands:**
 ```bash
@@ -52,7 +52,6 @@ npm run build:electron   # only when Electron behavior changed
 
 | Beads ID | Title | Status | Primer |
 |----------|-------|--------|--------|
-| vscode-extension-gpf4.3 | MCP Phase 3c: Persist server and tool permission rules | OPEN | `.kiro/primers/vscode-extension-gpf4.3.md` |
 | vscode-extension-f4v | extension.ts 宿主总控继续下沉 | DEFERRED | `.kiro/primers/vscode-extension-f4v.md` |
 
 <details>
@@ -62,6 +61,7 @@ npm run build:electron   # only when Electron behavior changed
 |----------|-------|
 | vscode-extension-gpf4.1 | MCP Phase 3a: Electron OAuth login and logout |
 | vscode-extension-gpf4.2 | MCP Phase 3b: Require approval for workspace MCP servers |
+| vscode-extension-gpf4.3 | MCP Phase 3c: Persist server and tool permission rules |
 | vscode-extension-912h | KainClaw Electron MCP settings UI |
 | vscode-extension-piky | KainClaw MCP registry service and config CRUD |
 | vscode-extension-3yn | v3: sez regression — transient draft anchor clears on project switch |
@@ -194,6 +194,7 @@ npm run build:electron   # only when Electron behavior changed
 
 ## Current Focus
 
+- **MCP Phase 3c closed (`vscode-extension-gpf4.3`)**: local KainClaw storage now persists canonical `mcp__server__tool` allow/deny rules, including server shorthand and `mcp__server__*`. Runtime derives keys from resolved MCP metadata, so model aliases cannot bypass a rule; deny wins. Plan/verification restrictions still run first, and destructive MCP tools still require one-time confirmation even when allowed.
 - **MCP Phase 3b closed (`vscode-extension-gpf4.2`)**: workspace `.mcp.json` / `.cain-mcp.json` servers now require an explicit local approval before `McpRuntime` exposes any tools or opens a connection. Decisions are stored under KainClaw local storage and keyed by workspace root, config source, server name, and configuration hash. Electron shows approval state and supports approve, reject, and reset without conflating approval with enabled/disabled. Phase 3c is persistent server/tool permission rules.
 - **MCP Phase 3a closed (`vscode-extension-gpf4.1`)**: the Electron MCP page can start remote OAuth, show a safe browser authorization link, report completion/failure, and log out without deleting server configuration. `McpRuntime` remains responsible for token storage, callback validation, and revocation.
 - **MCP Phase 2 closed (`vscode-extension-912h`)**: the existing Electron MCP page now manages stdio/HTTP/SSE configuration through `McpRegistry` IPC, combines config source/enabled state with live runtime status, and refreshes when opened. Phase 3 covers OAuth UX, project approval, and persistent permissions.

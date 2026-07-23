@@ -42,6 +42,7 @@ import type {
 import { McpRuntime, type McpServerStatusSummary } from "../src/mcpRuntime";
 import { McpRegistry, type McpRegistryServerConfig } from "../src/mcpRegistry";
 import { McpProjectApprovalStore } from "../src/mcpProjectApprovalStore";
+import { McpPermissionStore } from "../src/mcpPermissionStore";
 import { runAgent, SYSTEM_PROMPT } from "../src/agent/agentRunner";
 import { createPromptTurnSwarm } from "../src/promptSwarmHost";
 import type { SwarmCoordinator } from "../src/agent/swarm/SwarmCoordinator";
@@ -462,6 +463,7 @@ export class ElectronChatPanel {
   private readonly mcpRuntime: McpRuntime;
   private readonly mcpRegistry: McpRegistry;
   private readonly mcpProjectApprovalStore: McpProjectApprovalStore;
+  private readonly mcpPermissionStore: McpPermissionStore;
   private readonly imageGalleryStore: ImageLabGalleryStore;
   private readonly imageThreadStore: ImageThreadStore;
   private readonly promptLibraryRepository: PromptLibraryRepository;
@@ -494,11 +496,13 @@ export class ElectronChatPanel {
     private readonly desktopRuntimeServices?: DesktopRuntimeServices,
   ) {
     this.mcpProjectApprovalStore = new McpProjectApprovalStore(this.host.getStorageUri());
+    this.mcpPermissionStore = new McpPermissionStore(this.host.getStorageUri());
     this.mcpRuntime = new McpRuntime(
       () => this.getSelectedWorkspaceRoot(),
       process.env as Record<string, string>,
       this.host,
       this.mcpProjectApprovalStore,
+      this.mcpPermissionStore,
     );
     this.mcpRegistry = new McpRegistry(() => this.getSelectedWorkspaceRoot());
     this.imageGalleryStore = new ImageLabGalleryStore(this.host.getStorageUri());
@@ -5770,6 +5774,7 @@ export class ElectronChatPanel {
               process.env as Record<string, string>,
               this.host,
               this.mcpProjectApprovalStore,
+              this.mcpPermissionStore,
             ))
           : this.mcpRuntime;
       const { config, envMap } = await resolveProviderConfig(

@@ -17,6 +17,7 @@ import {
   revokeServerTokens,
 } from "./mcpOAuth";
 import type { McpProjectApprovalStore } from "./mcpProjectApprovalStore";
+import { buildMcpPermissionKey, type McpPermissionStore } from "./mcpPermissionStore";
 import {
   dedupeToolDefinitionsByName,
   type McpToolAdapter,
@@ -438,6 +439,7 @@ export class McpRuntime implements McpToolAdapter {
     private envMap: Record<string, string>,
     private readonly oauthHost?: McpOAuthHost,
     private readonly projectApprovalStore?: McpProjectApprovalStore,
+    private readonly permissionStore?: McpPermissionStore,
   ) {}
 
   setEnvMap(envMap: Record<string, string>): void {
@@ -743,6 +745,13 @@ export class McpRuntime implements McpToolAdapter {
         throw new Error(
           "Verification mode is active. Only read-only MCP tools are allowed during verification.",
         );
+      }
+    }
+
+    if (this.permissionStore) {
+      const permissionKey = buildMcpPermissionKey(metadata.serverName, metadata.toolName);
+      if (await this.permissionStore.getDecision(permissionKey) === "deny") {
+        throw new Error(`MCP tool denied by permission rule: ${permissionKey}`);
       }
     }
 
