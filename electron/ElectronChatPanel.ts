@@ -2129,6 +2129,18 @@ export class ElectronChatPanel {
     };
   }
 
+  private toDesignChatRendererHistoryMessage(
+    sessionId: string,
+    message: DesignChatHistoryMessage,
+    index: number,
+  ): DesignChatRendererMessage {
+    return this.toDesignChatRendererMessage(
+      sessionId,
+      { ...message, timestamp: index },
+      index,
+    );
+  }
+
   private async deleteSession(id: string): Promise<void> {
     if (!id) return;
     const wasActiveSession =
@@ -5515,6 +5527,22 @@ export class ElectronChatPanel {
       this.sendToRenderer({ type: "design:chat:history", messages: [] });
       return;
     }
+    const projectId = typeof state.designFlowState?.projectId === "string"
+      ? state.designFlowState.projectId.trim()
+      : "";
+    if (projectId) {
+      const projectHistory = await this.designProjectStore.loadConversationHistory(projectId);
+      if (projectHistory.length > 0) {
+        this.sendToRenderer({
+          type: "design:chat:history",
+          messages: projectHistory.map((entry, index) =>
+            this.toDesignChatRendererHistoryMessage(sessionId, entry, index),
+          ),
+        });
+        return;
+      }
+    }
+
     const messages = await this.sessions.loadMessages(sessionId);
     this.sendToRenderer({
       type: "design:chat:history",

@@ -10,7 +10,7 @@
 | Metric | Value | Last Updated |
 |--------|-------|--------------|
 | Test files | 185 | 2026-07-23 |
-| Tests passing | 1531 | 2026-07-23 |
+| Tests passing | 1532 | 2026-07-23 |
 | Last verified commit | see `git log --oneline -1` | — |
 | Last clean verification | 2026-07-23 — Electron MCP permission rules | — |
 
@@ -193,6 +193,8 @@ npm run build:electron   # only when Electron behavior changed
 - `src/webviewHtml.ts` — large template string; fragile escaping
 
 ## Current Focus
+
+- **Recent works design history restored (`vscode-extension-7gj`)**: switching a saved design project now emits its complete project-level conversation history to the renderer instead of an incomplete session transcript. Empty project histories retain the session-transcript fallback. Automated verification passed; manual verification is to open a multi-turn project from Recent works, switch away, then switch back and confirm every turn remains visible.
 
 - **Image Chat Touch Edit closed (`vscode-extension-kcy9`)**: the unified editor now supports overall and brush-mask local edits for both chat-history and selected Midtai images. A renderer compositor bug that exported fully transparent masks is fixed: the uploaded PNG now has an opaque black background and opaque white painted pixels. Electron smoke verified the editor, brush state, mask pixels, and actual `image:touchEdit` IPC payload; live provider execution still requires a configured `gpt-image-*` model.
 - **MCP Phase 5 closed (`vscode-extension-gpf4.5`)**: MCP settings now preview/import Codex, Claude Desktop, and Claude Code server definitions, install fetch/browser/read-only-filesystem/hotel templates, and export workspace config. Static sensitive env/header values are dropped on import and redacted on export; environment placeholders remain references. Electron exposes these flows without moving registry logic into the renderer. Next planned MCP work is Phase 6, KainClaw as an MCP server, deferred until inbound permissions and session isolation are designed.

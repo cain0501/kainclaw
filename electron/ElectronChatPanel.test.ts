@@ -5513,9 +5513,9 @@ Freeze skill body.
       { role: "user", content: "project 历史 A" },
       { role: "assistant", content: "project 回复 A" },
     ]);
-    expect(historyPayload?.messages).toEqual([
-      expect.objectContaining({ role: "user", content: "session transcript A" }),
-    ]);
+    expect(historyPayload?.messages.map(({ role, content }) => ({ role, content }))).toEqual(
+      await (harness.panel as any).designProjectStore.loadConversationHistory(projectA.projectId),
+    );
 
     const projectB = await (harness.panel as any).designProjectStore.createProject({
       name: "Project With Legacy Session History",
@@ -5570,8 +5570,43 @@ Freeze skill body.
       { role: "user", content: "legacy 历史 B" },
       { role: "assistant", content: "legacy 回复 B" },
     ]);
-    expect(historyPayload?.messages).toEqual([
-      expect.objectContaining({ role: "user", content: "session transcript B" }),
+    expect(historyPayload?.messages.map(({ role, content }) => ({ role, content }))).toEqual(
+      await (harness.panel as any).designProjectStore.loadConversationHistory(projectB.projectId),
+    );
+  });
+
+  it("falls back to the session transcript when a design project has no saved history", async () => {
+    const harness = await createHarness();
+    tempDirs.push(harness.storagePath);
+
+    const project = await (harness.panel as any).designProjectStore.createProject({
+      name: "Session fallback",
+      source: "blank",
+      activeVersionId: "pending-version",
+    });
+    const session = await harness.sessions.createSession("session-history-fallback", "electron", "Design chat");
+    await harness.sessions.saveRuntimeState(session.id, {
+      workspaceRoot: "",
+      sessionType: "design",
+      designFlowState: {
+        flowId: "flow-history-fallback",
+        projectId: project.projectId,
+        conversationId: session.id,
+        createdAt: 1001,
+      },
+    });
+    await harness.sessions.appendMessages(session.id, [
+      { role: "user", content: "session fallback", timestamp: 1001 },
+    ]);
+
+    await (harness.panel as any).postDesignChatHistoryForSession(session.id);
+
+    const historyPayload = getLastRendererPayloadOfType<{
+      type: "design:chat:history";
+      messages: Array<{ role: string; content: string }>;
+    }>(harness.rendererPayloads, "design:chat:history");
+    expect(historyPayload?.messages.map(({ role, content }) => ({ role, content }))).toEqual([
+      { role: "user", content: "session fallback" },
     ]);
   });
 
