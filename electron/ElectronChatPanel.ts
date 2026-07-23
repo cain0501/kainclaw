@@ -40,6 +40,7 @@ import type {
   ProviderConfig as AdapterProviderConfig,
 } from "../src/agent/providers/IProviderAdapter";
 import { McpRuntime, type McpServerStatusSummary } from "../src/mcpRuntime";
+import { McpRegistry, type McpRegistryServerConfig } from "../src/mcpRegistry";
 import { runAgent, SYSTEM_PROMPT } from "../src/agent/agentRunner";
 import { createPromptTurnSwarm } from "../src/promptSwarmHost";
 import type { SwarmCoordinator } from "../src/agent/swarm/SwarmCoordinator";
@@ -458,6 +459,7 @@ export class ElectronChatPanel {
     }
   >();
   private readonly mcpRuntime: McpRuntime;
+  private readonly mcpRegistry: McpRegistry;
   private readonly imageGalleryStore: ImageLabGalleryStore;
   private readonly imageThreadStore: ImageThreadStore;
   private readonly promptLibraryRepository: PromptLibraryRepository;
@@ -494,6 +496,7 @@ export class ElectronChatPanel {
       process.env as Record<string, string>,
       this.host,
     );
+    this.mcpRegistry = new McpRegistry(() => this.getSelectedWorkspaceRoot());
     this.imageGalleryStore = new ImageLabGalleryStore(this.host.getStorageUri());
     this.imageThreadStore = new ImageThreadStore(this.host.getStorageUri());
     this.promptLibraryRepository = new PromptLibraryRepository(this.host.getStorageUri());
@@ -1594,6 +1597,9 @@ export class ElectronChatPanel {
     if (type === "cancelPendingQuestion") { this.resolvePendingQuestion(null); return; }
     if (type === "requestEditorSelection") { this.sendToRenderer({ type: "editorSelection", selectedText: "", language: "" }); return; }
     if (type === "mcp:refresh") { await this.refreshMcpStatus(); return; }
+    if (type === "mcp:add") { await this.changeMcpRegistry("add", message); return; }
+    if (type === "mcp:set-enabled") { await this.changeMcpRegistry("set-enabled", message); return; }
+    if (type === "mcp:remove") { await this.changeMcpRegistry("remove", message); return; }
   }
 
   // ─── Ready ──────────────────────────────────────────────────────────────────
@@ -4356,12 +4362,52 @@ export class ElectronChatPanel {
   // ─── MCP ────────────────────────────────────────────────────────────────────
 
   private async refreshMcpStatus(): Promise<void> {
+    const [registryResult, runtimeResult] = await Promise.allSettled([
+      this.mcpRegistry.listServers(),
+      this.mcpRuntime.getStatusSummary(),
+    ]);
+    const errors = [registryResult, runtimeResult]
+      .filter((result): result is PromiseRejectedResult => result.status === "rejected")
+      .map(result => result.reason instanceof Error ? result.reason.message : String(result.reason));
+
+    this.sendToRenderer({
+      type: "mcp:status",
+      servers: runtimeResult.status === "fulfilled" ? runtimeResult.value : [],
+      registryServers: registryResult.status === "fulfilled" ? registryResult.value : [],
+      ...(errors.length > 0 ? { error: errors.join(" ") } : {}),
+    });
+  }
+
+  private async changeMcpRegistry(
+    action: "add" | "set-enabled" | "remove",
+    message: Record<string, unknown>,
+  ): Promise<void> {
     try {
-      const servers = await this.mcpRuntime.getStatusSummary();
-      this.sendToRenderer({ type: "mcp:status", servers });
-    } catch {
-      this.sendToRenderer({ type: "mcp:status", servers: [] });
+      const name = String(message.name ?? "");
+      if (action === "add") {
+        const config = message.config;
+        if (!config || typeof config !== "object" || Array.isArray(config)) {
+          throw new Error("Invalid MCP configuration");
+        }
+        await this.mcpRegistry.addServer(name, config as McpRegistryServerConfig);
+      } else if (action === "set-enabled") {
+        await this.mcpRegistry.setServerEnabled(name, message.enabled === true);
+      } else {
+        await this.mcpRegistry.removeServer(name);
+      }
+
+      this.mcpRuntime.markConfigDirty();
+      this.sendToRenderer({ type: "mcp:operation", action, ok: true });
+    } catch (error) {
+      this.sendToRenderer({
+        type: "mcp:operation",
+        action,
+        ok: false,
+        error: error instanceof Error ? error.message : String(error),
+      });
     }
+
+    await this.refreshMcpStatus();
   }
 
   // ─── Chat ───────────────────────────────────────────────────────────────────

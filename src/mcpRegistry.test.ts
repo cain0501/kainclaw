@@ -196,4 +196,28 @@ describe("McpRegistry", () => {
     expect(servers[0]?.name).toBe("demo");
     expect(servers[0]?.sourcePath).toBe(path.join(parentRoot, ".cain-mcp.json"));
   });
+
+  it("uses the current workspace from a root resolver and refuses writes without one", async () => {
+    const firstRoot = await fs.mkdtemp(path.join(os.tmpdir(), "cain-mcp-registry-first-"));
+    const secondRoot = await fs.mkdtemp(path.join(os.tmpdir(), "cain-mcp-registry-second-"));
+    tempDirs.push(firstRoot, secondRoot);
+
+    let currentRoot = firstRoot;
+    const registry = new McpRegistry(() => currentRoot);
+
+    await registry.addServer("first", { command: "node" });
+    currentRoot = secondRoot;
+    await registry.addServer("second", { command: "node" });
+
+    expect((await registry.listServers()).map(server => server.name)).toEqual(["second"]);
+    expect(JSON.parse(await fs.readFile(path.join(firstRoot, ".mcp.json"), "utf8"))).toMatchObject({
+      mcpServers: { first: { command: "node" } },
+    });
+
+    currentRoot = "";
+    await expect(registry.addServer("missing-root", { command: "node" })).rejects.toThrow(
+      /Choose a workspace/,
+    );
+    await expect(registry.listServers()).resolves.toEqual([]);
+  });
 });

@@ -340,6 +340,52 @@ describe("ElectronChatPanel session lifecycle", () => {
     vi.clearAllMocks();
   });
 
+  it("manages workspace MCP configuration through MCP IPC messages", async () => {
+    const harness = await createHarness();
+    tempDirs.push(harness.storagePath);
+    await harness.panel.handleMessage({
+      type: "workspace:set",
+      root: harness.storagePath,
+    });
+
+    await harness.panel.handleMessage({
+      type: "mcp:add",
+      name: "missing-server",
+      config: {
+        command: "missing-mcp-executable",
+        args: ["--version"],
+      },
+    });
+
+    let status = getLastRendererPayloadOfType<{
+      registryServers?: Array<{ name: string; enabled: boolean }>;
+    }>(harness.rendererPayloads, "mcp:status");
+    expect(status?.registryServers).toEqual([
+      expect.objectContaining({ name: "missing-server", enabled: true }),
+    ]);
+
+    await harness.panel.handleMessage({
+      type: "mcp:set-enabled",
+      name: "missing-server",
+      enabled: false,
+    });
+    status = getLastRendererPayloadOfType<{
+      registryServers?: Array<{ name: string; enabled: boolean }>;
+    }>(harness.rendererPayloads, "mcp:status");
+    expect(status?.registryServers).toEqual([
+      expect.objectContaining({ name: "missing-server", enabled: false }),
+    ]);
+
+    await harness.panel.handleMessage({
+      type: "mcp:remove",
+      name: "missing-server",
+    });
+    status = getLastRendererPayloadOfType<{
+      registryServers?: Array<{ name: string; enabled: boolean }>;
+    }>(harness.rendererPayloads, "mcp:status");
+    expect(status?.registryServers).toEqual([]);
+  });
+
   it("keeps an in-flight reply attached to the session that started it", async () => {
     const harness = await createHarness();
     tempDirs.push(harness.storagePath);

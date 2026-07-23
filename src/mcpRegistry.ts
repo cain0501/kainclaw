@@ -45,12 +45,16 @@ const DEFAULT_CODEX_CONFIG_PATH = path.join(os.homedir(), ".codex", "config.toml
 
 export class McpRegistry {
   constructor(
-    private readonly workspaceRoot: string,
+    private readonly workspaceRoot: string | (() => string),
     private readonly codexConfigPath: string = DEFAULT_CODEX_CONFIG_PATH,
   ) {}
 
   async listServers(): Promise<McpRegistryServerEntry[]> {
-    const { configPath, servers } = await readWorkspaceServers(this.workspaceRoot);
+    const workspaceRoot = this.resolveWorkspaceRoot();
+    if (!workspaceRoot) {
+      return [];
+    }
+    const { configPath, servers } = await readWorkspaceServers(workspaceRoot);
 
     return Object.entries(servers)
       .map(([name, config]) => toServerEntry(name, config, configPath))
@@ -61,12 +65,13 @@ export class McpRegistry {
     validateServerName(name);
     validateServerConfig(config);
 
-    const { document, configPath, servers, topLevelKey } = await readWorkspaceServers(this.workspaceRoot);
+    const workspaceRoot = this.requireWorkspaceRoot();
+    const { document, configPath, servers, topLevelKey } = await readWorkspaceServers(workspaceRoot);
     if (servers[name]) {
       throw new Error(`MCP server ${name} already exists in ${path.basename(configPath)}`);
     }
 
-    servers[name] = normalizeConfigForWrite(config, this.workspaceRoot);
+    servers[name] = normalizeConfigForWrite(config, workspaceRoot);
     await writeWorkspaceServers(configPath, document, topLevelKey, servers);
   }
 
@@ -74,17 +79,19 @@ export class McpRegistry {
     validateServerName(name);
     validateServerConfig(config);
 
-    const { document, configPath, servers, topLevelKey } = await readWorkspaceServers(this.workspaceRoot);
+    const workspaceRoot = this.requireWorkspaceRoot();
+    const { document, configPath, servers, topLevelKey } = await readWorkspaceServers(workspaceRoot);
     if (!servers[name]) {
       throw new Error(`No MCP server found with name: ${name}`);
     }
 
-    servers[name] = normalizeConfigForWrite(config, this.workspaceRoot);
+    servers[name] = normalizeConfigForWrite(config, workspaceRoot);
     await writeWorkspaceServers(configPath, document, topLevelKey, servers);
   }
 
   async removeServer(name: string): Promise<void> {
-    const { document, configPath, servers, topLevelKey } = await readWorkspaceServers(this.workspaceRoot);
+    const workspaceRoot = this.requireWorkspaceRoot();
+    const { document, configPath, servers, topLevelKey } = await readWorkspaceServers(workspaceRoot);
     if (!servers[name]) {
       throw new Error(`No MCP server found with name: ${name}`);
     }
@@ -94,7 +101,8 @@ export class McpRegistry {
   }
 
   async setServerEnabled(name: string, enabled: boolean): Promise<void> {
-    const { document, configPath, servers, topLevelKey } = await readWorkspaceServers(this.workspaceRoot);
+    const workspaceRoot = this.requireWorkspaceRoot();
+    const { document, configPath, servers, topLevelKey } = await readWorkspaceServers(workspaceRoot);
     const existing = servers[name];
     if (!existing) {
       throw new Error(`No MCP server found with name: ${name}`);
@@ -113,7 +121,8 @@ export class McpRegistry {
 
   async importCodexServers(): Promise<McpRegistryImportResult> {
     const codexServers = await readCodexMcpServers(this.codexConfigPath);
-    const { document, configPath, servers, topLevelKey } = await readWorkspaceServers(this.workspaceRoot);
+    const workspaceRoot = this.requireWorkspaceRoot();
+    const { document, configPath, servers, topLevelKey } = await readWorkspaceServers(workspaceRoot);
     const imported: McpRegistryServerEntry[] = [];
     const skipped: string[] = [];
 
@@ -130,7 +139,7 @@ export class McpRegistry {
         continue;
       }
 
-      servers[name] = normalizeConfigForWrite(config, this.workspaceRoot);
+      servers[name] = normalizeConfigForWrite(config, workspaceRoot);
       imported.push(toServerEntry(name, servers[name], configPath));
     }
 
@@ -139,6 +148,18 @@ export class McpRegistry {
     }
 
     return { imported, skipped };
+  }
+
+  private resolveWorkspaceRoot(): string {
+    return (typeof this.workspaceRoot === "function" ? this.workspaceRoot() : this.workspaceRoot).trim();
+  }
+
+  private requireWorkspaceRoot(): string {
+    const workspaceRoot = this.resolveWorkspaceRoot();
+    if (!workspaceRoot) {
+      throw new Error("Choose a workspace before changing MCP configuration");
+    }
+    return workspaceRoot;
   }
 }
 

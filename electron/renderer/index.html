@@ -1340,6 +1340,9 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-seri
     <div class="klogo">K</div>
     <span class="ptop-title">MCP Servers</span>
     <div style="flex:1"></div>
+    <button class="btn-ghost" title="添加 MCP 服务器" onclick="showMcpAddForm()" style="margin-right:4px">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+    </button>
     <button class="btn-ghost" title="刷新" onclick="refreshMcp()" style="margin-right:4px">
       <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>
     </button>
@@ -1364,6 +1367,55 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-seri
         <div id="mcp-workspace-candidates" style="display:none;flex-wrap:wrap;gap:6px;margin-top:8px"></div>
       </div>
     </div>
+    <div id="mcp-feedback" style="display:none;margin-bottom:12px;font-size:12px;line-height:1.5"></div>
+    <section id="mcp-add-form" style="display:none;margin-bottom:16px;border:1px solid #d4d4d8;border-radius:8px;padding:14px">
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px">
+        <div id="mcp-add-form-title" style="flex:1;font-size:13px;font-weight:600">添加 MCP 服务器</div>
+        <button class="btn-ghost" title="取消" onclick="hideMcpAddForm()">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+        </button>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+        <label style="font-size:12px;color:#52525b"><span id="mcp-label-name">名称</span>
+          <input id="mcp-server-name" autocomplete="off" style="width:100%;box-sizing:border-box;margin-top:4px;border:1px solid #d4d4d8;border-radius:6px;padding:8px;font:inherit" placeholder="fetch">
+        </label>
+        <label style="font-size:12px;color:#52525b"><span id="mcp-label-kind">类型</span>
+          <select id="mcp-server-kind" onchange="updateMcpAddFormKind()" style="width:100%;box-sizing:border-box;margin-top:4px;border:1px solid #d4d4d8;border-radius:6px;padding:8px;font:inherit;background:#fff">
+            <option value="stdio">stdio</option>
+            <option value="remote">HTTP / SSE</option>
+          </select>
+        </label>
+      </div>
+      <div id="mcp-stdio-fields" style="margin-top:10px;display:grid;gap:10px">
+        <label style="font-size:12px;color:#52525b"><span id="mcp-label-command">命令</span>
+          <input id="mcp-server-command" autocomplete="off" style="width:100%;box-sizing:border-box;margin-top:4px;border:1px solid #d4d4d8;border-radius:6px;padding:8px;font:inherit" placeholder="npx">
+        </label>
+        <label style="font-size:12px;color:#52525b"><span id="mcp-label-args">参数（每行一个）</span>
+          <textarea id="mcp-server-args" rows="2" style="width:100%;box-sizing:border-box;margin-top:4px;border:1px solid #d4d4d8;border-radius:6px;padding:8px;font:inherit;resize:vertical" placeholder="-y&#10;@modelcontextprotocol/server-fetch"></textarea>
+        </label>
+        <label style="font-size:12px;color:#52525b"><span id="mcp-label-env">环境变量 JSON（可选）</span>
+          <textarea id="mcp-server-env" rows="2" style="width:100%;box-sizing:border-box;margin-top:4px;border:1px solid #d4d4d8;border-radius:6px;padding:8px;font:inherit;resize:vertical" placeholder='{"API_KEY":"${API_KEY}"}'></textarea>
+        </label>
+      </div>
+      <div id="mcp-remote-fields" style="display:none;margin-top:10px;display:grid;gap:10px">
+        <label style="font-size:12px;color:#52525b"><span id="mcp-label-url">URL</span>
+          <input id="mcp-server-url" autocomplete="off" style="width:100%;box-sizing:border-box;margin-top:4px;border:1px solid #d4d4d8;border-radius:6px;padding:8px;font:inherit" placeholder="https://example.com/mcp">
+        </label>
+        <label style="font-size:12px;color:#52525b"><span id="mcp-label-transport">传输协议</span>
+          <select id="mcp-server-transport" style="width:100%;box-sizing:border-box;margin-top:4px;border:1px solid #d4d4d8;border-radius:6px;padding:8px;font:inherit;background:#fff">
+            <option value="streamable-http">Streamable HTTP</option>
+            <option value="sse">SSE</option>
+          </select>
+        </label>
+        <label style="font-size:12px;color:#52525b"><span id="mcp-label-headers">请求头 JSON（可选）</span>
+          <textarea id="mcp-server-headers" rows="2" style="width:100%;box-sizing:border-box;margin-top:4px;border:1px solid #d4d4d8;border-radius:6px;padding:8px;font:inherit;resize:vertical" placeholder='{"Authorization":"Bearer ${TOKEN}"}'></textarea>
+        </label>
+      </div>
+      <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:12px">
+        <button id="mcp-add-cancel" class="btn-secondary" onclick="hideMcpAddForm()">取消</button>
+        <button id="mcp-add-submit" class="btn-red" onclick="submitMcpServer()">添加服务器</button>
+      </div>
+    </section>
     <div id="mcp-list" style="display:flex;flex-direction:column;gap:7px"></div>
       <div id="mcp-empty" style="color:#a1a1aa;text-align:center;padding:20px 0;font-size:13px">尚未配置 MCP 服务器<br><span style="font-size:11px">在工作区根目录创建 .mcp.json 并选择文件夹</span></div>
   </div>
@@ -3175,6 +3227,25 @@ function getMcpStrings() {
   return isEnglishUi()
     ? {
         title: 'MCP Servers',
+        addServer: 'Add MCP server',
+        cancel: 'Cancel',
+        name: 'Name',
+        type: 'Type',
+        command: 'Command',
+        args: 'Arguments (one per line)',
+        env: 'Environment JSON (optional)',
+        url: 'URL',
+        transport: 'Transport',
+        headers: 'Headers JSON (optional)',
+        add: 'Add server',
+        enable: 'Enable',
+        disable: 'Disable',
+        remove: 'Remove',
+        disabled: 'Disabled',
+        unavailable: 'Not connected',
+        source: 'Source',
+        invalidJson: 'Environment variables and headers must be JSON objects.',
+        removeConfirm: name => `Remove MCP server "${name}"?`,
         refreshTitle: 'Refresh',
         workspace: 'Workspace',
         workspaceUnset: 'Not set',
@@ -3188,6 +3259,25 @@ function getMcpStrings() {
       }
     : {
         title: 'MCP Servers',
+        addServer: '添加 MCP 服务器',
+        cancel: '取消',
+        name: '名称',
+        type: '类型',
+        command: '命令',
+        args: '参数（每行一个）',
+        env: '环境变量 JSON（可选）',
+        url: 'URL',
+        transport: '传输协议',
+        headers: '请求头 JSON（可选）',
+        add: '添加服务器',
+        enable: '启用',
+        disable: '禁用',
+        remove: '删除',
+        disabled: '已禁用',
+        unavailable: '未连接',
+        source: '来源',
+        invalidJson: '环境变量和请求头必须是 JSON 对象。',
+        removeConfirm: name => `删除 MCP 服务器“${name}”？`,
         refreshTitle: '刷新',
         workspace: '工作区',
         workspaceUnset: '未设置',
@@ -3207,6 +3297,8 @@ function localizeMcpSurface() {
   if (title) title.textContent = strings.title;
   const refreshBtn = document.querySelector('#page-mcp button[onclick="refreshMcp()"]');
   if (refreshBtn) refreshBtn.title = strings.refreshTitle;
+  const addBtn = document.querySelector('#page-mcp button[onclick="showMcpAddForm()"]');
+  if (addBtn) addBtn.title = strings.addServer;
   const workspaceLabel = document.querySelector('#page-mcp div[style*="letter-spacing:.05em"]');
   if (workspaceLabel) workspaceLabel.textContent = strings.workspace;
   const workspacePath = document.getElementById('mcp-workspace-path');
@@ -3219,6 +3311,23 @@ function localizeMcpSurface() {
   if (note) note.innerHTML = `${strings.configNote} <code style="background:#e4e4e7;padding:1px 4px;border-radius:3px">.mcp.json</code>`;
   const empty = document.getElementById('mcp-empty');
   if (empty) empty.innerHTML = `${strings.empty}<br><span style="font-size:11px">${strings.emptyHint}</span>`;
+  const textTargets = {
+    'mcp-add-form-title': strings.addServer,
+    'mcp-label-name': strings.name,
+    'mcp-label-kind': strings.type,
+    'mcp-label-command': strings.command,
+    'mcp-label-args': strings.args,
+    'mcp-label-env': strings.env,
+    'mcp-label-url': strings.url,
+    'mcp-label-transport': strings.transport,
+    'mcp-label-headers': strings.headers,
+    'mcp-add-cancel': strings.cancel,
+    'mcp-add-submit': strings.add,
+  };
+  Object.entries(textTargets).forEach(([id, value]) => {
+    const element = document.getElementById(id);
+    if (element) element.textContent = value;
+  });
 }
 
 let currentPendingQuestionRequest = null;
@@ -3828,7 +3937,15 @@ function handleMessage(msg) {
       renderMessages({ liveOnly: true });
       break;
     case 'mcp:status':
-      renderMcpServers(msg.servers || []);
+      renderMcpServers(msg.servers || [], msg.registryServers || [], msg.error || '');
+      break;
+    case 'mcp:operation':
+      if (msg.ok) {
+        hideMcpAddForm();
+        setMcpFeedback(isEnglishUi() ? 'MCP configuration saved.' : 'MCP 配置已保存。', false);
+      } else {
+        setMcpFeedback(String(msg.error || (isEnglishUi() ? 'MCP configuration failed.' : 'MCP 配置操作失败。')), true);
+      }
       break;
     case 'tool:start':
       if (!appState.isBusy) break;
@@ -4508,6 +4625,9 @@ function showPage(id) {
       const input = document.getElementById('prompt-input');
       input?.focus();
     });
+  }
+  if (id === 'mcp') {
+    refreshMcp();
   }
 }
 
@@ -8563,6 +8683,85 @@ function setWorkspaceRoot(root) {
 
 function refreshMcp() {
   send({ type: 'mcp:refresh' });
+}
+
+function showMcpAddForm() {
+  const form = document.getElementById('mcp-add-form');
+  if (form) form.style.display = 'block';
+  updateMcpAddFormKind();
+  document.getElementById('mcp-server-name')?.focus();
+}
+
+function hideMcpAddForm() {
+  const form = document.getElementById('mcp-add-form');
+  if (form) form.style.display = 'none';
+}
+
+function updateMcpAddFormKind() {
+  const kind = document.getElementById('mcp-server-kind')?.value;
+  const stdioFields = document.getElementById('mcp-stdio-fields');
+  const remoteFields = document.getElementById('mcp-remote-fields');
+  if (stdioFields) stdioFields.style.display = kind === 'remote' ? 'none' : 'grid';
+  if (remoteFields) remoteFields.style.display = kind === 'remote' ? 'grid' : 'none';
+}
+
+function submitMcpServer() {
+  const name = document.getElementById('mcp-server-name')?.value.trim() || '';
+  const kind = document.getElementById('mcp-server-kind')?.value || 'stdio';
+  const strings = getMcpStrings();
+  let config;
+
+  try {
+    if (kind === 'remote') {
+      config = {
+        url: document.getElementById('mcp-server-url')?.value.trim() || '',
+        type: document.getElementById('mcp-server-transport')?.value || 'streamable-http',
+        ...readMcpJsonObject('mcp-server-headers', 'headers'),
+      };
+    } else {
+      const args = (document.getElementById('mcp-server-args')?.value || '')
+        .split(/\r?\n/)
+        .map(value => value.trim())
+        .filter(Boolean);
+      config = {
+        command: document.getElementById('mcp-server-command')?.value.trim() || '',
+        ...(args.length ? { args } : {}),
+        ...readMcpJsonObject('mcp-server-env', 'env'),
+      };
+    }
+  } catch {
+    setMcpFeedback(strings.invalidJson, true);
+    return;
+  }
+
+  send({ type: 'mcp:add', name, config });
+}
+
+function readMcpJsonObject(inputId, key) {
+  const value = document.getElementById(inputId)?.value.trim() || '';
+  if (!value) return {};
+  const parsed = JSON.parse(value);
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+    throw new Error('Expected object');
+  }
+  return { [key]: parsed };
+}
+
+function setMcpServerEnabled(name, enabled) {
+  send({ type: 'mcp:set-enabled', name, enabled });
+}
+
+function removeMcpServer(name) {
+  if (!localizedConfirm(getMcpStrings().removeConfirm(name))) return;
+  send({ type: 'mcp:remove', name });
+}
+
+function setMcpFeedback(message, isError) {
+  const feedback = document.getElementById('mcp-feedback');
+  if (!feedback) return;
+  feedback.style.display = message ? 'block' : 'none';
+  feedback.style.color = isError ? '#b91c1c' : '#166534';
+  feedback.textContent = message || '';
 }
 
 function clearChat() {
@@ -15804,30 +16003,69 @@ function rejectApproval() {
 }
 
 // MCP
-function renderMcpServers(servers) {
+function renderMcpServers(servers, registryServers, error) {
   const list = document.getElementById('mcp-list');
   const empty = document.getElementById('mcp-empty');
   const strings = getMcpStrings();
-  if (!servers || !servers.length) {
+  const statuses = Array.isArray(servers) ? servers : [];
+  const configuredServers = Array.isArray(registryServers) ? registryServers : [];
+  const statusByName = new Map(statuses.map(server => [server.name, server]));
+  const entries = configuredServers.length
+    ? configuredServers
+    : statuses.map(server => ({
+        name: server.name,
+        enabled: true,
+        transport: server.transport,
+        sourcePath: '',
+        scope: 'workspace',
+        config: {},
+      }));
+
+  if (!entries.length) {
     list.innerHTML = '';
     empty.style.display = '';
+    setMcpFeedback(error || '', !!error);
     return;
   }
   empty.style.display = 'none';
-  list.innerHTML = servers.map(s => {
-    const badgeCls = s.state === 'connected' ? 'badge-green' : s.state === 'needs-auth' ? 'badge-yellow' : 'badge-orange';
-    const stateText = s.state === 'connected'
-      ? strings.connected(s.toolCount || 0)
-      : s.state === 'needs-auth'
-        ? strings.auth
-        : strings.error;
+  if (error) setMcpFeedback(error, true);
+  list.innerHTML = entries.map(entry => {
+    const status = statusByName.get(entry.name);
+    const isEnabled = entry.enabled !== false;
+    const badgeCls = !isEnabled
+      ? 'badge-slate'
+      : status?.state === 'connected'
+        ? 'badge-green'
+        : status?.state === 'needs-auth'
+          ? 'badge-yellow'
+          : status?.state === 'error'
+            ? 'badge-orange'
+            : 'badge-slate';
+    const stateText = !isEnabled
+      ? strings.disabled
+      : status?.state === 'connected'
+        ? strings.connected(status.toolCount || 0)
+        : status?.state === 'needs-auth'
+          ? strings.auth
+          : status?.state === 'error'
+            ? strings.error
+            : strings.unavailable;
+    const config = entry.config || {};
+    const location = config.command || config.url || '';
+    const source = entry.sourcePath ? `${strings.source}: ${entry.sourcePath}` : '';
+    const escapedName = JSON.stringify(String(entry.name || ''));
     return `<div class="list-row" style="flex-direction:column;align-items:stretch;gap:4px">
       <div style="display:flex;align-items:center;gap:8px">
-        <div style="flex:1"><div style="font-size:13px;font-weight:600">${escapeHtml(s.name || '')}</div>
-        <div style="font-size:11px;color:#a1a1aa">${escapeHtml(s.transport || '')}</div></div>
+        <div style="flex:1;min-width:0"><div style="font-size:13px;font-weight:600">${escapeHtml(entry.name || '')}</div>
+        <div style="font-size:11px;color:#a1a1aa;overflow-wrap:anywhere">${escapeHtml(entry.transport || '')}${location ? ` · ${escapeHtml(location)}` : ''}</div></div>
         <span class="${badgeCls}">${stateText}</span>
       </div>
-      ${s.error ? `<div style="font-size:11px;color:#b91c1c;padding:4px 0">${escapeHtml(s.error)}</div>` : ''}
+      ${source ? `<div style="font-size:11px;color:#71717a;overflow-wrap:anywhere">${escapeHtml(source)}</div>` : ''}
+      ${status?.error ? `<div style="font-size:11px;color:#b91c1c;padding:4px 0">${escapeHtml(status.error)}</div>` : ''}
+      <div style="display:flex;justify-content:flex-end;gap:6px;margin-top:2px">
+        <button class="btn-secondary" onclick="setMcpServerEnabled(${escapedName}, ${isEnabled ? 'false' : 'true'})">${isEnabled ? strings.disable : strings.enable}</button>
+        <button class="btn-secondary" onclick="removeMcpServer(${escapedName})">${strings.remove}</button>
+      </div>
     </div>`;
   }).join('');
 }

@@ -10,9 +10,9 @@
 | Metric | Value | Last Updated |
 |--------|-------|--------------|
 | Test files | 182 | 2026-07-23 |
-| Tests passing | 1509 | 2026-07-23 |
+| Tests passing | 1512 | 2026-07-23 |
 | Last verified commit | see `git log --oneline -1` | — |
-| Last clean verification | 2026-07-23 — MCP registry service | — |
+| Last clean verification | 2026-07-23 — Electron MCP settings UI | — |
 
 **Required passing commands:**
 ```bash
@@ -59,6 +59,7 @@ npm run build:electron   # only when Electron behavior changed
 
 | Beads ID | Title |
 |----------|-------|
+| vscode-extension-912h | KainClaw Electron MCP settings UI |
 | vscode-extension-piky | KainClaw MCP registry service and config CRUD |
 | vscode-extension-3yn | v3: sez regression — transient draft anchor clears on project switch |
 | vscode-extension-3ka | v3: image ownership writeback — light provenance on use |
@@ -190,6 +191,7 @@ npm run build:electron   # only when Electron behavior changed
 
 ## Current Focus
 
+- **MCP Phase 2 closed (`vscode-extension-912h`)**: the existing Electron MCP page now manages stdio/HTTP/SSE configuration through `McpRegistry` IPC, combines config source/enabled state with live runtime status, and refreshes when opened. Phase 3 covers OAuth UX, project approval, and persistent permissions.
 - **MCP Phase 1 closed (`vscode-extension-piky`)**: `src/mcpRegistry.ts` now owns workspace MCP config CRUD, validation, enable/disable, and Codex TOML import. Environment placeholders remain references and static authentication headers are not copied. Phase 2 is the Electron MCP Settings UI.
 - **v3 Design Project Lifecycle 已收口**（yth / gqr / ut1 / sez / 3ka / 28m.3）：
   - gqr：`DesignProjectStore.conversationHistory` 是唯一持久真相源，session 只做内存 projection

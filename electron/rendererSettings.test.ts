@@ -198,6 +198,20 @@ describe("Electron renderer settings", () => {
     expect(html).toContain("showDesignView('design-chat')");
   });
 
+  it("keeps MCP configuration actions in the existing MCP page and routes them through IPC", async () => {
+    const rendererPath = path.join(__dirname, "renderer", "index.html");
+    const html = await readFile(rendererPath, "utf8");
+
+    expect(html).toContain('id="mcp-add-form"');
+    expect(html).toContain('onclick="showMcpAddForm()"');
+    expect(html).toContain("function submitMcpServer()");
+    expect(html).toContain("type: 'mcp:add'");
+    expect(html).toContain("type: 'mcp:set-enabled'");
+    expect(html).toContain("type: 'mcp:remove'");
+    expect(html).toContain("function renderMcpServers(servers, registryServers, error)");
+    expect(html).toContain("if (id === 'mcp') {\n    refreshMcp();");
+  });
+
   it("preserves design-chat question-form scroll position unless the user was already near the bottom", async () => {
     const rendererPath = path.join(__dirname, "renderer", "index.html");
     const html = await readFile(rendererPath, "utf8");
