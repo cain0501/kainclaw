@@ -3244,6 +3244,14 @@ function getMcpStrings() {
         remove: 'Remove',
         login: 'Log in',
         logout: 'Log out',
+        approve: 'Approve',
+        reject: 'Reject',
+        resetApproval: 'Reset approval',
+        approvalRequired: 'Approval required',
+        rejected: 'Rejected',
+        approvalApproved: 'MCP server approved.',
+        approvalRejected: 'MCP server rejected.',
+        approvalReset: 'MCP server approval reset.',
         loginStarting: 'Starting MCP authorization...',
         loginContinue: 'Complete authorization in your browser.',
         loginComplete: 'MCP authorization completed.',
@@ -3283,6 +3291,14 @@ function getMcpStrings() {
         remove: '删除',
         login: '登录',
         logout: '退出登录',
+        approve: '批准',
+        reject: '拒绝',
+        resetApproval: '重置审批',
+        approvalRequired: '需要审批',
+        rejected: '已拒绝',
+        approvalApproved: 'MCP 服务器已批准。',
+        approvalRejected: 'MCP 服务器已拒绝。',
+        approvalReset: 'MCP 服务器审批已重置。',
         loginStarting: '正在启动 MCP 授权...',
         loginContinue: '请在浏览器中完成授权。',
         loginComplete: 'MCP 授权已完成。',
@@ -3962,6 +3978,12 @@ function handleMessage(msg) {
         } else if (msg.action === 'logout') {
           clearMcpAuthorizationLink();
           setMcpFeedback(getMcpStrings().logoutComplete, false);
+        } else if (msg.action === 'approve') {
+          setMcpFeedback(getMcpStrings().approvalApproved, false);
+        } else if (msg.action === 'reject') {
+          setMcpFeedback(getMcpStrings().approvalRejected, false);
+        } else if (msg.action === 'reset') {
+          setMcpFeedback(getMcpStrings().approvalReset, false);
         } else {
           hideMcpAddForm();
           setMcpFeedback(isEnglishUi() ? 'MCP configuration saved.' : 'MCP 配置已保存。', false);
@@ -8830,6 +8852,18 @@ function loginMcpServer(name) {
 
 function logoutMcpServer(name) {
   send({ type: 'mcp:logout', name });
+}
+
+function approveMcpServer(name) {
+  send({ type: 'mcp:approve', name });
+}
+
+function rejectMcpServer(name) {
+  send({ type: 'mcp:reject', name });
+}
+
+function resetMcpApproval(name) {
+  send({ type: 'mcp:reset-approval', name });
 }
 
 function clearChat() {
@@ -16100,8 +16134,11 @@ function renderMcpServers(servers, registryServers, error) {
   list.innerHTML = entries.map(entry => {
     const status = statusByName.get(entry.name);
     const isEnabled = entry.enabled !== false;
+    const approval = entry.approval || 'unapproved';
     const badgeCls = !isEnabled
       ? 'badge-slate'
+      : approval === 'unapproved' || approval === 'rejected'
+        ? 'badge-orange'
       : status?.state === 'connected'
         ? 'badge-green'
         : status?.state === 'needs-auth'
@@ -16111,6 +16148,10 @@ function renderMcpServers(servers, registryServers, error) {
             : 'badge-slate';
     const stateText = !isEnabled
       ? strings.disabled
+      : approval === 'unapproved'
+        ? strings.approvalRequired
+        : approval === 'rejected'
+          ? strings.rejected
       : status?.state === 'connected'
         ? strings.connected(status.toolCount || 0)
         : status?.state === 'needs-auth'
@@ -16132,7 +16173,8 @@ function renderMcpServers(servers, registryServers, error) {
       ${source ? `<div style="font-size:11px;color:#71717a;overflow-wrap:anywhere">${escapeHtml(source)}</div>` : ''}
       ${status?.error ? `<div style="font-size:11px;color:#b91c1c;padding:4px 0">${escapeHtml(status.error)}</div>` : ''}
       <div style="display:flex;justify-content:flex-end;gap:6px;margin-top:2px">
-        ${isEnabled && isRemote ? `<button class="btn-secondary" onclick="loginMcpServer(${escapedName})">${strings.login}</button><button class="btn-secondary" onclick="logoutMcpServer(${escapedName})">${strings.logout}</button>` : ''}
+        ${isEnabled && approval === 'approved' && isRemote ? `<button class="btn-secondary" onclick="loginMcpServer(${escapedName})">${strings.login}</button><button class="btn-secondary" onclick="logoutMcpServer(${escapedName})">${strings.logout}</button>` : ''}
+        ${approval === 'approved' ? `<button class="btn-secondary" onclick="resetMcpApproval(${escapedName})">${strings.resetApproval}</button>` : `<button class="btn-secondary" onclick="approveMcpServer(${escapedName})">${strings.approve}</button>${approval === 'unapproved' ? `<button class="btn-secondary" onclick="rejectMcpServer(${escapedName})">${strings.reject}</button>` : `<button class="btn-secondary" onclick="resetMcpApproval(${escapedName})">${strings.resetApproval}</button>`}`}
         <button class="btn-secondary" onclick="setMcpServerEnabled(${escapedName}, ${isEnabled ? 'false' : 'true'})">${isEnabled ? strings.disable : strings.enable}</button>
         <button class="btn-secondary" onclick="removeMcpServer(${escapedName})">${strings.remove}</button>
       </div>

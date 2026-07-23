@@ -434,6 +434,41 @@ describe("ElectronChatPanel session lifecycle", () => {
     }));
   });
 
+  it("persists MCP approval decisions through dedicated IPC actions", async () => {
+    const harness = await createHarness();
+    tempDirs.push(harness.storagePath);
+    await harness.panel.handleMessage({ type: "workspace:set", root: harness.storagePath });
+    await harness.panel.handleMessage({
+      type: "mcp:add",
+      name: "local-server",
+      config: { command: "node", args: ["server.js"] },
+    });
+
+    await harness.panel.handleMessage({ type: "mcp:approve", name: "local-server" });
+    let status = getLastRendererPayloadOfType<{
+      registryServers?: Array<{ name: string; approval: string }>;
+    }>(harness.rendererPayloads, "mcp:status");
+    expect(status?.registryServers).toEqual([
+      expect.objectContaining({ name: "local-server", approval: "approved" }),
+    ]);
+
+    await harness.panel.handleMessage({ type: "mcp:reject", name: "local-server" });
+    status = getLastRendererPayloadOfType<{
+      registryServers?: Array<{ name: string; approval: string }>;
+    }>(harness.rendererPayloads, "mcp:status");
+    expect(status?.registryServers).toEqual([
+      expect.objectContaining({ name: "local-server", approval: "rejected" }),
+    ]);
+
+    await harness.panel.handleMessage({ type: "mcp:reset-approval", name: "local-server" });
+    status = getLastRendererPayloadOfType<{
+      registryServers?: Array<{ name: string; approval: string }>;
+    }>(harness.rendererPayloads, "mcp:status");
+    expect(status?.registryServers).toEqual([
+      expect.objectContaining({ name: "local-server", approval: "unapproved" }),
+    ]);
+  });
+
   it("keeps an in-flight reply attached to the session that started it", async () => {
     const harness = await createHarness();
     tempDirs.push(harness.storagePath);

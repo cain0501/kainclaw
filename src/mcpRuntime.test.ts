@@ -4,6 +4,7 @@ import path from "node:path";
 import { UnauthorizedError } from "@modelcontextprotocol/sdk/client/auth.js";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { createMcpOAuthClientProvider, type McpOAuthHost } from "./mcpOAuth";
+import { McpProjectApprovalStore } from "./mcpProjectApprovalStore";
 import { McpRuntime } from "./mcpRuntime";
 
 const tempDirs: string[] = [];
@@ -158,6 +159,42 @@ describe("McpRuntime config discovery cache", () => {
     const secondChanged = await (runtime as any).refreshConfig();
     expect(secondChanged).toBe(true);
     expect((runtime as any).serverConfigs.get("demo")?.url).toBe("https://second.example.com/mcp");
+  });
+
+  it("does not expose tools for workspace servers until locally approved", async () => {
+    const workspaceRoot = await fs.mkdtemp(path.join(os.tmpdir(), "cain-mcp-runtime-approval-"));
+    const storageRoot = await fs.mkdtemp(path.join(os.tmpdir(), "cain-mcp-approval-store-"));
+    tempDirs.push(workspaceRoot, storageRoot);
+    const configPath = path.join(workspaceRoot, ".mcp.json");
+    const config = { command: "node", args: ["server.js"] };
+    await fs.writeFile(configPath, JSON.stringify({ mcpServers: { demo: config } }), "utf8");
+
+    const approvals = new McpProjectApprovalStore(storageRoot);
+    const runtime = new McpRuntime(() => workspaceRoot, {}, undefined, approvals);
+    const ensureConnection = vi.spyOn(runtime as any, "ensureConnection");
+
+    expect(await runtime.getToolDefinitions()).toEqual([]);
+    expect(ensureConnection).not.toHaveBeenCalled();
+
+    await approvals.approve({ workspaceRoot, configPath, serverName: "demo", config });
+    runtime.markConfigDirty();
+    (runtime as any).ensureConnection = async () => ({
+      client: {
+        getServerCapabilities: () => ({ tools: {} }),
+        listTools: async () => ({ tools: [{ name: "read_file", description: "Read a file", inputSchema: {} }] }),
+      },
+      transport: { close: async () => undefined },
+    });
+
+    expect((await runtime.getToolDefinitions()).map(tool => tool.name)).toEqual(["mcp__demo__read_file"]);
+
+    await approvals.reject({ workspaceRoot, configPath, serverName: "demo", config });
+    runtime.markConfigDirty();
+    expect(await runtime.getToolDefinitions()).toEqual([]);
+
+    await approvals.reset({ workspaceRoot, configPath, serverName: "demo", config });
+    runtime.markConfigDirty();
+    expect(await runtime.getToolDefinitions()).toEqual([]);
   });
 
   it("resolves Claude MCP remote transport types without routing SSE as streamable HTTP", async () => {

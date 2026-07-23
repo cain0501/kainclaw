@@ -41,6 +41,7 @@ import type {
 } from "../src/agent/providers/IProviderAdapter";
 import { McpRuntime, type McpServerStatusSummary } from "../src/mcpRuntime";
 import { McpRegistry, type McpRegistryServerConfig } from "../src/mcpRegistry";
+import { McpProjectApprovalStore } from "../src/mcpProjectApprovalStore";
 import { runAgent, SYSTEM_PROMPT } from "../src/agent/agentRunner";
 import { createPromptTurnSwarm } from "../src/promptSwarmHost";
 import type { SwarmCoordinator } from "../src/agent/swarm/SwarmCoordinator";
@@ -460,6 +461,7 @@ export class ElectronChatPanel {
   >();
   private readonly mcpRuntime: McpRuntime;
   private readonly mcpRegistry: McpRegistry;
+  private readonly mcpProjectApprovalStore: McpProjectApprovalStore;
   private readonly imageGalleryStore: ImageLabGalleryStore;
   private readonly imageThreadStore: ImageThreadStore;
   private readonly promptLibraryRepository: PromptLibraryRepository;
@@ -491,10 +493,12 @@ export class ElectronChatPanel {
     private readonly sendToRenderer: (payload: unknown) => void,
     private readonly desktopRuntimeServices?: DesktopRuntimeServices,
   ) {
+    this.mcpProjectApprovalStore = new McpProjectApprovalStore(this.host.getStorageUri());
     this.mcpRuntime = new McpRuntime(
       () => this.getSelectedWorkspaceRoot(),
       process.env as Record<string, string>,
       this.host,
+      this.mcpProjectApprovalStore,
     );
     this.mcpRegistry = new McpRegistry(() => this.getSelectedWorkspaceRoot());
     this.imageGalleryStore = new ImageLabGalleryStore(this.host.getStorageUri());
@@ -1602,6 +1606,9 @@ export class ElectronChatPanel {
     if (type === "mcp:remove") { await this.changeMcpRegistry("remove", message); return; }
     if (type === "mcp:login") { await this.changeMcpAuthentication("login", message); return; }
     if (type === "mcp:logout") { await this.changeMcpAuthentication("logout", message); return; }
+    if (type === "mcp:approve") { await this.changeMcpApproval("approve", message); return; }
+    if (type === "mcp:reject") { await this.changeMcpApproval("reject", message); return; }
+    if (type === "mcp:reset-approval") { await this.changeMcpApproval("reset", message); return; }
   }
 
   // ─── Ready ──────────────────────────────────────────────────────────────────
@@ -4372,10 +4379,22 @@ export class ElectronChatPanel {
       .filter((result): result is PromiseRejectedResult => result.status === "rejected")
       .map(result => result.reason instanceof Error ? result.reason.message : String(result.reason));
 
+    const registryServers = registryResult.status === "fulfilled"
+      ? await Promise.all(registryResult.value.map(async server => ({
+          ...server,
+          approval: await this.mcpProjectApprovalStore.getDecision({
+            workspaceRoot: this.getSelectedWorkspaceRoot(),
+            configPath: server.sourcePath,
+            serverName: server.name,
+            config: server.config,
+          }),
+        })))
+      : [];
+
     this.sendToRenderer({
       type: "mcp:status",
       servers: runtimeResult.status === "fulfilled" ? runtimeResult.value : [],
-      registryServers: registryResult.status === "fulfilled" ? registryResult.value : [],
+      registryServers,
       ...(errors.length > 0 ? { error: errors.join(" ") } : {}),
     });
   }
@@ -4434,6 +4453,44 @@ export class ElectronChatPanel {
       } else {
         await this.mcpRuntime.logoutServer(name);
       }
+      this.sendToRenderer({ type: "mcp:operation", action, ok: true });
+    } catch (error) {
+      this.sendToRenderer({
+        type: "mcp:operation",
+        action,
+        ok: false,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+
+    await this.refreshMcpStatus();
+  }
+
+  private async changeMcpApproval(
+    action: "approve" | "reject" | "reset",
+    message: Record<string, unknown>,
+  ): Promise<void> {
+    try {
+      const name = String(message.name ?? "");
+      const server = (await this.mcpRegistry.listServers()).find(entry => entry.name === name);
+      if (!server) {
+        throw new Error(`No MCP server found with name: ${name}`);
+      }
+      const target = {
+        workspaceRoot: this.getSelectedWorkspaceRoot(),
+        configPath: server.sourcePath,
+        serverName: server.name,
+        config: server.config,
+      };
+
+      if (action === "approve") {
+        await this.mcpProjectApprovalStore.approve(target);
+      } else if (action === "reject") {
+        await this.mcpProjectApprovalStore.reject(target);
+      } else {
+        await this.mcpProjectApprovalStore.reset(target);
+      }
+      this.mcpRuntime.markConfigDirty();
       this.sendToRenderer({ type: "mcp:operation", action, ok: true });
     } catch (error) {
       this.sendToRenderer({
@@ -5712,6 +5769,7 @@ export class ElectronChatPanel {
               () => workspaceRoot,
               process.env as Record<string, string>,
               this.host,
+              this.mcpProjectApprovalStore,
             ))
           : this.mcpRuntime;
       const { config, envMap } = await resolveProviderConfig(

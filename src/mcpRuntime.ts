@@ -16,6 +16,7 @@ import {
   performMcpOAuthFlow,
   revokeServerTokens,
 } from "./mcpOAuth";
+import type { McpProjectApprovalStore } from "./mcpProjectApprovalStore";
 import {
   dedupeToolDefinitionsByName,
   type McpToolAdapter,
@@ -436,6 +437,7 @@ export class McpRuntime implements McpToolAdapter {
     private readonly getWorkspaceRoot: () => string,
     private envMap: Record<string, string>,
     private readonly oauthHost?: McpOAuthHost,
+    private readonly projectApprovalStore?: McpProjectApprovalStore,
   ) {}
 
   setEnvMap(envMap: Record<string, string>): void {
@@ -1060,8 +1062,15 @@ export class McpRuntime implements McpToolAdapter {
     const stats = await fs.stat(configFile);
     const content = await fs.readFile(configFile, "utf8");
     const rawJson = JSON.parse(content) as JsonRecord;
-    const resolvedServers = this.resolveServers(rawJson);
-    const nextSignature = JSON.stringify(resolvedServers);
+    const rawServers = this.getRawServers(rawJson);
+    const resolvedServers = this.resolveServers(rawServers);
+    const approvedServers = await this.filterApprovedServers(
+      resolvedServers,
+      rawServers,
+      workspaceRoot,
+      configFile,
+    );
+    const nextSignature = JSON.stringify(approvedServers);
 
     this.configFilePath = configFile;
     this.configFileMtimeMs = stats.mtimeMs;
@@ -1075,7 +1084,7 @@ export class McpRuntime implements McpToolAdapter {
     this.configDirty = false;
     await this.dispose();
 
-    for (const server of resolvedServers) {
+    for (const server of approvedServers) {
       this.serverConfigs.set(server.name, server);
     }
     return true;
@@ -1115,8 +1124,38 @@ export class McpRuntime implements McpToolAdapter {
     }
   }
 
-  private resolveServers(rawJson: JsonRecord): ResolvedServerConfig[] {
-    const rawServers = (rawJson.mcpServers || rawJson.servers || {}) as Record<string, RawServerConfig>;
+  private getRawServers(rawJson: JsonRecord): Record<string, RawServerConfig> {
+    return (rawJson.mcpServers || rawJson.servers || {}) as Record<string, RawServerConfig>;
+  }
+
+  private async filterApprovedServers(
+    resolvedServers: ResolvedServerConfig[],
+    rawServers: Record<string, RawServerConfig>,
+    workspaceRoot: string,
+    configPath: string,
+  ): Promise<ResolvedServerConfig[]> {
+    const approvalStore = this.projectApprovalStore;
+    if (!approvalStore) {
+      return resolvedServers;
+    }
+
+    const approvedServers = await Promise.all(resolvedServers.map(async server => {
+      const rawConfig = rawServers[server.name];
+      if (!rawConfig) {
+        return undefined;
+      }
+      const decision = await approvalStore.getDecision({
+        workspaceRoot,
+        configPath,
+        serverName: server.name,
+        config: rawConfig,
+      });
+      return decision === "approved" ? server : undefined;
+    }));
+    return approvedServers.filter((server): server is ResolvedServerConfig => Boolean(server));
+  }
+
+  private resolveServers(rawServers: Record<string, RawServerConfig>): ResolvedServerConfig[] {
     const resolved: ResolvedServerConfig[] = [];
 
     for (const [name, rawConfig] of Object.entries(rawServers)) {
