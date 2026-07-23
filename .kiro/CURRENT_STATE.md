@@ -10,7 +10,7 @@
 | Metric | Value | Last Updated |
 |--------|-------|--------------|
 | Test files | 185 | 2026-07-23 |
-| Tests passing | 1532 | 2026-07-23 |
+| Tests passing | 1534 | 2026-07-23 |
 | Last verified commit | see `git log --oneline -1` | — |
 | Last clean verification | 2026-07-23 — Electron MCP permission rules | — |
 
@@ -193,6 +193,8 @@ npm run build:electron   # only when Electron behavior changed
 - `src/webviewHtml.ts` — large template string; fragile escaping
 
 ## Current Focus
+
+- **MCP Phase 6a closed (`vscode-extension-gpf4.6`)**: KainClaw now has a standard stdio MCP server entrypoint at `dist/mcp/kainclawServer.js`. Its only current tool, `kainclaw_server_info`, is read-only and exposes static capability metadata only; it cannot read user sessions, memory, workspace data, or invoke chat/design/image workflows. A real MCP client smoke-tested tool discovery and invocation. Phase 6b must design session tokens, isolated inbound sessions, and approval scopes before exposing stateful capabilities.
 
 - **Recent works design history restored (`vscode-extension-7gj`)**: switching a saved design project now emits its complete project-level conversation history to the renderer instead of an incomplete session transcript. Empty project histories retain the session-transcript fallback. Automated verification passed; manual verification is to open a multi-turn project from Recent works, switch away, then switch back and confirm every turn remains visible.
 
