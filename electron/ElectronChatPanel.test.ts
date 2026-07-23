@@ -404,6 +404,61 @@ describe("ElectronChatPanel session lifecycle", () => {
     expect(status?.registryServers).toEqual([]);
   });
 
+  it("previews/imports Claude MCP config, installs a template, and exports redacted config", async () => {
+    const harness = await createHarness();
+    tempDirs.push(harness.storagePath);
+    await harness.panel.handleMessage({ type: "workspace:set", root: harness.storagePath });
+    const claudeConfigPath = path.join(harness.storagePath, "claude.json");
+    await writeFile(
+      claudeConfigPath,
+      JSON.stringify({
+        mcpServers: {
+          demo: {
+            command: "node",
+            args: ["server.js"],
+            env: { API_KEY: "literal-secret" },
+          },
+        },
+      }),
+      "utf8",
+    );
+
+    await harness.panel.handleMessage({
+      type: "mcp:import-preview",
+      source: "claude-code",
+      sourcePath: claudeConfigPath,
+    });
+    expect(harness.rendererPayloads).toContainEqual(expect.objectContaining({
+      type: "mcp:import-preview",
+      source: "claude-code",
+      candidates: [expect.objectContaining({ name: "demo" })],
+    }));
+
+    await harness.panel.handleMessage({
+      type: "mcp:import",
+      source: "claude-code",
+      sourcePath: claudeConfigPath,
+    });
+    await harness.panel.handleMessage({ type: "mcp:install-template", templateId: "hotel" });
+    const status = getLastRendererPayloadOfType<{
+      registryServers?: Array<{ name: string }>;
+    }>(harness.rendererPayloads, "mcp:status");
+    expect(status?.registryServers?.map(server => server.name).sort()).toEqual(["demo", "hotel"]);
+
+    await harness.panel.handleMessage({
+      type: "mcp:add",
+      name: "private",
+      config: {
+        url: "https://example.com/mcp",
+        headers: { Authorization: "Bearer literal-secret" },
+      },
+    });
+    await harness.panel.handleMessage({ type: "mcp:export" });
+    const exported = getLastRendererPayloadOfType<{ type: string; content?: string }>(harness.rendererPayloads, "mcp:export");
+    expect(exported?.content).toContain("[REDACTED]");
+    expect(exported?.content).not.toContain("literal-secret");
+  });
+
   it("forwards MCP OAuth login and logout through dedicated IPC actions", async () => {
     const harness = await createHarness();
     tempDirs.push(harness.storagePath);

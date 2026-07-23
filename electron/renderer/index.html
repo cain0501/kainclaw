@@ -1367,6 +1367,18 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-seri
         <div id="mcp-workspace-candidates" style="display:none;flex-wrap:wrap;gap:6px;margin-top:8px"></div>
       </div>
     </div>
+    <div id="mcp-tools" style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-bottom:12px">
+      <button id="mcp-import-codex" class="btn-secondary" onclick="previewMcpImport('codex')">导入 Codex</button>
+      <button id="mcp-import-claude" class="btn-secondary" onclick="previewMcpImport('claude-desktop')">导入 Claude</button>
+      <select id="mcp-template-select" style="border:1px solid #d4d4d8;border-radius:6px;padding:6px 8px;font:inherit;background:#fff">
+        <option value="fetch">Fetch</option>
+        <option value="browser">Browser / Playwright</option>
+        <option value="readonly-filesystem">Read-only filesystem</option>
+        <option value="hotel">RollingGo hotel</option>
+      </select>
+      <button id="mcp-install-template" class="btn-secondary" onclick="installMcpTemplate()">安装模板</button>
+      <button id="mcp-export" class="btn-secondary" onclick="exportMcpConfig()">导出配置</button>
+    </div>
     <div id="mcp-feedback" style="display:none;margin-bottom:12px;font-size:12px;line-height:1.5"></div>
     <div id="mcp-auth-link" style="display:none;margin:-4px 0 12px;font-size:12px;line-height:1.5"></div>
     <section id="mcp-add-form" style="display:none;margin-bottom:16px;border:1px solid #d4d4d8;border-radius:8px;padding:14px">
@@ -3229,6 +3241,14 @@ function getMcpStrings() {
     ? {
         title: 'MCP Servers',
         addServer: 'Add MCP server',
+        importCodex: 'Import Codex',
+        importClaude: 'Import Claude',
+        installTemplate: 'Install template',
+        exportConfig: 'Export config',
+        templateInstalled: 'MCP template installed.',
+        importComplete: 'MCP configuration imported.',
+        importPreview: source => `Import ${source} MCP servers?`,
+        noImportCandidates: 'No new MCP servers were found.',
         cancel: 'Cancel',
         name: 'Name',
         type: 'Type',
@@ -3275,6 +3295,14 @@ function getMcpStrings() {
       }
     : {
         title: 'MCP Servers',
+        importCodex: '导入 Codex',
+        importClaude: '导入 Claude',
+        installTemplate: '安装模板',
+        exportConfig: '导出配置',
+        templateInstalled: 'MCP 模板已安装。',
+        importComplete: 'MCP 配置已导入。',
+        importPreview: source => `导入 ${source} MCP 服务器？`,
+        noImportCandidates: '没有发现新的 MCP 服务器。',
         addServer: '添加 MCP 服务器',
         cancel: '取消',
         name: '名称',
@@ -3344,6 +3372,10 @@ function localizeMcpSurface() {
   if (empty) empty.innerHTML = `${strings.empty}<br><span style="font-size:11px">${strings.emptyHint}</span>`;
   const textTargets = {
     'mcp-add-form-title': strings.addServer,
+    'mcp-import-codex': strings.importCodex,
+    'mcp-import-claude': strings.importClaude,
+    'mcp-install-template': strings.installTemplate,
+    'mcp-export': strings.exportConfig,
     'mcp-label-name': strings.name,
     'mcp-label-kind': strings.type,
     'mcp-label-command': strings.command,
@@ -3967,11 +3999,21 @@ function handleMessage(msg) {
       }
       renderMessages({ liveOnly: true });
       break;
-    case 'mcp:status':
-      renderMcpServers(msg.servers || [], msg.registryServers || [], msg.error || '');
-      break;
-    case 'mcp:operation':
-      if (msg.ok) {
+      case 'mcp:status':
+        renderMcpServers(msg.servers || [], msg.registryServers || [], msg.error || '');
+        break;
+      case 'mcp:import-preview':
+        handleMcpImportPreview(msg);
+        break;
+      case 'mcp:export':
+        if (msg.ok && typeof msg.content === 'string') {
+          downloadMcpExport(msg.content);
+        } else {
+          setMcpFeedback(String(msg.error || 'MCP export failed.'), true);
+        }
+        break;
+      case 'mcp:operation':
+        if (msg.ok) {
         if (msg.action === 'login') {
           clearMcpAuthorizationLink();
           setMcpFeedback(getMcpStrings().loginComplete, false);
@@ -3982,9 +4024,13 @@ function handleMessage(msg) {
           setMcpFeedback(getMcpStrings().approvalApproved, false);
         } else if (msg.action === 'reject') {
           setMcpFeedback(getMcpStrings().approvalRejected, false);
-        } else if (msg.action === 'reset') {
-          setMcpFeedback(getMcpStrings().approvalReset, false);
-        } else {
+          } else if (msg.action === 'reset') {
+            setMcpFeedback(getMcpStrings().approvalReset, false);
+          } else if (msg.action === 'import') {
+            setMcpFeedback(getMcpStrings().importComplete, false);
+          } else if (msg.action === 'install-template') {
+            setMcpFeedback(getMcpStrings().templateInstalled, false);
+          } else {
           hideMcpAddForm();
           setMcpFeedback(isEnglishUi() ? 'MCP configuration saved.' : 'MCP 配置已保存。', false);
         }
@@ -8735,11 +8781,54 @@ function setWorkspaceRoot(root) {
   send({ type: 'workspace:set', root });
 }
 
-function refreshMcp() {
-  send({ type: 'mcp:refresh' });
-}
+  function refreshMcp() {
+    send({ type: 'mcp:refresh' });
+  }
 
-function showMcpAddForm() {
+  function previewMcpImport(source) {
+    send({ type: 'mcp:import-preview', source: source });
+  }
+
+  function handleMcpImportPreview(msg) {
+    const strings = getMcpStrings();
+    if (msg.error) {
+      setMcpFeedback(String(msg.error), true);
+      return;
+    }
+    const candidates = Array.isArray(msg.candidates) ? msg.candidates : [];
+    if (!candidates.length) {
+      setMcpFeedback(strings.noImportCandidates, false);
+      return;
+    }
+    const names = candidates.map(candidate => String(candidate.name || '')).filter(Boolean).join(', ');
+    const source = String(msg.source || 'MCP');
+    const question = `${strings.importPreview(source)}\n${names}`;
+    if (window.confirm(question)) {
+      send({ type: 'mcp:import', source: source });
+    }
+  }
+
+  function installMcpTemplate() {
+    const templateId = document.getElementById('mcp-template-select')?.value || '';
+    if (templateId) send({ type: 'mcp:install-template', templateId: templateId });
+  }
+
+  function exportMcpConfig() {
+    send({ type: 'mcp:export' });
+  }
+
+  function downloadMcpExport(content) {
+    const blob = new Blob([content], { type: 'application/json;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = 'mcp.json';
+    link.click();
+    URL.revokeObjectURL(url);
+    setMcpFeedback(isEnglishUi() ? 'MCP configuration exported.' : 'MCP 配置已导出。', false);
+  }
+
+  function showMcpAddForm() {
   const form = document.getElementById('mcp-add-form');
   if (form) form.style.display = 'block';
   updateMcpAddFormKind();

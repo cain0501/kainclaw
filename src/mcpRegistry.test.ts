@@ -220,4 +220,71 @@ describe("McpRegistry", () => {
     );
     await expect(registry.listServers()).resolves.toEqual([]);
   });
+
+  it("previews and imports Claude JSON servers without copying static credentials", async () => {
+    const workspaceRoot = await fs.mkdtemp(path.join(os.tmpdir(), "cain-mcp-claude-workspace-"));
+    const claudeRoot = await fs.mkdtemp(path.join(os.tmpdir(), "cain-claude-config-"));
+    tempDirs.push(workspaceRoot, claudeRoot);
+    const claudeConfigPath = path.join(claudeRoot, "claude.json");
+    await fs.writeFile(
+      claudeConfigPath,
+      JSON.stringify({
+        mcpServers: {
+          fetch: {
+            command: "npx",
+            args: ["-y", "@modelcontextprotocol/server-fetch"],
+            env: { API_KEY: "literal-secret", BROWSER: "chrome" },
+          },
+          remote: {
+            type: "http",
+            url: "https://example.com/mcp",
+            headers: { Authorization: "Bearer literal-secret", Accept: "application/json" },
+          },
+        },
+      }),
+      "utf8",
+    );
+
+    const registry = new McpRegistry(workspaceRoot);
+    const preview = await registry.previewImport("claude-code", claudeConfigPath);
+    expect(preview.candidates.map(candidate => candidate.name)).toEqual(["fetch", "remote"]);
+    expect(preview.candidates.find(candidate => candidate.name === "fetch")?.config.env).toEqual({ BROWSER: "chrome" });
+    expect(preview.candidates.find(candidate => candidate.name === "remote")?.config.headers).toEqual({
+      Accept: "application/json",
+    });
+
+    const imported = await registry.importClaudeServers("claude-code", claudeConfigPath);
+    expect(imported.imported.map(server => server.name)).toEqual(["fetch", "remote"]);
+    expect(await fs.readFile(path.join(workspaceRoot, ".mcp.json"), "utf8")).not.toContain("literal-secret");
+  });
+
+  it("installs reviewed templates and redacts credential values when exporting", async () => {
+    const workspaceRoot = await fs.mkdtemp(path.join(os.tmpdir(), "cain-mcp-template-"));
+    tempDirs.push(workspaceRoot);
+    const registry = new McpRegistry(workspaceRoot);
+
+    expect(registry.listTemplates().map(template => template.id)).toEqual([
+      "fetch",
+      "browser",
+      "readonly-filesystem",
+      "hotel",
+    ]);
+    const filesystem = await registry.installTemplate("readonly-filesystem");
+    expect(filesystem.enabled).toBe(false);
+    await registry.installTemplate("hotel");
+    await registry.addServer("private", {
+      url: "https://example.com/mcp",
+      headers: { Authorization: "Bearer literal-secret", Accept: "application/json" },
+    });
+
+    const exported = JSON.parse(await registry.exportWorkspaceConfig()) as {
+      mcpServers: Record<string, { headers?: Record<string, string> }>;
+    };
+    expect(exported.mcpServers.private.headers).toEqual({
+      Authorization: "[REDACTED]",
+      Accept: "application/json",
+    });
+    expect(exported.mcpServers.hotel).toBeDefined();
+    expect(exported.mcpServers["readonly-filesystem"]).toBeDefined();
+  });
 });

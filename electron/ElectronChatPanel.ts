@@ -40,7 +40,11 @@ import type {
   ProviderConfig as AdapterProviderConfig,
 } from "../src/agent/providers/IProviderAdapter";
 import { McpRuntime, type McpServerStatusSummary } from "../src/mcpRuntime";
-import { McpRegistry, type McpRegistryServerConfig } from "../src/mcpRegistry";
+import {
+  McpRegistry,
+  type McpRegistryImportSource,
+  type McpRegistryServerConfig,
+} from "../src/mcpRegistry";
 import { McpProjectApprovalStore } from "../src/mcpProjectApprovalStore";
 import { McpPermissionStore } from "../src/mcpPermissionStore";
 import { runAgent, SYSTEM_PROMPT } from "../src/agent/agentRunner";
@@ -1608,6 +1612,10 @@ export class ElectronChatPanel {
     if (type === "mcp:add") { await this.changeMcpRegistry("add", message); return; }
     if (type === "mcp:set-enabled") { await this.changeMcpRegistry("set-enabled", message); return; }
     if (type === "mcp:remove") { await this.changeMcpRegistry("remove", message); return; }
+    if (type === "mcp:import-preview") { await this.previewMcpImport(message); return; }
+    if (type === "mcp:import") { await this.importMcpServers(message); return; }
+    if (type === "mcp:install-template") { await this.installMcpTemplate(message); return; }
+    if (type === "mcp:export") { await this.exportMcpConfig(); return; }
     if (type === "mcp:login") { await this.changeMcpAuthentication("login", message); return; }
     if (type === "mcp:logout") { await this.changeMcpAuthentication("logout", message); return; }
     if (type === "mcp:approve") { await this.changeMcpApproval("approve", message); return; }
@@ -4433,6 +4441,96 @@ export class ElectronChatPanel {
     }
 
     await this.refreshMcpStatus();
+  }
+
+  private async previewMcpImport(message: Record<string, unknown>): Promise<void> {
+    try {
+      const source = parseMcpImportSource(message.source);
+      const sourcePath = typeof message.sourcePath === "string" ? message.sourcePath : undefined;
+      const preview = await this.mcpRegistry.previewImport(source, sourcePath);
+      this.sendToRenderer({
+        type: "mcp:import-preview",
+        source,
+        sourcePath: preview.sourcePath,
+        candidates: preview.candidates.map(candidate => ({
+          name: candidate.name,
+          transport: candidate.transport,
+          location: candidate.config.command ?? candidate.config.url ?? "",
+        })),
+        skipped: preview.skipped,
+      });
+    } catch (error) {
+      this.sendToRenderer({
+        type: "mcp:import-preview",
+        ok: false,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+  }
+
+  private async importMcpServers(message: Record<string, unknown>): Promise<void> {
+    const source = parseMcpImportSource(message.source);
+    const sourcePath = typeof message.sourcePath === "string" ? message.sourcePath : undefined;
+    try {
+      const result = await this.mcpRegistry.importServers(source, sourcePath);
+      this.mcpRuntime.markConfigDirty();
+      this.sendToRenderer({
+        type: "mcp:operation",
+        action: "import",
+        ok: true,
+        source,
+        imported: result.imported.map(server => server.name),
+        skipped: result.skipped,
+      });
+    } catch (error) {
+      this.sendToRenderer({
+        type: "mcp:operation",
+        action: "import",
+        ok: false,
+        source,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+    await this.refreshMcpStatus();
+  }
+
+  private async installMcpTemplate(message: Record<string, unknown>): Promise<void> {
+    try {
+      const templateId = String(message.templateId ?? "").trim();
+      const name = typeof message.name === "string" && message.name.trim()
+        ? message.name.trim()
+        : undefined;
+      const server = await this.mcpRegistry.installTemplate(templateId, name);
+      this.mcpRuntime.markConfigDirty();
+      this.sendToRenderer({
+        type: "mcp:operation",
+        action: "install-template",
+        ok: true,
+        templateId,
+        name: server.name,
+      });
+    } catch (error) {
+      this.sendToRenderer({
+        type: "mcp:operation",
+        action: "install-template",
+        ok: false,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+    await this.refreshMcpStatus();
+  }
+
+  private async exportMcpConfig(): Promise<void> {
+    try {
+      const content = await this.mcpRegistry.exportWorkspaceConfig();
+      this.sendToRenderer({ type: "mcp:export", ok: true, content });
+    } catch (error) {
+      this.sendToRenderer({
+        type: "mcp:export",
+        ok: false,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
   }
 
   private async changeMcpAuthentication(
@@ -8902,6 +9000,13 @@ ${html.slice(0, 8000)}
       localBridge: this.desktopRuntimeServices?.localBridgeRuntime?.getStatus(),
     };
   }
+}
+
+function parseMcpImportSource(value: unknown): McpRegistryImportSource {
+  if (value === "codex" || value === "claude-desktop" || value === "claude-code") {
+    return value;
+  }
+  throw new Error("Unsupported MCP import source");
 }
 
 type WebviewAttachment = {

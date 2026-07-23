@@ -35,6 +35,22 @@ export type McpRegistryImportResult = {
   skipped: string[];
 };
 
+export type McpRegistryImportSource = "codex" | "claude-desktop" | "claude-code";
+
+export type McpRegistryImportPreview = {
+  source: McpRegistryImportSource;
+  sourcePath: string;
+  candidates: McpRegistryServerEntry[];
+  skipped: string[];
+};
+
+export type McpRegistryTemplate = {
+  id: string;
+  label: string;
+  description: string;
+  config: McpRegistryServerConfig;
+};
+
 type WorkspaceMcpDocument = Record<string, unknown> & {
   mcpServers?: Record<string, McpRegistryServerConfig>;
   servers?: Record<string, McpRegistryServerConfig>;
@@ -42,6 +58,46 @@ type WorkspaceMcpDocument = Record<string, unknown> & {
 
 const CONFIG_CANDIDATES = [".mcp.json", ".cain-mcp.json"];
 const DEFAULT_CODEX_CONFIG_PATH = path.join(os.homedir(), ".codex", "config.toml");
+const DEFAULT_CLAUDE_DESKTOP_CONFIG_PATH = process.env.APPDATA
+  ? path.join(process.env.APPDATA, "Claude", "claude_desktop_config.json")
+  : path.join(os.homedir(), "Library", "Application Support", "Claude", "claude_desktop_config.json");
+const DEFAULT_CLAUDE_CODE_CONFIG_PATH = process.env.CLAUDE_CONFIG_HOME
+  ? path.join(process.env.CLAUDE_CONFIG_HOME, ".claude.json")
+  : path.join(os.homedir(), ".claude.json");
+
+export const MCP_REGISTRY_TEMPLATES: readonly McpRegistryTemplate[] = [
+  {
+    id: "fetch",
+    label: "Fetch",
+    description: "Read web pages through the official fetch MCP server.",
+    config: { command: "npx", args: ["-y", "@modelcontextprotocol/server-fetch"] },
+  },
+  {
+    id: "browser",
+    label: "Browser / Playwright",
+    description: "Use the Playwright MCP browser bridge.",
+    config: { command: "npx", args: ["-y", "@playwright/mcp@latest"] },
+  },
+  {
+    id: "readonly-filesystem",
+    label: "Read-only filesystem example",
+    description: "Filesystem example requiring MCP_READ_ROOT; kept disabled until its root is configured.",
+    config: {
+      command: "npx",
+      args: ["-y", "@modelcontextprotocol/server-filesystem", "${MCP_READ_ROOT}"],
+      disabled: true,
+    },
+  },
+  {
+    id: "hotel",
+    label: "RollingGo hotel",
+    description: "Use the local RollingGo hotel MCP server built by KainClaw.",
+    config: {
+      command: "node",
+      args: ["${KAINCLAW_ROOT}/dist/mcp/rollinggoHotelServer.js"],
+    },
+  },
+];
 
 export class McpRegistry {
   constructor(
@@ -120,26 +176,46 @@ export class McpRegistry {
   }
 
   async importCodexServers(): Promise<McpRegistryImportResult> {
-    const codexServers = await readCodexMcpServers(this.codexConfigPath);
+    return this.importServers("codex");
+  }
+
+  async previewImport(
+    source: McpRegistryImportSource,
+    sourcePath?: string,
+  ): Promise<McpRegistryImportPreview> {
+    const resolvedSourcePath = resolveImportSourcePath(source, sourcePath, this.codexConfigPath);
+    const servers = await readImportServers(source, resolvedSourcePath);
+    const candidates: McpRegistryServerEntry[] = [];
+    const skipped: string[] = [];
+    for (const [name, config] of Object.entries(servers)) {
+      try {
+        validateServerName(name);
+        candidates.push(toServerEntry(name, config, resolvedSourcePath));
+      } catch {
+        skipped.push(name);
+      }
+    }
+    return { source, sourcePath: resolvedSourcePath, candidates, skipped };
+  }
+
+  async importServers(
+    source: McpRegistryImportSource,
+    sourcePath?: string,
+  ): Promise<McpRegistryImportResult> {
+    const preview = await this.previewImport(source, sourcePath);
     const workspaceRoot = this.requireWorkspaceRoot();
     const { document, configPath, servers, topLevelKey } = await readWorkspaceServers(workspaceRoot);
     const imported: McpRegistryServerEntry[] = [];
-    const skipped: string[] = [];
+    const skipped = [...preview.skipped];
 
-    for (const [name, config] of Object.entries(codexServers)) {
-      try {
-        validateServerName(name);
-      } catch {
-        skipped.push(name);
-        continue;
-      }
-
+    for (const candidate of preview.candidates) {
+      const { name } = candidate;
       if (servers[name]) {
         skipped.push(name);
         continue;
       }
 
-      servers[name] = normalizeConfigForWrite(config, workspaceRoot);
+      servers[name] = normalizeConfigForWrite(candidate.config, workspaceRoot);
       imported.push(toServerEntry(name, servers[name], configPath));
     }
 
@@ -148,6 +224,45 @@ export class McpRegistry {
     }
 
     return { imported, skipped };
+  }
+
+  async importClaudeServers(
+    source: "claude-desktop" | "claude-code" = "claude-desktop",
+    sourcePath?: string,
+  ): Promise<McpRegistryImportResult> {
+    return this.importServers(source, sourcePath);
+  }
+
+  listTemplates(): McpRegistryTemplate[] {
+    return MCP_REGISTRY_TEMPLATES.map(template => ({
+      ...template,
+      config: cloneConfig(template.config),
+    }));
+  }
+
+  async installTemplate(templateId: string, name = templateId): Promise<McpRegistryServerEntry> {
+    const template = MCP_REGISTRY_TEMPLATES.find(candidate => candidate.id === templateId);
+    if (!template) {
+      throw new Error(`Unknown MCP template: ${templateId}`);
+    }
+    await this.addServer(name, cloneConfig(template.config));
+    const server = (await this.listServers()).find(entry => entry.name === name);
+    if (!server) {
+      throw new Error(`MCP template ${templateId} was not written`);
+    }
+    return server;
+  }
+
+  async exportWorkspaceConfig(): Promise<string> {
+    const workspaceRoot = this.requireWorkspaceRoot();
+    const { document, configPath, servers, topLevelKey } = await readWorkspaceServers(workspaceRoot);
+    const exportDocument = {
+      ...document,
+      [topLevelKey]: Object.fromEntries(
+        Object.entries(servers).map(([name, config]) => [name, sanitizeConfigForExport(config)]),
+      ),
+    };
+    return `${JSON.stringify(exportDocument, null, 2)}\n`;
   }
 
   private resolveWorkspaceRoot(): string {
@@ -239,6 +354,66 @@ async function readCodexMcpServers(codexConfigPath: string): Promise<Record<stri
   return parseCodexMcpToml(raw);
 }
 
+async function readImportServers(
+  source: McpRegistryImportSource,
+  sourcePath: string,
+): Promise<Record<string, McpRegistryServerConfig>> {
+  if (source === "codex") {
+    return readCodexMcpServers(sourcePath);
+  }
+
+  const raw = await fs.readFile(sourcePath, "utf8");
+  const document = safeParseJsonDocument(raw);
+  return parseJsonMcpServers(document);
+}
+
+function parseJsonMcpServers(document: WorkspaceMcpDocument): Record<string, McpRegistryServerConfig> {
+  const rawServers = document.mcpServers ?? document.servers;
+  if (!rawServers || typeof rawServers !== "object" || Array.isArray(rawServers)) {
+    return {};
+  }
+
+  const result: Record<string, McpRegistryServerConfig> = {};
+  for (const [name, rawValue] of Object.entries(rawServers)) {
+    if (!rawValue || typeof rawValue !== "object" || Array.isArray(rawValue)) {
+      continue;
+    }
+    const rawConfig = rawValue as Record<string, unknown>;
+    const command = typeof rawConfig.command === "string" && rawConfig.command.trim()
+      ? rawConfig.command
+      : undefined;
+    const url = typeof rawConfig.url === "string" && rawConfig.url.trim()
+      ? rawConfig.url
+      : undefined;
+    if ((command && url) || (!command && !url)) {
+      continue;
+    }
+
+    if (command) {
+      result[name] = normalizeConfigForWrite({
+        type: "stdio",
+        command,
+        args: Array.isArray(rawConfig.args) ? rawConfig.args.map(String) : [],
+        cwd: typeof rawConfig.cwd === "string" ? rawConfig.cwd : undefined,
+        env: sanitizeImportedEnv(rawConfig.env),
+        disabled: rawConfig.disabled === true,
+      });
+      continue;
+    }
+
+    result[name] = normalizeConfigForWrite({
+      type: normalizeRemoteType(rawConfig.type ?? rawConfig.transport),
+      url,
+      headers: importCodexHeaders(rawConfig),
+      oauth: rawConfig.oauth && typeof rawConfig.oauth === "object" && !Array.isArray(rawConfig.oauth)
+        ? toMcpOAuthConfig(rawConfig.oauth as Record<string, unknown>)
+        : undefined,
+      disabled: rawConfig.disabled === true,
+    });
+  }
+  return result;
+}
+
 function parseCodexMcpToml(text: string): Record<string, McpRegistryServerConfig> {
   const document = parseTomlSubset(text);
   const root = document.mcp_servers;
@@ -255,7 +430,7 @@ function parseCodexMcpToml(text: string): Record<string, McpRegistryServerConfig
     const rawConfig = value as Record<string, unknown>;
     if (typeof rawConfig.command === "string" && rawConfig.command.trim()) {
       const env = rawConfig.env && typeof rawConfig.env === "object" && !Array.isArray(rawConfig.env)
-        ? toStringRecord(rawConfig.env as Record<string, unknown>)
+        ? sanitizeImportedEnv(rawConfig.env)
         : undefined;
       const args = Array.isArray(rawConfig.args)
         ? rawConfig.args.map(item => String(item))
@@ -411,6 +586,63 @@ function importCodexHeaders(rawConfig: Record<string, unknown>): Record<string, 
   }
 
   return Object.keys(result).length > 0 ? result : undefined;
+}
+
+function sanitizeImportedEnv(value: unknown): Record<string, string> | undefined {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return undefined;
+  }
+  const result: Record<string, string> = {};
+  for (const [key, entry] of Object.entries(toStringRecord(value as Record<string, unknown>))) {
+    if (!isSensitiveHeader(key) || containsEnvironmentPlaceholder(entry)) {
+      result[key] = entry;
+    }
+  }
+  return Object.keys(result).length > 0 ? result : undefined;
+}
+
+function sanitizeConfigForExport(config: McpRegistryServerConfig): McpRegistryServerConfig {
+  const result = cloneConfig(config);
+  if (result.env) {
+    result.env = redactStringRecord(result.env);
+  }
+  if (result.headers) {
+    result.headers = redactStringRecord(result.headers);
+  }
+  return result;
+}
+
+function redactStringRecord(value: Record<string, string>): Record<string, string> {
+  return Object.fromEntries(Object.entries(value).map(([key, entry]) => [
+    key,
+    isSensitiveHeader(key) && !containsEnvironmentPlaceholder(entry) ? "[REDACTED]" : entry,
+  ]));
+}
+
+function cloneConfig(config: McpRegistryServerConfig): McpRegistryServerConfig {
+  return {
+    ...config,
+    ...(config.args ? { args: [...config.args] } : {}),
+    ...(config.env ? { env: { ...config.env } } : {}),
+    ...(config.headers ? { headers: { ...config.headers } } : {}),
+    ...(config.oauth ? { oauth: { ...config.oauth } } : {}),
+  };
+}
+
+function resolveImportSourcePath(
+  source: McpRegistryImportSource,
+  sourcePath: string | undefined,
+  codexConfigPath: string,
+): string {
+  if (sourcePath?.trim()) {
+    return sourcePath.trim();
+  }
+  if (source === "codex") {
+    return codexConfigPath;
+  }
+  return source === "claude-code"
+    ? DEFAULT_CLAUDE_CODE_CONFIG_PATH
+    : DEFAULT_CLAUDE_DESKTOP_CONFIG_PATH;
 }
 
 function toMcpOAuthConfig(value: Record<string, unknown>): McpOAuthConfig {
