@@ -208,6 +208,9 @@ describe("Electron renderer settings", () => {
     expect(html).toContain("type: 'mcp:add'");
     expect(html).toContain("type: 'mcp:set-enabled'");
     expect(html).toContain("type: 'mcp:remove'");
+    expect(html).toContain("type: 'mcp:login'");
+    expect(html).toContain("type: 'mcp:logout'");
+    expect(html).toContain("case 'mcp:auth':");
     expect(html).toContain("function renderMcpServers(servers, registryServers, error)");
     expect(html).toContain("if (id === 'mcp') {\n    refreshMcp();");
   });

@@ -388,6 +388,46 @@ describe("McpRuntime config discovery cache", () => {
     expect(result.content).not.toContain("browser-based OAuth flow");
   });
 
+  it("rejects unsupported OAuth targets and clears stored credentials on logout", async () => {
+    const workspaceRoot = await fs.mkdtemp(path.join(os.tmpdir(), "cain-mcp-runtime-logout-"));
+    tempDirs.push(workspaceRoot);
+    await fs.writeFile(
+      path.join(workspaceRoot, ".mcp.json"),
+      JSON.stringify({
+        mcpServers: {
+          stdio: { command: "node" },
+          remote: { type: "http", url: "https://remote.example.com/mcp" },
+        },
+      }),
+      "utf8",
+    );
+
+    const oauthHost = new FakeMcpOAuthHost();
+    const provider = createMcpOAuthClientProvider({
+      serverName: "remote",
+      config: { kind: "streamable-http", url: "https://remote.example.com/mcp" },
+      host: oauthHost,
+      redirectUrl: "http://localhost:3118/callback",
+    });
+    await provider.saveTokens({
+      access_token: "access-token",
+      refresh_token: "refresh-token",
+      expires_in: 3600,
+      token_type: "Bearer",
+    });
+
+    const runtime = new McpRuntime(() => workspaceRoot, {}, oauthHost);
+    await expect(runtime.authenticateServer("stdio")).rejects.toThrow(/does not support OAuth/);
+
+    vi.stubGlobal("fetch", vi.fn(async () => {
+      throw new Error("offline");
+    }));
+    await runtime.logoutServer("remote");
+    vi.unstubAllGlobals();
+
+    await expect(provider.tokens()).resolves.toBeUndefined();
+  });
+
   it("skips reconnect probes when OAuth discovery exists but no token is stored", async () => {
     const workspaceRoot = await fs.mkdtemp(path.join(os.tmpdir(), "cain-mcp-runtime-needs-auth-cache-"));
     tempDirs.push(workspaceRoot);

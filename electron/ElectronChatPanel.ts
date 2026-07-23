@@ -1600,6 +1600,8 @@ export class ElectronChatPanel {
     if (type === "mcp:add") { await this.changeMcpRegistry("add", message); return; }
     if (type === "mcp:set-enabled") { await this.changeMcpRegistry("set-enabled", message); return; }
     if (type === "mcp:remove") { await this.changeMcpRegistry("remove", message); return; }
+    if (type === "mcp:login") { await this.changeMcpAuthentication("login", message); return; }
+    if (type === "mcp:logout") { await this.changeMcpAuthentication("logout", message); return; }
   }
 
   // ─── Ready ──────────────────────────────────────────────────────────────────
@@ -4397,6 +4399,41 @@ export class ElectronChatPanel {
       }
 
       this.mcpRuntime.markConfigDirty();
+      this.sendToRenderer({ type: "mcp:operation", action, ok: true });
+    } catch (error) {
+      this.sendToRenderer({
+        type: "mcp:operation",
+        action,
+        ok: false,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+
+    await this.refreshMcpStatus();
+  }
+
+  private async changeMcpAuthentication(
+    action: "login" | "logout",
+    message: Record<string, unknown>,
+  ): Promise<void> {
+    const name = String(message.name ?? "");
+    try {
+      if (action === "login") {
+        this.sendToRenderer({ type: "mcp:auth", action, name, state: "starting" });
+        await this.mcpRuntime.authenticateServer(name, {
+          onAuthorizationUrl: authorizationUrl => {
+            this.sendToRenderer({
+              type: "mcp:auth",
+              action,
+              name,
+              state: "authorizing",
+              authorizationUrl,
+            });
+          },
+        });
+      } else {
+        await this.mcpRuntime.logoutServer(name);
+      }
       this.sendToRenderer({ type: "mcp:operation", action, ok: true });
     } catch (error) {
       this.sendToRenderer({

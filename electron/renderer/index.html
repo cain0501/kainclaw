@@ -1368,6 +1368,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-seri
       </div>
     </div>
     <div id="mcp-feedback" style="display:none;margin-bottom:12px;font-size:12px;line-height:1.5"></div>
+    <div id="mcp-auth-link" style="display:none;margin:-4px 0 12px;font-size:12px;line-height:1.5"></div>
     <section id="mcp-add-form" style="display:none;margin-bottom:16px;border:1px solid #d4d4d8;border-radius:8px;padding:14px">
       <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px">
         <div id="mcp-add-form-title" style="flex:1;font-size:13px;font-weight:600">添加 MCP 服务器</div>
@@ -3241,6 +3242,13 @@ function getMcpStrings() {
         enable: 'Enable',
         disable: 'Disable',
         remove: 'Remove',
+        login: 'Log in',
+        logout: 'Log out',
+        loginStarting: 'Starting MCP authorization...',
+        loginContinue: 'Complete authorization in your browser.',
+        loginComplete: 'MCP authorization completed.',
+        logoutComplete: 'MCP credentials cleared.',
+        openAuthorizationLink: 'Open authorization page',
         disabled: 'Disabled',
         unavailable: 'Not connected',
         source: 'Source',
@@ -3273,6 +3281,13 @@ function getMcpStrings() {
         enable: '启用',
         disable: '禁用',
         remove: '删除',
+        login: '登录',
+        logout: '退出登录',
+        loginStarting: '正在启动 MCP 授权...',
+        loginContinue: '请在浏览器中完成授权。',
+        loginComplete: 'MCP 授权已完成。',
+        logoutComplete: 'MCP 凭据已清除。',
+        openAuthorizationLink: '打开授权页面',
         disabled: '已禁用',
         unavailable: '未连接',
         source: '来源',
@@ -3941,10 +3956,27 @@ function handleMessage(msg) {
       break;
     case 'mcp:operation':
       if (msg.ok) {
-        hideMcpAddForm();
-        setMcpFeedback(isEnglishUi() ? 'MCP configuration saved.' : 'MCP 配置已保存。', false);
+        if (msg.action === 'login') {
+          clearMcpAuthorizationLink();
+          setMcpFeedback(getMcpStrings().loginComplete, false);
+        } else if (msg.action === 'logout') {
+          clearMcpAuthorizationLink();
+          setMcpFeedback(getMcpStrings().logoutComplete, false);
+        } else {
+          hideMcpAddForm();
+          setMcpFeedback(isEnglishUi() ? 'MCP configuration saved.' : 'MCP 配置已保存。', false);
+        }
       } else {
         setMcpFeedback(String(msg.error || (isEnglishUi() ? 'MCP configuration failed.' : 'MCP 配置操作失败。')), true);
+      }
+      break;
+    case 'mcp:auth':
+      if (msg.state === 'starting') {
+        clearMcpAuthorizationLink();
+        setMcpFeedback(getMcpStrings().loginStarting, false);
+      } else if (msg.state === 'authorizing') {
+        setMcpAuthorizationLink(String(msg.authorizationUrl || ''));
+        setMcpFeedback(getMcpStrings().loginContinue, false);
       }
       break;
     case 'tool:start':
@@ -8762,6 +8794,42 @@ function setMcpFeedback(message, isError) {
   feedback.style.display = message ? 'block' : 'none';
   feedback.style.color = isError ? '#b91c1c' : '#166534';
   feedback.textContent = message || '';
+}
+
+function setMcpAuthorizationLink(authorizationUrl) {
+  const container = document.getElementById('mcp-auth-link');
+  if (!container) return;
+  container.replaceChildren();
+  try {
+    const url = new URL(authorizationUrl);
+    if (url.protocol !== 'https:' && url.protocol !== 'http:') throw new Error('Unsupported protocol');
+    const link = document.createElement('a');
+    link.href = url.toString();
+    link.target = '_blank';
+    link.rel = 'noopener noreferrer';
+    link.textContent = getMcpStrings().openAuthorizationLink;
+    link.style.color = '#2563eb';
+    link.style.textDecoration = 'underline';
+    container.append(link);
+    container.style.display = 'block';
+  } catch {
+    container.style.display = 'none';
+  }
+}
+
+function clearMcpAuthorizationLink() {
+  const container = document.getElementById('mcp-auth-link');
+  if (!container) return;
+  container.replaceChildren();
+  container.style.display = 'none';
+}
+
+function loginMcpServer(name) {
+  send({ type: 'mcp:login', name });
+}
+
+function logoutMcpServer(name) {
+  send({ type: 'mcp:logout', name });
 }
 
 function clearChat() {
@@ -16054,6 +16122,7 @@ function renderMcpServers(servers, registryServers, error) {
     const location = config.command || config.url || '';
     const source = entry.sourcePath ? `${strings.source}: ${entry.sourcePath}` : '';
     const escapedName = JSON.stringify(String(entry.name || ''));
+    const isRemote = entry.transport === 'streamable-http' || entry.transport === 'sse';
     return `<div class="list-row" style="flex-direction:column;align-items:stretch;gap:4px">
       <div style="display:flex;align-items:center;gap:8px">
         <div style="flex:1;min-width:0"><div style="font-size:13px;font-weight:600">${escapeHtml(entry.name || '')}</div>
@@ -16063,6 +16132,7 @@ function renderMcpServers(servers, registryServers, error) {
       ${source ? `<div style="font-size:11px;color:#71717a;overflow-wrap:anywhere">${escapeHtml(source)}</div>` : ''}
       ${status?.error ? `<div style="font-size:11px;color:#b91c1c;padding:4px 0">${escapeHtml(status.error)}</div>` : ''}
       <div style="display:flex;justify-content:flex-end;gap:6px;margin-top:2px">
+        ${isEnabled && isRemote ? `<button class="btn-secondary" onclick="loginMcpServer(${escapedName})">${strings.login}</button><button class="btn-secondary" onclick="logoutMcpServer(${escapedName})">${strings.logout}</button>` : ''}
         <button class="btn-secondary" onclick="setMcpServerEnabled(${escapedName}, ${isEnabled ? 'false' : 'true'})">${isEnabled ? strings.disable : strings.enable}</button>
         <button class="btn-secondary" onclick="removeMcpServer(${escapedName})">${strings.remove}</button>
       </div>

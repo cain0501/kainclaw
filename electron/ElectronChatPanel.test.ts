@@ -34,12 +34,18 @@ import { ElectronChatPanel } from "./ElectronChatPanel";
 import { routeIntentWithLLM } from "../src/imageGeneration/llmIntentRouter";
 
 const execFileAsync = promisify(execFile);
-const { mockedBuiltinToolDefinitions } = vi.hoisted(() => ({
+const {
+  mockedBuiltinToolDefinitions,
+  mockedMcpRuntimeAuthenticate,
+  mockedMcpRuntimeLogout,
+} = vi.hoisted(() => ({
   mockedBuiltinToolDefinitions: [] as Array<{
     name: string;
     description?: string;
     input_schema?: unknown;
   }>,
+  mockedMcpRuntimeAuthenticate: vi.fn(),
+  mockedMcpRuntimeLogout: vi.fn(),
 }));
 
 vi.mock("../src/platform/electronHostAdapter", () => ({
@@ -52,6 +58,18 @@ vi.mock("../src/mcpRuntime", () => ({
 
     async getStatusSummary(): Promise<unknown[]> {
       return [];
+    }
+
+    async authenticateServer(
+      name: string,
+      options?: { onAuthorizationUrl?: (url: string) => void },
+    ): Promise<void> {
+      options?.onAuthorizationUrl?.(`https://auth.example.com/authorize?server=${encodeURIComponent(name)}`);
+      await mockedMcpRuntimeAuthenticate(name);
+    }
+
+    async logoutServer(name: string): Promise<void> {
+      await mockedMcpRuntimeLogout(name);
     }
   },
 }));
@@ -384,6 +402,36 @@ describe("ElectronChatPanel session lifecycle", () => {
       registryServers?: Array<{ name: string; enabled: boolean }>;
     }>(harness.rendererPayloads, "mcp:status");
     expect(status?.registryServers).toEqual([]);
+  });
+
+  it("forwards MCP OAuth login and logout through dedicated IPC actions", async () => {
+    const harness = await createHarness();
+    tempDirs.push(harness.storagePath);
+
+    await harness.panel.handleMessage({ type: "mcp:login", name: "remote-server" });
+
+    expect(mockedMcpRuntimeAuthenticate).toHaveBeenCalledWith("remote-server");
+    expect(harness.rendererPayloads).toContainEqual(expect.objectContaining({
+      type: "mcp:auth",
+      action: "login",
+      name: "remote-server",
+      state: "authorizing",
+      authorizationUrl: "https://auth.example.com/authorize?server=remote-server",
+    }));
+    expect(harness.rendererPayloads).toContainEqual(expect.objectContaining({
+      type: "mcp:operation",
+      action: "login",
+      ok: true,
+    }));
+
+    await harness.panel.handleMessage({ type: "mcp:logout", name: "remote-server" });
+
+    expect(mockedMcpRuntimeLogout).toHaveBeenCalledWith("remote-server");
+    expect(harness.rendererPayloads).toContainEqual(expect.objectContaining({
+      type: "mcp:operation",
+      action: "logout",
+      ok: true,
+    }));
   });
 
   it("keeps an in-flight reply attached to the session that started it", async () => {

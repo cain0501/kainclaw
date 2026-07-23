@@ -14,6 +14,7 @@ import {
   type McpOAuthConfig,
   type McpOAuthHost,
   performMcpOAuthFlow,
+  revokeServerTokens,
 } from "./mcpOAuth";
 import {
   dedupeToolDefinitionsByName,
@@ -680,6 +681,38 @@ export class McpRuntime implements McpToolAdapter {
     return Array.from(this.serverStatuses.values()).sort((left, right) => left.name.localeCompare(right.name));
   }
 
+  async authenticateServer(
+    serverName: string,
+    options: {
+      onAuthorizationUrl?: (url: string) => void;
+      abortSignal?: AbortSignal;
+    } = {},
+  ): Promise<void> {
+    await this.refreshConfig();
+    const target = this.resolveOAuthRemoteServer(serverName);
+
+    await performMcpOAuthFlow({
+      serverName: target.serverName,
+      config: target.config,
+      host: this.oauthHost!,
+      onAuthorizationUrl: options.onAuthorizationUrl ?? (() => undefined),
+      abortSignal: options.abortSignal,
+    });
+    await this.resetServerAuthenticationState(target.serverName);
+  }
+
+  async logoutServer(serverName: string): Promise<void> {
+    await this.refreshConfig();
+    const target = this.resolveOAuthRemoteServer(serverName);
+
+    await revokeServerTokens({
+      host: this.oauthHost!,
+      serverName: target.serverName,
+      config: target.config,
+    });
+    await this.resetServerAuthenticationState(target.serverName);
+  }
+
   async executeTool(name: string, input: ToolInput, context: ToolContext): Promise<ToolExecutionResult> {
     await this.refreshConfig();
 
@@ -726,27 +759,16 @@ export class McpRuntime implements McpToolAdapter {
     }
 
     if (metadata.kind === "auth-placeholder") {
-      if (!this.oauthHost) {
-        return this.describeMcpAuthentication(metadata.serverName, config);
+      try {
+        await this.authenticateServer(metadata.serverName, {
+          abortSignal: context.abortSignal,
+        });
+      } catch (error) {
+        if (!this.oauthHost || config.kind === "stdio" || config.oauth?.xaa) {
+          return this.describeMcpAuthentication(metadata.serverName, config);
+        }
+        throw error;
       }
-      if (config.kind === "stdio") {
-        return this.describeMcpAuthentication(metadata.serverName, config);
-      }
-      if (config.oauth?.xaa) {
-        return this.describeMcpAuthentication(metadata.serverName, config);
-      }
-
-      await performMcpOAuthFlow({
-        serverName: metadata.serverName,
-        config,
-        host: this.oauthHost,
-        onAuthorizationUrl: () => undefined,
-        abortSignal: context.abortSignal,
-      });
-      await this.closeConnection(metadata.serverName);
-      this.serverStatuses.delete(metadata.serverName);
-      this.cachedToolDefinitions = undefined;
-      this.cachedPromptCommands = undefined;
 
       return {
         summary: `Authenticated MCP server ${metadata.serverName}`,
@@ -937,6 +959,39 @@ export class McpRuntime implements McpToolAdapter {
           ? "Call the authenticate tool to start the browser-based OAuth flow. Once the browser callback completes, the server's real tools can be reloaded immediately."
           : "This host cannot launch the OAuth browser flow, so configure the server token/headers manually and reconnect the MCP server."),
     };
+  }
+
+  private resolveOAuthRemoteServer(serverName: string): {
+    serverName: string;
+    config: Extract<ResolvedServerConfig, { kind: "streamable-http" | "sse" }>;
+  } {
+    const normalizedServerName = this.resolveConfiguredServerName(serverName.trim());
+    if (!normalizedServerName) {
+      throw new Error("MCP server name is required");
+    }
+
+    const config = this.serverConfigs.get(normalizedServerName);
+    if (!config) {
+      throw new Error(this.buildUnknownServerMessage(normalizedServerName));
+    }
+    if (config.kind !== "streamable-http" && config.kind !== "sse") {
+      throw new Error(`MCP server "${normalizedServerName}" does not support OAuth`);
+    }
+    if (!this.oauthHost) {
+      throw new Error("This host cannot launch the MCP OAuth flow");
+    }
+    if (config.oauth?.xaa) {
+      throw new Error(`MCP server "${normalizedServerName}" uses unsupported XAA OAuth`);
+    }
+
+    return { serverName: normalizedServerName, config };
+  }
+
+  private async resetServerAuthenticationState(serverName: string): Promise<void> {
+    await this.closeConnection(serverName);
+    this.serverStatuses.delete(serverName);
+    this.cachedToolDefinitions = undefined;
+    this.cachedPromptCommands = undefined;
   }
 
   async dispose(): Promise<void> {

@@ -8,7 +8,9 @@ Date: 2026-07-16
 - 2026-07-23: Phase 1 is complete. `McpRegistry` provides workspace MCP list/add/update/remove/enable/disable/validation and Codex TOML import; imports preserve environment references and do not copy static authentication secrets.
 - 2026-07-23：Phase 2 已完成。现有 Electron MCP 页面可以添加 stdio、HTTP 和 SSE server，显示配置来源和实时连接状态，并支持刷新、启用/禁用和删除。
 - 2026-07-23: Phase 2 is complete. The existing Electron MCP page can add stdio, HTTP, and SSE servers, shows configuration source plus live connection state, and supports refresh, enable/disable, and remove.
-- 下一步 / Next: Phase 3 Auth, Approval, and Permission Hardening.
+- 2026-07-23：Phase 3a 已完成。Electron MCP 页面支持 remote server 登录/退出登录，显示浏览器 OAuth 授权链接；token 存储、回调校验和撤销仍由 `McpRuntime` / `mcpOAuth` 处理。
+- 2026-07-23: Phase 3a is complete. The Electron MCP page supports remote-server login/logout and surfaces the browser OAuth authorization link; token storage, callback validation, and revocation remain in `McpRuntime` / `mcpOAuth`.
+- 下一步 / Next: Phase 3b project MCP approval, then Phase 3c persistent permissions.
 
 ## 中文版
 
