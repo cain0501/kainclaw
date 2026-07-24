@@ -9,10 +9,10 @@
 
 | Metric | Value | Last Updated |
 |--------|-------|--------------|
-| Test files | 185 | 2026-07-23 |
-| Tests passing | 1537 | 2026-07-23 |
+| Test files | 189 | 2026-07-24 |
+| Tests passing | 1543 | 2026-07-24 |
 | Last verified commit | see `git log --oneline -1` | — |
-| Last clean verification | 2026-07-23 — Electron MCP permission rules | — |
+| Last clean verification | 2026-07-24 — inbound MCP bridge and grants | — |
 
 **Required passing commands:**
 ```bash
@@ -194,7 +194,9 @@ npm run build:electron   # only when Electron behavior changed
 
 ## Current Focus
 
-- **MCP Phase 6c closed (`vscode-extension-gpf4.8`)**: the inbound approval and execution contract now requires a current-user Windows named-pipe bridge to the running Electron host, per-connection registration, short-lived user-visible grants, and ephemeral provider context keyed to the inbound session. The external stdio server never receives desktop provider credentials or session storage. Phase 6d is bounded to this bridge plus the text-only `kainclaw_chat` path.
+- **MCP Phase 6d.1 closed (`vscode-extension-gpf4.9`)**: Electron now owns an in-memory inbound MCP grant broker and a local named-pipe host. Each stdio server process must register before it starts, and every grant is bound to its pipe connection, server instance, tool, inbound session, scope, and 15-minute expiry. Electron presents Deny / Allow once / Allow for this inbound session through a native dialog; grants are consumed, revoked, expired, or cleared on disconnect. Node cannot configure a Windows pipe DACL through `net`, so a pipe connection carries no execution authority and no provider or desktop data. Phase 6d.2 must add a user-initiated revocation action, ephemeral text-only provider context, and `kainclaw_chat`.
+
+- **MCP Phase 6c closed (`vscode-extension-gpf4.8`)**: the inbound approval and execution contract requires Electron-owned grants, per-connection registration, and ephemeral provider context keyed to the inbound session. The external stdio server never receives desktop provider credentials or session storage. Phase 6d is bounded to this bridge plus the text-only `kainclaw_chat` path.
 
 - **MCP Phase 6b closed (`vscode-extension-gpf4.7`)**: each KainClaw MCP stdio server process now owns an isolated in-memory session namespace. External clients can open, list, and close only those ephemeral inbound sessions; no desktop `SessionRepository` data is imported, persisted, enumerated, or restored. A second server process starts empty. The next Phase 6 step must define user-visible approval and a session-scoped provider contract before adding `kainclaw_chat`.
 

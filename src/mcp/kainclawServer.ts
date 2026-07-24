@@ -6,6 +6,7 @@ import {
   KainClawInboundSessionStore,
   type KainClawInboundSession,
 } from "./kainclawInboundSessionStore";
+import { InboundMcpNamedPipeClient } from "../platform/inboundMcpNamedPipeBridge";
 
 export const kainClawServerInfo = {
   name: "kainclaw",
@@ -123,6 +124,11 @@ export function createKainClawMcpServer(
 }
 
 export async function runKainClawStdioServer(): Promise<void> {
+  // A server process cannot execute stateful work until it has registered with
+  // the Electron-owned bridge. The safe read-only tool declarations remain
+  // unchanged; future provider-backed tools will use this same connection.
+  const bridgeClient = new InboundMcpNamedPipeClient();
+  await bridgeClient.connect();
   const server = createKainClawMcpServer();
   await server.connect(new StdioServerTransport());
 }

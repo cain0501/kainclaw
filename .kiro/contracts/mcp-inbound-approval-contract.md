@@ -2,7 +2,7 @@
 
 ## Status
 
-Phase 6c decision record. This contract is required before adding a provider-backed inbound MCP tool such as `kainclaw_chat`.
+Phase 6c decision record. Phase 6d.1 implemented the broker, named-pipe bridge, and approval choices; this contract remains required before adding a provider-backed inbound MCP tool such as `kainclaw_chat`.
 
 ## Security Boundary
 
@@ -17,9 +17,11 @@ The running Electron desktop process is the only authority that may execute a pr
 
 ## Local Bridge
 
-Phase 6d introduces an `IInboundMcpExecutionBroker` in `src/platform/`. The Electron host implements it through a Windows named pipe restricted to the current Windows user.
+Phase 6d introduces an `IInboundMcpExecutionBroker` in `src/platform/`. The Electron host implements it through a Windows named pipe.
 
-The stdio server is launched by an external MCP client, not by Electron, so Electron cannot safely inject a launch secret. The bridge therefore relies on the current-user pipe ACL and a registration handshake. The bridge assigns a fresh connection ID after the server supplies a random `serverInstanceId`; reconnecting receives a new connection ID and invalidates prior grants.
+The stdio server is launched by an external MCP client, not by Electron, so Electron cannot safely inject a launch secret. The bridge assigns a fresh connection ID after the server supplies a random `serverInstanceId`; reconnecting receives a new connection ID and invalidates prior grants. The wire protocol binds every request to the registered pipe socket instead of trusting a caller-supplied connection ID.
+
+Node's `net` named-pipe API does not expose a Windows pipe-DACL option. Phase 6d.1 therefore does not claim OS-level current-user ACL enforcement. A local pipe connection is not execution authority: it receives no credentials or desktop data, and every stateful request still requires a visible, short-lived Electron grant. A future native host boundary may add an explicit Windows DACL if the product threat model requires process-level local isolation.
 
 The stdio server must fail closed when Electron is not running, the named pipe is unavailable, or bridge authentication fails.
 
@@ -39,7 +41,7 @@ For a requested tool call, the server asks the bridge to resolve a grant contain
 
 Electron shows the approval request in a dedicated MCP permission surface. It identifies the calling client, requested tool, prompt summary, and session label. The user can deny, allow once, or allow for the current inbound session. Grants expire after 15 minutes and are kept only in Electron memory.
 
-Electron revocation immediately invalidates matching grants. The server must ask again after denial, expiry, revocation, server restart, or inbound-session close.
+Electron revocation immediately invalidates matching grants. The server must ask again after denial, expiry, revocation, server restart, or inbound-session close. Phase 6d.1 implements connection-bound bridge revocation plus automatic cleanup on session close, disconnect, and Electron restart. A user-initiated revocation list/action must be delivered before `kainclaw_chat` is registered in Phase 6d.2.
 
 ## Inbound Session Scope
 
@@ -66,9 +68,9 @@ The stdio server receives only the normalized text response and a session-local 
 
 Phase 6d implements only the local bridge and `kainclaw_chat` text path:
 
-1. `IInboundMcpExecutionBroker` plus Electron named-pipe host.
-2. Server bridge client with challenge-response and fail-closed behavior.
-3. User-visible Electron approval surface and revocation action.
+1. `IInboundMcpExecutionBroker` plus Electron named-pipe host. **Implemented in 6d.1.**
+2. Server bridge client with registration and fail-closed behavior. **Implemented in 6d.1.**
+3. User-visible Electron approval surface and revocation action. **Approval implemented in 6d.1; user-initiated revocation remains a 6d.2 gate.**
 4. `kainclaw_chat` with per-inbound-session ephemeral model context.
 5. Unit tests for grant scope, expiry, denial, revocation, and bridge failure.
 6. Electron-plus-stdio smoke test proving one approved text turn and one denied turn.

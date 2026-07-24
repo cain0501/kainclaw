@@ -1,6 +1,6 @@
 import path from "node:path";
 import { promises as fs } from "node:fs";
-import { app, BrowserWindow, ipcMain, globalShortcut, dialog } from "electron";
+import { app, BrowserWindow, ipcMain, globalShortcut, dialog, type MessageBoxOptions } from "electron";
 import { ElectronHostAdapter } from "../src/platform/electronHostAdapter";
 import {
   ELECTRON_APP_NAME,
@@ -20,6 +20,11 @@ import { createPersistentLocalBridgeSessionResolver } from "../src/localBridge/l
 import { LocalBridgeRuntime } from "../src/localBridge/localBridgeRuntime";
 import type { DesktopRuntimeServices } from "../src/platform/desktopRuntimeServices";
 import type { BridgeProviderConfig } from "../src/platform/localBridgeRuntime";
+import {
+  InboundMcpExecutionBroker,
+  type InboundMcpGrantDecision,
+} from "../src/platform/inboundMcpExecutionBroker";
+import { InboundMcpNamedPipeHost } from "../src/platform/inboundMcpNamedPipeBridge";
 
 // ─── App state ────────────────────────────────────────────────────────────────
 
@@ -123,6 +128,7 @@ function createWindow(): void {
   });
 
   let localBridgeRuntime: LocalBridgeRuntime | undefined;
+  let inboundMcpPipeHost: InboundMcpNamedPipeHost | undefined;
   try {
     const storagePath = resolveElectronStoragePath(app.getPath("userData"));
 
@@ -168,6 +174,33 @@ function createWindow(): void {
       loadAuthToken: () => host.getState<string>("cain.localBridgeAuthToken"),
       saveAuthToken: authToken => host.setState("cain.localBridgeAuthToken", authToken),
     });
+    const inboundMcpBroker = new InboundMcpExecutionBroker({
+      requestApproval: async request => {
+        const options: MessageBoxOptions = {
+          type: "question",
+          title: "KainClaw MCP permission",
+          message: `Allow external MCP tool ${request.toolName}?`,
+          detail: [
+            `Client: ${request.serverInstanceId}`,
+            `Inbound session: ${request.sessionLabel || request.sessionId}`,
+            `Request: ${request.promptSummary.slice(0, 1_000)}`,
+          ].join("\n"),
+          buttons: ["Deny", "Allow once", "Allow for this inbound session"],
+          defaultId: 0,
+          cancelId: 0,
+          noLink: true,
+        };
+        const result = mainWindow
+          ? await dialog.showMessageBox(mainWindow, options)
+          : await dialog.showMessageBox(options);
+        const decisions: InboundMcpGrantDecision[] = ["deny", "once", "session"];
+        return decisions[result.response] ?? "deny";
+      },
+    });
+    inboundMcpPipeHost = new InboundMcpNamedPipeHost(inboundMcpBroker);
+    void inboundMcpPipeHost.start().catch(error => {
+      console.error("[KainClaw] Failed to start inbound MCP bridge:", error);
+    });
 
     chatPanel = new ElectronChatPanel(
       sessions,
@@ -209,6 +242,11 @@ function createWindow(): void {
     if (localBridgeRuntime) {
       void localBridgeRuntime.stop().catch(error => {
         console.error("[KainClaw] Failed to stop local bridge runtime:", error);
+      });
+    }
+    if (inboundMcpPipeHost) {
+      void inboundMcpPipeHost.stop().catch(error => {
+        console.error("[KainClaw] Failed to stop inbound MCP bridge:", error);
       });
     }
     mainWindow = null;
