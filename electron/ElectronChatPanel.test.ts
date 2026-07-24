@@ -459,6 +459,52 @@ describe("ElectronChatPanel session lifecycle", () => {
     expect(exported?.content).not.toContain("literal-secret");
   });
 
+  it("keeps Codex-imported MCP server controls actionable", async () => {
+    const harness = await createHarness();
+    tempDirs.push(harness.storagePath);
+    await harness.panel.handleMessage({ type: "workspace:set", root: harness.storagePath });
+    const codexConfigPath = path.join(harness.storagePath, "codex.toml");
+    await writeFile(
+      codexConfigPath,
+      '[mcp_servers.codex-server]\ncommand = "node"\nargs = ["server.js"]\n',
+      "utf8",
+    );
+
+    await harness.panel.handleMessage({
+      type: "mcp:import",
+      source: "codex",
+      sourcePath: codexConfigPath,
+    });
+    let status = getLastRendererPayloadOfType<{
+      registryServers?: Array<{ name: string; enabled: boolean; approval: string }>;
+    }>(harness.rendererPayloads, "mcp:status");
+    expect(status?.registryServers).toEqual([
+      expect.objectContaining({ name: "codex-server", enabled: true, approval: "unapproved" }),
+    ]);
+
+    await harness.panel.handleMessage({ type: "mcp:approve", name: "codex-server" });
+    status = getLastRendererPayloadOfType<{
+      registryServers?: Array<{ name: string; enabled: boolean; approval: string }>;
+    }>(harness.rendererPayloads, "mcp:status");
+    expect(status?.registryServers).toEqual([
+      expect.objectContaining({ name: "codex-server", enabled: true, approval: "approved" }),
+    ]);
+
+    await harness.panel.handleMessage({ type: "mcp:set-enabled", name: "codex-server", enabled: false });
+    status = getLastRendererPayloadOfType<{
+      registryServers?: Array<{ name: string; enabled: boolean; approval: string }>;
+    }>(harness.rendererPayloads, "mcp:status");
+    expect(status?.registryServers).toEqual([
+      expect.objectContaining({ name: "codex-server", enabled: false, approval: "approved" }),
+    ]);
+
+    await harness.panel.handleMessage({ type: "mcp:remove", name: "codex-server" });
+    status = getLastRendererPayloadOfType<{
+      registryServers?: Array<{ name: string }>;
+    }>(harness.rendererPayloads, "mcp:status");
+    expect(status?.registryServers).toEqual([]);
+  });
+
   it("forwards MCP OAuth login and logout through dedicated IPC actions", async () => {
     const harness = await createHarness();
     tempDirs.push(harness.storagePath);

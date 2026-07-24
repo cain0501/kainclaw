@@ -212,6 +212,7 @@ describe("Electron renderer settings", () => {
     expect(html).toContain("type: 'mcp:logout'");
     expect(html).toContain("case 'mcp:auth':");
     expect(html).toContain("function renderMcpServers(servers, registryServers, error)");
+    expect(html).toContain("const escapedName = escapeHtml(JSON.stringify(String(entry.name || '')));");
     expect(html).toContain("if (id === 'mcp') {\n    refreshMcp();");
   });
 

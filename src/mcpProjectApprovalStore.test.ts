@@ -47,6 +47,22 @@ describe("McpProjectApprovalStore", () => {
       .toBe("unapproved");
   });
 
+  it("keeps approval when only the enabled state changes", async () => {
+    const storageRoot = await fs.mkdtemp(path.join(os.tmpdir(), "cain-mcp-approval-"));
+    tempDirs.push(storageRoot);
+    const store = new McpProjectApprovalStore(storageRoot);
+    const target = {
+      workspaceRoot: "E:\\work\\demo",
+      configPath: "E:\\work\\demo\\.mcp.json",
+      serverName: "filesystem",
+      config: { command: "npx", args: ["-y", "safe-server"] },
+    };
+
+    await store.approve(target);
+    expect(await store.getDecision({ ...target, config: { ...target.config, disabled: true } }))
+      .toBe("approved");
+  });
+
   it("keeps rejection until it is reset", async () => {
     const storageRoot = await fs.mkdtemp(path.join(os.tmpdir(), "cain-mcp-approval-"));
     tempDirs.push(storageRoot);

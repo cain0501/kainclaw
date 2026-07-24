@@ -10,9 +10,9 @@
 | Metric | Value | Last Updated |
 |--------|-------|--------------|
 | Test files | 190 | 2026-07-24 |
-| Tests passing | 1549 | 2026-07-24 |
+| Tests passing | 1552 | 2026-07-24 |
 | Last verified commit | see `git log --oneline -1` | — |
-| Last clean verification | 2026-07-24 — inbound MCP approved text chat | — |
+| Last clean verification | 2026-07-24 — imported MCP controls | — |
 
 **Required passing commands:**
 ```bash
@@ -62,6 +62,7 @@ npm run build:electron   # only when Electron behavior changed
 | vscode-extension-gpf4.1 | MCP Phase 3a: Electron OAuth login and logout |
 | vscode-extension-gpf4.2 | MCP Phase 3b: Require approval for workspace MCP servers |
 | vscode-extension-gpf4.3 | MCP Phase 3c: Persist server and tool permission rules |
+| vscode-extension-gpf4.11 | Fix unresponsive imported MCP controls |
 | vscode-extension-912h | KainClaw Electron MCP settings UI |
 | vscode-extension-piky | KainClaw MCP registry service and config CRUD |
 | vscode-extension-3yn | v3: sez regression — transient draft anchor clears on project switch |
@@ -193,6 +194,8 @@ npm run build:electron   # only when Electron behavior changed
 - `src/webviewHtml.ts` — large template string; fragile escaping
 
 ## Current Focus
+
+- **Imported MCP controls fixed (`vscode-extension-gpf4.11`)**: dynamically rendered MCP controls now HTML-escape their JSON string arguments, so `approve`, `reject`, enable/disable, and remove events reach Electron correctly. Approval identity ignores only the `disabled` operational flag, preserving an existing trust decision when a server is disabled while still invalidating it for connection configuration changes. Codex TOML import regression coverage and full quality gates passed.
 
 - **MCP Phase 6d.2 closed (`vscode-extension-gpf4.10`)**: `kainclaw_chat` is now registered only after its stdio server connects to Electron's inbound bridge. Every turn consumes a matching grant, runs the currently selected provider inside Electron with an empty tool list, and stores only text context in memory under the inbound server/session key. The stdio process receives only a local turn ID and normalized text. MCP page users can revoke all active inbound grants and clear the ephemeral contexts; no desktop sessions, provider configuration, credentials, thinking text, tool calls, or provider errors cross the bridge. Manual Electron-plus-stdio testing verified allow-once text reply, denial, session-scoped grant reuse without a second prompt, and revoke-then-reauthorize behavior.
 

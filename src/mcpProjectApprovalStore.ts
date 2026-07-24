@@ -103,13 +103,18 @@ export function buildApprovalIdentity(target: McpProjectApprovalTarget): {
   const configPath = canonicalizePath(target.configPath);
   const serverName = target.serverName.trim();
   const configFingerprint = createHash("sha256")
-    .update(stableStringify(target.config))
+    .update(stableStringify(withoutEnabledState(target.config)))
     .digest("hex");
   const key = createHash("sha256")
     .update(JSON.stringify({ workspaceRoot, configPath, serverName, configFingerprint }))
     .digest("hex");
 
   return { key, workspaceRoot, configPath, serverName, configFingerprint };
+}
+
+function withoutEnabledState(config: Record<string, unknown>): Record<string, unknown> {
+  const { disabled: _disabled, ...connectionConfig } = config;
+  return connectionConfig;
 }
 
 function canonicalizePath(value: string): string {

@@ -16313,7 +16313,8 @@ function renderMcpServers(servers, registryServers, error) {
     const config = entry.config || {};
     const location = config.command || config.url || '';
     const source = entry.sourcePath ? `${strings.source}: ${entry.sourcePath}` : '';
-    const escapedName = JSON.stringify(String(entry.name || ''));
+    // JSON.stringify supplies a JavaScript string literal; escape it again for the HTML attribute.
+    const escapedName = escapeHtml(JSON.stringify(String(entry.name || '')));
     const isRemote = entry.transport === 'streamable-http' || entry.transport === 'sse';
     return `<div class="list-row" style="flex-direction:column;align-items:stretch;gap:4px">
       <div style="display:flex;align-items:center;gap:8px">
