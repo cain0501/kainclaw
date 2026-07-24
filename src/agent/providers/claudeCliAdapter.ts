@@ -57,7 +57,9 @@ export class ClaudeCliAdapter implements IProviderAdapter {
     const prompt = buildClaudeCliPrompt(messages, this.systemPrompt);
 
     const sessionId = randomUUID();
-    const args = ["--print", "--output-format", "text", "--session-id", sessionId];
+    // A provider turn for KainClaw is text-only. Do not inherit the user's
+    // Claude MCP configuration, which can start unrelated local servers.
+    const args = ["--print", "--output-format", "text", "--strict-mcp-config", "--session-id", sessionId];
     if (this.config.model) args.push("--model", this.config.model);
 
     const child =

@@ -100,6 +100,7 @@ describe("Claude CLI adapter helpers", () => {
     expect(args).toContain("--print");
     expect(args).toContain("--output-format");
     expect(args).toContain("text");
+    expect(args).toContain("--strict-mcp-config");
     expect(args).not.toContain("Hello");
     expect(args).not.toContain("Hi there");
 
