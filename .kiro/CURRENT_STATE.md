@@ -194,6 +194,8 @@ npm run build:electron   # only when Electron behavior changed
 
 ## Current Focus
 
+- **MCP Phase 6c closed (`vscode-extension-gpf4.8`)**: the inbound approval and execution contract now requires a current-user Windows named-pipe bridge to the running Electron host, per-connection registration, short-lived user-visible grants, and ephemeral provider context keyed to the inbound session. The external stdio server never receives desktop provider credentials or session storage. Phase 6d is bounded to this bridge plus the text-only `kainclaw_chat` path.
+
 - **MCP Phase 6b closed (`vscode-extension-gpf4.7`)**: each KainClaw MCP stdio server process now owns an isolated in-memory session namespace. External clients can open, list, and close only those ephemeral inbound sessions; no desktop `SessionRepository` data is imported, persisted, enumerated, or restored. A second server process starts empty. The next Phase 6 step must define user-visible approval and a session-scoped provider contract before adding `kainclaw_chat`.
 
 - **MCP Phase 6a closed (`vscode-extension-gpf4.6`)**: KainClaw now has a standard stdio MCP server entrypoint at `dist/mcp/kainclawServer.js`. Its only current tool, `kainclaw_server_info`, is read-only and exposes static capability metadata only; it cannot read user sessions, memory, workspace data, or invoke chat/design/image workflows. A real MCP client smoke-tested tool discovery and invocation. Phase 6b must design session tokens, isolated inbound sessions, and approval scopes before exposing stateful capabilities.
