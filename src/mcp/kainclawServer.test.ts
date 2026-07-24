@@ -26,8 +26,12 @@ describe("KainClaw MCP server", () => {
   it("requests a desktop grant before returning an isolated text chat response", async () => {
     const sessions = new KainClawInboundSessionStore();
     const session = sessions.openSession("External client");
+    let grantRequests = 0;
     const bridge = {
-      requestGrant: async () => ({ ok: true, grant: { grantId: "grant-1" } }),
+      requestGrant: async () => {
+        grantRequests += 1;
+        return { ok: true, grant: { grantId: "grant-1", scope: "session" } };
+      },
       executeChat: async () => ({ ok: true, turnId: "turn-1", text: "Safe answer" }),
     } as unknown as import("../platform/inboundMcpNamedPipeBridge").InboundMcpNamedPipeClient;
     const handler = createKainClawChatHandler(sessions, bridge);
@@ -35,6 +39,8 @@ describe("KainClaw MCP server", () => {
     const response = await handler({ sessionId: session.sessionId, prompt: "Help me" });
     expect(response).toMatchObject({ content: [{ type: "text" }] });
     expect(JSON.parse((response.content[0] as { text: string }).text)).toEqual({ turnId: "turn-1", text: "Safe answer" });
+    await handler({ sessionId: session.sessionId, prompt: "Follow up" });
+    expect(grantRequests).toBe(1);
   });
 
   it("returns static server capability data without user state", async () => {

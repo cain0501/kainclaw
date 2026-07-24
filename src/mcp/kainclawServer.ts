@@ -69,6 +69,7 @@ export function createKainClawServerInfoHandler(): () => Promise<CallToolResult>
 export function createKainClawInboundSessionHandlers(
   sessionStore: KainClawInboundSessionStore,
   bridgeClient?: InboundMcpNamedPipeClient,
+  sessionGrants?: Map<string, string>,
 ): {
   openSession: (input: unknown) => Promise<CallToolResult>;
   listSessions: () => Promise<CallToolResult>;
@@ -92,6 +93,7 @@ export function createKainClawInboundSessionHandlers(
           content: [{ type: "text", text: JSON.stringify({ error: "Unknown inbound MCP session." }) }],
         };
       }
+      sessionGrants?.delete(sessionId);
       await bridgeClient?.closeSession(sessionId);
       return {
         content: [{ type: "text", text: JSON.stringify({ closedSessionId: sessionId }) }],
@@ -103,6 +105,7 @@ export function createKainClawInboundSessionHandlers(
 export function createKainClawChatHandler(
   sessionStore: KainClawInboundSessionStore,
   bridgeClient: InboundMcpNamedPipeClient,
+  sessionGrants = new Map<string, string>(),
 ): (input: unknown) => Promise<CallToolResult> {
   return async input => {
     const { sessionId, prompt } = chatInputSchema.parse(input);
@@ -110,17 +113,23 @@ export function createKainClawChatHandler(
     if (!session) {
       return { isError: true, content: [{ type: "text", text: JSON.stringify({ error: "Unknown inbound MCP session." }) }] };
     }
-    const grant = await bridgeClient.requestGrant({
-      toolName: "kainclaw_chat",
-      sessionId,
-      sessionLabel: session.label,
-      promptSummary: prompt.slice(0, 1_000),
-    });
-    if (!grant.ok) {
-      return { isError: true, content: [{ type: "text", text: JSON.stringify({ error: "KainClaw chat permission was not granted." }) }] };
+    let grantId = sessionGrants.get(sessionId);
+    if (!grantId) {
+      const grant = await bridgeClient.requestGrant({
+        toolName: "kainclaw_chat",
+        sessionId,
+        sessionLabel: session.label,
+        promptSummary: prompt.slice(0, 1_000),
+      });
+      if (!grant.ok) {
+        return { isError: true, content: [{ type: "text", text: JSON.stringify({ error: "KainClaw chat permission was not granted." }) }] };
+      }
+      grantId = grant.grant.grantId;
+      if (grant.grant.scope === "session") sessionGrants.set(sessionId, grantId);
     }
-    const result = await bridgeClient.executeChat(grant.grant.grantId, sessionId, prompt);
+    const result = await bridgeClient.executeChat(grantId, sessionId, prompt);
     if (!result.ok) {
+      sessionGrants.delete(sessionId);
       return { isError: true, content: [{ type: "text", text: JSON.stringify({ error: "KainClaw chat is unavailable." }) }] };
     }
     return { content: [{ type: "text", text: JSON.stringify({ turnId: result.turnId, text: result.text }) }] };
@@ -140,7 +149,8 @@ export function createKainClawMcpServer(
   const listSessionsTool = kainClawToolDefinitions[2]!;
   const closeSessionTool = kainClawToolDefinitions[3]!;
   const chatTool = kainClawToolDefinitions[4]!;
-  const sessionHandlers = createKainClawInboundSessionHandlers(sessionStore, bridgeClient);
+  const sessionGrants = new Map<string, string>();
+  const sessionHandlers = createKainClawInboundSessionHandlers(sessionStore, bridgeClient, sessionGrants);
   server.registerTool(infoTool.name, {
     title: "KainClaw server information",
     description: "Return the KainClaw MCP server transport and currently safe capabilities. This tool does not access user data.",
@@ -169,7 +179,7 @@ export function createKainClawMcpServer(
       description: "Request an approved text-only chat turn in an isolated inbound session.",
       inputSchema: chatInputSchema,
       annotations: chatTool.annotations,
-    }, createKainClawChatHandler(sessionStore, bridgeClient));
+    }, createKainClawChatHandler(sessionStore, bridgeClient, sessionGrants));
   }
   return server;
 }
