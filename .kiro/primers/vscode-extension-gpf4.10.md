@@ -45,9 +45,9 @@ Expose `kainclaw_chat` as the first provider-backed inbound MCP tool. It must ex
 
 ## Next Step
 
-**Do:** Manually smoke a configured provider through Electron and a stdio MCP client before expanding inbound capabilities.
+**Do:** Do not expand inbound capabilities without a new contract and primer.
 **Files:** No code change required.
-**Test:** Open KainClaw, use `kainclaw_open_session`, call `kainclaw_chat`, approve once, confirm text only; then repeat and deny; finally use MCP page "撤销外部授权" and confirm a session-scoped grant no longer runs.
+**Test:** Manual Electron-plus-stdio smoke passed: allow-once reply, denial, session-scoped reuse, and revoke-then-reauthorize.
 
 ## Definition Of Done
 
@@ -55,4 +55,4 @@ Expose `kainclaw_chat` as the first provider-backed inbound MCP tool. It must ex
 - [x] Provider execution is Electron-only, text-only, tool-free, and ephemeral.
 - [x] Users can revoke active inbound MCP grants from the MCP page.
 - [x] No desktop session, credential, provider metadata, or unsafe error crosses to stdio.
-- [ ] Tests, builds, task tracking, scoped commit, and push are complete.
+- [x] Tests, builds, task tracking, scoped commit, push, and configured-provider manual smoke are complete.
