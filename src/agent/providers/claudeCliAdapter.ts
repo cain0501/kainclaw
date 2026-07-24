@@ -60,7 +60,11 @@ export class ClaudeCliAdapter implements IProviderAdapter {
     // A provider turn for KainClaw is text-only. Do not inherit the user's
     // Claude MCP configuration, which can start unrelated local servers.
     const args = ["--print", "--output-format", "text", "--strict-mcp-config", "--session-id", sessionId];
-    if (this.config.model) args.push("--model", this.config.model);
+    const configuredModel = this.config.model?.trim();
+    // Provider-qualified model IDs belong to API adapters. Claude CLI expects
+    // its own aliases or model IDs and hangs on values such as
+    // "anthropic/claude-sonnet-4.6", so let the logged-in CLI choose its default.
+    if (configuredModel && !configuredModel.includes("/")) args.push("--model", configuredModel);
     // Claude Code 2.1.218 no longer consumes a plain text prompt from stdin
     // in print mode. Passing it as the final argument keeps the invocation
     // explicitly non-interactive.

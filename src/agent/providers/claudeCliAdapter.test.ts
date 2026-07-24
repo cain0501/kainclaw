@@ -28,6 +28,31 @@ describe("Claude CLI adapter helpers", () => {
     expect(getClaudeCliCommand("custom-claude", "win32")).toBe("custom-claude");
   });
 
+  it("does not pass provider-qualified model IDs to Claude CLI", async () => {
+    const stdout = new PassThrough();
+    const stderr = new PassThrough();
+    const child = new EventEmitter() as EventEmitter & {
+      stdout: PassThrough;
+      stderr: PassThrough;
+      stdin: PassThrough;
+      kill: ReturnType<typeof vi.fn>;
+    };
+    child.stdout = stdout;
+    child.stderr = stderr;
+    child.stdin = new PassThrough();
+    child.kill = vi.fn();
+    spawnMock.mockReturnValue(child);
+    const adapter = new ClaudeCliAdapter({ type: "claude-cli", model: "anthropic/claude-sonnet-4.6" }, "E:\\repo", {});
+    const stepPromise = adapter.runStep([{ role: "user", content: "Hello" }], [], () => {});
+
+    const [, args] = spawnMock.mock.calls[0] ?? [];
+    expect(args).not.toContain("--model");
+    stdout.end("OK.");
+    stderr.end();
+    child.emit("close", 0);
+    await expect(stepPromise).resolves.toMatchObject({ text: "OK." });
+  });
+
   it("builds a prompt from system instructions and conversation history", () => {
     const messages: NormalizedMessage[] = [
       { role: "user", content: "Hello" },
