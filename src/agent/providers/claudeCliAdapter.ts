@@ -61,6 +61,10 @@ export class ClaudeCliAdapter implements IProviderAdapter {
     // Claude MCP configuration, which can start unrelated local servers.
     const args = ["--print", "--output-format", "text", "--strict-mcp-config", "--session-id", sessionId];
     if (this.config.model) args.push("--model", this.config.model);
+    // Claude Code 2.1.218 no longer consumes a plain text prompt from stdin
+    // in print mode. Passing it as the final argument keeps the invocation
+    // explicitly non-interactive.
+    args.push(prompt);
 
     const child =
       process.platform === "win32"
@@ -88,8 +92,6 @@ export class ClaudeCliAdapter implements IProviderAdapter {
       child.stdout.on("data", (chunk: Buffer) => { stdout += chunk.toString(); });
       child.stderr.on("data", (chunk: Buffer) => { stderr += chunk.toString(); });
       child.on("error", err => { clearTimeout(handle); reject(err); });
-      child.stdin.write(prompt);
-      child.stdin.end();
       abortSignal?.addEventListener("abort", () => {
         child.kill();
         clearTimeout(handle);
