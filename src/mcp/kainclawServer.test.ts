@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   createKainClawInboundSessionHandlers,
+  createKainClawChatHandler,
   createKainClawServerInfoHandler,
   kainClawServerInfo,
   kainClawToolDefinitions,
@@ -14,11 +15,26 @@ describe("KainClaw MCP server", () => {
       "kainclaw_open_session",
       "kainclaw_list_sessions",
       "kainclaw_close_session",
+      "kainclaw_chat",
     ]);
     expect(kainClawToolDefinitions.filter(tool => tool.annotations.readOnlyHint)
       .map(tool => tool.name)).toEqual(["kainclaw_server_info", "kainclaw_list_sessions"]);
     expect(kainClawToolDefinitions.find(tool => tool.name === "kainclaw_close_session")?.annotations)
       .toMatchObject({ destructiveHint: true });
+  });
+
+  it("requests a desktop grant before returning an isolated text chat response", async () => {
+    const sessions = new KainClawInboundSessionStore();
+    const session = sessions.openSession("External client");
+    const bridge = {
+      requestGrant: async () => ({ ok: true, grant: { grantId: "grant-1" } }),
+      executeChat: async () => ({ ok: true, turnId: "turn-1", text: "Safe answer" }),
+    } as unknown as import("../platform/inboundMcpNamedPipeBridge").InboundMcpNamedPipeClient;
+    const handler = createKainClawChatHandler(sessions, bridge);
+
+    const response = await handler({ sessionId: session.sessionId, prompt: "Help me" });
+    expect(response).toMatchObject({ content: [{ type: "text" }] });
+    expect(JSON.parse((response.content[0] as { text: string }).text)).toEqual({ turnId: "turn-1", text: "Safe answer" });
   });
 
   it("returns static server capability data without user state", async () => {

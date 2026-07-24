@@ -15,7 +15,9 @@ describe("InboundMcpNamedPipeBridge", () => {
   it("registers, grants, validates, and fails closed after disconnect", async () => {
     const broker = new InboundMcpExecutionBroker({ requestApproval: async () => "once" });
     const pipePath = testPipePath();
-    const host = new InboundMcpNamedPipeHost(broker, pipePath);
+    const host = new InboundMcpNamedPipeHost(broker, pipePath, {
+      executeChat: async request => ({ turnId: "turn-1", text: `reply:${request.prompt}` }),
+    });
     await host.start();
     const client = new InboundMcpNamedPipeClient(pipePath);
     try {
@@ -39,6 +41,28 @@ describe("InboundMcpNamedPipeBridge", () => {
       client.close();
       await expect(client.requestGrant({ toolName: "kainclaw_chat", sessionId: "session-a", promptSummary: "again" }))
         .rejects.toBeInstanceOf(InboundMcpBridgeUnavailableError);
+    } finally {
+      client.close();
+      await host.stop();
+    }
+  });
+
+  it("consumes a matching chat grant before running the Electron callback", async () => {
+    const pipePath = testPipePath();
+    const broker = new InboundMcpExecutionBroker({ requestApproval: async () => "once" });
+    const host = new InboundMcpNamedPipeHost(broker, pipePath, {
+      executeChat: async request => ({ turnId: "turn-1", text: `reply:${request.prompt}` }),
+    });
+    await host.start();
+    const client = new InboundMcpNamedPipeClient(pipePath);
+    try {
+      await client.connect("server-a");
+      const grant = await client.requestGrant({ toolName: "kainclaw_chat", sessionId: "session-a", promptSummary: "hello" });
+      if (!grant.ok) throw new Error("Expected a grant");
+      await expect(client.executeChat(grant.grant.grantId, "session-a", "hello"))
+        .resolves.toEqual({ ok: true, turnId: "turn-1", text: "reply:hello" });
+      await expect(client.executeChat(grant.grant.grantId, "session-a", "again"))
+        .resolves.toEqual({ ok: false, error: "unavailable" });
     } finally {
       client.close();
       await host.stop();

@@ -71,4 +71,16 @@ describe("InboundMcpExecutionBroker", () => {
     expect(broker.validateGrant({ ...request(connection.connectionId, "server-a"), grantId: disconnected.grant.grantId }))
       .toEqual({ ok: false, reason: "unknown_grant" });
   });
+
+  it("revokes every active inbound grant on an explicit user action", async () => {
+    const broker = new InboundMcpExecutionBroker({ requestApproval: async () => "session" });
+    const connection = broker.register("server-a");
+    const first = await broker.requestGrant(request(connection.connectionId, "server-a"));
+    const second = await broker.requestGrant({ ...request(connection.connectionId, "server-a"), sessionId: "another-session" });
+    if (!first.ok || !second.ok) throw new Error("Expected grants");
+
+    expect(broker.revokeAllGrants()).toBe(2);
+    expect(broker.validateGrant({ ...request(connection.connectionId, "server-a"), grantId: first.grant.grantId }))
+      .toEqual({ ok: false, reason: "unknown_grant" });
+  });
 });

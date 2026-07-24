@@ -9,10 +9,10 @@
 
 | Metric | Value | Last Updated |
 |--------|-------|--------------|
-| Test files | 189 | 2026-07-24 |
-| Tests passing | 1543 | 2026-07-24 |
+| Test files | 190 | 2026-07-24 |
+| Tests passing | 1549 | 2026-07-24 |
 | Last verified commit | see `git log --oneline -1` | — |
-| Last clean verification | 2026-07-24 — inbound MCP bridge and grants | — |
+| Last clean verification | 2026-07-24 — inbound MCP approved text chat | — |
 
 **Required passing commands:**
 ```bash
@@ -193,6 +193,8 @@ npm run build:electron   # only when Electron behavior changed
 - `src/webviewHtml.ts` — large template string; fragile escaping
 
 ## Current Focus
+
+- **MCP Phase 6d.2 closed (`vscode-extension-gpf4.10`)**: `kainclaw_chat` is now registered only after its stdio server connects to Electron's inbound bridge. Every turn consumes a matching grant, runs the currently selected provider inside Electron with an empty tool list, and stores only text context in memory under the inbound server/session key. The stdio process receives only a local turn ID and normalized text. MCP page users can revoke all active inbound grants and clear the ephemeral contexts; no desktop sessions, provider configuration, credentials, thinking text, tool calls, or provider errors cross the bridge. A configured-provider Electron-plus-stdio manual smoke remains the final non-automated check.
 
 - **MCP Phase 6d.1 closed (`vscode-extension-gpf4.9`)**: Electron now owns an in-memory inbound MCP grant broker and a local named-pipe host. Each stdio server process must register before it starts, and every grant is bound to its pipe connection, server instance, tool, inbound session, scope, and 15-minute expiry. Electron presents Deny / Allow once / Allow for this inbound session through a native dialog; grants are consumed, revoked, expired, or cleared on disconnect. Node cannot configure a Windows pipe DACL through `net`, so a pipe connection carries no execution authority and no provider or desktop data. Phase 6d.2 must add a user-initiated revocation action, ephemeral text-only provider context, and `kainclaw_chat`.
 

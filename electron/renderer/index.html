@@ -1378,6 +1378,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-seri
       </select>
       <button id="mcp-install-template" class="btn-secondary" onclick="installMcpTemplate()">安装模板</button>
       <button id="mcp-export" class="btn-secondary" onclick="exportMcpConfig()">导出配置</button>
+      <button id="mcp-revoke-inbound" class="btn-secondary" onclick="revokeInboundMcpGrants()">撤销外部授权</button>
     </div>
     <div id="mcp-feedback" style="display:none;margin-bottom:12px;font-size:12px;line-height:1.5"></div>
     <div id="mcp-auth-link" style="display:none;margin:-4px 0 12px;font-size:12px;line-height:1.5"></div>
@@ -8828,6 +8829,13 @@ function setWorkspaceRoot(root) {
 
   function exportMcpConfig() {
     send({ type: 'mcp:export' });
+  }
+
+  function revokeInboundMcpGrants() {
+    const message = isEnglishUi()
+      ? 'Revoke all active inbound MCP permissions?'
+      : '撤销所有当前外部 MCP 授权？';
+    if (window.confirm(message)) send({ type: 'mcp:revoke-inbound' });
   }
 
   function downloadMcpExport(content) {

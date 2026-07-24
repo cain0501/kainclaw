@@ -142,6 +142,13 @@ export class InboundMcpExecutionBroker {
     return true;
   }
 
+  revokeAllGrants(): number {
+    const grants = [...this.grants.values()];
+    this.grants.clear();
+    for (const grant of grants) this.record(grant, "revoked");
+    return grants.length;
+  }
+
   closeInboundSession(connectionId: string, sessionId: string): void {
     for (const grant of this.grants.values()) {
       if (grant.connectionId === connectionId && grant.sessionId === sessionId) {

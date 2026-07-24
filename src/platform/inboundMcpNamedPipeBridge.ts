@@ -13,6 +13,7 @@ type BridgeMethod =
   | "request_grant"
   | "validate_grant"
   | "consume_grant"
+  | "execute_chat"
   | "revoke_grant"
   | "close_session";
 
@@ -26,6 +27,22 @@ export type InboundMcpBridgeGrantRequest = {
   sessionId: string;
   sessionLabel?: string;
   promptSummary: string;
+};
+
+export type InboundMcpBridgeChatRequest = {
+  serverInstanceId: string;
+  sessionId: string;
+  prompt: string;
+};
+
+export type InboundMcpBridgeChatResult =
+  | { ok: true; turnId: string; text: string }
+  | { ok: false; error: "denied" | "expired" | "unavailable" | "provider_failed" | "invalid_prompt" };
+
+export type InboundMcpNamedPipeHostOptions = {
+  executeChat?: (request: InboundMcpBridgeChatRequest) => Promise<{ turnId: string; text: string }>;
+  closeSession?: (serverInstanceId: string, sessionId: string) => void;
+  disconnect?: (serverInstanceId: string) => void;
 };
 
 export class InboundMcpBridgeUnavailableError extends Error {
@@ -47,6 +64,7 @@ export class InboundMcpNamedPipeHost {
   constructor(
     private readonly broker: InboundMcpExecutionBroker,
     private readonly pipePath = KAINCLAW_INBOUND_MCP_PIPE_PATH,
+    private readonly options: InboundMcpNamedPipeHostOptions = {},
   ) {}
 
   async start(): Promise<void> {
@@ -76,6 +94,7 @@ export class InboundMcpNamedPipeHost {
     this.sockets.add(socket);
     let input = "";
     let connectionId: string | undefined;
+    let serverInstanceId: string | undefined;
     socket.setEncoding("utf8");
     socket.on("data", chunk => {
       input += chunk;
@@ -86,7 +105,10 @@ export class InboundMcpNamedPipeHost {
         if (line.length > 32_000) {
           this.respond(socket, { id: "", ok: false, error: { code: "invalid_request", message: "Bridge request is too large." } });
         } else if (line.trim()) {
-          void this.handleRequest(socket, line, () => connectionId, value => { connectionId = value; });
+          void this.handleRequest(socket, line, () => connectionId, () => serverInstanceId, connection => {
+            connectionId = connection.connectionId;
+            serverInstanceId = connection.serverInstanceId;
+          });
         }
         lineEnd = input.indexOf("\n");
       }
@@ -94,6 +116,7 @@ export class InboundMcpNamedPipeHost {
     socket.on("close", () => {
       this.sockets.delete(socket);
       if (connectionId) this.broker.disconnect(connectionId);
+      if (serverInstanceId) this.options.disconnect?.(serverInstanceId);
     });
     socket.on("error", () => {
       // A close event follows for normal pipe disconnects.
@@ -104,7 +127,8 @@ export class InboundMcpNamedPipeHost {
     socket: Socket,
     line: string,
     getConnectionId: () => string | undefined,
-    setConnectionId: (connectionId: string) => void,
+    getServerInstanceId: () => string | undefined,
+    setConnection: (connection: { connectionId: string; serverInstanceId: string }) => void,
   ): Promise<void> {
     const parsed = parseBridgeRequest(line);
     if (!parsed.ok) {
@@ -117,7 +141,7 @@ export class InboundMcpNamedPipeHost {
         if (getConnectionId()) throw new Error("Bridge connection is already registered.");
         const serverInstanceId = requireString(request.params, "serverInstanceId");
         const connection = this.broker.register(serverInstanceId);
-        setConnectionId(connection.connectionId);
+        setConnection(connection);
         this.respond(socket, { id: request.id, ok: true, result: connection });
         return;
       }
@@ -153,7 +177,46 @@ export class InboundMcpNamedPipeHost {
         this.respond(socket, { id: request.id, ok: true, result: { revoked: this.broker.revokeGrant(connectionId, requireString(request.params, "grantId")) } });
         return;
       }
-      this.broker.closeInboundSession(connectionId, requireString(request.params, "sessionId"));
+      if (request.method === "execute_chat") {
+        const serverInstanceId = getServerInstanceId();
+        if (!serverInstanceId || !this.options.executeChat) {
+          this.respond(socket, { id: request.id, ok: true, result: { ok: false, error: "unavailable" } satisfies InboundMcpBridgeChatResult });
+          return;
+        }
+        const sessionId = requireString(request.params, "sessionId");
+        const authorization = this.broker.consumeGrant({
+          connectionId,
+          serverInstanceId,
+          toolName: "kainclaw_chat",
+          sessionId,
+          grantId: requireString(request.params, "grantId"),
+        });
+        if (!authorization.ok) {
+          const error = authorization.reason === "denied" || authorization.reason === "expired"
+            ? authorization.reason
+            : "unavailable";
+          this.respond(socket, { id: request.id, ok: true, result: { ok: false, error } satisfies InboundMcpBridgeChatResult });
+          return;
+        }
+        try {
+          const result = await this.options.executeChat({
+            serverInstanceId,
+            sessionId,
+            prompt: requireString(request.params, "prompt"),
+          });
+          this.respond(socket, { id: request.id, ok: true, result: { ok: true, ...result } satisfies InboundMcpBridgeChatResult });
+        } catch (error) {
+          const code = error instanceof Error && error.name === "InboundMcpTextChatError" && error.message.includes("prompt")
+            ? "invalid_prompt"
+            : "provider_failed";
+          this.respond(socket, { id: request.id, ok: true, result: { ok: false, error: code } satisfies InboundMcpBridgeChatResult });
+        }
+        return;
+      }
+      const sessionId = requireString(request.params, "sessionId");
+      this.broker.closeInboundSession(connectionId, sessionId);
+      const serverInstanceId = getServerInstanceId();
+      if (serverInstanceId) this.options.closeSession?.(serverInstanceId, sessionId);
       this.respond(socket, { id: request.id, ok: true, result: { closed: true } });
     } catch (error) {
       this.respond(socket, {
@@ -224,6 +287,10 @@ export class InboundMcpNamedPipeClient {
 
   async closeSession(sessionId: string): Promise<void> {
     await this.send("close_session", { ...this.requireConnection(), sessionId });
+  }
+
+  async executeChat(grantId: string, sessionId: string, prompt: string): Promise<InboundMcpBridgeChatResult> {
+    return this.send("execute_chat", { ...this.requireConnection(), grantId, sessionId, prompt }) as Promise<InboundMcpBridgeChatResult>;
   }
 
   close(): void {
@@ -302,7 +369,7 @@ function parseBridgeRequest(line: string): { ok: true; request: BridgeRequest } 
 }
 
 function isBridgeMethod(value: string): value is BridgeMethod {
-  return ["register", "request_grant", "validate_grant", "consume_grant", "revoke_grant", "close_session"].includes(value);
+  return ["register", "request_grant", "validate_grant", "consume_grant", "execute_chat", "revoke_grant", "close_session"].includes(value);
 }
 
 function requireString(params: Record<string, unknown> | undefined, key: string): string {

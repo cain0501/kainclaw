@@ -11,7 +11,7 @@ import {
 import { SettingsRepository } from "../src/storage/settingsRepository";
 import { SessionRepository } from "../src/storage/sessionRepository";
 import type { DesignSlider } from "../src/design/slidersExtractor";
-import { resolveProviderConfig } from "../src/providerHost";
+import { buildProviderAdapter, resolveProviderConfig } from "../src/providerHost";
 import { ElectronChatPanel } from "./ElectronChatPanel";
 import { createPersistentLocalBridgeAuthTokenResolver } from "../src/localBridge/localBridgeAuth";
 import { LocalBridgeContextStore } from "../src/localBridge/localBridgeContextStore";
@@ -25,11 +25,14 @@ import {
   type InboundMcpGrantDecision,
 } from "../src/platform/inboundMcpExecutionBroker";
 import { InboundMcpNamedPipeHost } from "../src/platform/inboundMcpNamedPipeBridge";
+import { InboundMcpTextChatRuntime } from "../src/platform/inboundMcpTextChatRuntime";
 
 // ─── App state ────────────────────────────────────────────────────────────────
 
 let mainWindow: BrowserWindow | null = null;
 let chatPanel: ElectronChatPanel | null = null;
+let inboundMcpBroker: InboundMcpExecutionBroker | undefined;
+let inboundMcpTextRuntime: InboundMcpTextChatRuntime | undefined;
 
 function buildTimestampedExportPath(projectLabel: string, format: "pdf" | "pptx" | "zip"): string {
   return path.join(
@@ -174,7 +177,12 @@ function createWindow(): void {
       loadAuthToken: () => host.getState<string>("cain.localBridgeAuthToken"),
       saveAuthToken: authToken => host.setState("cain.localBridgeAuthToken", authToken),
     });
-    const inboundMcpBroker = new InboundMcpExecutionBroker({
+    inboundMcpTextRuntime = new InboundMcpTextChatRuntime(async messages => {
+      const { config, envMap } = await resolveProviderConfig(settings, "");
+      const adapter = buildProviderAdapter(config, "", undefined, envMap);
+      return adapter.runStep(messages, [], () => {});
+    });
+    inboundMcpBroker = new InboundMcpExecutionBroker({
       requestApproval: async request => {
         const options: MessageBoxOptions = {
           type: "question",
@@ -197,7 +205,11 @@ function createWindow(): void {
         return decisions[result.response] ?? "deny";
       },
     });
-    inboundMcpPipeHost = new InboundMcpNamedPipeHost(inboundMcpBroker);
+    inboundMcpPipeHost = new InboundMcpNamedPipeHost(inboundMcpBroker, undefined, {
+      executeChat: request => inboundMcpTextRuntime!.execute(request),
+      closeSession: (serverInstanceId, sessionId) => inboundMcpTextRuntime?.closeSession(serverInstanceId, sessionId),
+      disconnect: serverInstanceId => inboundMcpTextRuntime?.disconnect(serverInstanceId),
+    });
     void inboundMcpPipeHost.start().catch(error => {
       console.error("[KainClaw] Failed to start inbound MCP bridge:", error);
     });
@@ -251,6 +263,8 @@ function createWindow(): void {
     }
     mainWindow = null;
     chatPanel = null;
+    inboundMcpBroker = undefined;
+    inboundMcpTextRuntime = undefined;
   });
 }
 
@@ -435,6 +449,12 @@ ipcMain.handle("design:exportZip", async (_event, payload: Record<string, unknow
 // ─── IPC: renderer → main ────────────────────────────────────────────────────
 
 ipcMain.on("webview:message", (_event, message: Record<string, unknown>) => {
+  if (message.type === "mcp:revoke-inbound") {
+    const revoked = inboundMcpBroker?.revokeAllGrants() ?? 0;
+    inboundMcpTextRuntime?.clearAll();
+    mainWindow?.webContents.send("webview:receive", { type: "mcp:operation", action: "revoke-inbound", ok: true, revoked });
+    return;
+  }
   if (!chatPanel) return;
   void chatPanel.handleMessage(message).catch(err => {
     console.error("[KainClaw] IPC handler error:", err);

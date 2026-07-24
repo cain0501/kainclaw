@@ -2,7 +2,7 @@
 
 ## Status
 
-Phase 6c decision record. Phase 6d.1 implemented the broker, named-pipe bridge, and approval choices; this contract remains required before adding a provider-backed inbound MCP tool such as `kainclaw_chat`.
+Phase 6c decision record. Phase 6d.2 implemented the broker, named-pipe bridge, approval choices, revocation action, and the first provider-backed inbound MCP tool, `kainclaw_chat`.
 
 ## Security Boundary
 
@@ -70,9 +70,9 @@ Phase 6d implements only the local bridge and `kainclaw_chat` text path:
 
 1. `IInboundMcpExecutionBroker` plus Electron named-pipe host. **Implemented in 6d.1.**
 2. Server bridge client with registration and fail-closed behavior. **Implemented in 6d.1.**
-3. User-visible Electron approval surface and revocation action. **Approval implemented in 6d.1; user-initiated revocation remains a 6d.2 gate.**
-4. `kainclaw_chat` with per-inbound-session ephemeral model context.
+3. User-visible Electron approval surface and revocation action. **Implemented in 6d.2.**
+4. `kainclaw_chat` with per-inbound-session ephemeral model context. **Implemented in 6d.2.**
 5. Unit tests for grant scope, expiry, denial, revocation, and bridge failure.
 6. Electron-plus-stdio smoke test proving one approved text turn and one denied turn.
 
-Design, image, memory, workspace, filesystem, browser, and task tools remain separate future phases.
+Design, image, memory, workspace, filesystem, browser, and task tools remain separate future phases. The Phase 6d runtime is text-only and tool-free; do not expand it by reusing desktop session state or the general tool runtime.
