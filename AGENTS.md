@@ -225,8 +225,8 @@ Only for `pmv8.3`, if the task translation still starts from the old skeleton, s
 - If a suitable existing skill is available, use it instead of improvising a custom workflow.
 
 Note:
-- The canonical skill set currently lives under `C:\Users\Administrator\.claude\skills\`.
-- Codex CLI in this environment reads skills from `C:\Users\Administrator\.agents\skills\`.
+- The canonical Claude skill set lives under the local Claude skills directory configured by the host.
+- Codex CLI reads skills from its local Codex skills directory configured by the host.
 - If `/plan-eng-review`, `/codex review`, `/guard`, or related skills are not visible to the current Codex runtime, follow the same checklist manually and call that out in status updates.
 
 ### 2. During implementation

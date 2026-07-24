@@ -56,14 +56,14 @@ KainClaw 当前 MCP 运行时：
 - `src/mcpOAuth.ts` 已有 OAuth host、secret/state 存储、token 刷新
 - `electron/ElectronChatPanel.ts` 已有 `mcp:refresh` / `mcp:status`
 
-Claude Code 源码参考：
+Claude Code 源码参考（本地外部参考，不随仓库发布）：
 
-- `E:\claudecodejingiang\src\cli\handlers\mcp.tsx` 里有 `mcp list/get/add-json/remove/serve/add-from-desktop/reset-project-choices`
-- `E:\claudecodejingiang\src\services\mcp\types.ts` 支持 stdio、SSE、HTTP、WebSocket、SDK、Claude.ai proxy
-- `E:\claudecodejingiang\src\services\mcp\config.ts` 有配置校验、scope 优先级、project MCP approval、plugin MCP 合并
-- `E:\claudecodejingiang\src\components\mcp\` 下有 MCP settings/list/tool detail UI
-- `E:\claudecodejingiang\src\utils\settings\permissionValidation.ts` 有 `mcp__server`、`mcp__server__*`、`mcp__server__tool` 级别权限规则
-- `E:\claudecodejingiang\src\utils\plugins\` 下有 MCPB / DXT / plugin manifest 的 MCP server 装载逻辑
+- `cli/handlers/mcp` 提供 `mcp list/get/add-json/remove/serve/add-from-desktop/reset-project-choices`
+- `services/mcp/types` 支持 stdio、SSE、HTTP、WebSocket、SDK、Claude.ai proxy
+- `services/mcp/config` 提供配置校验、scope 优先级、project MCP approval、plugin MCP 合并
+- `components/mcp` 提供 MCP settings/list/tool detail UI
+- `utils/settings/permissionValidation` 提供 `mcp__server`、`mcp__server__*`、`mcp__server__tool` 级别权限规则
+- `utils/plugins` 提供 MCPB / DXT / plugin manifest 的 MCP server 装载逻辑
 
 当前 Codex 参考：
 
@@ -205,7 +205,7 @@ UI 范围：
 
 当前状态：
 
-- `E:\claudecodejingiang\hotel-core` 是 Skill + CLI wrapper
+- 外部 hotel-core 项目是 Skill + CLI wrapper
 - 底层命令是 `npx -y @rollinggo/hotel@latest`
 - 支持 `login/logout/whoami/hotel-tags/search-hotels/hotel-detail/price-confirm/book/orders`
 
@@ -329,31 +329,31 @@ Recommended direction: keep `src/mcpRuntime.ts` as the execution core, add a reg
 
 ### KainClaw Current MCP Runtime
 
-- Config files are discovered upward from the workspace using `.mcp.json` and `.cain-mcp.json`: `E:\claudecodejingiang\vscode-extension\src\mcpRuntime.ts:162`, `E:\claudecodejingiang\vscode-extension\src\mcpRuntime.ts:1029`
-- Runtime class tracks configs, connections, tool metadata, prompt metadata, and server status: `E:\claudecodejingiang\vscode-extension\src\mcpRuntime.ts:418`
-- Tool discovery calls MCP `listTools()`: `E:\claudecodejingiang\vscode-extension\src\mcpRuntime.ts:495`
-- Tool execution calls MCP `callTool()`: `E:\claudecodejingiang\vscode-extension\src\mcpRuntime.ts:761`
-- Prompt commands are loaded via `prompts/list`: `E:\claudecodejingiang\vscode-extension\src\mcpRuntime.ts:619`
-- Plan / verification mode blocks unsafe MCP tools based on annotations: `E:\claudecodejingiang\vscode-extension\src\mcpRuntime.ts:693`
-- Destructive MCP tools request explicit approval: `E:\claudecodejingiang\vscode-extension\src\mcpRuntime.ts:714`
-- OAuth host abstraction stores secrets and state: `E:\claudecodejingiang\vscode-extension\src\mcpOAuth.ts:17`
-- OAuth token refresh starts before expiry: `E:\claudecodejingiang\vscode-extension\src\mcpOAuth.ts:396`
-- `/mcp`, `/mcp prompts`, and `/mcp auth <server>` exist as prompt commands: `E:\claudecodejingiang\vscode-extension\src\promptCommandHost.ts:173`, `E:\claudecodejingiang\vscode-extension\src\promptCommandHost.ts:1370`
-- Electron can refresh and render MCP status, but not manage configs: `E:\claudecodejingiang\vscode-extension\electron\ElectronChatPanel.ts:1596`, `E:\claudecodejingiang\vscode-extension\electron\ElectronChatPanel.ts:4358`
+- Config files are discovered upward from the workspace using `.mcp.json` and `.cain-mcp.json`: `src/mcpRuntime.ts`
+- Runtime class tracks configs, connections, tool metadata, prompt metadata, and server status: `src/mcpRuntime.ts`
+- Tool discovery calls MCP `listTools()`: `src/mcpRuntime.ts`
+- Tool execution calls MCP `callTool()`: `src/mcpRuntime.ts`
+- Prompt commands are loaded via `prompts/list`: `src/mcpRuntime.ts`
+- Plan / verification mode blocks unsafe MCP tools based on annotations: `src/mcpRuntime.ts`
+- Destructive MCP tools request explicit approval: `src/mcpRuntime.ts`
+- OAuth host abstraction stores secrets and state: `src/mcpOAuth.ts`
+- OAuth token refresh starts before expiry: `src/mcpOAuth.ts`
+- `/mcp`, `/mcp prompts`, and `/mcp auth <server>` exist as prompt commands: `src/promptCommandHost.ts`
+- Electron can refresh and render MCP status: `electron/ElectronChatPanel.ts`
 
 ### Claude Code MCP Reference
 
 Claude Code has a fuller product surface:
 
-- CLI handlers cover serve, remove, list, get, add-json, import from Claude Desktop, and reset project approvals: `E:\claudecodejingiang\src\cli\handlers\mcp.tsx:42`, `E:\claudecodejingiang\src\cli\handlers\mcp.tsx:74`, `E:\claudecodejingiang\src\cli\handlers\mcp.tsx:144`, `E:\claudecodejingiang\src\cli\handlers\mcp.tsx:193`, `E:\claudecodejingiang\src\cli\handlers\mcp.tsx:286`, `E:\claudecodejingiang\src\cli\handlers\mcp.tsx:317`, `E:\claudecodejingiang\src\cli\handlers\mcp.tsx:352`
-- Supported config types include stdio, SSE, HTTP, WebSocket, SDK, and Claude.ai proxy: `E:\claudecodejingiang\src\services\mcp\types.ts:28`, `E:\claudecodejingiang\src\services\mcp\types.ts:58`, `E:\claudecodejingiang\src\services\mcp\types.ts:89`, `E:\claudecodejingiang\src\services\mcp\types.ts:99`, `E:\claudecodejingiang\src\services\mcp\types.ts:108`, `E:\claudecodejingiang\src\services\mcp\types.ts:116`
-- Config write path validates names, schemas, enterprise policy, allowlists, denylists, and duplicate scopes before saving: `E:\claudecodejingiang\src\services\mcp\config.ts:625`
-- Scope precedence is plugin < user < approved project < local: `E:\claudecodejingiang\src\services\mcp\config.ts:1231`
-- Project `.mcp.json` servers require approval before activation: `E:\claudecodejingiang\src\services\mcp\config.ts:1164`
-- MCP settings UI lists servers by scope and shows connection / auth status: `E:\claudecodejingiang\src\components\mcp\MCPSettings.tsx:21`, `E:\claudecodejingiang\src\components\mcp\MCPListPanel.tsx:92`, `E:\claudecodejingiang\src\components\mcp\MCPListPanel.tsx:305`
-- Tool detail UI exists: `E:\claudecodejingiang\src\components\mcp\MCPToolDetailView.tsx:14`
-- MCP permissions support server-level, wildcard, and tool-level rules: `E:\claudecodejingiang\src\utils\settings\permissionValidation.ts:105`
-- Plugin manifests can provide MCP servers and MCPB / DXT bundles: `E:\claudecodejingiang\src\utils\plugins\schemas.ts:543`, `E:\claudecodejingiang\src\utils\plugins\mcpbHandler.ts:79`, `E:\claudecodejingiang\src\utils\plugins\mcpPluginIntegration.ts:129`
+- CLI handlers cover serve, remove, list, get, add-json, import from Claude Desktop, and reset project approvals: `cli/handlers/mcp`
+- Supported config types include stdio, SSE, HTTP, WebSocket, SDK, and Claude.ai proxy: `services/mcp/types`
+- Config write path validates names, schemas, enterprise policy, allowlists, denylists, and duplicate scopes before saving: `services/mcp/config`
+- Scope precedence is plugin < user < approved project < local: `services/mcp/config`
+- Project `.mcp.json` servers require approval before activation: `services/mcp/config`
+- MCP settings UI lists servers by scope and shows connection / auth status: `components/mcp`
+- Tool detail UI exists: `components/mcp/MCPToolDetailView`
+- MCP permissions support server-level, wildcard, and tool-level rules: `utils/settings/permissionValidation`
+- Plugin manifests can provide MCP servers and MCPB / DXT bundles: `utils/plugins`
 
 ### Current Codex MCP Reference
 
@@ -511,7 +511,7 @@ Goal: turn the RollingGo hotel CLI into a real MCP server that KainClaw can call
 
 Current state:
 
-- `E:\claudecodejingiang\hotel-core` is a Skill + CLI wrapper around `npx -y @rollinggo/hotel@latest`.
+- An external hotel-core project is a Skill + CLI wrapper around `npx -y @rollinggo/hotel@latest`.
 - It supports `login`, `logout`, `whoami`, `hotel-tags`, `search-hotels`, `hotel-detail`, `price-confirm`, `book`, and `orders`.
 - It is not a protocol-level MCP server today.
 
