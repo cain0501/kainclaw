@@ -68,10 +68,12 @@ describe("Claude CLI adapter helpers", () => {
     expect(prompt).not.toContain("tool_result");
   });
 
-  it("passes the prompt as the final non-interactive Claude CLI argument", async () => {
+  it("sends the prompt through explicit UTF-8 text input mode", async () => {
     const stdout = new PassThrough();
     const stderr = new PassThrough();
     const stdin = new PassThrough();
+    const receivedPrompt: string[] = [];
+    stdin.on("data", chunk => receivedPrompt.push(String(chunk)));
 
     const child = new EventEmitter() as EventEmitter & {
       stdout: PassThrough;
@@ -83,6 +85,12 @@ describe("Claude CLI adapter helpers", () => {
     child.stderr = stderr;
     child.stdin = stdin;
     child.kill = vi.fn();
+
+    stdin.on("end", () => {
+      stdout.end("OK.");
+      stderr.end();
+      child.emit("close", 0);
+    });
 
     spawnMock.mockReturnValue(child);
 
@@ -113,17 +121,14 @@ describe("Claude CLI adapter helpers", () => {
     expect(args).toContain("--print");
     expect(args).toContain("--output-format");
     expect(args).toContain("text");
+    expect(args).toContain("--input-format");
     expect(args).toContain("--strict-mcp-config");
-    expect(args.at(-1)).toContain("System instructions:\nBe concise.");
-    expect(args.at(-1)).toContain("Conversation:\nUser: Hello");
-    expect(args.at(-1)).toContain("Assistant: Hi there");
-
-    stdout.write("OK.\n");
-    stdout.end();
-    stderr.end();
-    child.emit("close", 0);
-
     const step = await stepPromise;
+
+    const prompt = receivedPrompt.join("");
+    expect(prompt).toContain("System instructions:\nBe concise.");
+    expect(prompt).toContain("Conversation:\nUser: Hello");
+    expect(prompt).toContain("Assistant: Hi there");
 
     expect(tokens).toEqual(["OK."]);
     expect(step).toEqual({
