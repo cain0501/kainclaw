@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { existsSync, promises as fs } from "node:fs";
 import path from "node:path";
+import { nativeImage } from "electron";
 import { BrowserRuntime } from "../src/browserRuntime";
 import { ElectronHostAdapter } from "../src/platform/electronHostAdapter";
 import {
@@ -164,6 +165,12 @@ import {
 import { InMemoryArtifactRegistry } from "../src/artifacts/artifactRegistry";
 import { resolveImageBatchPlan } from "../src/imageGeneration/imagePromptBatching";
 import { resolveRequestedImageSize } from "../src/imageGeneration/imagePromptSizing";
+import {
+  buildImageAspectRatioInstruction,
+  getCenterCropRect,
+  normalizeImageAspectRatio,
+  type ImageAspectRatio,
+} from "../src/imageGeneration/imageAspectRatio";
 import type { DesktopRuntimeServices } from "../src/platform/desktopRuntimeServices";
 import {
   resolveWorkspaceRoot,
@@ -2901,8 +2908,13 @@ export class ElectronChatPanel {
       );
     }
 
-    const size = typeof overrides.size === "string" && overrides.size.trim()
+    const sizeOverride = typeof overrides.size === "string" && overrides.size.trim()
       ? overrides.size.trim()
+      : typeof overrides.sizePreset === "string" && overrides.sizePreset.trim()
+        ? overrides.sizePreset.trim()
+        : undefined;
+    const size = sizeOverride
+      ? sizeOverride
       : resolveRequestedImageSize(String(overrides.prompt ?? ""))?.size
         ?? saved?.size
         ?? "1024x1024";
@@ -2917,6 +2929,7 @@ export class ElectronChatPanel {
       overrides.quality === "high" || overrides.quality === "medium" || overrides.quality === "low"
         ? overrides.quality as "high" | "medium" | "low"
         : undefined;
+    const aspectRatio = normalizeImageAspectRatio(overrides.aspectRatio);
 
     return {
       apiKey,
@@ -2927,8 +2940,46 @@ export class ElectronChatPanel {
       batchCount,
       ...(responseFormat ? { responseFormat } : {}),
       ...(quality ? { quality } : {}),
+      ...(aspectRatio ? { aspectRatio } : {}),
       ...(activeImageModel.provider === "gemini" ? { provider: "gemini" as const } : {}),
     };
+  }
+
+  private normalizeImageResultAspectRatios(
+    results: ImageLabResultItem[],
+    aspectRatio: string | undefined,
+  ): ImageLabResultItem[] {
+    const normalizedAspectRatio = normalizeImageAspectRatio(aspectRatio);
+    if (!normalizedAspectRatio) {
+      return results;
+    }
+
+    return results.map(result => ({
+      ...result,
+      src: this.cropImageDataUrlToAspectRatio(result.src, normalizedAspectRatio),
+    }));
+  }
+
+  private cropImageDataUrlToAspectRatio(
+    source: string,
+    aspectRatio: ImageAspectRatio,
+  ): string {
+    if (!source.startsWith("data:image/")) {
+      return source;
+    }
+
+    try {
+      const image = nativeImage.createFromDataURL(source);
+      const size = image.getSize();
+      const crop = getCenterCropRect(size.width, size.height, aspectRatio);
+      if (!crop) {
+        return source;
+      }
+
+      return `data:image/png;base64,${image.crop(crop).toPNG().toString("base64")}`;
+    } catch {
+      return source;
+    }
   }
 
   private async handleImageChatRoute(message: Record<string, unknown>): Promise<void> {
@@ -2940,8 +2991,13 @@ export class ElectronChatPanel {
     const referenceImages = this.normalizeImageReferenceImages(message.referenceImages);
     const savedImageConfig = this.settings.getImageConfig();
     const batchExecution = this.resolveImageBatchExecution(message);
-    const size = typeof message.size === "string" && message.size.trim()
+    const sizeOverride = typeof message.size === "string" && message.size.trim()
       ? message.size.trim()
+      : typeof message.sizePreset === "string" && message.sizePreset.trim()
+        ? message.sizePreset.trim()
+        : undefined;
+    const size = sizeOverride
+      ? sizeOverride
       : resolveRequestedImageSize(prompt)?.size
         ?? savedImageConfig?.size
         ?? "1024x1024";
@@ -3508,14 +3564,21 @@ export class ElectronChatPanel {
       }
       const rawResults = await runImageLabRequest({
         prompt,
-        executionPrompt: batchExecution.executionPrompt,
+        executionPrompt: buildImageAspectRatioInstruction(
+          batchExecution.executionPrompt,
+          normalizeImageAspectRatio(config.aspectRatio),
+        ),
         config,
         ...(referenceImages.length > 0 ? { referenceImages } : {}),
         signal: abortController.signal,
       });
-      const results = await this.hydrateImageResultSources(
+      const hydratedResults = await this.hydrateImageResultSources(
         rawResults,
         abortController.signal,
+      );
+      const results = this.normalizeImageResultAspectRatios(
+        hydratedResults,
+        config.aspectRatio,
       );
       const resultsWithProvenance = this.withImageResultProvenance(results, {
         originSurface: "image-chat",

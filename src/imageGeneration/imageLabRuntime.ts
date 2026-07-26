@@ -23,6 +23,7 @@ export type ImageLabConfig = {
   responseFormat?: "url" | "b64_json";
   provider?: ImageLabProvider;
   quality?: "auto" | "high" | "medium" | "low";
+  aspectRatio?: string;
 };
 
 export type ImageLabReferenceImage = {

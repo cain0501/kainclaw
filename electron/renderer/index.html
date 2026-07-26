@@ -16588,13 +16588,13 @@ function handleIchatRefUpload(event) {
 // ─── ichat config popup ───────────────────────────────────────────────────────
 
 var ICHAT_SIZE_PRESETS = [
-  { label: '1:1',      size: '1024x1024' },
-  { label: '3:2',      size: '1536x1024' },
-  { label: '2:3',      size: '1024x1536' },
-  { label: '4:3',      size: '1365x1024' },
-  { label: '3:4',      size: '1024x1365' },
-  { label: '16:9',     size: '1792x1024' },
-  { label: '9:16',     size: '1024x1792' },
+  { label: '1:1',      size: '1024x1024', ratio: '1:1' },
+  { label: '3:2',      size: '1536x1024', ratio: '3:2' },
+  { label: '2:3',      size: '1024x1536', ratio: '2:3' },
+  { label: '4:3',      size: '1365x1024', ratio: '4:3' },
+  { label: '3:4',      size: '1024x1365', ratio: '3:4' },
+  { label: '16:9',     size: '1792x1024', ratio: '16:9' },
+  { label: '9:16',     size: '1024x1792', ratio: '9:16' },
   { label: '1:1·2k',   size: '2048x2048' },
   { label: '2:1·2k',   size: '2048x1024' },
   { label: '1:2·2k',   size: '1024x2048' },
@@ -16743,6 +16743,7 @@ function submitIchat() {
   }
   if (input) input.value = '';
   var resolvedBatchCount = resolveImageRunBatchCount(prompt, midtaiState.imgCount || 1);
+  var selectedImagePreset = ICHAT_SIZE_PRESETS.find(function(preset) { return preset.size === midtaiState.imgSize; });
   armMidtaiImagePreviewSession();
   imgSwitchView('preview');
   var threadId = imageChatThreadState.activeThreadId || getImageChatThreadId();
@@ -16756,6 +16757,7 @@ function submitIchat() {
     type: 'image:chatRoute',
     prompt: prompt,
     sizePreset: midtaiState.imgSize || '1024x1024',
+    aspectRatio: selectedImagePreset ? selectedImagePreset.ratio : null,
     batchCount: resolvedBatchCount,
     quality: midtaiState.imgQuality || 'auto',
     threadId: threadId,
