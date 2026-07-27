@@ -11,6 +11,8 @@ describe("electronUiLanguage shell surface map", () => {
     expect(map["请填写别名"]).toBe("Enter an alias");
     expect(map["删除这张结果"]).toBe("Delete this result");
     expect(map["留空则保留当前 Key"]).toBe("Leave blank to keep the current key");
+    expect(map["GitHub 仓库"]).toBe("GitHub repository");
+    expect(map["安装并信任"]).toBe("Install and trust");
   });
 
   it("supports reverse lookup for host-side English image errors in zh-CN", () => {
@@ -26,5 +28,6 @@ describe("electronUiLanguage shell surface map", () => {
     expect(
       map["The active image model is incomplete. Open Settings and finish the base URL and model fields."],
     ).toBe("当前活动图像模型配置不完整。请先打开设置并补全 base URL 和 model 字段。");
+    expect(map["Install and trust"]).toBe("安装并信任");
   });
 });

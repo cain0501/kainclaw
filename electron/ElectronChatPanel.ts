@@ -48,6 +48,14 @@ import {
 } from "../src/mcpRegistry";
 import { McpProjectApprovalStore } from "../src/mcpProjectApprovalStore";
 import { McpPermissionStore } from "../src/mcpPermissionStore";
+import {
+  GitHubMcpDiscoveryError,
+  type GitHubMcpCandidate,
+} from "../src/mcp/githubMcpDiscovery";
+import {
+  ConversationalMcpInstallRuntime,
+  getGitHubMcpInstallRequest,
+} from "../src/platform/conversationalMcpInstallRuntime";
 import { runAgent, SYSTEM_PROMPT } from "../src/agent/agentRunner";
 import { createPromptTurnSwarm } from "../src/promptSwarmHost";
 import type { SwarmCoordinator } from "../src/agent/swarm/SwarmCoordinator";
@@ -207,6 +215,23 @@ import {
   patchDesignTextNode,
   patchKainClawDesignNode,
 } from "../src/design/patchEngine";
+
+function describeGitHubMcpCandidate(candidate: GitHubMcpCandidate, language: string): string {
+  const isChinese = !language.toLowerCase().startsWith("en");
+  const location = candidate.config.command
+    ? isChinese
+      ? `通过 ${candidate.config.command}${candidate.config.args?.length ? ` ${candidate.config.args.join(" ")}` : ""} 启动。`
+      : `Runs ${candidate.config.command}${candidate.config.args?.length ? ` ${candidate.config.args.join(" ")}` : ""}.`
+    : isChinese
+      ? `连接到 ${candidate.config.url}。`
+      : `Connects to ${candidate.config.url}.`;
+  const requiredVariables = candidate.requiredEnvironmentVariables.length > 0
+    ? isChinese
+      ? ` 还需要：${candidate.requiredEnvironmentVariables.join(", ")}。`
+      : ` Requires: ${candidate.requiredEnvironmentVariables.join(", ")}.`
+    : "";
+  return `${location}${requiredVariables}`;
+}
 import {
   DesignProjectStore,
   type DesignProjectRecord,
@@ -5795,6 +5820,37 @@ export class ElectronChatPanel {
       return;
     }
 
+    const mcpInstallRequest = getGitHubMcpInstallRequest(trimmedPrompt);
+    if (mcpInstallRequest) {
+      if (mcpInstallRequest.explicit) {
+        await this.handleConversationalMcpInstall(trimmedPrompt, mcpInstallRequest.repositoryUrl);
+        return;
+      }
+      const response = await this.requestUserQuestion({
+        kind: "question",
+        title: this.localizeShellSurfaceText("GitHub repository"),
+        questions: [{
+          header: this.localizeShellSurfaceText("What would you like to do?"),
+          question: this.localizeShellSurfaceText("Do you want to install this GitHub repository as an MCP server?"),
+          options: [
+            {
+              label: this.localizeShellSurfaceText("Install as MCP"),
+              description: this.localizeShellSurfaceText("Inspect its machine-readable MCP configuration before installation."),
+            },
+            {
+              label: this.localizeShellSurfaceText("Continue chatting"),
+              description: this.localizeShellSurfaceText("Keep this as a normal repository discussion."),
+            },
+          ],
+        }],
+      });
+      const question = this.localizeShellSurfaceText("Do you want to install this GitHub repository as an MCP server?");
+      if (response?.answers[question] === this.localizeShellSurfaceText("Install as MCP")) {
+        await this.handleConversationalMcpInstall(trimmedPrompt, mcpInstallRequest.repositoryUrl);
+        return;
+      }
+    }
+
     const explicitIntent =
       intentOverride === "image_generate" || intentOverride === "chat"
         ? intentOverride
@@ -5899,6 +5955,172 @@ export class ElectronChatPanel {
     }
 
     await this.sendPrompt(trimmedPrompt, attachments);
+  }
+
+  private async handleConversationalMcpInstall(prompt: string, repositoryUrl: string): Promise<void> {
+    await this.ensureSession();
+    const sessionId = this.currentSessionId;
+    if (!sessionId) {
+      return;
+    }
+    await this.appendAssistantMessageToSession(sessionId, {
+      role: "user",
+      content: prompt,
+      timestamp: Date.now(),
+    });
+
+    const installer = new ConversationalMcpInstallRuntime({
+      addServer: (name, config) => this.mcpRegistry.addServer(name, config),
+      markConfigDirty: () => this.mcpRuntime.markConfigDirty(),
+    });
+    let configurationWritten = false;
+    try {
+      const discovery = await installer.inspect(repositoryUrl);
+      if (discovery.candidates.length === 0) {
+        await this.appendAssistantMessageToSession(sessionId, {
+          role: "assistant",
+          content: this.localizeShellSurfaceText("I could not find a supported MCP declaration in this GitHub repository. No configuration was installed."),
+          timestamp: Date.now(),
+        });
+        return;
+      }
+
+      const selected = await this.selectGitHubMcpCandidate(discovery.candidates);
+      if (!selected) {
+        await this.appendAssistantMessageToSession(sessionId, {
+          role: "assistant",
+          content: this.localizeShellSurfaceText("MCP installation cancelled. No configuration was changed."),
+          timestamp: Date.now(),
+        });
+        return;
+      }
+      const confirmed = await this.confirmGitHubMcpInstall(selected, discovery.resolvedRef);
+      if (!confirmed) {
+        await this.appendAssistantMessageToSession(sessionId, {
+          role: "assistant",
+          content: this.localizeShellSurfaceText("MCP installation cancelled. No configuration was changed."),
+          timestamp: Date.now(),
+        });
+        return;
+      }
+
+      await installer.install(selected);
+      configurationWritten = true;
+      const server = (await this.mcpRegistry.listServers()).find(candidate => candidate.name === selected.name);
+      if (!server) {
+        throw new Error(`MCP server ${selected.name} was saved but could not be reloaded for approval.`);
+      }
+      await this.mcpProjectApprovalStore.approve({
+        workspaceRoot: this.getSelectedWorkspaceRoot(),
+        configPath: server.sourcePath,
+        serverName: server.name,
+        config: server.config,
+      });
+      this.mcpRuntime.markConfigDirty();
+      const status = (await this.mcpRuntime.getStatusSummary()).find(candidate => candidate.name === selected.name);
+      await this.refreshMcpStatus();
+      await this.appendAssistantMessageToSession(sessionId, {
+        role: "assistant",
+        content: this.formatGitHubMcpInstallOutcome(selected, status),
+        timestamp: Date.now(),
+      });
+    } catch (error) {
+      const message = error instanceof GitHubMcpDiscoveryError
+        ? this.localizeShellSurfaceText(error.message)
+        : this.formatGitHubMcpInstallFailure(error, configurationWritten);
+      await this.appendAssistantMessageToSession(sessionId, {
+        role: "assistant",
+        content: message,
+        timestamp: Date.now(),
+      });
+    }
+  }
+
+  private async selectGitHubMcpCandidate(candidates: GitHubMcpCandidate[]): Promise<GitHubMcpCandidate | undefined> {
+    const question = this.localizeShellSurfaceText("Which MCP server would you like to install?");
+    const response = await this.requestUserQuestion({
+      kind: "question",
+      title: this.localizeShellSurfaceText("MCP server found"),
+      questions: [{
+        header: this.localizeShellSurfaceText("Choose one server"),
+        question,
+        options: candidates.map(candidate => ({
+          label: candidate.name,
+          description: describeGitHubMcpCandidate(candidate, this.settings.getLanguage()),
+          preview: JSON.stringify(candidate.config, null, 2),
+        })),
+      }],
+    });
+    const name = response?.answers[question];
+    return candidates.find(candidate => candidate.name === name);
+  }
+
+  private async confirmGitHubMcpInstall(candidate: GitHubMcpCandidate, ref: string): Promise<boolean> {
+    const isChinese = !this.settings.getLanguage().toLowerCase().startsWith("en");
+    const question = isChinese ? `要安装 MCP 服务器“${candidate.name}”吗？` : `Install MCP server "${candidate.name}"?`;
+    const response = await this.requestUserQuestion({
+      kind: "question",
+      title: this.localizeShellSurfaceText("Confirm MCP installation"),
+      questions: [{
+        header: this.localizeShellSurfaceText("Review before installing"),
+        question,
+        options: [
+          {
+            label: this.localizeShellSurfaceText("Install and trust"),
+            description: `${describeGitHubMcpCandidate(candidate, this.settings.getLanguage())}${isChinese ? ` 来源版本：${ref}。` : ` Source revision: ${ref}.`}`,
+            preview: JSON.stringify(candidate.config, null, 2),
+          },
+          {
+            label: this.localizeShellSurfaceText("Cancel"),
+            description: this.localizeShellSurfaceText("Do not write or trust this MCP configuration."),
+          },
+        ],
+      }],
+    });
+    return response?.answers[question] === this.localizeShellSurfaceText("Install and trust");
+  }
+
+  private formatGitHubMcpInstallOutcome(
+    candidate: GitHubMcpCandidate,
+    status: McpServerStatusSummary | undefined,
+  ): string {
+    const isChinese = !this.settings.getLanguage().toLowerCase().startsWith("en");
+    const credentials = candidate.requiredEnvironmentVariables.length > 0
+      ? isChinese
+        ? ` 还需要：${candidate.requiredEnvironmentVariables.join(", ")}。`
+        : ` It still needs: ${candidate.requiredEnvironmentVariables.join(", ")}.`
+      : "";
+    if (!status) {
+      return isChinese
+        ? `已安装并信任 ${candidate.name}。${credentials} 如需查看连接状态，请打开 MCP 页面。`
+        : `Installed and trusted ${candidate.name}.${credentials} Open the MCP page only if you need to inspect its connection status.`;
+    }
+    if (status.state === "connected") {
+      return isChinese
+        ? `已安装并连接 ${candidate.name}。KainClaw 发现了 ${status.toolCount} 个工具。${credentials}`
+        : `Installed and connected ${candidate.name}. KainClaw found ${status.toolCount} tool${status.toolCount === 1 ? "" : "s"}.${credentials}`;
+    }
+    if (status.state === "needs-auth") {
+      return isChinese
+        ? `已安装 ${candidate.name}，但需要先完成 OAuth 登录才能使用工具。${credentials}`
+        : `Installed ${candidate.name}, but it needs OAuth login before its tools can be used.${credentials}`;
+    }
+    return isChinese
+      ? `已安装 ${candidate.name}，但 KainClaw 暂时还无法连接。${credentials}`
+      : `Installed ${candidate.name}, but KainClaw could not connect to it yet.${credentials}`;
+  }
+
+  private formatGitHubMcpInstallFailure(error: unknown, configurationWritten: boolean): string {
+    const detail = error instanceof Error ? error.message : String(error);
+    const isChinese = !this.settings.getLanguage().toLowerCase().startsWith("en");
+    if (configurationWritten) {
+      return isChinese
+        ? `MCP 配置已经保存，但信任或连接检查没有完成：${detail}`
+        : `The MCP configuration was saved, but trust or connection checking did not complete: ${detail}`;
+    }
+    return isChinese
+      ? `无法安装此 MCP 配置：${detail}`
+      : `KainClaw could not install this MCP configuration: ${detail}`;
   }
 
   private async sendPrompt(

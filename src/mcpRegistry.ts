@@ -367,8 +367,13 @@ async function readImportServers(
   return parseJsonMcpServers(document);
 }
 
-function parseJsonMcpServers(document: WorkspaceMcpDocument): Record<string, McpRegistryServerConfig> {
-  const rawServers = document.mcpServers ?? document.servers;
+export function parseMcpServerDocument(
+  document: Record<string, unknown>,
+  options: { allowTopLevelServers?: boolean } = {},
+): Record<string, McpRegistryServerConfig> {
+  const rawServers = document.mcpServers ?? document.servers ?? (
+    options.allowTopLevelServers ? document : undefined
+  );
   if (!rawServers || typeof rawServers !== "object" || Array.isArray(rawServers)) {
     return {};
   }
@@ -412,6 +417,10 @@ function parseJsonMcpServers(document: WorkspaceMcpDocument): Record<string, Mcp
     });
   }
   return result;
+}
+
+function parseJsonMcpServers(document: WorkspaceMcpDocument): Record<string, McpRegistryServerConfig> {
+  return parseMcpServerDocument(document);
 }
 
 function parseCodexMcpToml(text: string): Record<string, McpRegistryServerConfig> {

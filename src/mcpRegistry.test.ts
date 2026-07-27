@@ -2,7 +2,7 @@ import { promises as fs } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import { McpRegistry } from "./mcpRegistry";
+import { McpRegistry, parseMcpServerDocument } from "./mcpRegistry";
 
 const tempDirs: string[] = [];
 
@@ -13,6 +13,24 @@ afterEach(async () => {
 });
 
 describe("McpRegistry", () => {
+  it("parses top-level Claude plugin MCP declarations with the same credential filtering", () => {
+    expect(parseMcpServerDocument({
+      github: {
+        type: "http",
+        url: "https://api.githubcopilot.com/mcp/",
+        headers: { Authorization: "Bearer ${GITHUB_PERSONAL_ACCESS_TOKEN}" },
+      },
+      ignored: { description: "not a server" },
+    }, { allowTopLevelServers: true })).toEqual({
+      github: {
+        type: "streamable-http",
+        url: "https://api.githubcopilot.com/mcp/",
+        headers: { Authorization: "Bearer ${GITHUB_PERSONAL_ACCESS_TOKEN}" },
+        disabled: false,
+      },
+    });
+  });
+
   it("adds, lists, disables, and removes workspace MCP servers", async () => {
     const workspaceRoot = await fs.mkdtemp(path.join(os.tmpdir(), "cain-mcp-registry-"));
     tempDirs.push(workspaceRoot);

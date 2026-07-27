@@ -404,6 +404,72 @@ describe("ElectronChatPanel session lifecycle", () => {
     expect(status?.registryServers).toEqual([]);
   });
 
+  it("installs a discovered GitHub MCP only after the conversational selection and trust confirmations", async () => {
+    const harness = await createHarness();
+    tempDirs.push(harness.storagePath);
+    await harness.settings.setLanguage("en-US");
+    await harness.panel.handleMessage({ type: "workspace:set", root: harness.storagePath });
+    vi.stubGlobal("fetch", vi.fn(async (url: string) => {
+      if (url === "https://api.github.com/repos/acme/demo") {
+        return new Response(JSON.stringify({ default_branch: "main" }), { status: 200 });
+      }
+      if (url.endsWith("/.mcp.json")) {
+        return new Response(JSON.stringify({
+          mcpServers: {
+            context7: { command: "npx", args: ["-y", "@upstash/context7-mcp"] },
+          },
+        }), { status: 200 });
+      }
+      return new Response(null, { status: 404 });
+    }));
+
+    const install = harness.panel.handleMessage({
+      type: "sendPrompt",
+      prompt: "Please install this MCP: https://github.com/acme/demo",
+    });
+
+    await vi.waitFor(() => {
+      const state = getLastRendererPayloadOfType<{
+        pendingApproval?: { questions?: Array<{ question: string }> };
+      }>(harness.rendererPayloads, "state");
+      expect(state?.pendingApproval?.questions?.[0]?.question).toBe(
+        "Which MCP server would you like to install?",
+      );
+    });
+    await harness.panel.handleMessage({
+      type: "submitPendingQuestion",
+      answers: { "Which MCP server would you like to install?": "context7" },
+    });
+
+    await vi.waitFor(() => {
+      const state = getLastRendererPayloadOfType<{
+        pendingApproval?: { questions?: Array<{ question: string }> };
+      }>(harness.rendererPayloads, "state");
+      expect(state?.pendingApproval?.questions?.[0]?.question).toBe(
+        "Install MCP server \"context7\"?",
+      );
+    });
+    await harness.panel.handleMessage({
+      type: "submitPendingQuestion",
+      answers: { "Install MCP server \"context7\"?": "Install and trust" },
+    });
+    await install;
+
+    const status = getLastRendererPayloadOfType<{
+      registryServers?: Array<{ name: string; approval: string }>;
+      messages?: Array<{ content: string }>;
+    }>(harness.rendererPayloads, "state");
+    expect(status?.messages?.at(-1)?.content).toContain("Installed and trusted context7.");
+
+    await harness.panel.handleMessage({ type: "mcp:refresh" });
+    const mcpStatus = getLastRendererPayloadOfType<{
+      registryServers?: Array<{ name: string; approval: string }>;
+    }>(harness.rendererPayloads, "mcp:status");
+    expect(mcpStatus?.registryServers).toEqual([
+      expect.objectContaining({ name: "context7", approval: "approved" }),
+    ]);
+  });
+
   it("previews/imports Claude MCP config, installs a template, and exports redacted config", async () => {
     const harness = await createHarness();
     tempDirs.push(harness.storagePath);
